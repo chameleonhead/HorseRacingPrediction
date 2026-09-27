@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260927_collection-rest-api",
+  "taskId": "T0",
+  "attemptId": "T0-A2",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC1", "AC7"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose observed worker model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime did not expose per-worker token usage"
+  },
+  "scope": [
+    "docs/changes/20260927_collection-rest-api/README.md",
+    "docs/changes/20260927_collection-rest-api/route-map.md",
+    "docs/changes/20260927_collection-rest-api/consumer-impact.md",
+    "docs/changes/20260927_collection-rest-api/validate-route-ledger.py",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A1.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A2.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A3.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A4.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A5.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A6.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review telemetry and active review time were not exposed"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "active effort telemetry was not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable worker elapsed effort was not exposed"
+  },
+  "startRevision": "uncommitted shared-worktree patch T0-A1",
+  "endRevisionOrPatch": "uncommitted shared-worktree focused correction T0-A2",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": false,
+    "scopePassed": true,
+    "independentChallenge": "Second focused review traced six remaining P2 route contracts to source/client/test behavior; the six gaps were corrected in the owned planning docs. Lead re-review remains pending; this is not an acceptance decision.",
+    "retries": 1,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 6,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "revise"
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260927_collection-rest-api",
+  "taskId": "T0",
+  "attemptId": "T0-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC1", "AC7"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose observed worker model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime did not expose per-worker token usage"
+  },
+  "scope": [
+    "docs/changes/20260927_collection-rest-api/README.md",
+    "docs/changes/20260927_collection-rest-api/route-map.md",
+    "docs/changes/20260927_collection-rest-api/consumer-impact.md",
+    "docs/changes/20260927_collection-rest-api/validate-route-ledger.py",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A1.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A2.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A3.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A4.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A5.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A6.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review telemetry and active review time were not exposed"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "active effort telemetry was not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable worker elapsed effort was not exposed"
+  },
+  "startRevision": "4e5299e816d5cee1070c8e4fb93b1e79967d9709",
+  "endRevisionOrPatch": "uncommitted shared-worktree patch T0-A1",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": false,
+    "scopePassed": true,
+    "independentChallenge": "Independent review rejected the prior proposal with five findings; focused corrections and local checks completed; lead re-review pending.",
+    "retries": 2,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 5,
+    "escalations": 1,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "revise"
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260927_collection-rest-api",
+  "taskId": "T0",
+  "attemptId": "T0-A6",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC1", "AC7", "AC8"],
+  "route": {
+    "tier": "reviewer",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose observed reviewer model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime did not expose per-reviewer token usage"
+  },
+  "scope": [
+    "docs/changes/20260927_collection-rest-api/README.md",
+    "docs/changes/20260927_collection-rest-api/route-map.md",
+    "docs/changes/20260927_collection-rest-api/consumer-impact.md",
+    "docs/changes/20260927_collection-rest-api/validate-route-ledger.py",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A1.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A2.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A3.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A4.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A5.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A6.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review telemetry unavailable"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "effort telemetry unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable reviewer elapsed effort was not exposed"
+  },
+  "startRevision": "shared worktree T0-A5",
+  "endRevisionOrPatch": "shared worktree T0-A6",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Accepted the disclosed external-caller risk under the user's all-routes/no-alias rule. CP-24 has no first-party callers; internal SNS dispatcher/store behavior is preserved. README/route-map counts and deletion proof reconcile; route/audit validators and diff checks pass. Accepts completed inventory/design/process work only; implementation remains Proposed pending user approval. Requested route: gpt-6-luna/high; observed telemetry unavailable.",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260927_collection-rest-api",
+  "taskId": "T0",
+  "attemptId": "T0-A4",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC1", "AC7", "AC8"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose observed worker model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime did not expose per-worker token usage"
+  },
+  "scope": [
+    "docs/changes/20260927_collection-rest-api/README.md",
+    "docs/changes/20260927_collection-rest-api/route-map.md",
+    "docs/changes/20260927_collection-rest-api/consumer-impact.md",
+    "docs/changes/20260927_collection-rest-api/validate-route-ledger.py",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A1.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A2.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A3.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A4.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A5.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A6.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review telemetry and active review time were not exposed"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "active effort telemetry was not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable worker elapsed effort was not exposed"
+  },
+  "startRevision": "uncommitted shared-worktree CP-24 baseline/count correction",
+  "endRevisionOrPatch": "uncommitted shared-worktree CP-24 baseline/count correction T0-A4",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": false,
+    "scopePassed": true,
+    "independentChallenge": "Applied lead-frozen semantics: preserve each old PublishAttemptCount as immutable migration baseline with no synthetic historical attempts; exposed count is baseline plus unique new attempt rows; atomically insert Pending and idempotency binding before send as the sole increment; Published/Failed transitions do not recount; committed Pending stays counted and recovers with same ID. Updated route/consumer/AC/task/validator evidence and migration, rollback, restart, replay, concurrency and failure-atomicity gates. T0 and C8 remain open pending lead review.",
+    "retries": 1,
+    "leadCorrections": 1,
+    "reviewPasses": 0,
+    "promoted": false,
+    "escapedDefects": 1,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "revise"
+  }
+}

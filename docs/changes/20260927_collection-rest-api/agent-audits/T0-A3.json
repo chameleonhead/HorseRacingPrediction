@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260927_collection-rest-api",
+  "taskId": "T0",
+  "attemptId": "T0-A3",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC1", "AC7"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose observed worker model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime did not expose per-worker token usage"
+  },
+  "scope": [
+    "docs/changes/20260927_collection-rest-api/README.md",
+    "docs/changes/20260927_collection-rest-api/route-map.md",
+    "docs/changes/20260927_collection-rest-api/consumer-impact.md",
+    "docs/changes/20260927_collection-rest-api/validate-route-ledger.py",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A1.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A2.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A3.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A4.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A5.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A6.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review telemetry and active review time were not exposed"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "active effort telemetry was not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable worker elapsed effort was not exposed"
+  },
+  "startRevision": "uncommitted shared-worktree focused correction T0-A2",
+  "endRevisionOrPatch": "uncommitted shared-worktree CP-24 idempotency correction T0-A3",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": false,
+    "scopePassed": true,
+    "independentChallenge": "Replaced the CP-24 retry-risk proposal with a durable PUT publication-attempt resource, explicit unique-attempt persistence/counter semantics across both success and failure writers, internal pending recovery, atomicity and conflict contracts, AC8, T6 migration task, and regression gates. Lead review and user approval remain pending; no implementation was authorized.",
+    "retries": 1,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 1,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "revise"
+  }
+}

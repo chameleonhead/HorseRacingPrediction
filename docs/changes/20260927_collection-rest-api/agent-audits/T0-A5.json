@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260927_collection-rest-api",
+  "taskId": "T0",
+  "attemptId": "T0-A5",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC1", "AC7", "AC8"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose observed worker model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime did not expose per-worker token usage"
+  },
+  "scope": [
+    "docs/changes/20260927_collection-rest-api/README.md",
+    "docs/changes/20260927_collection-rest-api/route-map.md",
+    "docs/changes/20260927_collection-rest-api/consumer-impact.md",
+    "docs/changes/20260927_collection-rest-api/validate-route-ledger.py",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A1.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A2.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A3.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A4.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A5.json",
+    "docs/changes/20260927_collection-rest-api/agent-audits/T0-A6.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review telemetry and active review time were not exposed"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "active effort telemetry was not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable worker elapsed effort was not exposed"
+  },
+  "startRevision": "uncommitted shared-worktree CP-24 baseline/count correction",
+  "endRevisionOrPatch": "uncommitted shared-worktree CP-24 deletion and internal-caller correction T0-A5",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": false,
+    "scopePassed": true,
+    "independentChallenge": "Source evidence showed CP-24's AdminApiClient method has no first-party call site; the active SNS publisher is CollectionPipelineAlertDispatchService calling store methods directly. Withdrew the unnecessary publication-attempt API/data-model proposal and classified CP-24 Delete. Added zero-callsite/client-method removal, old-route rejection, internal success/failure/restart regression, and external caller-risk gates. T0 and C8 remain pending lead final review.",
+    "retries": 1,
+    "leadCorrections": 1,
+    "reviewPasses": 0,
+    "promoted": false,
+    "escapedDefects": 1,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "revise"
+  }
+}
