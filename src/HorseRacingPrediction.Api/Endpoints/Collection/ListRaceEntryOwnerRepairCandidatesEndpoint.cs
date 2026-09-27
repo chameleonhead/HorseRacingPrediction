@@ -3,13 +3,14 @@ using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using HorseRacingPrediction.Application.Queries.ReadModels;
+using Microsoft.AspNetCore.Mvc;
 namespace HorseRacingPrediction.Api.Endpoints.Collection;
 
 internal static class ListRaceEntryOwnerRepairCandidatesEndpoint
 {
     internal static void Map(IEndpointRouteBuilder endpoints) => endpoints.MapGet(
         "/api/v2/admin/collection/race-entry-owner-repair-candidates", async (DateOnly date,
-            IDbContextProvider<EventStoreDbContext> provider, CancellationToken token) =>
+            [FromServices] IDbContextProvider<EventStoreDbContext> provider, CancellationToken token) =>
         {
             using var db = provider.CreateContext();
             var races = await db.Set<RacePredictionContextReadModel>().AsNoTracking().Where(x => x.RaceDate == date)

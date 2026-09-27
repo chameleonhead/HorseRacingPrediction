@@ -6,6 +6,7 @@ using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc;
 
 namespace HorseRacingPrediction.Api.Endpoints.Races;
 
@@ -14,7 +15,8 @@ internal static class CreateRaceFromScheduleEndpoint
     internal static void Map(IEndpointRouteBuilder endpoints)
     {
         endpoints.MapPost("/api/v2/admin/races", async (PrepareHorseHistoryRaceRequest request,
-            IDbContextProvider<EventStoreDbContext> provider, ICommandBus commands, CancellationToken token) =>
+            [FromServices] IDbContextProvider<EventStoreDbContext> provider,
+            [FromServices] ICommandBus commands, CancellationToken token) =>
         {
             var course = RaceCourseIdentity.Canonicalize(request.Course);
             if (course is null || request.RaceNumber is < 1 or > 12

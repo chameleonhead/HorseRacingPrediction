@@ -3,6 +3,7 @@ using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Mvc;
 
 namespace HorseRacingPrediction.Api.Endpoints.Collection;
 
@@ -11,8 +12,8 @@ internal static class CreateCollectionTaskBatchEndpoint
     internal static void Map(IEndpointRouteBuilder endpoints) =>
         endpoints.MapPost("/api/v2/admin/collection/task-batches",
             async (CollectionTaskBatchRequest request, CollectionPlatformStore store,
-                IDbContextProvider<EventStoreDbContext> domain,
-                IEnumerable<INamedRevisionImpactCondition> conditions, CancellationToken token) =>
+                [FromServices] IDbContextProvider<EventStoreDbContext> domain,
+                [FromServices] IEnumerable<INamedRevisionImpactCondition> conditions, CancellationToken token) =>
             {
                 if (string.Equals(request.Mode, "PreviewSelection", StringComparison.Ordinal))
                 {

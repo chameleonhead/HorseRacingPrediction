@@ -1,10 +1,12 @@
 using EventFlow;
+using EventFlow.Commands;
 using EventFlow.Queries;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Application.Commands.Horses;
 using HorseRacingPrediction.Application.Commands.Jockeys;
 using HorseRacingPrediction.Application.Commands.Trainers;
 using HorseRacingPrediction.Contracts;
+using Microsoft.AspNetCore.Mvc;
 using HorseRacingPrediction.Domain;
 using HorseRacingPrediction.Domain.Horses;
 using HorseRacingPrediction.Domain.Jockeys;
@@ -19,8 +21,8 @@ internal static class PutSubjectProfileEndpoint
     internal static void Map(IEndpointRouteBuilder endpoints)
     {
         endpoints.MapPut("/api/v2/admin/subjects/{kind}/{subjectId}/profile",
-            async (string kind, string subjectId, JraSubjectProfileDto request, IQueryProcessor queries,
-                ICommandBus commands, CancellationToken token) =>
+            async (string kind, string subjectId, JraSubjectProfileDto request, [FromServices] IQueryProcessor queries,
+                [FromServices] ICommandBus commands, CancellationToken token) =>
             {
                 var subject = await SubjectCollectionEndpointMappings.ResolveAsync(kind, subjectId, queries, token);
                 if (subject is null) return Results.NotFound();

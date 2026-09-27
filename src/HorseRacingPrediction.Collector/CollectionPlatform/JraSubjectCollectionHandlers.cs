@@ -54,9 +54,12 @@ public sealed class JraSubjectProfileApiClient(HttpClient client) : IJraSubjectP
     public async Task SaveAsync(string subjectType, string subjectId, JraSubjectProfileDto profile,
         CancellationToken cancellationToken)
     {
-        using var response = await client.PostAsJsonAsync(
-            $"api/v2/admin/subjects/{subjectType}/{Uri.EscapeDataString(subjectId)}/profile", profile,
-            cancellationToken).ConfigureAwait(false);
+        using var request = new HttpRequestMessage(HttpMethod.Put,
+            $"api/v2/admin/subjects/{subjectType}/{Uri.EscapeDataString(subjectId)}/profile")
+        {
+            Content = JsonContent.Create(profile),
+        };
+        using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }
 }

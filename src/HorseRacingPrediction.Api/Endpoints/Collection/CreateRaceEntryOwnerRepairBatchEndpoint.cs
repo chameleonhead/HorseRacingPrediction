@@ -6,13 +6,15 @@ using HorseRacingPrediction.Contracts.Time;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc;
 namespace HorseRacingPrediction.Api.Endpoints.Collection;
 
 internal static class CreateRaceEntryOwnerRepairBatchEndpoint
 {
     internal static void Map(IEndpointRouteBuilder endpoints) => endpoints.MapPost(
         "/api/v2/admin/collection/race-entry-owner-repair-batches", async (RaceEntryOwnerRepairRequest request,
-            IDbContextProvider<EventStoreDbContext> provider, CollectionPlatformStore store, CancellationToken token) =>
+            [FromServices] IDbContextProvider<EventStoreDbContext> provider,
+            CollectionPlatformStore store, CancellationToken token) =>
         {
             if (!(await store.GetPipelineStateAsync(token)).IsPaused)
                 return Results.Conflict(new { message = "Use the paused race entry owner migration." });

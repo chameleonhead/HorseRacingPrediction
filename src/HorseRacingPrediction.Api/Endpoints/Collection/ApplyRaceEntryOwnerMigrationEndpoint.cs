@@ -4,13 +4,15 @@ using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Contracts.Time;
 using HorseRacingPrediction.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Mvc;
 namespace HorseRacingPrediction.Api.Endpoints.Collection;
 
 internal static class ApplyRaceEntryOwnerMigrationEndpoint
 {
     internal static void Map(IEndpointRouteBuilder endpoints) => endpoints.MapPost(
         "/api/v2/admin/collection/migrations/race-entry-owner-repair",
-        async (IDbContextProvider<EventStoreDbContext> db, CollectionPlatformStore store, CancellationToken token) =>
+        async ([FromServices] IDbContextProvider<EventStoreDbContext> db,
+            CollectionPlatformStore store, CancellationToken token) =>
         {
             if (!(await store.GetPipelineStateAsync(token)).IsPaused)
                 return Results.Conflict(new { message = "Collection pipeline must be paused." });

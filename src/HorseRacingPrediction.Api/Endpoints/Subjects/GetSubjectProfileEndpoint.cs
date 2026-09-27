@@ -2,6 +2,7 @@ using EventFlow.Queries;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Contracts;
+using Microsoft.AspNetCore.Mvc;
 
 namespace HorseRacingPrediction.Api.Endpoints.Subjects;
 
@@ -10,7 +11,7 @@ internal static class GetSubjectProfileEndpoint
     internal static void Map(IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet("/api/v2/admin/subjects/{kind}/{subjectId}/profiles/current",
-            async (string kind, string subjectId, IQueryProcessor queries, CancellationToken token) =>
+            async (string kind, string subjectId, [FromServices] IQueryProcessor queries, CancellationToken token) =>
             {
                 if (await SubjectCollectionEndpointMappings.ResolveAsync(kind, subjectId, queries, token) is null)
                     return Results.NotFound();

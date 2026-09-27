@@ -6,6 +6,7 @@ using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Domain.Races;
+using Microsoft.AspNetCore.Mvc;
 
 namespace HorseRacingPrediction.Api.Endpoints.Races;
 
@@ -14,8 +15,8 @@ internal static class CreateRaceOddsSnapshotEndpoint
     internal static void Map(IEndpointRouteBuilder endpoints)
     {
         endpoints.MapPost("/api/v2/admin/races/{raceId}/odds-snapshot-records",
-            async (string raceId, RecordRaceOddsSnapshotRequest request, ICommandBus commands,
-                IQueryProcessor queries, CancellationToken token) =>
+            async (string raceId, RecordRaceOddsSnapshotRequest request, [FromServices] ICommandBus commands,
+                [FromServices] IQueryProcessor queries, CancellationToken token) =>
             {
                 var entries = request.Entries ?? [];
                 var observations = request.Observations;

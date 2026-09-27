@@ -11,6 +11,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Web;
+using Microsoft.AspNetCore.Mvc;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 
@@ -26,11 +27,11 @@ public sealed record ReleaseRaceEntryRepairRequest(string OperationId, string Ho
 
 internal static class RaceEntryRepairOperations
 {
-    internal static async Task<IResult> GetHoldAsync(string raceId, CollectionPlatformStore collection, CancellationToken token) =>
+    internal static async Task<IResult> GetHoldAsync(string raceId, [FromServices] CollectionPlatformStore collection, CancellationToken token) =>
         Results.Ok(await collection.GetRaceRepairHoldAsync(raceId, token));
 
-    internal static async Task<IResult> GetFenceAsync(string raceId, RaceEntryRepairInspector inspector,
-        RaceWriteCoordinator coordinator, CollectionPlatformStore collection, CancellationToken token)
+    internal static async Task<IResult> GetFenceAsync(string raceId, [FromServices] RaceEntryRepairInspector inspector,
+        [FromServices] RaceWriteCoordinator coordinator, [FromServices] CollectionPlatformStore collection, CancellationToken token)
     {
         await using var held = await LockAsync(raceId, inspector, coordinator, token);
         var hold = await collection.GetRaceRepairHoldAsync(raceId, token);
@@ -44,7 +45,8 @@ internal static class RaceEntryRepairOperations
     }
 
     internal static async Task<IResult> PutHoldAsync(string raceId, HoldRaceEntryRepairRequest request,
-        RaceEntryRepairInspector inspector, RaceWriteCoordinator coordinator, CollectionPlatformStore collection,
+        [FromServices] RaceEntryRepairInspector inspector, [FromServices] RaceWriteCoordinator coordinator,
+        [FromServices] CollectionPlatformStore collection,
         CancellationToken token)
     {
         await using var held = await LockAsync(raceId, inspector, coordinator, token);
@@ -72,7 +74,8 @@ internal static class RaceEntryRepairOperations
     }
 
     internal static async Task<IResult> PatchHoldAsync(string raceId, ReleaseRaceEntryRepairRequest request,
-        RaceEntryRepairInspector inspector, RaceWriteCoordinator coordinator, CollectionPlatformStore collection,
+        [FromServices] RaceEntryRepairInspector inspector, [FromServices] RaceWriteCoordinator coordinator,
+        [FromServices] CollectionPlatformStore collection,
         CancellationToken token)
     {
         await using var held = await LockAsync(raceId, inspector, coordinator, token);
@@ -100,15 +103,16 @@ internal static class RaceEntryRepairOperations
         catch (InvalidOperationException) { return Results.Conflict(new { code = "RepairReleaseConflict" }); }
     }
 
-    internal static async Task<IResult> GetInspectionAsync(string raceId, RaceEntryRepairInspector inspector,
-        RaceWriteCoordinator coordinator, CancellationToken token)
+    internal static async Task<IResult> GetInspectionAsync(string raceId, [FromServices] RaceEntryRepairInspector inspector,
+        [FromServices] RaceWriteCoordinator coordinator, CancellationToken token)
     {
         await using var held = await LockAsync(raceId, inspector, coordinator, token);
         return Results.Ok(await inspector.InspectAsync(raceId, token));
     }
 
     internal static async Task<IResult> PreviewAsync(string raceId, RaceEntryRepairManifest manifest,
-        RaceEntryRepairInspector inspector, RaceWriteCoordinator coordinator, CollectionPlatformStore collection,
+        [FromServices] RaceEntryRepairInspector inspector, [FromServices] RaceWriteCoordinator coordinator,
+        [FromServices] CollectionPlatformStore collection,
         CancellationToken token)
     {
         await using var held = await LockAsync(raceId, inspector, coordinator, token);
@@ -141,8 +145,9 @@ internal static class RaceEntryRepairOperations
     }
 
     internal static async Task<IResult> ApplyAsync(string raceId, ApplyRaceEntryRepairRequest request,
-        RaceEntryRepairInspector inspector, RaceWriteCoordinator coordinator, CollectionPlatformStore collection,
-        ICommandBus commands, IEventStore events, IDomainEventPublisher publisher, CancellationToken token)
+        [FromServices] RaceEntryRepairInspector inspector, [FromServices] RaceWriteCoordinator coordinator,
+        [FromServices] CollectionPlatformStore collection, [FromServices] ICommandBus commands,
+        [FromServices] IEventStore events, [FromServices] IDomainEventPublisher publisher, CancellationToken token)
     {
         if (!Guid.TryParse(request.OperationId, out _)) return Results.BadRequest(new { code = "InvalidOperationId" });
         await using var held = await LockAsync(raceId, inspector, coordinator, token);

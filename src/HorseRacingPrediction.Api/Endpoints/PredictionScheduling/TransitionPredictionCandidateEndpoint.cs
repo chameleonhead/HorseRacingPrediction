@@ -1,11 +1,13 @@
 using HorseRacingPrediction.PredictionScheduling;
+using Microsoft.AspNetCore.Mvc;
 namespace HorseRacingPrediction.Api.Endpoints.PredictionScheduling;
 
 internal static class TransitionPredictionCandidateEndpoint
 {
     internal static void Map(IEndpointRouteBuilder endpoints) => endpoints.MapPatch(
         "/api/v2/internal/prediction-candidates/{raceId}", async (string raceId,
-            PredictionCandidateTransitionRequest request, IPredictionSchedule schedule, CancellationToken token) =>
+            PredictionCandidateTransitionRequest request, [FromServices] IPredictionSchedule schedule,
+            CancellationToken token) =>
         {
             if (request.Mode == "Complete")
             {

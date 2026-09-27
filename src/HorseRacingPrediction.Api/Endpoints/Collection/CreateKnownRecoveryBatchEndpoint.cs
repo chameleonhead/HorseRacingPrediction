@@ -1,5 +1,6 @@
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Contracts.Time;
+using Microsoft.AspNetCore.Mvc;
 
 namespace HorseRacingPrediction.Api.Endpoints.Collection;
 
@@ -7,7 +8,8 @@ internal static class CreateKnownRecoveryBatchEndpoint
 {
     internal static void Map(IEndpointRouteBuilder endpoints) =>
         endpoints.MapPost("/api/v2/admin/collection/known-recovery-batches",
-            async (CollectionMonitoringService service, ILogger<CollectionMonitoringService> logger,
+            async ([FromServices] CollectionMonitoringService service,
+                [FromServices] ILogger<CollectionMonitoringService> logger,
                 CancellationToken token) =>
             {
                 try
