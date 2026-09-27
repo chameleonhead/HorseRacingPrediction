@@ -47,7 +47,8 @@ public sealed class CollectionRevisionEndpointTests
                 new ApplyCollectionRevisionRequest(definition.Value, 8, "specific fix", impact)))
                 .EnsureSuccessStatusCode();
             (await client.PostAsJsonAsync("api/v2/admin/collection/recollection-batches",
-                new { Mode = "Revision", DefinitionId = definition.Value, Revision = 8, Lane = "Normal", Priority = 50 })).EnsureSuccessStatusCode();
+                new CollectionRecollectionBatchRequest("Revision", definition.Value, 8,
+                    Lane: CollectionLane.Normal, Priority: 50))).EnsureSuccessStatusCode();
             var progress = await client.GetFromJsonAsync<RevisionRecollectionProgress>(
                 $"api/v2/admin/collection/recollection-batches?definition={definition.Value}&revision=8");
 

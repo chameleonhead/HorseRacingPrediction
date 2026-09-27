@@ -413,7 +413,7 @@ public sealed class CollectionAdministrationComponentTests
                 Previews++;
                 return await Ok(new CollectionBulkPreview(Definition, 1, 1, [Resource]));
             }
-            if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/recollection-batch-previews"))
+            if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/recollection-previews"))
             {
                 RacePeriodPreviews++;
                 LastRacePeriodRequest = await request.Content!.ReadFromJsonAsync<CreateRacePeriodRecollectionRequest>(cancellationToken);
@@ -424,10 +424,14 @@ public sealed class CollectionAdministrationComponentTests
             if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/recollection-batches"))
             {
                 RacePeriodRequests++;
-                LastRacePeriodRequest = await request.Content!.ReadFromJsonAsync<CreateRacePeriodRecollectionRequest>(cancellationToken);
+                var batchRequest = await request.Content!.ReadFromJsonAsync<CollectionRecollectionBatchRequest>(cancellationToken);
+                Assert.AreEqual("RacePeriod", batchRequest!.Mode);
+                LastRacePeriodRequest = new(batchRequest.From!.Value, batchRequest.To!.Value,
+                    batchRequest.Provider!, batchRequest.BatchId);
                 var batch = new BackfillBatchSnapshot("recollection:component-test", LastRacePeriodRequest!.From,
                     LastRacePeriodRequest.To, 2, 2, 2, 0, 0, 0, [], DateTimeOffset.UtcNow, null);
-                return await Ok(new RacePeriodRecollectionReceipt(batch, 2, 0));
+                return await Ok(new CollectionRecollectionBatchResponse("RacePeriod", null,
+                    new RacePeriodRecollectionReceipt(batch, 2, 0)));
             }
             if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath == "/api/v2/admin/collection/tasks")
             {

@@ -198,12 +198,12 @@ public sealed class SharedCollectionIdentityTests
         var profile = new JraSubjectProfileDto("Horse", "マル外 サンプル", source, source,
             new() { ["生年月日"] = "2024年1月1日" }, DateTimeOffset.UtcNow);
         (await http.PutAsJsonAsync(path, profile)).EnsureSuccessStatusCode();
-        (await http.PostAsJsonAsync(path, profile with { SourceIdentity = source + "&extra=1" })).EnsureSuccessStatusCode();
+        (await http.PutAsJsonAsync(path, profile with { SourceIdentity = source + "&extra=1" })).EnsureSuccessStatusCode();
         var resolved = await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("サンプル", source));
         resolved.EnsureSuccessStatusCode();
         Assert.AreEqual(id, (await resolved.Content.ReadFromJsonAsync<ResolvedIdentity>())!.Id);
         Assert.AreEqual(HttpStatusCode.UnprocessableEntity, (await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("サンプル"))).StatusCode);
-        Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync(path, profile with { SourceIdentity = source.Replace("123456", "654321"), SourceUrl = source.Replace("123456", "654321") })).StatusCode);
-        Assert.AreEqual(HttpStatusCode.BadRequest, (await http.PostAsJsonAsync(path, profile with { SourceUrl = source.Replace("www.jra.go.jp", "example.com") })).StatusCode);
+        Assert.AreEqual(HttpStatusCode.Conflict, (await http.PutAsJsonAsync(path, profile with { SourceIdentity = source.Replace("123456", "654321"), SourceUrl = source.Replace("123456", "654321") })).StatusCode);
+        Assert.AreEqual(HttpStatusCode.BadRequest, (await http.PutAsJsonAsync(path, profile with { SourceUrl = source.Replace("www.jra.go.jp", "example.com") })).StatusCode);
     }
 }

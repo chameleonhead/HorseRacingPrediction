@@ -104,11 +104,11 @@ public sealed class RaceCancellationTests
         Assert.AreNotEqual(before.EntryAssignmentFingerprint, after.EntryAssignmentFingerprint);
         http.DefaultRequestHeaders.Add("X-Race-Hold-Generation", "0");
         http.DefaultRequestHeaders.Add("X-Race-Assignment-Fingerprint", before.EntryAssignmentFingerprint);
-        var odds = new HorseRacingPrediction.ApiClient.RecordRaceOddsSnapshotRequest(DateTimeOffset.UtcNow, [new(1, 2.5m)]);
+        var odds = new HorseRacingPrediction.Contracts.RecordRaceOddsSnapshotRequest(DateTimeOffset.UtcNow, [new(1, 2.5m)]);
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync($"/api/v2/admin/races/{raceId}/odds-snapshot-records", odds)).StatusCode);
         http.DefaultRequestHeaders.Remove("X-Race-Assignment-Fingerprint");
         http.DefaultRequestHeaders.Add("X-Race-Assignment-Fingerprint", after.EntryAssignmentFingerprint);
-        Assert.AreEqual(HttpStatusCode.Accepted, (await http.PostAsJsonAsync($"/api/v2/admin/races/{raceId}/odds-snapshot-records", odds)).StatusCode);
+        Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync($"/api/v2/admin/races/{raceId}/odds-snapshot-records", odds)).StatusCode);
         Assert.AreEqual(HttpStatusCode.BadRequest, (await http.PostAsJsonAsync($"/api/v2/admin/races/{raceId}/odds-snapshot-records", odds with { Entries = [new(6, 3m)] })).StatusCode);
         http.DefaultRequestHeaders.Remove("X-Race-Assignment-Fingerprint");
         http.DefaultRequestHeaders.Remove("X-Race-Hold-Generation");

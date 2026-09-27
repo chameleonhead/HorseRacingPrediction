@@ -307,13 +307,16 @@ public sealed class JobDetailComponentTests
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
-            if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/requests"))
+            if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath == "/api/v2/admin/collection/tasks")
             {
                 ManualRequests++;
                 if (FailManualRequest) throw new HttpRequestException("offline");
-                return await Ok(new CollectionRequestReceipt(Guid.NewGuid(), DeferredByRepairHold ? null : ReceiptTaskId, CreatedTask, DeferredByRepairHold));
+                return await Ok(new CollectionTaskSubmissionResponse("Resource",
+                    new CollectionRequestReceipt(Guid.NewGuid(), DeferredByRepairHold ? null : ReceiptTaskId,
+                        CreatedTask, DeferredByRepairHold), Resource, Definition, new DateOnly(2026, 9, 28), null,
+                    new Dictionary<string, string>()));
             }
-            if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/cancel"))
+            if (request.Method == HttpMethod.Patch && request.RequestUri!.AbsolutePath.EndsWith("/tasks/" + ActiveTaskId.ToString("D")))
             {
                 CancelRequests++;
                 return new HttpResponseMessage(System.Net.HttpStatusCode.NoContent);

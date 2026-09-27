@@ -19,6 +19,7 @@ public sealed class PredictionScheduleEndpointTests
         Assert.AreEqual(HttpStatusCode.Unauthorized,
             (await unauthenticated.PostAsJsonAsync("/api/v2/internal/prediction-candidates",
                 new EnqueuePredictionCandidatesRequest(["race-unauthorized"], now))).StatusCode);
+        client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         Assert.AreEqual(HttpStatusCode.BadRequest,
             (await client.PostAsJsonAsync("/api/v2/internal/prediction-candidates",
                 new EnqueuePredictionCandidatesRequest([], now))).StatusCode);
@@ -30,7 +31,7 @@ public sealed class PredictionScheduleEndpointTests
             (await client.PostAsJsonAsync("/api/v2/internal/prediction-candidates", enqueue)).StatusCode,
             "Repeated enqueue should coalesce by race ID rather than duplicate candidates.");
 
-        var acquire = new AcquirePredictionCandidatesRequest(now, TimeSpan.Zero, 1, TimeSpan.FromMinutes(5));
+        var acquire = new AcquirePredictionCandidatesRequest(now, TimeSpan.Zero, 1, TimeSpan.FromMinutes(30));
         var concurrent = await Task.WhenAll(
             client.PostAsJsonAsync("/api/v2/internal/prediction-candidate-leases", acquire),
             client.PostAsJsonAsync("/api/v2/internal/prediction-candidate-leases", acquire));

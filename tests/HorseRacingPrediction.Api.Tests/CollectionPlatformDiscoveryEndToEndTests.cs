@@ -2,6 +2,8 @@ using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Contracts;
+using EventFlow.EntityFramework;
+using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
@@ -42,6 +44,8 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             var builder = WebApplication.CreateBuilder();
             builder.WebHost.UseTestServer();
             builder.Services.AddSingleton(store);
+            using var domain = new SqliteDbContextProvider();
+            builder.Services.AddSingleton<IDbContextProvider<EventStoreDbContext>>(domain);
             var app = builder.Build();
             app.MapCollectionApiV2Endpoints();
             await app.StartAsync();

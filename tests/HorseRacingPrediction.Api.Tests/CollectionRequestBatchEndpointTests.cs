@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Contracts;
+using EventFlow.EntityFramework;
+using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -26,6 +28,8 @@ public sealed class CollectionRequestBatchEndpointTests
             var builder = WebApplication.CreateBuilder();
             builder.WebHost.UseTestServer();
             builder.Services.AddSingleton(store);
+            using var domain = new SqliteDbContextProvider();
+            builder.Services.AddSingleton<IDbContextProvider<EventStoreDbContext>>(domain);
             var app = builder.Build();
             app.MapCollectionApiV2Endpoints();
             await app.StartAsync();

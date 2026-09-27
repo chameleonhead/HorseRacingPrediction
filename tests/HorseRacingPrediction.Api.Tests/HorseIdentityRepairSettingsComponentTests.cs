@@ -349,11 +349,11 @@ public sealed class HorseIdentityRepairSettingsComponentTests
             var progress = new RaceEntryOwnerMigrationProgress("migration:race-entry-owners:v2", 1, 0, 1, 0, 0, 1,
                 [new("race-target", "20260919:Hanshin:11", "大阪スポーツ杯", "阪神", 11, 16, 15,
                     new(2026, 9, 19))], Eligible: 1);
-            if (request.Method == HttpMethod.Post && path.EndsWith("race-entry-owners/preview", StringComparison.Ordinal))
+            if (request.Method == HttpMethod.Post && path.EndsWith("migration-previews/race-entry-owner-repair", StringComparison.Ordinal))
                 return Ok(progress);
-            if (request.Method == HttpMethod.Get && path.EndsWith("race-entry-owners/progress", StringComparison.Ordinal))
+            if (request.Method == HttpMethod.Get && path.EndsWith("migrations/race-entry-owner-repair", StringComparison.Ordinal))
                 return Ok(progress);
-            if (request.Method == HttpMethod.Post && path.EndsWith("race-entry-owners/apply", StringComparison.Ordinal))
+            if (request.Method == HttpMethod.Post && path.EndsWith("migrations/race-entry-owner-repair", StringComparison.Ordinal))
             {
                 Applied = true;
                 return Ok(progress);

@@ -23,9 +23,11 @@ public sealed class CollectionOperationsEndpointTests
             using var client = app.GetTestClient();
 
             using var reversed = await client.PostAsJsonAsync("/api/v2/admin/collection/recollection-batches",
-                new CreateRacePeriodRecollectionRequest(new(2026, 9, 13), new(2026, 9, 12)));
+                new CollectionRecollectionBatchRequest("RacePeriod", Provider: "JRA",
+                    From: new(2026, 9, 13), To: new(2026, 9, 12)));
             using var tooLong = await client.PostAsJsonAsync("/api/v2/admin/collection/recollection-batches",
-                new CreateRacePeriodRecollectionRequest(new(2026, 7, 1), new(2026, 8, 1)));
+                new CollectionRecollectionBatchRequest("RacePeriod", Provider: "JRA",
+                    From: new(2026, 7, 1), To: new(2026, 8, 1)));
 
             Assert.AreEqual(HttpStatusCode.BadRequest, reversed.StatusCode);
             Assert.AreEqual(HttpStatusCode.BadRequest, tooLong.StatusCode);
@@ -43,15 +45,15 @@ public sealed class CollectionOperationsEndpointTests
             var store = await CreateStoreAsync(directory);
             await using var app = await CreateApplicationAsync(store);
             using var client = app.GetTestClient();
-            var request = new CreateRacePeriodRecollectionRequest(new(2026, 9, 12), new(2026, 9, 13),
-                BatchId: "recollection:test-1");
+            var request = new CollectionRecollectionBatchRequest("RacePeriod", Provider: "JRA",
+                From: new(2026, 9, 12), To: new(2026, 9, 13), BatchId: "recollection:test-1");
 
             using var firstResponse = await client.PostAsJsonAsync(
                 "/api/v2/admin/collection/recollection-batches", request);
-            var first = await firstResponse.Content.ReadFromJsonAsync<RacePeriodRecollectionReceipt>();
+            var first = (await firstResponse.Content.ReadFromJsonAsync<CollectionRecollectionBatchResponse>())?.RacePeriod;
             using var duplicateResponse = await client.PostAsJsonAsync(
                 "/api/v2/admin/collection/recollection-batches", request);
-            var duplicate = await duplicateResponse.Content.ReadFromJsonAsync<RacePeriodRecollectionReceipt>();
+            var duplicate = (await duplicateResponse.Content.ReadFromJsonAsync<CollectionRecollectionBatchResponse>())?.RacePeriod;
 
             Assert.AreEqual(HttpStatusCode.Accepted, firstResponse.StatusCode);
             Assert.AreEqual(2, first!.Batch.ExpectedDiscoveryDays);
@@ -74,7 +76,7 @@ public sealed class CollectionOperationsEndpointTests
             using var rerunResponse = await client.PostAsJsonAsync(
                 "/api/v2/admin/collection/recollection-batches",
                 request with { BatchId = "recollection:test-2" });
-            var rerun = await rerunResponse.Content.ReadFromJsonAsync<RacePeriodRecollectionReceipt>();
+            var rerun = (await rerunResponse.Content.ReadFromJsonAsync<CollectionRecollectionBatchResponse>())?.RacePeriod;
 
             Assert.AreEqual(HttpStatusCode.Accepted, rerunResponse.StatusCode);
             Assert.AreEqual(2, rerun!.TasksCreated);
@@ -440,7 +442,7 @@ public sealed class CollectionOperationsEndpointTests
             var detail = await client.GetFromJsonAsync<BackfillBatchSnapshot>("/api/v2/admin/collection/backfill-batches/2026-09");
             Assert.IsNotNull(detail);
             Assert.HasCount(1, detail.Holes);
-            var response = await client.PostAsJsonAsync("/api/v2/admin/collection/backfill-batches/2026-09/recover-holes", new { });
+            var response = await client.PostAsJsonAsync("/api/v2/admin/collection/backfill-batches/2026-09/recovery-batches", new { });
             Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
             var result = await response.Content.ReadFromJsonAsync<BackfillHoleRecoveryResult>();
             Assert.IsNotNull(result);
@@ -468,18 +470,18 @@ public sealed class CollectionOperationsEndpointTests
             using var client = app.GetTestClient();
 
             using var firstResponse = await client.PostAsJsonAsync(
-                "/api/v2/admin/collection/backfill-batches/retryable/recover-holes", new { });
+                "/api/v2/admin/collection/backfill-batches/retryable/recovery-batches", new { });
             var first = await firstResponse.Content.ReadFromJsonAsync<BackfillHoleRecoveryResult>();
             Assert.AreEqual(1, first?.TasksCreated);
             using var duplicateResponse = await client.PostAsJsonAsync(
-                "/api/v2/admin/collection/backfill-batches/retryable/recover-holes", new { });
+                "/api/v2/admin/collection/backfill-batches/retryable/recovery-batches", new { });
             var duplicate = await duplicateResponse.Content.ReadFromJsonAsync<BackfillHoleRecoveryResult>();
             Assert.AreEqual(0, duplicate?.TasksCreated, "An active task must not be duplicated.");
 
             var recovery = (await store.GetTasksAsync()).Single(x => x.TaskId != original.TaskId);
             Assert.IsTrue(await store.ReconcileDeadLetterAsync(recovery.TaskId, 1, now.AddSeconds(2), "again"));
             using var retryResponse = await client.PostAsJsonAsync(
-                "/api/v2/admin/collection/backfill-batches/retryable/recover-holes", new { });
+                "/api/v2/admin/collection/backfill-batches/retryable/recovery-batches", new { });
             var retry = await retryResponse.Content.ReadFromJsonAsync<BackfillHoleRecoveryResult>();
             Assert.AreEqual(1, retry?.TasksCreated, "A terminal failed recovery must be retryable.");
         }
@@ -507,7 +509,7 @@ public sealed class CollectionOperationsEndpointTests
             using var client = app.GetTestClient();
 
             using var response = await client.PostAsJsonAsync(
-                "/api/v2/admin/collection/backfill-batches/complete/recover-holes", new { });
+                "/api/v2/admin/collection/backfill-batches/complete/recovery-batches", new { });
             var result = await response.Content.ReadFromJsonAsync<BackfillHoleRecoveryResult>();
 
             Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
@@ -538,7 +540,7 @@ public sealed class CollectionOperationsEndpointTests
             using var client = app.GetTestClient();
 
             using var response = await client.PostAsJsonAsync(
-                "/api/v2/admin/collection/backfill-batches/large/recover-holes", new { });
+                "/api/v2/admin/collection/backfill-batches/large/recovery-batches", new { });
             var result = await response.Content.ReadFromJsonAsync<BackfillHoleRecoveryResult>();
 
             Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);

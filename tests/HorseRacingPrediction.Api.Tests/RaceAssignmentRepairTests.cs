@@ -359,7 +359,7 @@ public sealed class RaceAssignmentRepairTests
         oddsRequest.Headers.Add("X-Race-Assignment-Fingerprint", fence.GetProperty("assignmentFingerprint").GetString());
         oddsRequest.Headers.Add("X-Race-Hold-Generation", fence.GetProperty("generation").GetInt64().ToString(System.Globalization.CultureInfo.InvariantCulture));
         var odds = await http.SendAsync(oddsRequest);
-        Assert.AreEqual(HttpStatusCode.Accepted, odds.StatusCode, await odds.Content.ReadAsStringAsync());
+        Assert.AreEqual(HttpStatusCode.Created, odds.StatusCode, await odds.Content.ReadAsStringAsync());
         var inspection = await http.GetFromJsonAsync<JsonElement>($"/api/v2/admin/races/{raceId}/entry-repair/inspection");
         var response = await http.PostAsJsonAsync($"/api/v2/admin/races/{raceId}/entry-repair-previews", Manifest(inspection.GetProperty("version").GetInt32()));
         var preview = await response.Content.ReadFromJsonAsync<JsonElement>();

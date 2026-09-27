@@ -184,7 +184,7 @@ public sealed class RaceOddsSnapshotApiTests
         var at = new DateTimeOffset(2026, 9, 12, 5, 0, 0, TimeSpan.Zero);
         using (var first = await PostOddsAsync(client, raceId,
                    new RecordRaceOddsSnapshotRequest(at, [new(1, 2.5m), new(2, 3.5m)]), beforeFence))
-            Assert.AreEqual(HttpStatusCode.Accepted, first.StatusCode);
+            Assert.AreEqual(HttpStatusCode.Created, first.StatusCode);
 
         using var swapped = await client.PostAsJsonAsync("/api/races/result-bulk", initialCard with
         {
@@ -202,7 +202,7 @@ public sealed class RaceOddsSnapshotApiTests
             Assert.AreEqual(HttpStatusCode.Conflict, stale.StatusCode);
         using (var current = await PostOddsAsync(client, raceId,
                    new RecordRaceOddsSnapshotRequest(at.AddMinutes(2), [new(1, 2.1m)]), afterFence))
-            Assert.AreEqual(HttpStatusCode.Accepted, current.StatusCode);
+            Assert.AreEqual(HttpStatusCode.Created, current.StatusCode);
 
         var snapshots = await client.GetFromJsonAsync<List<RaceOddsSnapshot>>($"/api/v2/admin/races/{raceId}/odds-snapshot-records");
         Assert.IsNotNull(snapshots);
