@@ -71,6 +71,16 @@ Before describing a slice as complete, trace each acceptance criterion through t
 - Treat new code calling a component that creates legacy work as continued legacy usage, even when wrapped by a new handler.
 - For capabilities registered or seeded outside the main application, maintain an entry-point matrix before completion. Enumerate every production bootstrap, initializer, importer/seed reader, scheduler, manual-operation surface, and compatibility adapter that can create or dispatch the affected work. For each affected resource/definition pair, prove registration, type mapping, required metadata, and terminal handler resolution at every applicable entry point. Searching only the main runtime registration or testing only the primary UI/API path is insufficient; an unclassified alternate entry point is an open completion item.
 
+## Finite public-contract inventory gate
+
+When a change migrates an external, public, or API contract and investigation discovers a finite set of routes, operations, or endpoints, enumerate every discovered item directly in the governing change-record `README.md` before approval. A linked route map, ID range, or total count is supporting evidence only; it does not replace the README ledger.
+
+Give each item its current method/path or other contract identity, in-scope or out-of-scope disposition, approved replacement/consolidation/deletion target (or explicit unchanged disposition), and the invariants to preserve with the affected consumer evidence. Include reconciliation totals for the discovered inventory and each disposition/target category so the counts balance. Keep a detailed secondary inventory linkable for additional evidence, and reconcile it item-for-item with the README ledger.
+
+Approval is blocked if an inventory item is missing, duplicated, unclassified, lacks its disposition or target, omits required invariant/consumer evidence, or if the reconciliation totals do not balance. This gate applies only when the change concerns an external/public/API contract and a finite inventory has been discovered; it does not require inventing an inventory for non-API work or small changes with no enumerated set.
+
+The observable approval check is a one-to-one reconciliation between the discovered inventory and the README ledger, including balanced totals. A linked 65-route matrix with no per-route README entries fails; a complete README ledger with matching identities, dispositions, targets, evidence, and totals passes; an unrelated non-API change with no finite inventory does not trigger the gate.
+
 ## Cutover Gate
 
 For destructive replacement, document and verify the executable order separately from the steady-state architecture: create replacement resources; connect new producers and consumers; prevent mixed messages and dual execution; initialize state and smoke test; preserve rollback until checks pass; then delete only the approved legacy targets.
