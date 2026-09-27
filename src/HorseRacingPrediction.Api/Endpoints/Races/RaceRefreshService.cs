@@ -1,21 +1,19 @@
-using static HorseRacingPrediction.Api.Endpoints.Races.RaceEndpointMappings;
 using EventFlow;
-using EventFlow.Queries;
 using EventFlow.EntityFramework;
-using HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.ApiClient;
-using HorseRacingPrediction.Application.Commands.Races;
+using EventFlow.Queries;
 using HorseRacingPrediction.Application.Commands.Horses;
+using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure.Persistence;
-using ApiContracts = HorseRacingPrediction.Contracts;
+using static HorseRacingPrediction.Api.Endpoints.Races.RaceEndpointMappings;
 
 namespace HorseRacingPrediction.Api.Endpoints.Races;
 
 internal static partial class RaceResultBulkService
 {
-    internal static async Task<IResult> RefreshCollectedRaceAsync(ApiContracts.DeclareRaceResultBulkRequest request,
+    internal static async Task<IResult> RefreshCollectedRaceAsync(DeclareRaceResultBulkRequest request,
         ICommandBus commands, IQueryProcessor queries, IDbContextProvider<EventStoreDbContext> dbProvider, CancellationToken token)
     {
         var id = request.TargetRaceId;
@@ -33,7 +31,7 @@ internal static partial class RaceResultBulkService
         var originHorse = request.SourceHorseId is null ? null
             : await queries.ProcessAsync(new ReadModelByIdQuery<HorseReadModel>(request.SourceHorseId), token);
         using var identityDb = dbProvider.CreateContext();
-        Dictionary<ApiContracts.RaceResultEntryBulkDto, string> horseIdentities;
+        Dictionary<RaceResultEntryBulkDto, string> horseIdentities;
         try { horseIdentities = await ResolveCollectedHorseIdentitiesAsync(request, identityDb, token); }
         catch (InvalidOperationException ex) { return CollectedIdentityRejection(id, ex.Message); }
         if (request.SourceHorseId is not null && (originHorse is null
@@ -48,8 +46,8 @@ internal static partial class RaceResultBulkService
             static string? SubjectId(string prefix, string subjectType, string? name) => string.IsNullOrWhiteSpace(name) ? null
                 : DeterministicIdGenerator.BuildEntityId(prefix,
                     DeterministicIdGenerator.NormalizeKey(
-                        ApiContracts.JraSubjectNameNormalizer.CanonicalizeDisplayName(subjectType, name)));
-            var horseName = ApiContracts.JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", source.HorseName);
+                        JraSubjectNameNormalizer.CanonicalizeDisplayName(subjectType, name)));
+            var horseName = JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", source.HorseName);
             var horseId = horseIdentities[source];
             var old = existing.Entries.FirstOrDefault(x => x.HorseId == horseId);
             var jockeyId = SubjectId("jockey", "Jockey", source.JockeyName);
@@ -91,7 +89,7 @@ internal static partial class RaceResultBulkService
                 source.Popularity, source.OriginalFinishPosition, source.IsDeadHeat, source.Average1F,
                 source.AdditionalPrizeMoney));
         }
-        static IReadOnlyList<PayoutEntry> Payouts(IReadOnlyList<ApiContracts.PayoutEntryDto>? values) =>
+        static IReadOnlyList<PayoutEntry> Payouts(IReadOnlyList<PayoutEntryDto>? values) =>
             values?.Select(x => new PayoutEntry(x.Combination, x.Amount)).ToArray() ?? [];
         var p = request.Payouts;
         var w = request.Weather;
@@ -111,7 +109,7 @@ internal static partial class RaceResultBulkService
             request.StartTime, request.OverallPaceText, request.CornerPassagesText, request.CourseLayout,
             request.StewardReportText);
         var outcome = await commands.PublishAsync(new RefreshCollectedRaceCommand(new RaceId(id), data), token);
-        return outcome.IsSuccess ? Results.Ok(new ApiContracts.DeclareRaceResultBulkResponse(id, [], CorePersisted: true))
+        return outcome.IsSuccess ? Results.Ok(new DeclareRaceResultBulkResponse(id, [], CorePersisted: true))
             : Results.BadRequest(new[] { "再取得情報の保存に失敗しました。" });
     }
 

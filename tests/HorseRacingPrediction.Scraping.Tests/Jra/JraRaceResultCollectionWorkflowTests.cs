@@ -1,4 +1,3 @@
-using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;

@@ -1,4 +1,4 @@
-using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Scraping.Jra.Normalization;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 
 namespace HorseRacingPrediction.Scraping.Jra.Parsing;

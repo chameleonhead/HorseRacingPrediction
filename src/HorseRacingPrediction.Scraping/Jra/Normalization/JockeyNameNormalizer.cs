@@ -1,4 +1,4 @@
-namespace HorseRacingPrediction.ApiClient;
+namespace HorseRacingPrediction.Scraping.Jra.Normalization;
 
 /// <summary>Removes race-specific allowance marks from jockey master data.</summary>
 public static class JockeyNameNormalizer

@@ -1,13 +1,12 @@
+using HorseRacingPrediction.Contracts;
+using HorseRacingPrediction.Scraping.Browser;
+using HorseRacingPrediction.Scraping.Jra.Models;
+using HorseRacingPrediction.Scraping.Jra.Pages;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
-using HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.ApiClient;
-using HorseRacingPrediction.Scraping.Browser;
-using PageContentNode = HorseRacingPrediction.Scraping.Browser.Snapshots.PageContentNode;
 using PageContentKind = HorseRacingPrediction.Scraping.Browser.Snapshots.PageContentKind;
-using HorseRacingPrediction.Scraping.Jra.Models;
-using HorseRacingPrediction.Scraping.Jra.Pages;
+using PageContentNode = HorseRacingPrediction.Scraping.Browser.Snapshots.PageContentNode;
 using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 
 namespace HorseRacingPrediction.Scraping.Jra.Parsing;

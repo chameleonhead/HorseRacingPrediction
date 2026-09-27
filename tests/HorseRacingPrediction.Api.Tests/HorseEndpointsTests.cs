@@ -1,6 +1,5 @@
 using EventFlow.EntityFramework;
 using EventFlow.EntityFramework.EventStores;
-using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
@@ -183,7 +182,7 @@ public class HorseEndpointsTests
     {
         var raceId = $"race-{Guid.NewGuid()}";
         var horseId = $"horse-{Guid.NewGuid()}";
-        var entryId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceEntryId(raceId, horseId);
+        var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, horseId);
 
         await _client.PostAsJsonAsync(
             "/api/races",

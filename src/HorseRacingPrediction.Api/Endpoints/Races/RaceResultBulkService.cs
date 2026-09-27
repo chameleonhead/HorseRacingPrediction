@@ -1,8 +1,6 @@
-using static HorseRacingPrediction.Api.Endpoints.Races.RaceEndpointMappings;
 using EventFlow;
 using EventFlow.EntityFramework;
 using EventFlow.Queries;
-using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Commands.Horses;
 using HorseRacingPrediction.Application.Commands.Jockeys;
 using HorseRacingPrediction.Application.Commands.Races;
@@ -10,6 +8,7 @@ using HorseRacingPrediction.Application.Commands.Trainers;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Contracts;
+using HorseRacingPrediction.Contracts.Time;
 using HorseRacingPrediction.Domain.Horses;
 using HorseRacingPrediction.Domain.Jockeys;
 using HorseRacingPrediction.Domain.Races;
@@ -18,14 +17,14 @@ using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text;
-using ApiContracts = HorseRacingPrediction.Contracts;
+using static HorseRacingPrediction.Api.Endpoints.Races.RaceEndpointMappings;
 
 namespace HorseRacingPrediction.Api.Endpoints.Races;
 
 internal static partial class RaceResultBulkService
 {
     internal static async Task<IResult> ApplyCollectedRaceResultBulkAsync(
-        ApiContracts.DeclareRaceResultBulkRequest request,
+        DeclareRaceResultBulkRequest request,
         ICommandBus commandBus,
         IQueryProcessor queryProcessor,
         IDbContextProvider<EventStoreDbContext> dbContextProvider,
@@ -37,7 +36,7 @@ internal static partial class RaceResultBulkService
 
         using var identityDb = dbContextProvider.CreateContext();
         string raceIdValue;
-        Dictionary<ApiContracts.RaceResultEntryBulkDto, string> horseIdentities;
+        Dictionary<RaceResultEntryBulkDto, string> horseIdentities;
         try
         {
             raceIdValue = await CollectionIdentityResolver.RaceAsync(identityDb, request.RaceDate, request.RacecourseCode, request.RaceNumber, cancellationToken);
@@ -55,8 +54,8 @@ internal static partial class RaceResultBulkService
 
         var errors = new List<string>();
         var relatedErrors = new List<string>();
-        var outcomes = new List<ApiContracts.DeclareRaceResultBulkItemOutcome>();
-        var accepted = new List<(ApiContracts.RaceResultEntryBulkDto Source, EntryDetails Entry, EntryResultDetails Result,
+        var outcomes = new List<DeclareRaceResultBulkItemOutcome>();
+        var accepted = new List<(RaceResultEntryBulkDto Source, EntryDetails Entry, EntryResultDetails Result,
             string HorseName, string? JockeyName, string? TrainerName)>();
         var seenNumbers = new HashSet<int>();
 
@@ -81,11 +80,11 @@ internal static partial class RaceResultBulkService
             }
 
             var horseName = item.HorseName!.Trim();
-            var canonicalHorseName = ApiContracts.JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", horseName);
+            var canonicalHorseName = JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", horseName);
             var canonicalJockeyName = string.IsNullOrWhiteSpace(item.JockeyName) ? null
-                : ApiContracts.JraSubjectNameNormalizer.CanonicalizeDisplayName("Jockey", item.JockeyName);
+                : JraSubjectNameNormalizer.CanonicalizeDisplayName("Jockey", item.JockeyName);
             var canonicalTrainerName = string.IsNullOrWhiteSpace(item.TrainerName) ? null
-                : ApiContracts.JraSubjectNameNormalizer.CanonicalizeDisplayName("Trainer", item.TrainerName);
+                : JraSubjectNameNormalizer.CanonicalizeDisplayName("Trainer", item.TrainerName);
             var horseId = horseIdentities[item];
             var entryId = existing?.Entries.SingleOrDefault(x => x.HorseId == horseId)?.EntryId
                 ?? DeterministicIdGenerator.BuildRaceEntryId(raceIdValue, horseId);
@@ -111,7 +110,7 @@ internal static partial class RaceResultBulkService
             const string message = "Race-card requests must not contain result data.";
             errors.Add($"出馬表登録エラー: {message}");
             MarkAcceptedOutcomesFailed(outcomes, "RaceCardContainsResultData", message);
-            return Results.Ok(new ApiContracts.DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes));
+            return Results.Ok(new DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes));
         }
 
         var gradeCode = ResolveCollectedGradeCode(request.GradeCode, request.RaceName, existing?.RaceName);
@@ -122,7 +121,7 @@ internal static partial class RaceResultBulkService
             request.IsRaceCard ? [] : accepted.Select(item => item.Result).ToArray(), request.WinningHorseName,
             string.IsNullOrWhiteSpace(request.WinningHorseName)
                 ? null
-                : request.DeclaredAt ?? ApiContracts.Time.JstTime.Now(),
+                : request.DeclaredAt ?? JstTime.Now(),
             request.Payouts is null ? null : new PayoutResultDetails(request.Payouts.DeclaredAt,
                 ToPayoutEntries(request.Payouts.WinPayouts), ToPayoutEntries(request.Payouts.PlacePayouts),
                 ToPayoutEntries(request.Payouts.QuinellaPayouts), ToPayoutEntries(request.Payouts.ExactaPayouts),
@@ -144,7 +143,7 @@ internal static partial class RaceResultBulkService
         {
             errors.Add($"レース一括登録エラー: {ex.Message}");
             MarkAcceptedOutcomesFailed(outcomes, "RaceBulkValidationFailed", ex.Message);
-            return Results.Ok(new ApiContracts.DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes));
+            return Results.Ok(new DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes));
         }
 
         try
@@ -159,7 +158,7 @@ internal static partial class RaceResultBulkService
         {
             errors.Add($"関連主体登録エラー: {ex.Message}");
             MarkAcceptedOutcomesFailed(outcomes, "RelatedSubjectUpsertFailed", ex.Message);
-            return Results.Ok(new ApiContracts.DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes));
+            return Results.Ok(new DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes));
         }
 
         try
@@ -201,11 +200,11 @@ internal static partial class RaceResultBulkService
             MarkAcceptedOutcomesFailed(outcomes, "RaceBulkCommandFailed", ex.Message);
         }
 
-        return Results.Ok(new ApiContracts.DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes,
+        return Results.Ok(new DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes,
             corePersisted, relatedErrors));
     }
 
-    internal static bool HasRaceResultEvidence(ApiContracts.DeclareRaceResultBulkRequest request)
+    internal static bool HasRaceResultEvidence(DeclareRaceResultBulkRequest request)
         => !string.IsNullOrWhiteSpace(request.WinningHorseName)
            || request.DeclaredAt is not null
            || request.Payouts is not null
@@ -224,12 +223,12 @@ internal static partial class RaceResultBulkService
 
     internal static async Task<IReadOnlyList<CollectionRequestBatchOutcome>> RequestSubjectProfileJobsAsync(
         string raceId, DateOnly raceDate,
-        IReadOnlyList<(ApiContracts.RaceResultEntryBulkDto Source, EntryDetails Entry, EntryResultDetails Result,
+        IReadOnlyList<(RaceResultEntryBulkDto Source, EntryDetails Entry, EntryResultDetails Result,
             string HorseName, string? JockeyName, string? TrainerName)> entries,
         CollectionPlatformStore store, IDbContextProvider<EventStoreDbContext> dbContextProvider,
         CancellationToken cancellationToken)
     {
-        var today = ApiContracts.Time.JstTime.Today();
+        var today = JstTime.Today();
         var realtime = raceDate >= today && raceDate <= today.AddDays(7);
         var lane = realtime ? CollectionLane.Realtime : CollectionLane.Normal;
         var priority = realtime ? (int)CollectionPriority.High : (int)CollectionPriority.Low;
@@ -290,8 +289,8 @@ internal static partial class RaceResultBulkService
                 _ => null,
             };
             var valid = referenced && projectedName is not null
-                && string.Equals(ApiContracts.JraSubjectNameNormalizer.NormalizeIdentityName(subject.Type.ToString(), projectedName),
-                    ApiContracts.JraSubjectNameNormalizer.NormalizeIdentityName(subject.Type.ToString(), subject.Name!),
+                && string.Equals(JraSubjectNameNormalizer.NormalizeIdentityName(subject.Type.ToString(), projectedName),
+                    JraSubjectNameNormalizer.NormalizeIdentityName(subject.Type.ToString(), subject.Name!),
                     StringComparison.Ordinal)
                 && string.Equals(subject.Id, subject.Type == CollectionResourceType.Horse
                     ? resolvedHorseJobs[subject.Id!] : ExpectedSubjectJobId(subject), StringComparison.Ordinal);
@@ -316,7 +315,7 @@ internal static partial class RaceResultBulkService
                 ReasonMessage = "主体投影、名称、決定論的ID、またはRaceEntry参照が一致しません。",
                 EvidenceFingerprint = fingerprint,
                 Status = "Open",
-                CreatedAt = ApiContracts.Time.JstTime.Now(),
+                CreatedAt = JstTime.Now(),
             });
             return false;
         }).ToArray();
@@ -397,7 +396,7 @@ internal static partial class RaceResultBulkService
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n',
             items.Select(item => $"{item.ItemKey}:{item.RequestedRevision}"))))).ToLowerInvariant()[..24];
         var accepted = items.Length == 0 ? [] : await store.RequestManyAsync(
-            $"race-subjects:{raceId}:{fingerprint}", items, ApiContracts.Time.JstTime.Now(), cancellationToken)
+            $"race-subjects:{raceId}:{fingerprint}", items, JstTime.Now(), cancellationToken)
             .ConfigureAwait(false);
         return [.. accepted, .. rejected];
     }
@@ -406,7 +405,7 @@ internal static partial class RaceResultBulkService
 
     internal static string? ExpectedSubjectJobId(SubjectJob subject)
     {
-        var canonical = ApiContracts.JraSubjectNameNormalizer.CanonicalizeDisplayName(
+        var canonical = JraSubjectNameNormalizer.CanonicalizeDisplayName(
             subject.Type.ToString(), subject.Name!);
         return subject.Type switch
         {
@@ -465,10 +464,10 @@ internal static partial class RaceResultBulkService
             throw new ArgumentException("Payouts require a declared race result.");
     }
 
-    internal static IReadOnlyList<PayoutEntry> ToPayoutEntries(IReadOnlyList<ApiContracts.PayoutEntryDto>? values)
+    internal static IReadOnlyList<PayoutEntry> ToPayoutEntries(IReadOnlyList<PayoutEntryDto>? values)
         => values?.Select(item => new PayoutEntry(item.Combination, item.Amount)).ToArray() ?? [];
 
-    internal static void MarkAcceptedOutcomesFailed(List<ApiContracts.DeclareRaceResultBulkItemOutcome> outcomes,
+    internal static void MarkAcceptedOutcomesFailed(List<DeclareRaceResultBulkItemOutcome> outcomes,
         string errorCode, string message)
     {
         for (var index = 0; index < outcomes.Count; index++)
@@ -477,7 +476,7 @@ internal static partial class RaceResultBulkService
     }
 
     internal static async Task EnsureRelatedSubjectsBulkAsync(
-        IEnumerable<(ApiContracts.RaceResultEntryBulkDto Source, EntryDetails Entry, EntryResultDetails Result,
+        IEnumerable<(RaceResultEntryBulkDto Source, EntryDetails Entry, EntryResultDetails Result,
             string HorseName, string? JockeyName, string? TrainerName)> source,
         ICommandBus commandBus,
         IDbContextProvider<EventStoreDbContext> dbContextProvider,

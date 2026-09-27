@@ -1,10 +1,12 @@
+using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Contracts;
+using HorseRacingPrediction.Scraping.Interfaces;
+using HorseRacingPrediction.Scraping.Jra.Normalization;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.ApiClient;
 
 namespace HorseRacingPrediction.Collector.Http;
 

@@ -1,4 +1,5 @@
 using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Scraping.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 

@@ -1,6 +1,5 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Contracts;
-using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Net.Http.Json;
@@ -18,7 +17,7 @@ public sealed class RaceActiveCollectionEndpointFilterTests
         using var http = client;
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var date = new DateOnly(2026, 9, 26);
-        var raceId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceId(date, "中山", 5);
+        var raceId = DeterministicIdGenerator.BuildRaceId(date, "中山", 5);
         (await http.PostAsJsonAsync("/api/races", new { raceId, raceDate = date, racecourseCode = "中山", raceNumber = 5, raceName = "lease検証" })).EnsureSuccessStatusCode();
         var store = app.Services.GetRequiredService<CollectionPlatformStore>();
         var definition = new CollectionDefinitionId("race-detail");

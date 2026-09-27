@@ -1,5 +1,5 @@
-using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Queries.ReadModels;
+using HorseRacingPrediction.Contracts;
 using ApiContracts = HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.Api.Endpoints.Races;
@@ -47,7 +47,7 @@ internal static partial class RaceResultBulkService
                 Reject("InvalidHorseSourceIdentity", "The supplied Horse source identity is invalid.");
                 continue;
             }
-            var name = ApiContracts.JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", item.HorseName);
+            var name = JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", item.HorseName);
             var horseId = resolved?.GetValueOrDefault(item) ?? DeterministicIdGenerator.BuildHorseId(name, item.HorseSourceIdentity);
             if (!seenHorses.Add(horseId))
                 Reject("RaceEntryIdentityMismatch", "Collected Horse identity must be unique within the race; no data was written.");

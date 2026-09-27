@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace HorseRacingPrediction.ApiClient;
+namespace HorseRacingPrediction.Contracts;
 
 public static class OwnerIdentityContract
 {

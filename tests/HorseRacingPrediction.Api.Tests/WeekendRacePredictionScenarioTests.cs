@@ -55,9 +55,9 @@ public class WeekendRacePredictionScenarioTests
         var jockey2Id = $"jockey-{Guid.NewGuid()}";
         var jockey3Id = $"jockey-{Guid.NewGuid()}";
         var trainerId = $"trainer-{Guid.NewGuid()}";
-        var entry1Id = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceEntryId(raceId, horse1Id);
-        var entry2Id = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceEntryId(raceId, horse2Id);
-        var entry3Id = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceEntryId(raceId, horse3Id);
+        var entry1Id = DeterministicIdGenerator.BuildRaceEntryId(raceId, horse1Id);
+        var entry2Id = DeterministicIdGenerator.BuildRaceEntryId(raceId, horse2Id);
+        var entry3Id = DeterministicIdGenerator.BuildRaceEntryId(raceId, horse3Id);
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         var memo1Id = $"memo-{Guid.NewGuid()}";
         var memo2Id = $"memo-{Guid.NewGuid()}";

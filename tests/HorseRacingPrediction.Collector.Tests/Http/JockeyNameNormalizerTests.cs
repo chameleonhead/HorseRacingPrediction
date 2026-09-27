@@ -1,4 +1,5 @@
-using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Contracts;
+using HorseRacingPrediction.Scraping.Jra.Normalization;
 
 namespace HorseRacingPrediction.Collector.Tests.Http;
 

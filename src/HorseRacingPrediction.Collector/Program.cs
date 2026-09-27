@@ -1,14 +1,13 @@
-using System.Linq;
-using System.Text.Json;
-using HorseRacingPrediction.Collector.Http;
-using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Scraping.Jra;
-using Microsoft.Extensions.Options;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using HorseRacingPrediction.Collector.CollectionPlatform;
+using HorseRacingPrediction.Collector.Http;
 using HorseRacingPrediction.PredictionScheduling;
+using HorseRacingPrediction.Scraping.Interfaces;
+using HorseRacingPrediction.Scraping.Jra;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 var builder = Host.CreateApplicationBuilder(args);
 var runOnce = args.Contains("--once", StringComparer.OrdinalIgnoreCase);
@@ -36,7 +35,7 @@ foreach (var descriptor in JraSubjectCollectionDefinitions.All)
             services.GetRequiredService<IJraSubjectProfileSink>(),
             services.GetRequiredService<ICollectionRequestSink>(),
             ownerIdentities: services.GetRequiredService<IOwnerIdentityVerifier>(),
-            entityWriter: services.GetRequiredService<HorseRacingPrediction.ApiClient.IDataCollectionWriteService>()));
+            entityWriter: services.GetRequiredService<IDataCollectionWriteService>()));
 builder.Services.AddSingleton<CollectionDefinitionHandlerRegistry>();
 
 builder.Services.AddHttpClient<CollectionPlatformWorkerClient>((services, client) =>

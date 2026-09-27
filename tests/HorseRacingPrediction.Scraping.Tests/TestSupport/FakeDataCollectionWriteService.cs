@@ -1,5 +1,5 @@
-using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Contracts;
+using HorseRacingPrediction.Scraping.Interfaces;
 
 namespace HorseRacingPrediction.Scraping.Tests.TestSupport;
 

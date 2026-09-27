@@ -1,14 +1,12 @@
-using System.Net;
-using System.Net.Http.Json;
-using System.Text.Json;
 using EventFlow.EntityFramework;
 using EventFlow.EntityFramework.EventStores;
-using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -180,7 +178,7 @@ public sealed class CollectedRaceIdentityGuardTests
 
         var response = await http.PostAsJsonAsync("/api/races/result-bulk", conflicting, JsonOptions);
         var body = await ReadBodyAsync(response);
-        var newHorseId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId(
+        var newHorseId = DeterministicIdGenerator.BuildHorseId(
             newHorse, SourceIdentity("120002"));
         var newHorseResponse = await http.GetAsync($"/api/horses/{newHorseId}");
 
@@ -226,7 +224,7 @@ public sealed class CollectedRaceIdentityGuardTests
         $"https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002036{suffix}/00";
 
     private static string HorseId(string name, string suffix) =>
-        HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId(name, SourceIdentity(suffix));
+        DeterministicIdGenerator.BuildHorseId(name, SourceIdentity(suffix));
 
     private static async Task<Dictionary<string, (string EntryId, int? HorseNumber)>> GetEntriesAsync(HttpClient client, string raceId)
     {

@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace HorseRacingPrediction.ApiClient;
+namespace HorseRacingPrediction.Contracts;
 
 /// <summary>
 /// レース・馬・騎手・調教師の決定論的 ID 生成ロジックを提供するユーティリティクラス。
@@ -64,7 +64,7 @@ public static class DeterministicIdGenerator
     {
         var key = JraSourceIdentity.TryNormalizeHorse(jraSourceIdentity, out var identity)
             ? $"JRA|{identity}"
-            : NormalizeKey(HorseRacingPrediction.Contracts.JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", registeredName));
+            : NormalizeKey(JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", registeredName));
         return BuildEntityId("horse", key);
     }
 

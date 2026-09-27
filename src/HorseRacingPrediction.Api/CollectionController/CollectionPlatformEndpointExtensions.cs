@@ -1,12 +1,10 @@
 using EventFlow.EntityFramework;
-using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Shared = HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 
@@ -328,7 +326,7 @@ public static class CollectionPlatformEndpointExtensions
                 from, to, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
             return Results.Accepted($"/api/admin/collection/backfills/{Uri.EscapeDataString(batchId)}", batch);
         });
-        admin.MapPost("/requests/batch", async (Shared.CollectionRequestBulkRequest request,
+        admin.MapPost("/requests/batch", async (CollectionRequestBulkRequest request,
             CollectionPlatformStore store, CancellationToken token) =>
         {
             if (request.Items is null || request.Items.Count is < 1 or > 500)
@@ -350,8 +348,8 @@ public static class CollectionPlatformEndpointExtensions
             }
             var outcomes = await store.RequestManyAsync(request.BatchId, items,
                 HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
-            return Results.Ok(new Shared.CollectionRequestBulkResponse(outcomes.Select(outcome =>
-                new Shared.CollectionRequestBulkOutcome(outcome.ItemKey, outcome.Status,
+            return Results.Ok(new CollectionRequestBulkResponse(outcomes.Select(outcome =>
+                new CollectionRequestBulkOutcome(outcome.ItemKey, outcome.Status,
                     outcome.Receipt?.RequestId, outcome.Receipt?.TaskId,
                     outcome.Receipt?.CreatedTask ?? false, outcome.ErrorCode, outcome.Message)).ToArray()));
         });
@@ -606,12 +604,12 @@ public static class CollectionPlatformEndpointExtensions
         };
 
     private static string NormalizeSubjectName(CollectionResourceType type, string name) =>
-        Shared.JraSubjectNameNormalizer.NormalizeIdentityName(type.ToString(),
-            Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName(type.ToString(), name));
+        JraSubjectNameNormalizer.NormalizeIdentityName(type.ToString(),
+            JraSubjectNameNormalizer.CanonicalizeDisplayName(type.ToString(), name));
 
     private static string ExpectedSubjectId(ObsoleteSubjectProfileTask source, string targetName)
     {
-        var canonical = Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName(
+        var canonical = JraSubjectNameNormalizer.CanonicalizeDisplayName(
             source.Resource.Type.ToString(), targetName);
         if (source.Resource.Type == CollectionResourceType.Horse)
         {

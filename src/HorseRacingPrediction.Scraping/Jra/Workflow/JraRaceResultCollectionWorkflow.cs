@@ -1,9 +1,8 @@
-using System.Linq;
-using System.Text.RegularExpressions;
-using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Contracts;
+using HorseRacingPrediction.Scraping.Interfaces;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
+using System.Text.RegularExpressions;
 
 namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 

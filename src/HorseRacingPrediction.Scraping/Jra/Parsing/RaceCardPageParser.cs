@@ -1,9 +1,8 @@
-using System.Text.RegularExpressions;
-using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Contracts;
-using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
+using System.Text.RegularExpressions;
+using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 
 namespace HorseRacingPrediction.Scraping.Jra.Parsing;
 

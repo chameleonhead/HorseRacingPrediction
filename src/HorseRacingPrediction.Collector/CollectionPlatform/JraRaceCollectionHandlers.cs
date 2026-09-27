@@ -1,14 +1,13 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
+using HorseRacingPrediction.PredictionScheduling;
+using HorseRacingPrediction.Scraping.Interfaces;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
-using HorseRacingPrediction.Scraping.Jra.Workflow;
-using HorseRacingPrediction.Scraping.Jra.Pages;
-using HorseRacingPrediction.PredictionScheduling;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
-using HorseRacingPrediction.Scraping.Jra.Parsing;
+using HorseRacingPrediction.Scraping.Jra.Pages;
+using HorseRacingPrediction.Scraping.Jra.Workflow;
 using Microsoft.Extensions.Options;
-using HorseRacingPrediction.ApiClient;
-using HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 

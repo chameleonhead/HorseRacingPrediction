@@ -1,12 +1,12 @@
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Diagnostics;
-using System.Globalization;
-using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
+using System.Diagnostics;
+using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace HorseRacingPrediction.Scraping.Jra.Navigation;
 

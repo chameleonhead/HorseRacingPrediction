@@ -1,4 +1,5 @@
-using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Contracts;
+using HorseRacingPrediction.Scraping.Interfaces;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
 using HorseRacingPrediction.Scraping.Jra.Pages;

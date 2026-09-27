@@ -1161,7 +1161,7 @@ public sealed partial class CollectionPlatformStore
             return resolved == raceId || conservative && (resolved is null
                 || attributes?.GetValueOrDefault("domainRaceId") == raceId);
         }
-        var normalized = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.TryBuildRaceIdFromResource(resourceId);
+        var normalized = DeterministicIdGenerator.TryBuildRaceIdFromResource(resourceId);
         var explicitId = JsonSerializer.Deserialize<Dictionary<string, string>>(attributesJson)?.GetValueOrDefault("domainRaceId");
         if (conservative) return normalized == raceId || explicitId == raceId || resourceId == raceId;
         if (normalized is not null && explicitId is not null && normalized != explicitId) return false;

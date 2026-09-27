@@ -1,13 +1,11 @@
-using System.Text.Json;
-using System.Text.RegularExpressions;
 using EventFlow.EntityFramework;
-using EventFlow.Aggregates;
 using EventFlow.EventStores;
-using HorseRacingPrediction.Domain.Predictions;
 using HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Domain.Predictions;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace HorseRacingPrediction.Api.Security;
 
@@ -84,7 +82,7 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
     private static bool RequiresAssignmentFence(EndpointFilterInvocationContext context) =>
         context.HttpContext.Request.Path.StartsWithSegments("/api/races")
         || context.HttpContext.Request.Path.StartsWithSegments("/api/admin/races")
-        || context.Arguments.Any(x => x is HorseRacingPrediction.Contracts.PrepareHorseHistoryRaceRequest);
+        || context.Arguments.Any(x => x is PrepareHorseHistoryRaceRequest);
 
     private async Task<HashSet<string>> ResolveKeysAsync(EndpointFilterInvocationContext context, CancellationToken token)
     {
@@ -104,17 +102,17 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
                 && type.GetProperty("RacecourseCode")?.GetValue(argument) is string course
                 && type.GetProperty("RaceNumber")?.GetValue(argument) is int number)
                 keys.Add(DeterministicIdGenerator.BuildRaceId(date, course, number));
-            if (argument is HorseRacingPrediction.Contracts.DeclareRaceResultBulkRequest bulk)
+            if (argument is DeclareRaceResultBulkRequest bulk)
                 foreach (var entry in bulk.Entries ?? [])
                 {
                     if (!string.IsNullOrWhiteSpace(entry.HorseName))
-                        keys.Add(DeterministicIdGenerator.BuildHorseId(HorseRacingPrediction.Contracts.JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", entry.HorseName), entry.HorseSourceIdentity));
+                        keys.Add(DeterministicIdGenerator.BuildHorseId(JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", entry.HorseName), entry.HorseSourceIdentity));
                     if (!string.IsNullOrWhiteSpace(entry.JockeyName))
-                        keys.Add(DeterministicIdGenerator.BuildEntityId("jockey", DeterministicIdGenerator.NormalizeKey(HorseRacingPrediction.Contracts.JraSubjectNameNormalizer.CanonicalizeDisplayName("Jockey", entry.JockeyName))));
+                        keys.Add(DeterministicIdGenerator.BuildEntityId("jockey", DeterministicIdGenerator.NormalizeKey(JraSubjectNameNormalizer.CanonicalizeDisplayName("Jockey", entry.JockeyName))));
                     if (!string.IsNullOrWhiteSpace(entry.TrainerName))
-                        keys.Add(DeterministicIdGenerator.BuildEntityId("trainer", DeterministicIdGenerator.NormalizeKey(HorseRacingPrediction.Contracts.JraSubjectNameNormalizer.CanonicalizeDisplayName("Trainer", entry.TrainerName))));
+                        keys.Add(DeterministicIdGenerator.BuildEntityId("trainer", DeterministicIdGenerator.NormalizeKey(JraSubjectNameNormalizer.CanonicalizeDisplayName("Trainer", entry.TrainerName))));
                 }
-            if (argument is HorseRacingPrediction.Contracts.PrepareHorseHistoryRaceRequest history)
+            if (argument is PrepareHorseHistoryRaceRequest history)
             {
                 keys.Add(DeterministicIdGenerator.BuildRaceId(history.RaceDate, history.Course, history.RaceNumber));
             }
@@ -122,7 +120,7 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
         using var db = provider.CreateContext();
         // Canonical scope locks serialize alternate spellings before their persisted IDs are resolved.
         keys.Add("identity-resolution");
-        var horseIdentities = context.Arguments.OfType<HorseRacingPrediction.Contracts.DeclareRaceResultBulkRequest>().Any()
+        var horseIdentities = context.Arguments.OfType<DeclareRaceResultBulkRequest>().Any()
             ? await CollectionIdentityResolver.LoadHorsesAsync(db, token) : [];
         foreach (var argument in context.Arguments.Where(x => x is not null))
         {
@@ -133,7 +131,7 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
                 && string.IsNullOrWhiteSpace(type.GetProperty("RaceId")?.GetValue(argument)?.ToString())
                 && string.IsNullOrWhiteSpace(type.GetProperty("TargetRaceId")?.GetValue(argument)?.ToString()))
                 keys.Add(await CollectionIdentityResolver.RaceAsync(db, date, course, number, token));
-            if (argument is HorseRacingPrediction.Contracts.DeclareRaceResultBulkRequest bulk)
+            if (argument is DeclareRaceResultBulkRequest bulk)
                 foreach (var entry in bulk.Entries ?? [])
                     if (!string.IsNullOrWhiteSpace(entry.HorseName)
                         && (string.IsNullOrWhiteSpace(entry.HorseSourceIdentity) || JraSourceIdentity.TryNormalizeHorse(entry.HorseSourceIdentity, out _)))

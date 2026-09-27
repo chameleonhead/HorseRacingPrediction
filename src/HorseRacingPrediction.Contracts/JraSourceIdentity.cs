@@ -1,6 +1,6 @@
 using System.Web;
 
-namespace HorseRacingPrediction.ApiClient;
+namespace HorseRacingPrediction.Contracts;
 
 public static class JraSourceIdentity
 {

@@ -1,8 +1,9 @@
+using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Collector.Http;
+using HorseRacingPrediction.Contracts;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using HorseRacingPrediction.ApiClient;
-using HorseRacingPrediction.Collector.Http;
 
 namespace HorseRacingPrediction.Collector.Tests.Http;
 

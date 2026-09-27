@@ -15,7 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\HorseRacingPrediction.ApiClient\HorseRacingPrediction.ApiClient.csproj" />
+    <ProjectReference Include="..\HorseRacingPrediction.Contracts\HorseRacingPrediction.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

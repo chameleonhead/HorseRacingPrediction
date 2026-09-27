@@ -104,19 +104,19 @@ internal static partial class SubjectIdentificationRepairService
                 _ => null,
             };
             if (name is null) continue;
-            var normalized = HorseRacingPrediction.Contracts.JraSubjectNameNormalizer.NormalizeIdentityName(type.ToString(), name);
-            var expectedName = HorseRacingPrediction.Contracts.JraSubjectNameNormalizer.NormalizeIdentityName(type.ToString(), issue.SubjectName);
+            var normalized = JraSubjectNameNormalizer.NormalizeIdentityName(type.ToString(), name);
+            var expectedName = JraSubjectNameNormalizer.NormalizeIdentityName(type.ToString(), issue.SubjectName);
             if (!string.Equals(normalized, expectedName, StringComparison.Ordinal)) continue;
-            var canonical = HorseRacingPrediction.Contracts.JraSubjectNameNormalizer.CanonicalizeDisplayName(type.ToString(), name);
+            var canonical = JraSubjectNameNormalizer.CanonicalizeDisplayName(type.ToString(), name);
             string expectedId;
             if (type == CollectionResourceType.Horse)
             {
                 try { expectedId = await CollectionIdentityResolver.HorseAsync(db, name, issue.SourceIdentity, null, token); }
                 catch (InvalidOperationException) { return null; }
             }
-            else expectedId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId(
+            else expectedId = DeterministicIdGenerator.BuildEntityId(
                     type == CollectionResourceType.Jockey ? "jockey" : "trainer",
-                    HorseRacingPrediction.ApiClient.DeterministicIdGenerator.NormalizeKey(canonical));
+                    DeterministicIdGenerator.NormalizeKey(canonical));
             if (id == expectedId) candidates.Add((id, name));
         }
         if (candidates.DistinctBy(x => x.Id).Count() != 1) return null;

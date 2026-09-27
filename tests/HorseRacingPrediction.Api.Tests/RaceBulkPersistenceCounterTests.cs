@@ -47,11 +47,11 @@ public sealed class RaceBulkPersistenceCounterTests
             var horseName = $"計測馬-{key}-{number}";
             var jockeyName = $"計測騎手-{key}-{number}";
             var trainerName = $"計測調教師-{key}-{number}";
-            await http.PutAsJsonAsync($"/api/horses/{HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId("horse", HorseRacingPrediction.ApiClient.DeterministicIdGenerator.NormalizeKey(horseName))}",
+            await http.PutAsJsonAsync($"/api/horses/{DeterministicIdGenerator.BuildEntityId("horse", DeterministicIdGenerator.NormalizeKey(horseName))}",
                 new UpdateHorseProfileRequest(horseName, horseName, "M", null));
-            await http.PutAsJsonAsync($"/api/jockeys/{HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId("jockey", HorseRacingPrediction.ApiClient.DeterministicIdGenerator.NormalizeKey(jockeyName))}",
+            await http.PutAsJsonAsync($"/api/jockeys/{DeterministicIdGenerator.BuildEntityId("jockey", DeterministicIdGenerator.NormalizeKey(jockeyName))}",
                 new UpdateJockeyProfileRequest(jockeyName, jockeyName, "JRA"));
-            await http.PutAsJsonAsync($"/api/trainers/{HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId("trainer", HorseRacingPrediction.ApiClient.DeterministicIdGenerator.NormalizeKey(trainerName))}",
+            await http.PutAsJsonAsync($"/api/trainers/{DeterministicIdGenerator.BuildEntityId("trainer", DeterministicIdGenerator.NormalizeKey(trainerName))}",
                 new UpdateTrainerProfileRequest(trainerName, trainerName, "JRA"));
             entries.Add(new(number, number, null, null, null, null, null,
                 horseName, jockeyName, trainerName));

@@ -84,7 +84,7 @@ public sealed class SubjectCollectionTests
         var (app, http) = await TestApplicationFactory.CreateAsync();
         await using var application = app; using var client = http;
         client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
-        var horseId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId("履歴の馬");
+        var horseId = DeterministicIdGenerator.BuildHorseId("履歴の馬");
         (await client.PostAsJsonAsync("/api/horses", new RegisterHorseRequest("履歴の馬", "履歴の馬", null, null, horseId))).EnsureSuccessStatusCode();
         var date = new DateOnly(2026, 9, 6);
         var prepare = await client.PostAsJsonAsync("/api/admin/collection/horse-history/race", new PrepareHorseHistoryRaceRequest(date, "中山", 6, "メイクデビュー中山"));

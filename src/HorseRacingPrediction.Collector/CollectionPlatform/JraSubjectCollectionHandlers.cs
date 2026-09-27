@@ -1,13 +1,13 @@
-using System.Net.Http.Json;
-using System.Globalization;
-using System.Text.RegularExpressions;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Scraping.Interfaces;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
+using System.Globalization;
+using System.Net.Http.Json;
+using System.Text.RegularExpressions;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 

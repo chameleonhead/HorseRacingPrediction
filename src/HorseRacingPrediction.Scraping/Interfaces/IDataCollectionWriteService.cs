@@ -1,6 +1,6 @@
-using HorseRacingPrediction.Contracts;
+﻿using HorseRacingPrediction.Contracts;
 
-namespace HorseRacingPrediction.ApiClient;
+namespace HorseRacingPrediction.Scraping.Interfaces;
 
 /// <summary>
 /// データ収集エージェントが行うドメインモデル更新操作を抽象化するサービスインターフェース。

@@ -1,4 +1,4 @@
-namespace HorseRacingPrediction.ApiClient;
+namespace HorseRacingPrediction.Contracts;
 
 /// <summary>
 /// 引用元（データの取得元URL）を紐付ける対象。<c>SubjectType</c>は
