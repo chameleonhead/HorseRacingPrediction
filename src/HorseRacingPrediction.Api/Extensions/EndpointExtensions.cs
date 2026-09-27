@@ -2,6 +2,70 @@ namespace HorseRacingPrediction.Api;
 
 public static class EndpointExtensions
 {
+    public static IEndpointRouteBuilder MapCollectionApiV2Endpoints(this IEndpointRouteBuilder endpoints)
+    {
+        global::HorseRacingPrediction.Api.Endpoints.Subjects.GetSubjectProfileEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Subjects.PutSubjectProfileEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Races.CreateRaceFromScheduleEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.GetCollectionMonitoringFindingsEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.SetCollectionPipelineEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.PreviewRaceDetailMigrationEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.ApplyRaceDetailMigrationEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.PreviewRaceEntryOwnerMigrationEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.ApplyRaceEntryOwnerMigrationEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.GetKnownRecoveryPreviewEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.GetOwnerIdentityMigrationPreviewEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.CreateKnownRecoveryBatchEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.GetExecutionBatchEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.SearchCollectionStatesEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.GetCollectionProgressEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.GetTaskViewCountsEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.GetCollectionDashboardEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.GetRaceCollectionReadinessEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.GetCollectionPipelineEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.ListBackfillBatchesEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.GetBackfillBatchEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.GetRaceEntryOwnerMigrationEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.ListCollectionTasksEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.GetCollectionResourceStateEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.GetCollectionResourceDetailEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.CancelCollectionTaskEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.RecoverBackfillHolesEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.ListFailureNotificationGroupsEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.GetFailureNotificationGroupEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.ListFailureNotificationsEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.CreateCollectionRecoveryBatchEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.CreateCollectionTaskEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.CreateCollectionTaskBatchEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.PreviewCollectionTaskBatchEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.PreviewRevisionImpactEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.CreateCollectionRevisionEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.GetRevisionRecollectionProgressEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.CreateBackfillBatchEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.PreviewRacePeriodRecollectionEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.CreateRecollectionBatchEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.ListRaceEntryOwnerRepairCandidatesEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.CreateRaceEntryOwnerRepairBatchEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.AcquireNextExecutionEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.TransitionCollectionExecutionEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.AcquireCollectionTaskEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.CompleteCollectionTaskAttemptEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.HeartbeatCollectionTaskLeaseEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.PredictionScheduling.EnqueuePredictionCandidatesEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.PredictionScheduling.AcquirePredictionCandidateLeasesEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.PredictionScheduling.TransitionPredictionCandidateEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Races.CreateRaceOddsSnapshotEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Races.ListRaceOddsSnapshotsEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Races.GetRaceEntryRepairHoldEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Races.GetRaceAssignmentFenceEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Races.UpdateRaceEntryRepairHoldEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Races.ReleaseRaceEntryRepairHoldEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Races.GetRaceEntryRepairEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Races.PreviewRaceEntryRepairEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Races.ApplyRaceEntryRepairEndpoint.Map(endpoints);
+        return endpoints;
+    }
+
     public static WebApplication MapApiEndpoints(this WebApplication app)
     {
         global::HorseRacingPrediction.Api.Endpoints.Health.GetHealthEndpoint.Map(app);

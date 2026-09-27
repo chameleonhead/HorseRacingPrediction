@@ -43,12 +43,17 @@ public sealed class CollectionRequestApiClient(HttpClient client) : ICollectionR
     public async Task<CollectionRequestBulkResponse> RequestManyAsync(CollectionRequestBulkRequest request,
         CancellationToken cancellationToken)
     {
-        using var response = await client.PostAsJsonAsync("api/admin/collection/requests/batch", request,
+        var submission = new CollectionTaskBatchRequest("ExplicitItems", ExplicitItems: request);
+        using var response = await client.PostAsJsonAsync("api/v2/admin/collection/task-batches", submission,
             cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<CollectionRequestBulkResponse>(cancellationToken)
-                   .ConfigureAwait(false)
-               ?? throw new InvalidOperationException("Collection request batch response was empty.");
+        var result = await response.Content.ReadFromJsonAsync<CollectionTaskBatchSubmissionResponse>(cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Collection task batch response was empty.");
+        if (!string.Equals(result.Mode, "ExplicitItems", StringComparison.Ordinal)
+            || result.ExplicitItems is null)
+            throw new InvalidOperationException("Collection task batch response did not contain explicit-item outcomes.");
+        return result.ExplicitItems;
     }
 
     public async Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, int requestedRevision,
@@ -56,7 +61,7 @@ public sealed class CollectionRequestApiClient(HttpClient client) : ICollectionR
         CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
         IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken)
     {
-        using var response = await client.PostAsJsonAsync("api/admin/collection/requests", new
+        using var response = await client.PostAsJsonAsync("api/v2/admin/collection/tasks", new
         {
             ResourceType = resource.Type,
             resource.Provider,

@@ -32,7 +32,7 @@ public sealed class CollectionPlatformWorkerClient
     public async Task<CollectionExecutionAcquireResult> AcquireNextAsync(CollectionWakeSignal wake,
         string queueMessageId, CancellationToken cancellationToken)
     {
-        using var response = await _client.PostAsJsonAsync("api/internal/collection/executions/acquire-next",
+        using var response = await _client.PostAsJsonAsync("api/v2/internal/collection/execution-leases",
             new CollectionExecutionAcquireRequest(wake, queueMessageId), cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<CollectionExecutionAcquireResult>(cancellationToken)
@@ -42,9 +42,9 @@ public sealed class CollectionPlatformWorkerClient
     public async Task StartExecutionAsync(Guid executionBatchId, string leaseToken, string? lambdaRequestId,
         CancellationToken cancellationToken)
     {
-        using var response = await _client.PostAsJsonAsync(
-            $"api/internal/collection/executions/{executionBatchId:D}/start",
-            new CollectionExecutionStartRequest(leaseToken, 960, lambdaRequestId), cancellationToken)
+        using var response = await _client.PatchAsJsonAsync(
+            $"api/v2/internal/collection/execution-batches/{executionBatchId:D}",
+            new { Transition = "Start", LeaseToken = leaseToken, LeaseSeconds = 960, LambdaRequestId = lambdaRequestId }, cancellationToken)
             .ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }
@@ -52,9 +52,9 @@ public sealed class CollectionPlatformWorkerClient
     public async Task CompleteExecutionAsync(Guid executionBatchId, string leaseToken,
         CancellationToken cancellationToken)
     {
-        using var response = await _client.PostAsJsonAsync(
-            $"api/internal/collection/executions/{executionBatchId:D}/complete",
-            new CollectionExecutionCompleteRequest(leaseToken), cancellationToken).ConfigureAwait(false);
+        using var response = await _client.PatchAsJsonAsync(
+            $"api/v2/internal/collection/execution-batches/{executionBatchId:D}",
+            new { Transition = "Complete", LeaseToken = leaseToken }, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }
 
@@ -63,7 +63,7 @@ public sealed class CollectionPlatformWorkerClient
         var totalStarted = _clock.GetTimestamp();
         var acquireStarted = _clock.GetTimestamp();
         using var acquireResponse = await _client.PostAsJsonAsync(
-            $"api/internal/collection/tasks/{notification.TaskId}/acquire",
+            $"api/v2/internal/collection/tasks/{notification.TaskId}/leases",
             new
             {
                 notification.DispatchGeneration,
@@ -180,7 +180,7 @@ public sealed class CollectionPlatformWorkerClient
         CancellationToken cancellationToken)
     {
         using var completeResponse = await _client.PostAsJsonAsync(
-            $"api/internal/collection/tasks/{taskId}/complete",
+            $"api/v2/internal/collection/tasks/{taskId}/attempts",
             new CompleteRequest(leaseToken, completion.Result, completion.ErrorCode, completion.ErrorMessage,
                 completion.RequestedUrl?.ToString(), completion.FinalUrl?.ToString(), completion.HttpStatusCode,
                 completion.PageIdentification, completion.RetryAt, completion.NextCollectionAt,

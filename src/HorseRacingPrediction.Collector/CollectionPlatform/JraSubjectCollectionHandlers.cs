@@ -55,7 +55,7 @@ public sealed class JraSubjectProfileApiClient(HttpClient client) : IJraSubjectP
         CancellationToken cancellationToken)
     {
         using var response = await client.PostAsJsonAsync(
-            $"api/admin/subjects/{subjectType}/{Uri.EscapeDataString(subjectId)}/profile", profile,
+            $"api/v2/admin/subjects/{subjectType}/{Uri.EscapeDataString(subjectId)}/profile", profile,
             cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }

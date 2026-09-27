@@ -3097,6 +3097,24 @@ public sealed partial class CollectionPlatformStore
     }
 
     public async Task<IReadOnlyList<PendingCollectionFailureNotification>> GetFailureNotificationsAsync(
+        DateTimeOffset now, int maxCount, bool actionableOnly, bool unpublishedOnly,
+        bool? published, CollectionFailureResolutionStatus? deliveryState,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var rows = await FailureQuery(db).ToListAsync(cancellationToken).ConfigureAwait(false);
+        return rows.Where(x => x.Notification.AvailableAt <= now
+                && (!actionableOnly || x.Notification.ResolutionStatus == CollectionFailureResolutionStatus.Open)
+                && (!unpublishedOnly || x.Notification.PublishedAt is null)
+                && (published is null || (x.Notification.PublishedAt is not null) == published.Value)
+                && (deliveryState is null || x.Notification.ResolutionStatus == deliveryState.Value))
+            .OrderBy(x => x.Notification.AvailableAt)
+            .Take(Math.Max(1, maxCount))
+            .Select(ToFailure)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<PendingCollectionFailureNotification>> GetFailureNotificationsAsync(
         IReadOnlyCollection<Guid> notificationIds, CancellationToken cancellationToken = default)
     {
         var ids = notificationIds.Distinct().ToArray();

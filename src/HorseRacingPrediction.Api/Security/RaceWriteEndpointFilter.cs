@@ -34,7 +34,7 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
                 var repairHold = await collection.GetRaceRepairHoldAsync(raceId, token);
                 if (repairHold is { IsActive: true }) return Results.Conflict(new { code = "RaceRepairHeld", raceId });
                 if ((repairHold is not null && RequiresAssignmentFence(context))
-                    || context.HttpContext.Request.Path.Value?.EndsWith("/odds-snapshots", StringComparison.Ordinal) == true)
+                    || context.HttpContext.Request.Path.Value?.EndsWith("/odds-snapshot-records", StringComparison.Ordinal) == true)
                 {
                     var fingerprint = context.HttpContext.Request.Headers["X-Race-Assignment-Fingerprint"].ToString();
                     var generation = context.HttpContext.Request.Headers["X-Race-Hold-Generation"].ToString();
@@ -82,6 +82,7 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
     private static bool RequiresAssignmentFence(EndpointFilterInvocationContext context) =>
         context.HttpContext.Request.Path.StartsWithSegments("/api/races")
         || context.HttpContext.Request.Path.StartsWithSegments("/api/admin/races")
+        || context.HttpContext.Request.Path.StartsWithSegments("/api/v2/admin/races")
         || context.Arguments.Any(x => x is PrepareHorseHistoryRaceRequest);
 
     private async Task<HashSet<string>> ResolveKeysAsync(EndpointFilterInvocationContext context, CancellationToken token)

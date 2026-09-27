@@ -149,10 +149,10 @@ else if (detail is not null)
             if (result.Success && result.Value is not null)
             {
                 explicitUrl = null;
-                operationMessage = result.Value.DeferredByRepairHold
+                operationMessage = result.Value.Receipt.DeferredByRepairHold
                     ? "収集依頼を保存しました。馬番補正のため保留中です。保留解除後に再取得します。"
-                    : result.Value.TaskId is { } taskId
-                        ? result.Value.CreatedTask
+                    : result.Value.Receipt.TaskId is { } taskId
+                        ? result.Value.Receipt.CreatedTask
                             ? $"収集依頼を受け付けました。タスク {ShortId(taskId)} を作成しました。"
                             : $"収集依頼を受け付けました。実行中のタスク {ShortId(taskId)} にまとめました。"
                         : "収集依頼を保存しました。";

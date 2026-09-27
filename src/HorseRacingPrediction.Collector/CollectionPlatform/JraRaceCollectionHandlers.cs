@@ -47,6 +47,7 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
             or CollectionReason.PeriodRecollection;
         var firstOffset = isSingleDayDiscovery ? 0 : -7;
         var lastOffset = isSingleDayDiscovery ? 0 : 7;
+        var raceRequests = new List<CollectionRequestBulkItem>();
         DateOnly? earliestUnpublishedDate = null;
         string? unpublishedMessage = null;
         var cancellations = new List<JraMeetingCancellation>();
@@ -147,6 +148,7 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                             ["number"] = race.Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
                         };
                         if (task.Attributes.TryGetValue("batchId", out var batchId)) attributes["batchId"] = batchId;
+                        CollectionRequestBulkItem? oddsRequest = null;
                         Uri? detailUrl;
                         if (!resultRoute)
                         {
@@ -159,9 +161,10 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                             {
                                 var oddsAttributes = new Dictionary<string, string>(attributes)
                                 { ["startTime"] = start.ToString("HH:mm") };
-                                await requests.RequestAsync(new(CollectionResourceType.RaceOdds, "JRA", id), new("race-odds"), 1,
-                                    CollectionReason.Discovery, CollectionLane.Realtime, 90, null, date,
-                                    oddsAttributes, cancellationToken).ConfigureAwait(false);
+                                oddsRequest = new CollectionRequestBulkItem(
+                                    $"odds:{id}", CollectionResourceType.RaceOdds.ToString(), "JRA", id, "race-odds", 1,
+                                    CollectionReason.Discovery.ToString(), CollectionLane.Realtime.ToString(), 90,
+                                    null, date, oddsAttributes);
                             }
                         }
                         else
@@ -169,12 +172,15 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                             detailUrl = JraRaceDetailUrl.Validate(
                                 CollectionHttpUrl.Resolve(race.ResultUrl, page.Url), CollectionResourceType.RaceResult, race.Id);
                         }
-                        await requests.RequestAsync(new(CollectionResourceType.Race, "JRA", id), new("race-detail"), HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
-                            task.Reason is CollectionReason.Backfill or CollectionReason.PeriodRecollection
+                        raceRequests.Add(new CollectionRequestBulkItem(
+                            $"race:{id}", CollectionResourceType.Race.ToString(), "JRA", id, "race-detail",
+                            HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
+                            (task.Reason is CollectionReason.Backfill or CollectionReason.PeriodRecollection
                                 ? task.Reason
-                                : CollectionReason.Discovery,
-                            resultRoute ? CollectionLane.Background : CollectionLane.Realtime,
-                            resultRoute ? 10 : 100, detailUrl, date, attributes, cancellationToken).ConfigureAwait(false);
+                                : CollectionReason.Discovery).ToString(),
+                            (resultRoute ? CollectionLane.Background : CollectionLane.Realtime).ToString(),
+                            resultRoute ? 10 : 100, detailUrl?.AbsoluteUri, date, attributes));
+                        if (oddsRequest is not null) raceRequests.Add(oddsRequest);
                     }
                     collectedMeetings++;
                 }
@@ -184,6 +190,20 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
         {
             // Preserve the executor's existing failure classification, including partial-progress evidence.
             return CollectionAttemptFailureClassifier.FromException(ex) with { PageIdentification = Identification() };
+        }
+        var orderedRaceRequests = raceRequests
+            .OrderBy(item => item.EffectiveDate)
+            .ThenBy(item => item.ResourceId, StringComparer.Ordinal)
+            .ThenBy(item => item.ResourceType == CollectionResourceType.Race.ToString() ? 0 : 1)
+            .ThenBy(item => item.ItemKey, StringComparer.Ordinal)
+            .ToArray();
+        var chunks = orderedRaceRequests.Chunk(500).ToArray();
+        for (var chunkIndex = 0; chunkIndex < chunks.Length; chunkIndex++)
+        {
+            var batchId = $"race-discovery:{task.TaskId:N}:c{chunkIndex}";
+            var response = await requests.RequestManyAsync(new(batchId, chunks[chunkIndex]), cancellationToken)
+                .ConfigureAwait(false);
+            ValidateDiscoveryBatchResponse(chunks[chunkIndex], response);
         }
         var identification = Identification();
         if (earliestUnpublishedDate is { } waitingDate)
@@ -203,6 +223,26 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
     }
 
     private bool IsFutureJst(DateOnly date) => date > TodayJst();
+
+    private static void ValidateDiscoveryBatchResponse(IReadOnlyList<CollectionRequestBulkItem> items,
+        CollectionRequestBulkResponse response)
+    {
+        var expectedKeys = items.Select(item => item.ItemKey).Order(StringComparer.Ordinal).ToArray();
+        var actualKeys = response.Outcomes.Select(outcome => outcome.ItemKey).Order(StringComparer.Ordinal).ToArray();
+        if (!expectedKeys.SequenceEqual(actualKeys, StringComparer.Ordinal)
+            || response.Outcomes.Any(outcome => outcome.Status switch
+            {
+                "Created" or "Reused" => !HasId(outcome.RequestId) || !HasId(outcome.TaskId),
+                "Held" => !HasId(outcome.RequestId) || !HasValidOptionalId(outcome.TaskId),
+                // The interface's compatibility fallback submits single requests and cannot return receipts.
+                "Accepted" => outcome.RequestId is not null || outcome.TaskId is not null,
+                _ => true,
+            }))
+            throw new InvalidOperationException("Race discovery batch response was incomplete or rejected.");
+
+        static bool HasId(Guid? value) => value is { } id && id != Guid.Empty;
+        static bool HasValidOptionalId(Guid? value) => value is null || value != Guid.Empty;
+    }
 
     private static Uri? ToAbsoluteUri(string value)
         => Uri.TryCreate(value, UriKind.Absolute, out var uri) ? uri : null;

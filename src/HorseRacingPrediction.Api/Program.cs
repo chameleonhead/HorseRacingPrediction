@@ -277,11 +277,6 @@ app.UseAntiforgery();
 
 app.MapApiEndpoints();
 app.MapAdminEndpoints();
-app.MapCollectionPlatformEndpoints();
-app.MapCollectionMonitoringEndpoints();
-app.MapRaceOddsEndpoints();
-app.MapRaceEntryRepairEndpoints();
-app.MapSubjectCollectionEndpoints();
-app.MapPredictionScheduleEndpoints();
+app.MapCollectionApiV2Endpoints();
 
 app.Run();

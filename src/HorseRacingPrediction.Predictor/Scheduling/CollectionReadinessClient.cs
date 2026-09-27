@@ -8,7 +8,7 @@ public sealed class CollectionReadinessClient(HttpClient client)
     public async Task<CollectionReadinessSnapshot> GetAsync(string raceId,
         CancellationToken cancellationToken = default)
         => await client.GetFromJsonAsync<CollectionReadinessSnapshot>(
-            $"api/admin/collection/readiness/{Uri.EscapeDataString(raceId)}", cancellationToken)
+            $"api/v2/admin/collection/races/{Uri.EscapeDataString(raceId)}/readiness", cancellationToken)
            ?? throw new InvalidOperationException("Collection readiness response was empty.");
 }
 
