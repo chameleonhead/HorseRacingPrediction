@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260928_restore-fluentui-local-soak",
+  "taskId": "T1",
+  "attemptId": "T1-A1",
+  "state": "active",
+  "taskDifficulty": "low",
+  "acceptanceCriteria": ["AC1", "AC2", "AC3", "AC4", "AC5", "AC6"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose worker model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime did not expose per-worker usage"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj",
+    "src/HorseRacingPrediction.Web/HorseRacingPrediction.Web.csproj",
+    "docs/changes/20260928_restore-fluentui-local-soak/README.md",
+    "docs/changes/20260928_restore-fluentui-local-soak/agent-audits/T1-A1.json",
+    "localhost API process and probes"
+  ],
+  "review": {},
+  "overhead": {},
+  "elapsed": {},
+  "startRevision": "1d0d7b68",
+  "endRevisionOrPatch": null,
+  "outcome": {
+    "verificationPassed": null,
+    "qualityPassed": null,
+    "scopePassed": null,
+    "independentChallenge": null,
+    "promoted": null,
+    "escapedDefects": null,
+    "retries": null,
+    "leadCorrections": null,
+    "reviewPasses": null,
+    "escalations": null,
+    "decision": null,
+    "reviewMode": null,
+    "detailReviewReason": null
+  }
+}
