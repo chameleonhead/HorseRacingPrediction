@@ -105,6 +105,18 @@ Treat every failure observed in an approved change's required verification comma
 
 The observable correction is a failure ledger in which each observed failure has cause evidence, disposition, and a successful rerun of its original command; an isolated green rerun cannot erase an earlier red full-suite result.
 
+## Credential-bearing local validation output gate
+
+When an authenticated local API or service check has exposed a credential in command or tool output, treat the output path as the demonstrated failure, even if the request was confined to localhost.
+
+- Load the credential from local configuration inside the process that sends the request; do not place it in a command argument, transcript, log, or durable artifact.
+- Treat configuration, environment, authenticated responses, exception details, and service logs as tainted inputs. Never inspect them by printing raw content, even when diagnosing a failed helper. Parse inside the process and emit a new object containing only allowlisted numeric statuses, counts, timestamps, known enum values, and nonsecret identifiers. Unknown fields and unrecognized log lines must be omitted, not passed through by a fallback.
+- Do not emit request/response bodies, headers, environment dumps, command lines, or exception objects/messages from authenticated checks. On success, emit the numeric status and only explicitly allowlisted nonsecret fields; on failure, emit the numeric status when available and a sanitized category.
+- Before retrying the operational check, inspect and replace any helper that hardcodes a credential, uses an obsolete route, or writes raw exceptions. Verify the helper's output contract with both a successful response and a failing response before relying on it.
+- Challenge the output path with a synthetic secret in a response, exception, and unrecognized log line; assert that neither the canary nor raw fields reach captured output. After a repeated exposure, suspend that credential-bearing worker route and escalate the output boundary before retrying; record unavailable telemetry without inferring it.
+
+The observable correction is that a credential-bearing local check can complete and report its result without any output path containing the credential, HTTP headers/body, or raw exception detail.
+
 ## CI parity and push closure
 
 When a pushed change fails continuous integration after local verification, treat the mismatch between the local gate and the repository workflow as the demonstrated delivery failure.
