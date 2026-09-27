@@ -19,7 +19,7 @@ public sealed class JraSubjectCollectionHandlerTests
         var requests = new RecordingRequestSink();
         using var http = new HttpClient(new IdentityEvidenceResponse()) { BaseAddress = new("https://api.test") };
         var handler = new JraSubjectProfileCollectionHandler(
-            JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse),
             SubjectSessions("A", new Dictionary<string, string> { ["生年月日"] = "2020年1月1日", ["父"] = "B", ["母"] = "C" }),
             sink, requests, entityWriter: new HorseRacingPrediction.Collector.Http.HttpDataCollectionWriteService(http, new()));
         var completion = await handler.CollectAsync(SubjectTask("horse-a", "A", new Dictionary<string, string>()), CancellationToken.None);

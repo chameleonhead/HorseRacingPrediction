@@ -1,7 +1,4 @@
-using System.Net.Http.Json;
-using System.Text.Json;
 using HorseRacingPrediction.Api.CollectionController;
-using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
@@ -10,6 +7,8 @@ using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -31,8 +30,8 @@ public sealed class IdentityResolutionIsolationTests
         await new JraSubjectProfileApiClient(http).SaveAsync("Horse", parentId, profile, CancellationToken.None);
         var store = app.Services.GetRequiredService<CollectionPlatformStore>();
         var definition = new CollectionDefinitionId("horse-profile");
-        await store.RegisterDefinitionAsync(definition, "Horse", ResourceType.Horse, 1, "test", false);
-        var resources = Enumerable.Range(0, 3).Select(i => new ResourceKey(ResourceType.Horse, "JRA", "horse-child-" + i)).ToArray();
+        await store.RegisterDefinitionAsync(definition, "Horse", CollectionResourceType.Horse, 1, "test", false);
+        var resources = Enumerable.Range(0, 3).Select(i => new ResourceKey(CollectionResourceType.Horse, "JRA", "horse-child-" + i)).ToArray();
         var ids = new List<Guid>();
         foreach (var resource in resources)
         {
@@ -97,7 +96,7 @@ public sealed class IdentityResolutionIsolationTests
     private sealed class ParentReferenceHandler(HttpDataCollectionWriteService writer, string failingResource) : ICollectionDefinitionHandler
     {
         public CollectionDefinitionId DefinitionId => new("horse-profile");
-        public ResourceType ResourceType => ResourceType.Horse;
+        public CollectionResourceType ResourceType => CollectionResourceType.Horse;
         public async Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
         {
             if (task.Resource.Id == failingResource)
