@@ -36,6 +36,12 @@ internal static class TestApplicationFactory
         builder.Logging.ClearProviders();
         builder.Logging.AddConsole();
         builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
+        builder.Services.AddEndpointsApiExplorer();
+        builder.Services.AddSwaggerGen(options =>
+        {
+            options.EnableAnnotations();
+            options.CustomSchemaIds(type => (type.FullName ?? type.Name).Replace("+", "."));
+        });
 
         builder.Services.Configure<ApiKeyOptions>(opts =>
         {
@@ -113,6 +119,7 @@ internal static class TestApplicationFactory
         });
 
         var app = builder.Build();
+        app.UseSwagger();
         app.UseApiKeyProtection();
         app.UseAuthentication();
         app.UseAuthorization();
