@@ -1,11 +1,10 @@
-using System.Net.Http.Json;
-using System.Net;
-using System.Text;
-using System.Text.Json;
-using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Contracts;
+using System.Net;
+using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
 
 namespace HorseRacingPrediction.Api.Tests;
 

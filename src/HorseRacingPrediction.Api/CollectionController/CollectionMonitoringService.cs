@@ -1,12 +1,13 @@
-using System.Security.Cryptography;
-using System.Text;
 using EventFlow.EntityFramework;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 
@@ -452,8 +453,8 @@ public sealed class CollectionMonitoringService(
     private CollectionFindingClassification ClassifyFailure(CollectionFailureGroup group)
     {
         if (string.Equals(group.ErrorCode, "SubjectNotIdentified", StringComparison.Ordinal)
-            && group.SampleResources.All(x => x.Type is ResourceType.Horse or ResourceType.Jockey
-                or ResourceType.Trainer))
+            && group.SampleResources.All(x => x.Type is CollectionResourceType.Horse or CollectionResourceType.Jockey
+                or CollectionResourceType.Trainer))
             return CollectionFindingClassification.KnownHistoricalJobError;
         if (string.Equals(group.ErrorCode, "StructuralPageFailure", StringComparison.Ordinal)
             || string.Equals(group.ErrorCode, "ValidationFailure", StringComparison.Ordinal)

@@ -1,5 +1,5 @@
 using EventFlow.EntityFramework;
-using HorseRacingPrediction.Api.Contracts;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Infrastructure.Persistence;
@@ -103,7 +103,7 @@ public static partial class EndpointExtensions
                 foreach (var candidate in requestedCandidates)
                 {
                     var suppression = await collectionStore.SuppressResourceAsync(
-                        new ResourceKey(ResourceType.Horse, "JRA", candidate.SourceHorseId),
+                        new ResourceKey(CollectionResourceType.Horse, "JRA", candidate.SourceHorseId),
                         "JRA競走馬識別子の不具合修復により統合元データを削除済みです。",
                         HorseIdentityRepairId, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token)
                         .ConfigureAwait(false);
@@ -153,7 +153,7 @@ public static partial class EndpointExtensions
                     blocked = "sourceとtargetの正規化名が一致しません。";
             }
             var collectionTasks = await collectionStore.GetResourceSuppressionPreviewAsync(
-                new ResourceKey(ResourceType.Horse, "JRA", candidate.SourceHorseId), token).ConfigureAwait(false);
+                new ResourceKey(CollectionResourceType.Horse, "JRA", candidate.SourceHorseId), token).ConfigureAwait(false);
             var raceName = races.SingleOrDefault(x => x.RaceId == candidate.RaceId)?.RaceName;
             result.Add(new(candidate.CandidateId, candidate.SourceHorseId, candidate.TargetHorseId,
                 candidate.JraIdentity, candidate.RaceId, candidate.EntryId, blocked is null, blocked,

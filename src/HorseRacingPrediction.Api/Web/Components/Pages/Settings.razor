@@ -498,7 +498,7 @@
         normalizationLoading = true;
         try
         {
-            var type = Enum.Parse<ResourceType>(normalizationType);
+            var type = Enum.Parse<CollectionResourceType>(normalizationType);
             normalizationPage = await Api.SearchSubjectNameNormalizationAsync(type, normalizationQuery.Trim(), Math.Max(1, page));
             selectedNormalization.RemoveWhere(key => normalizationPage is null || normalizationPage.Items.All(x => NormalizationKey(x) != key || !x.CanApply));
         }
@@ -639,9 +639,9 @@
             : !SubjectActionable(candidate) ? "要確認"
             : candidate.Evaluation == "MergeReady" ? "名寄せ後に再収集" : "再収集可能";
 
-    private static string SubjectTypeLabel(ResourceType type) => type switch
+    private static string SubjectTypeLabel(CollectionResourceType type) => type switch
     {
-        ResourceType.Horse => "競走馬", ResourceType.Jockey => "騎手", ResourceType.Trainer => "調教師", ResourceType.Owner => "馬主", _ => type.ToString()
+        CollectionResourceType.Horse => "競走馬", CollectionResourceType.Jockey => "騎手", CollectionResourceType.Trainer => "調教師", CollectionResourceType.Owner => "馬主", _ => type.ToString()
     };
 
     private bool IsSelected(string id) => selected.Contains(id);

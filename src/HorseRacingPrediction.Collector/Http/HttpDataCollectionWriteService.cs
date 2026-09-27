@@ -591,12 +591,12 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         return $"レース {raceId} の確定結果（勝ち馬: {winningHorseName}）を記録しました。";
     }
 
-    private async Task<RacePredictionContextReadModel?> WaitForRaceMetadataAsync(
+    private async Task<RacePredictionContextDto?> WaitForRaceMetadataAsync(
         string raceId,
         CancellationToken cancellationToken)
     {
         const int maxAttempts = 5;
-        RacePredictionContextReadModel? latest = null;
+        RacePredictionContextDto? latest = null;
 
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
@@ -615,7 +615,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         return latest;
     }
 
-    private static bool HasRequiredCourseMetadata(RacePredictionContextReadModel? race)
+    private static bool HasRequiredCourseMetadata(RacePredictionContextDto? race)
     {
         return race is not null
             && !string.IsNullOrWhiteSpace(race.GradeCode)
@@ -964,8 +964,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         }
     }
 
-    private async Task<RacePredictionContextReadModel?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken)
-        => await GetAsync<RacePredictionContextReadModel>($"/api/races/{Uri.EscapeDataString(raceId)}/context", cancellationToken).ConfigureAwait(false);
+    private async Task<RacePredictionContextDto?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken)
+        => await GetAsync<RacePredictionContextDto>($"/api/races/{Uri.EscapeDataString(raceId)}/context", cancellationToken).ConfigureAwait(false);
 
     // ------------------------------------------------------------------ //
     // private helpers — payout parsing

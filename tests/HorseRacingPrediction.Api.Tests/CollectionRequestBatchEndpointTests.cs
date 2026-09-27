@@ -21,7 +21,7 @@ public sealed class CollectionRequestBatchEndpointTests
         {
             var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
             { StateDirectory = directory }));
-            await store.RegisterDefinitionAsync(new("horse-profile"), "Horse", ResourceType.Horse,
+            await store.RegisterDefinitionAsync(new("horse-profile"), "Horse", CollectionResourceType.Horse,
                 1, "initial", false);
             var builder = WebApplication.CreateBuilder();
             builder.WebHost.UseTestServer();

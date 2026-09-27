@@ -1,6 +1,7 @@
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using System.Globalization;
 using System.Text.RegularExpressions;
-using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 
@@ -37,15 +38,15 @@ internal static partial class JraExplicitUrlResolver
             || cname.Length > MaxCnameLength)
             return Unidentified("URLからJRAページの識別情報を取得できませんでした。");
 
-        (ResourceType? resourceType, CollectionDefinitionId? definition, string? expectedPath) = cname switch
+        (CollectionResourceType? resourceType, CollectionDefinitionId? definition, string? expectedPath) = cname switch
         {
             var value when value.StartsWith("pw01sde", StringComparison.OrdinalIgnoreCase) =>
-                ((ResourceType?)ResourceType.Race,
+                ((CollectionResourceType?)CollectionResourceType.Race,
                     (CollectionDefinitionId?)new CollectionDefinitionId("race-detail"), (string?)"/JRADB/accessS.html"),
             var value when value.StartsWith("pw01dde", StringComparison.OrdinalIgnoreCase) =>
-                ((ResourceType?)ResourceType.Race,
+                ((CollectionResourceType?)CollectionResourceType.Race,
                     (CollectionDefinitionId?)new CollectionDefinitionId("race-detail"), (string?)"/JRADB/accessD.html"),
-            _ => ((ResourceType?)null, (CollectionDefinitionId?)null, null),
+            _ => ((CollectionResourceType?)null, (CollectionDefinitionId?)null, null),
         };
         if (resourceType is null || definition is null || !string.Equals(uri.AbsolutePath, expectedPath,
                 StringComparison.Ordinal))

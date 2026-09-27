@@ -1,9 +1,10 @@
-using System.Net.Http.Json;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.AspNetCore.TestHost;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using System.Net.Http.Json;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -19,9 +20,9 @@ public sealed class CollectionRevisionEndpointTests
         {
             var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions { StateDirectory = directory }));
             var definition = new CollectionDefinitionId("horse-profile");
-            var affected = new ResourceKey(ResourceType.Horse, "JRA", "H1");
-            var unaffected = new ResourceKey(ResourceType.Horse, "JRA", "H2");
-            await store.RegisterDefinitionAsync(definition, "Horse", ResourceType.Horse, 7, "baseline", false);
+            var affected = new ResourceKey(CollectionResourceType.Horse, "JRA", "H1");
+            var unaffected = new ResourceKey(CollectionResourceType.Horse, "JRA", "H2");
+            await store.RegisterDefinitionAsync(definition, "Horse", CollectionResourceType.Horse, 7, "baseline", false);
             await SeedCurrentAsync(store, affected, definition);
             await SeedCurrentAsync(store, unaffected, definition);
 

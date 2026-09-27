@@ -1,10 +1,11 @@
-using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Application.Queries.ReadModels;
-using HorseRacingPrediction.ApiClient;
-using HorseRacingPrediction.Infrastructure.Persistence;
 using EventFlow.EntityFramework;
-using Microsoft.EntityFrameworkCore;
+using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Application.Queries.ReadModels;
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
+using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Shared = HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.Api.CollectionController;
@@ -20,7 +21,7 @@ public static class CollectionPlatformEndpointExtensions
             CollectionPlatformStore store, CancellationToken token) =>
             await store.GetExecutionBatchAsync(executionBatchId, token) is { } batch
                 ? Results.Ok(batch) : Results.NotFound());
-        admin.MapGet("/tasks/search", async (string? statuses, ResourceType? resourceType, string? provider,
+        admin.MapGet("/tasks/search", async (string? statuses, CollectionResourceType? resourceType, string? provider,
             string? definitionId, CollectionLane? lane, string? search, string? errorSearch, DateTimeOffset? createdFrom,
             DateTimeOffset? createdTo, bool? actionableOnly, bool? latestOnly, int? page, int? pageSize, CollectionPlatformStore store,
             CancellationToken token) =>
@@ -43,7 +44,7 @@ public static class CollectionPlatformEndpointExtensions
                 definitionId, lane, search, createdFrom, createdTo, errorSearch, page ?? 1, pageSize ?? 50,
                 actionableOnly ?? false, latestOnly ?? false), token));
         });
-        admin.MapGet("/states/search", async (string? statuses, ResourceType? resourceType, string? provider,
+        admin.MapGet("/states/search", async (string? statuses, CollectionResourceType? resourceType, string? provider,
             string? definitionId, string? search, int? page, int? pageSize, CollectionPlatformStore store,
             CancellationToken token) =>
         {
@@ -202,14 +203,14 @@ public static class CollectionPlatformEndpointExtensions
             return Results.NoContent();
         });
         admin.MapGet("/states/{type}/{provider}/{resourceId}/{definition}", async (
-            ResourceType type, string provider, string resourceId, string definition,
+            CollectionResourceType type, string provider, string resourceId, string definition,
             CollectionPlatformStore store, CancellationToken token) =>
         {
             var state = await store.GetStateAsync(new(type, provider, resourceId), new(definition), token);
             return state is null ? Results.NotFound() : Results.Ok(state);
         });
         admin.MapGet("/resources/{type}/{provider}/{resourceId}/{definition}", async (
-            ResourceType type, string provider, string resourceId, string definition,
+            CollectionResourceType type, string provider, string resourceId, string definition,
             int? historyPage, int? requestHistoryPage, int? taskHistoryPage, int? attemptHistoryPage,
             int? historyPageSize,
             CollectionPlatformStore store, CancellationToken token) =>
@@ -250,9 +251,9 @@ public static class CollectionPlatformEndpointExtensions
             var lane = CollectionLane.Realtime;
             var priority = resource.Type switch
             {
-                ResourceType.RaceOdds => (int)CollectionPriority.High,
-                ResourceType.RaceResult => (int)CollectionPriority.Critical,
-                ResourceType.RaceCard => 80,
+                CollectionResourceType.RaceOdds => (int)CollectionPriority.High,
+                CollectionResourceType.RaceResult => (int)CollectionPriority.Critical,
+                CollectionResourceType.RaceCard => 80,
                 _ => (int)CollectionPriority.Normal,
             };
             var currentRevision = await store.GetCurrentRevisionAsync(definition, token);
@@ -337,7 +338,7 @@ public static class CollectionPlatformEndpointExtensions
             var items = new List<CollectionRequestBatchItem>(request.Items.Count);
             foreach (var item in request.Items)
             {
-                if (!Enum.TryParse<ResourceType>(item.ResourceType, true, out var resourceType)
+                if (!Enum.TryParse<CollectionResourceType>(item.ResourceType, true, out var resourceType)
                     || !Enum.TryParse<CollectionReason>(item.Reason, true, out var reason)
                     || !Enum.TryParse<CollectionLane>(item.Lane, true, out var lane))
                     return Results.BadRequest(new { message = $"Invalid enum value for item {item.ItemKey}." });
@@ -409,7 +410,7 @@ public static class CollectionPlatformEndpointExtensions
             if (candidates.Length != selected.Length)
                 return Results.Conflict(new { message = "Selection changed after preview; preview again before executing." });
             var targets = candidates.Select(x => new CollectionBulkTarget(
-                new(ResourceType.Race, "JRA", x.ResourceId), request.Date,
+                new(CollectionResourceType.Race, "JRA", x.ResourceId), request.Date,
                 new Dictionary<string, string>
                 {
                     ["domainRaceId"] = x.RaceId,
@@ -585,26 +586,26 @@ public static class CollectionPlatformEndpointExtensions
         string classification, string reason, string? targetId = null, string? targetName = null) =>
         new(source.TaskId, source, classification, false, reason, targetId, targetName, true);
 
-    private static IEnumerable<string> ReferencedIds(RacePredictionContextReadModel race, ResourceType type) =>
+    private static IEnumerable<string> ReferencedIds(RacePredictionContextReadModel race, CollectionResourceType type) =>
         type switch
         {
-            ResourceType.Horse => race.Entries.Select(item => item.HorseId),
-            ResourceType.Jockey => race.Entries.Select(item => item.JockeyId).Where(id => id is not null).Cast<string>(),
-            ResourceType.Trainer => race.Entries.Select(item => item.TrainerId).Where(id => id is not null).Cast<string>(),
+            CollectionResourceType.Horse => race.Entries.Select(item => item.HorseId),
+            CollectionResourceType.Jockey => race.Entries.Select(item => item.JockeyId).Where(id => id is not null).Cast<string>(),
+            CollectionResourceType.Trainer => race.Entries.Select(item => item.TrainerId).Where(id => id is not null).Cast<string>(),
             _ => [],
         };
 
-    private static (string Id, string Name)? Subject(ResourceType type, string id,
+    private static (string Id, string Name)? Subject(CollectionResourceType type, string id,
         IReadOnlyDictionary<string, HorseReadModel> horses, IReadOnlyDictionary<string, JockeyReadModel> jockeys,
         IReadOnlyDictionary<string, TrainerReadModel> trainers) => type switch
         {
-            ResourceType.Horse when horses.TryGetValue(id, out var horse) => (id, horse.RegisteredName),
-            ResourceType.Jockey when jockeys.TryGetValue(id, out var jockey) => (id, jockey.DisplayName),
-            ResourceType.Trainer when trainers.TryGetValue(id, out var trainer) => (id, trainer.DisplayName),
+            CollectionResourceType.Horse when horses.TryGetValue(id, out var horse) => (id, horse.RegisteredName),
+            CollectionResourceType.Jockey when jockeys.TryGetValue(id, out var jockey) => (id, jockey.DisplayName),
+            CollectionResourceType.Trainer when trainers.TryGetValue(id, out var trainer) => (id, trainer.DisplayName),
             _ => null,
         };
 
-    private static string NormalizeSubjectName(ResourceType type, string name) =>
+    private static string NormalizeSubjectName(CollectionResourceType type, string name) =>
         Shared.JraSubjectNameNormalizer.NormalizeIdentityName(type.ToString(),
             Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName(type.ToString(), name));
 
@@ -612,25 +613,25 @@ public static class CollectionPlatformEndpointExtensions
     {
         var canonical = Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName(
             source.Resource.Type.ToString(), targetName);
-        if (source.Resource.Type == ResourceType.Horse)
+        if (source.Resource.Type == CollectionResourceType.Horse)
         {
             var identity = JraSourceIdentity.TryNormalizeHorse(source.SourceIdentity, out _)
                 ? source.SourceIdentity : null;
             return DeterministicIdGenerator.BuildHorseId(canonical, identity);
         }
-        var prefix = source.Resource.Type == ResourceType.Jockey ? "jockey" : "trainer";
+        var prefix = source.Resource.Type == CollectionResourceType.Jockey ? "jockey" : "trainer";
         return DeterministicIdGenerator.BuildEntityId(prefix, DeterministicIdGenerator.NormalizeKey(canonical));
     }
 
-    private static bool IsAllowedSubjectProfileUrl(ResourceType type, Uri? url)
+    private static bool IsAllowedSubjectProfileUrl(CollectionResourceType type, Uri? url)
     {
         if (url is null || url.Scheme != Uri.UriSchemeHttps
             || !url.Host.Equals("www.jra.go.jp", StringComparison.OrdinalIgnoreCase)) return false;
         var path = type switch
         {
-            ResourceType.Horse => "/JRADB/accessU.html",
-            ResourceType.Jockey => "/JRADB/accessK.html",
-            ResourceType.Trainer => "/JRADB/accessC.html",
+            CollectionResourceType.Horse => "/JRADB/accessU.html",
+            CollectionResourceType.Jockey => "/JRADB/accessK.html",
+            CollectionResourceType.Trainer => "/JRADB/accessC.html",
             _ => string.Empty,
         };
         return url.AbsolutePath.Equals(path, StringComparison.OrdinalIgnoreCase)
@@ -679,7 +680,7 @@ public static class CollectionPlatformEndpointExtensions
     }
 
     private static CollectionBulkTarget ToRaceEntryOwnerMigrationTarget(RaceEntryOwnerRepairCandidate candidate) =>
-        new(new(ResourceType.Race, "JRA", candidate.ResourceId), candidate.Date,
+        new(new(CollectionResourceType.Race, "JRA", candidate.ResourceId), candidate.Date,
             new Dictionary<string, string>
             {
                 ["domainRaceId"] = candidate.RaceId,
@@ -799,7 +800,7 @@ public static class CollectionPlatformEndpointExtensions
                 .Where(x => request.Selection != BulkCollectionSelection.HorsesByTrainer
                             || string.Equals(x.TrainerId, request.TrainerId, StringComparison.Ordinal))
                 .Select(x => x.HorseId).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal)
-                .Select(x => new CollectionBulkTarget(new(ResourceType.Horse, request.Provider, x))).ToList();
+                .Select(x => new CollectionBulkTarget(new(CollectionResourceType.Horse, request.Provider, x))).ToList();
         }
         return await store.ExcludeSuppressedResourcesAsync(targets, token).ConfigureAwait(false);
     }
@@ -817,7 +818,7 @@ public static class CollectionPlatformEndpointExtensions
     }
 }
 
-public sealed record CreateCollectionRequest(ResourceType ResourceType, string Provider, string ResourceId,
+public sealed record CreateCollectionRequest(CollectionResourceType ResourceType, string Provider, string ResourceId,
     string DefinitionId, int RequestedRevision, CollectionReason Reason,
     CollectionLane Lane = CollectionLane.Normal, int Priority = (int)CollectionPriority.Normal,
     string? ExplicitUrl = null, string? BatchId = null, DateOnly? EffectiveDate = null,

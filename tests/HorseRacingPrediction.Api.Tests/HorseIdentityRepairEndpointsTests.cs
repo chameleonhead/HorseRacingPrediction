@@ -1,6 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
-using HorseRacingPrediction.Api.Contracts;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
@@ -199,9 +199,9 @@ public sealed class HorseIdentityRepairEndpointsTests
         using var http = client;
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var store = application.Services.GetRequiredService<CollectionPlatformStore>();
-        await store.RegisterDefinitionAsync(new("owner-identity"), "Owner identity", ResourceType.Owner,
+        await store.RegisterDefinitionAsync(new("owner-identity"), "Owner identity", CollectionResourceType.Owner,
             1, "test", false);
-        var resource = new ResourceKey(ResourceType.Owner, "JRA", $"missing-{Guid.NewGuid():N}");
+        var resource = new ResourceKey(CollectionResourceType.Owner, "JRA", $"missing-{Guid.NewGuid():N}");
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
         var receipt = await store.RequestAsync(resource, new("owner-identity"), 1,
             CollectionReason.Discovery, now);
@@ -233,9 +233,9 @@ public sealed class HorseIdentityRepairEndpointsTests
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var store = application.Services.GetRequiredService<CollectionPlatformStore>();
         var definition = new CollectionDefinitionId("trainer-profile");
-        await store.RegisterDefinitionAsync(definition, "Trainer profile", ResourceType.Trainer,
+        await store.RegisterDefinitionAsync(definition, "Trainer profile", CollectionResourceType.Trainer,
             1, "test", false);
-        var resource = new ResourceKey(ResourceType.Trainer, "JRA", $"old-{Guid.NewGuid():N}");
+        var resource = new ResourceKey(CollectionResourceType.Trainer, "JRA", $"old-{Guid.NewGuid():N}");
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
         var receipt = await store.RequestAsync(resource, definition, 1, CollectionReason.Discovery, now);
         var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
@@ -279,8 +279,8 @@ public sealed class HorseIdentityRepairEndpointsTests
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var store = application.Services.GetRequiredService<CollectionPlatformStore>();
         var definition = new CollectionDefinitionId("horse-profile");
-        await store.RegisterDefinitionAsync(definition, "Horse profile", ResourceType.Horse, 3, "test", false);
-        var resource = new ResourceKey(ResourceType.Horse, "JRA", $"obsolete-{Guid.NewGuid():N}");
+        await store.RegisterDefinitionAsync(definition, "Horse profile", CollectionResourceType.Horse, 3, "test", false);
+        var resource = new ResourceKey(CollectionResourceType.Horse, "JRA", $"obsolete-{Guid.NewGuid():N}");
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
         var receipt = await store.RequestAsync(resource, definition, 3, CollectionReason.Discovery, now);
         var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
@@ -309,14 +309,14 @@ public sealed class HorseIdentityRepairEndpointsTests
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
         var subjectDefinition = new CollectionDefinitionId("jockey-profile");
         var raceDefinition = new CollectionDefinitionId("race-test");
-        await store.RegisterDefinitionAsync(subjectDefinition, "Jockey profile", ResourceType.Jockey,
+        await store.RegisterDefinitionAsync(subjectDefinition, "Jockey profile", CollectionResourceType.Jockey,
             1, "test", false);
-        await store.RegisterDefinitionAsync(raceDefinition, "Race", ResourceType.Race,
+        await store.RegisterDefinitionAsync(raceDefinition, "Race", CollectionResourceType.Race,
             1, "test", false);
         foreach (var item in new[]
                  {
-                     (new ResourceKey(ResourceType.Jockey, "JRA", "jockey-old"), subjectDefinition),
-                     (new ResourceKey(ResourceType.Race, "JRA", "race-old"), raceDefinition),
+                     (new ResourceKey(CollectionResourceType.Jockey, "JRA", "jockey-old"), subjectDefinition),
+                     (new ResourceKey(CollectionResourceType.Race, "JRA", "race-old"), raceDefinition),
                  })
         {
             var receipt = await store.RequestAsync(item.Item1, item.Item2, 1, CollectionReason.Discovery, now);
@@ -375,10 +375,10 @@ public sealed class HorseIdentityRepairEndpointsTests
         }
 
         var store = application.Services.GetRequiredService<CollectionPlatformStore>();
-        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse,
+        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", CollectionResourceType.Horse,
             1, "test", false);
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
-        var failed = await store.RequestAsync(new(ResourceType.Horse, "JRA", sourceId),
+        var failed = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", sourceId),
             new("horse-profile"), 1, CollectionReason.Discovery, now, explicitUrl: new Uri(sourceUrl));
         var failedTaskId = failed.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
         var lease = await store.AcquireAsync(failedTaskId, 1, now, TimeSpan.FromMinutes(5));
@@ -400,7 +400,7 @@ public sealed class HorseIdentityRepairEndpointsTests
         Assert.IsTrue((await store.GetTasksAsync()).Any(x => x.Resource.Id == targetId
             && x.Status == CollectionTaskStatus.Ready));
         await Assert.ThrowsExactlyAsync<CollectionResourceSuppressedException>(() => store.RequestAsync(
-            new(ResourceType.Horse, "JRA", sourceId), new("horse-profile"), 1,
+            new(CollectionResourceType.Horse, "JRA", sourceId), new("horse-profile"), 1,
             CollectionReason.ManualRefresh, DateTimeOffset.UtcNow));
     }
 
@@ -413,7 +413,7 @@ public sealed class HorseIdentityRepairEndpointsTests
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var store = application.Services.GetRequiredService<CollectionPlatformStore>();
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
-        var subjectTypes = new[] { ResourceType.Horse, ResourceType.Jockey, ResourceType.Trainer, ResourceType.Owner };
+        var subjectTypes = new[] { CollectionResourceType.Horse, CollectionResourceType.Jockey, CollectionResourceType.Trainer, CollectionResourceType.Owner };
         foreach (var type in subjectTypes)
         {
             var definition = new CollectionDefinitionId($"{type.ToString().ToLowerInvariant()}-identity");
@@ -426,8 +426,8 @@ public sealed class HorseIdentityRepairEndpointsTests
             await store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddSeconds(1),
                 new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "0件", url, url));
         }
-        await store.RegisterDefinitionAsync(new("race-test"), "Race", ResourceType.Race, 1, "test", false);
-        var excluded = await store.RequestAsync(new(ResourceType.Race, "JRA", "race-id"), new("race-test"), 1,
+        await store.RegisterDefinitionAsync(new("race-test"), "Race", CollectionResourceType.Race, 1, "test", false);
+        var excluded = await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "race-id"), new("race-test"), 1,
             CollectionReason.Discovery, now);
         var excludedTaskId = excluded.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
         var excludedLease = await store.AcquireAsync(excludedTaskId, 1, now, TimeSpan.FromMinutes(5));
@@ -449,9 +449,9 @@ public sealed class HorseIdentityRepairEndpointsTests
         using var http = client;
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var store = application.Services.GetRequiredService<CollectionPlatformStore>();
-        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse,
+        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", CollectionResourceType.Horse,
             1, "test", false);
-        var resource = new ResourceKey(ResourceType.Horse, "JRA", $"unresolved-{Guid.NewGuid():N}");
+        var resource = new ResourceKey(CollectionResourceType.Horse, "JRA", $"unresolved-{Guid.NewGuid():N}");
         var url = new Uri("https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud001234567890/01");
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
         var receipt = await store.RequestAsync(resource, new("horse-profile"), 1,
@@ -486,9 +486,9 @@ public sealed class HorseIdentityRepairEndpointsTests
         using var http = client;
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var store = application.Services.GetRequiredService<CollectionPlatformStore>();
-        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse,
+        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", CollectionResourceType.Horse,
             2, "test", false);
-        var resource = new ResourceKey(ResourceType.Horse, "JRA", $"marked-{Guid.NewGuid():N}");
+        var resource = new ResourceKey(CollectionResourceType.Horse, "JRA", $"marked-{Guid.NewGuid():N}");
         var url = new Uri("https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002011110091/B0");
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
         var receipt = await store.RequestAsync(resource, new("horse-profile"), 2,
@@ -544,9 +544,9 @@ public sealed class HorseIdentityRepairEndpointsTests
         using var http = client;
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var store = application.Services.GetRequiredService<CollectionPlatformStore>();
-        await store.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", ResourceType.Trainer,
+        await store.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", CollectionResourceType.Trainer,
             1, "test", false);
-        var resource = new ResourceKey(ResourceType.Trainer, "JRA", $"unresolved-{Guid.NewGuid():N}");
+        var resource = new ResourceKey(CollectionResourceType.Trainer, "JRA", $"unresolved-{Guid.NewGuid():N}");
         var invalid = new Uri("https://www.jra.go.jp/JRADB/accessD.html");
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
         var receipt = await store.RequestAsync(resource, new("trainer-profile"), 1,
@@ -624,10 +624,10 @@ public sealed class HorseIdentityRepairEndpointsTests
             await repairDb.SaveChangesAsync();
         }
         var collectionStore = application.Services.GetRequiredService<CollectionPlatformStore>();
-        var sourceResource = new ResourceKey(ResourceType.Horse, "JRA", sourceId);
+        var sourceResource = new ResourceKey(CollectionResourceType.Horse, "JRA", sourceId);
         const int revision = 1;
         await collectionStore.RegisterDefinitionAsync(new("horse-profile"), "Horse profile",
-            ResourceType.Horse, revision, "test", false);
+            CollectionResourceType.Horse, revision, "test", false);
         var sourceTask = await collectionStore.RequestAsync(sourceResource, new("horse-profile"), revision,
             CollectionReason.ManualRefresh, DateTimeOffset.UtcNow);
 
@@ -651,7 +651,7 @@ public sealed class HorseIdentityRepairEndpointsTests
                 CollectionReason.ManualRefresh, DateTimeOffset.UtcNow));
         var oldProfile = await http.GetAsync($"/api/horses/{sourceId}");
         Assert.AreEqual(HttpStatusCode.OK, oldProfile.StatusCode);
-        var resolved = await oldProfile.Content.ReadFromJsonAsync<HorseRacingPrediction.Contracts.HorseReadModel>();
+        var resolved = await oldProfile.Content.ReadFromJsonAsync<HorseRacingPrediction.Contracts.HorseReadDto>();
         Assert.AreEqual(targetId, resolved!.HorseId);
 
         var second = await http.PostAsJsonAsync("/api/admin/repairs/20260913-jra-horse-identity/apply",

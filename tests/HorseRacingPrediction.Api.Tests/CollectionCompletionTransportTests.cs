@@ -1,10 +1,11 @@
-using System.Net.Http.Json;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using System.Net.Http.Json;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -21,9 +22,9 @@ public sealed class CollectionCompletionTransportTests
         await WithApiAsync(async (store, client) =>
         {
             var now = DateTimeOffset.UtcNow;
-            var resource = new ResourceKey(ResourceType.Race, "JRA", "20260920:Nakayama:3");
+            var resource = new ResourceKey(CollectionResourceType.Race, "JRA", "20260920:Nakayama:3");
             var definition = new CollectionDefinitionId("race-detail");
-            await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "facets", false);
+            await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 2, "facets", false);
             var receipt = await store.RequestAsync(resource, definition, 2, CollectionReason.Initial, now);
             var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
             var evidence = new RaceSchedulingEvidence(now.AddHours(-2), "JRA-RaceCard", now);
@@ -79,9 +80,9 @@ public sealed class CollectionCompletionTransportTests
         await WithApiAsync(async (store, client) =>
         {
             var now = DateTimeOffset.UtcNow;
-            var resource = new ResourceKey(ResourceType.Race, "JRA", "20260920:Nakayama:3");
+            var resource = new ResourceKey(CollectionResourceType.Race, "JRA", "20260920:Nakayama:3");
             var definition = new CollectionDefinitionId("race-detail");
-            await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "facets", false);
+            await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 2, "facets", false);
             var receipt = await store.RequestAsync(resource, definition, 2, CollectionReason.Initial, now);
             var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
             var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
@@ -121,7 +122,7 @@ public sealed class CollectionCompletionTransportTests
     private sealed class EvidenceHandler(CollectionAttemptCompletion completion) : ICollectionDefinitionHandler
     {
         public CollectionDefinitionId DefinitionId => new("race-detail");
-        public ResourceType ResourceType => ResourceType.Race;
+        public CollectionResourceType ResourceType => CollectionResourceType.Race;
         public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
             => Task.FromResult(completion);
     }

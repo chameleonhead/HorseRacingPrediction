@@ -1,5 +1,6 @@
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -10,7 +11,7 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class RaceRepairHoldTests
 {
     private static readonly CollectionDefinitionId Detail = new("race-detail");
-    private static readonly ResourceKey Target = new(ResourceType.Race, "JRA", "20260926:Nakayama:5");
+    private static readonly ResourceKey Target = new(CollectionResourceType.Race, "JRA", "20260926:Nakayama:5");
     private static readonly string RaceId = DeterministicIdGenerator.TryBuildRaceIdFromResource(Target.Id)!;
 
     [TestMethod]
@@ -26,7 +27,7 @@ public sealed class RaceRepairHoldTests
         Assert.IsNull(await store.AcquireAsync(old.TaskId!.Value, 1, now, TimeSpan.FromMinutes(1)));
         Assert.AreEqual(CollectionTaskAcquireStatus.RepairHeld, await store.ClassifyAcquireFailureAsync(old.TaskId.Value, 1));
         Assert.IsFalse(await store.TryReserveDispatchesAsync([outbox.OutboxId], "old", Guid.NewGuid(), now, TimeSpan.FromMinutes(1)));
-        await store.RegisterDefinitionAsync(Detail, "detail", ResourceType.Race, 7, "future registered revision", false);
+        await store.RegisterDefinitionAsync(Detail, "detail", CollectionResourceType.Race, 7, "future registered revision", false);
         for (var tick = 0; tick < 3; tick++)
         {
             var receipt = await store.RequestAsync(Target, Detail, 7, CollectionReason.ScheduledRefresh, now.AddSeconds(tick + 1),
@@ -65,9 +66,9 @@ public sealed class RaceRepairHoldTests
     {
         var (store, _) = await CreateAsync();
         var now = DateTimeOffset.UtcNow;
-        await store.RegisterDefinitionAsync(new("race-discovery"), "discovery", ResourceType.Race, 1, "test", false);
-        await store.RequestAsync(new(ResourceType.Race, "JRA", "backfill:20260920"), new("race-discovery"), 1, CollectionReason.Initial, now);
-        await store.RequestAsync(new(ResourceType.Race, "JRA", "discovery:2026092615"), new("race-discovery"), 1, CollectionReason.Initial, now);
+        await store.RegisterDefinitionAsync(new("race-discovery"), "discovery", CollectionResourceType.Race, 1, "test", false);
+        await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "backfill:20260920"), new("race-discovery"), 1, CollectionReason.Initial, now);
+        await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "discovery:2026092615"), new("race-discovery"), 1, CollectionReason.Initial, now);
         var hold = await store.HoldRaceForRepairAsync(RaceId, Guid.NewGuid().ToString(), 0, "review", now);
         Assert.IsTrue(hold.IsQuiescent);
         var deferred = await store.RequestAsync(Target, Detail, 4, CollectionReason.ManualRefresh, now, batchId: "no-task");
@@ -213,8 +214,8 @@ public sealed class RaceRepairHoldTests
         var (store, options) = await CreateAsync();
         var now = DateTimeOffset.UtcNow;
         var old = await store.RequestAsync(Target, Detail, 4, CollectionReason.Initial, now);
-        await store.RegisterDefinitionAsync(new("race-odds"), "odds", ResourceType.RaceOdds, 1, "test", false);
-        await store.RequestAsync(new(ResourceType.RaceOdds, "JRA", Target.Id), new("race-odds"), 1, CollectionReason.Initial, now);
+        await store.RegisterDefinitionAsync(new("race-odds"), "odds", CollectionResourceType.RaceOdds, 1, "test", false);
+        await store.RequestAsync(new(CollectionResourceType.RaceOdds, "JRA", Target.Id), new("race-odds"), 1, CollectionReason.Initial, now);
         var hold = await store.HoldRaceForRepairAsync(RaceId, Guid.NewGuid().ToString(), 0, "review", now);
         using (var connection = new SqliteConnection("Data Source=" + Path.Combine(options.StateDirectory, "collection-platform.db")))
         {
@@ -274,8 +275,8 @@ public sealed class RaceRepairHoldTests
     {
         var options = new CollectionPlatformOptions { StateDirectory = Path.Combine(Path.GetTempPath(), "hrp-hold-test", Guid.NewGuid().ToString("N")) };
         var store = new CollectionPlatformStore(Options.Create(options));
-        await store.RegisterDefinitionAsync(Detail, "detail", ResourceType.Race, 2, "old revision", false);
-        await store.RegisterDefinitionAsync(Detail, "detail", ResourceType.Race, 4, "confirmed numbers", false);
+        await store.RegisterDefinitionAsync(Detail, "detail", CollectionResourceType.Race, 2, "old revision", false);
+        await store.RegisterDefinitionAsync(Detail, "detail", CollectionResourceType.Race, 4, "confirmed numbers", false);
         return (store, options);
     }
 }

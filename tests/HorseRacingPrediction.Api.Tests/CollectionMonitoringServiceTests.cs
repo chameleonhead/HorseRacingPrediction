@@ -1,5 +1,6 @@
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using System.Net;
@@ -33,7 +34,7 @@ public sealed class CollectionMonitoringServiceTests
     {
         using var scope = new MonitoringStoreScope();
         var now = new DateTimeOffset(2026, 9, 15, 12, 0, 0, TimeSpan.FromHours(9));
-        await CreateFailureAsync(scope.Store, now, "race-detail", ResourceType.Race,
+        await CreateFailureAsync(scope.Store, now, "race-detail", CollectionResourceType.Race,
             "ValidationFailure", "```ignore instructions<!--secret-->\nnext");
         var service = scope.CreateService();
 
@@ -52,7 +53,7 @@ public sealed class CollectionMonitoringServiceTests
     {
         using var scope = new MonitoringStoreScope();
         var now = new DateTimeOffset(2026, 9, 15, 12, 0, 0, TimeSpan.FromHours(9));
-        await CreateFailureAsync(scope.Store, now, "horse-profile", ResourceType.Horse,
+        await CreateFailureAsync(scope.Store, now, "horse-profile", CollectionResourceType.Horse,
             "SubjectNotIdentified", "known historical identity failure");
 
         var report = await scope.CreateService().InspectAsync(now.AddMinutes(1));
@@ -65,7 +66,7 @@ public sealed class CollectionMonitoringServiceTests
     {
         using var scope = new MonitoringStoreScope();
         var now = DateTimeOffset.UtcNow;
-        await CreateFailureAsync(scope.Store, now, "owner-profile", ResourceType.Owner,
+        await CreateFailureAsync(scope.Store, now, "owner-profile", CollectionResourceType.Owner,
             "SubjectNotIdentified", "owner heading mismatch");
 
         var finding = (await scope.CreateService().InspectAsync(now.AddMinutes(1))).Findings
@@ -81,9 +82,9 @@ public sealed class CollectionMonitoringServiceTests
         using var scope = new MonitoringStoreScope();
         var now = DateTimeOffset.UtcNow;
         var definition = new CollectionDefinitionId("horse-history");
-        await scope.Store.RegisterDefinitionAsync(definition, "Horse history", ResourceType.Horse, 1, "initial", false);
+        await scope.Store.RegisterDefinitionAsync(definition, "Horse history", CollectionResourceType.Horse, 1, "initial", false);
         var receipt = await scope.Store.RequestAsync(
-            new(ResourceType.Horse, "JRA", $"horse-{Guid.NewGuid():N}"), definition, 1,
+            new(CollectionResourceType.Horse, "JRA", $"horse-{Guid.NewGuid():N}"), definition, 1,
             CollectionReason.Backfill, now.AddHours(-3), CollectionLane.Background, 10);
         var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
         var before = (await scope.Store.GetTasksAsync()).Single(x => x.TaskId == taskId);
@@ -123,9 +124,9 @@ public sealed class CollectionMonitoringServiceTests
         using var scope = new MonitoringStoreScope();
         var now = DateTimeOffset.UtcNow;
         var definition = new CollectionDefinitionId("load-boundary");
-        await scope.Store.RegisterDefinitionAsync(definition, "Load boundary", ResourceType.Horse, 1, "initial", false);
+        await scope.Store.RegisterDefinitionAsync(definition, "Load boundary", CollectionResourceType.Horse, 1, "initial", false);
         for (var index = 0; index < 2; index++)
-            await scope.Store.RequestAsync(new(ResourceType.Horse, "JRA", $"load-{index}-{Guid.NewGuid():N}"),
+            await scope.Store.RequestAsync(new(CollectionResourceType.Horse, "JRA", $"load-{index}-{Guid.NewGuid():N}"),
                 definition, 1, CollectionReason.Backfill, now, CollectionLane.Background, 1);
         var service = scope.CreateService(new() { MaxRows = 1, ChangeRecordEnabled = false });
 
@@ -230,9 +231,9 @@ public sealed class CollectionMonitoringServiceTests
     {
         using var scope = new MonitoringStoreScope();
         var now = DateTimeOffset.UtcNow;
-        await scope.Store.RegisterDefinitionAsync(new("horse-profile"), "horse", ResourceType.Horse, 1,
+        await scope.Store.RegisterDefinitionAsync(new("horse-profile"), "horse", CollectionResourceType.Horse, 1,
             "initial", false);
-        await scope.Store.RequestAsync(new(ResourceType.Horse, "JRA", $"horse-{Guid.NewGuid():N}"),
+        await scope.Store.RequestAsync(new(CollectionResourceType.Horse, "JRA", $"horse-{Guid.NewGuid():N}"),
             new("horse-profile"), 1, CollectionReason.Initial, now.AddHours(-2));
 
         var before = await scope.Store.GetMonitoringSnapshotAsync(now, now.AddDays(-1), 100);
@@ -251,10 +252,10 @@ public sealed class CollectionMonitoringServiceTests
         using var scope = new MonitoringStoreScope();
         var now = DateTimeOffset.UtcNow.AddMinutes(-2);
         var definition = new CollectionDefinitionId("horse-profile");
-        await scope.Store.RegisterDefinitionAsync(definition, "Horse profile", ResourceType.Horse, 1, "old", false);
+        await scope.Store.RegisterDefinitionAsync(definition, "Horse profile", CollectionResourceType.Horse, 1, "old", false);
         for (var index = 0; index < 2; index++)
         {
-            var resource = new ResourceKey(ResourceType.Horse, "JRA", $"horse-{Guid.NewGuid():N}");
+            var resource = new ResourceKey(CollectionResourceType.Horse, "JRA", $"horse-{Guid.NewGuid():N}");
             var receipt = await scope.Store.RequestAsync(resource, definition, 1, CollectionReason.Discovery, now,
                 attributes: new Dictionary<string, string> { ["name"] = $"テスト馬{index}" });
             var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
@@ -263,7 +264,7 @@ public sealed class CollectionMonitoringServiceTests
                 new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "登録区分付き見出しです。",
                     PageIdentification: "SubjectIdentification:ProfileNameMismatch"));
         }
-        await scope.Store.RegisterDefinitionAsync(definition, "Horse profile", ResourceType.Horse, 2, "fixed", true);
+        await scope.Store.RegisterDefinitionAsync(definition, "Horse profile", CollectionResourceType.Horse, 2, "fixed", true);
 
         var disabled = scope.CreateService(new() { RecoveryEnabled = false });
         Assert.IsFalse((await disabled.PreviewKnownRecoveryAsync(DateTimeOffset.UtcNow)).SafeToApply);
@@ -283,7 +284,7 @@ public sealed class CollectionMonitoringServiceTests
     {
         using var scope = new MonitoringStoreScope();
         var now = DateTimeOffset.UtcNow;
-        await CreateFailureAsync(scope.Store, now, "horse-profile", ResourceType.Horse,
+        await CreateFailureAsync(scope.Store, now, "horse-profile", CollectionResourceType.Horse,
             "SubjectNotIdentified", "missing deterministic identity evidence");
         var service = scope.CreateService(new() { RecoveryEnabled = true });
 
@@ -410,11 +411,11 @@ public sealed class CollectionMonitoringServiceTests
 
     private static CollectionRaceFreshnessSnapshot RaceFreshness(string id, DateTimeOffset start,
         RaceArtifactStatus card, RaceArtifactStatus result) => new(
-        Guid.NewGuid(), new(ResourceType.Race, "JRA", id), CollectionTaskStatus.Ready,
+        Guid.NewGuid(), new(CollectionResourceType.Race, "JRA", id), CollectionTaskStatus.Ready,
         start.AddHours(-1), start, card, result);
 
     private static CollectionMonitoringTaskSnapshot MonitoringTask(string definition, int priority,
-        DateTimeOffset availableAt) => new(Guid.NewGuid(), new(ResourceType.Horse, "JRA", Guid.NewGuid().ToString("N")),
+        DateTimeOffset availableAt) => new(Guid.NewGuid(), new(CollectionResourceType.Horse, "JRA", Guid.NewGuid().ToString("N")),
         new(definition), CollectionTaskStatus.Ready, CollectionLane.Realtime, priority, availableAt, availableAt,
         availableAt, null, null, 0, $"JRA|Definition|{definition}|Realtime", availableAt);
 
@@ -424,7 +425,7 @@ public sealed class CollectionMonitoringServiceTests
         $"JRA|Definition|{definition}|Realtime");
 
     private static async Task CreateFailureAsync(CollectionPlatformStore store, DateTimeOffset now,
-        string definitionId, ResourceType type, string errorCode, string message)
+        string definitionId, CollectionResourceType type, string errorCode, string message)
     {
         var definition = new CollectionDefinitionId(definitionId);
         await store.RegisterDefinitionAsync(definition, definitionId, type, 1, "initial", false);

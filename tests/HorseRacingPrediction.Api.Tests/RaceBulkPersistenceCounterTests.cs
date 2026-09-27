@@ -1,9 +1,8 @@
-using System.Data.Common;
-using System.Net.Http.Json;
-using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Contracts;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using System.Data.Common;
+using System.Net.Http.Json;
 
 namespace HorseRacingPrediction.Api.Tests;
 

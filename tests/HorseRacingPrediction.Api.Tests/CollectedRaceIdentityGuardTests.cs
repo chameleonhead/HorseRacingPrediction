@@ -245,11 +245,11 @@ public sealed class CollectedRaceIdentityGuardTests
         var result = await TestApplicationFactory.CreateAsync();
         result.Client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var store = result.App.Services.GetRequiredService<CollectionPlatformStore>();
-        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse,
+        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", CollectionResourceType.Horse,
             3, "Identity guard test", true);
-        await store.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", ResourceType.Jockey,
+        await store.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", CollectionResourceType.Jockey,
             3, "Identity guard test", true);
-        await store.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", ResourceType.Trainer,
+        await store.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", CollectionResourceType.Trainer,
             3, "Identity guard test", true);
         return result;
     }

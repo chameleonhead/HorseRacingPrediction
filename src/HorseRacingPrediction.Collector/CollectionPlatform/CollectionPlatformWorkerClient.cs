@@ -1,8 +1,9 @@
-using System.Net.Http.Json;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.Http;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Net.Http.Json;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
@@ -164,11 +165,11 @@ public sealed class CollectionPlatformWorkerClient
             || task.Lane != expected.Lane) return false;
         return expected.GroupKind switch
         {
-            CollectionDispatchGroupKind.RaceDay => task.Resource.Type is ResourceType.RaceCard or ResourceType.RaceResult or ResourceType.Race
+            CollectionDispatchGroupKind.RaceDay => task.Resource.Type is CollectionResourceType.RaceCard or CollectionResourceType.RaceResult or CollectionResourceType.Race
                 && task.EffectiveDate.HasValue
                 && string.Equals(task.EffectiveDate.Value.ToString("yyyy-MM-dd"), expected.GroupKey,
                     StringComparison.Ordinal),
-            CollectionDispatchGroupKind.WeekendSubjects => task.Resource.Type == ResourceType.Horse
+            CollectionDispatchGroupKind.WeekendSubjects => task.Resource.Type == CollectionResourceType.Horse
                 && task.Attributes.TryGetValue("weekendPriorityUntil", out var weekend)
                 && string.Equals(weekend, expected.GroupKey, StringComparison.Ordinal),
             _ => task.Definition == expected.Definition && task.EffectiveDate == expected.EffectiveDate,

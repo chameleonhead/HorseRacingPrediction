@@ -34,7 +34,7 @@ public sealed class JraDirectCollectionHandlerTests
             }, _ => results,
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 8, 0, 0, TimeSpan.Zero)));
 
-        var completion = await handler.CollectAsync(CreateTask(ResourceType.Race, "race-detail", date),
+        var completion = await handler.CollectAsync(CreateTask(CollectionResourceType.Race, "race-detail", date),
             CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.ValidationFailure, completion.Result);
@@ -62,7 +62,7 @@ public sealed class JraDirectCollectionHandlerTests
         var handler = new JraRaceDetailCollectionHandler(sessions, _ => cards, _ => results,
             timeProvider: new FixedTimeProvider(now));
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260926:Nakayama:5"), new("race-detail"), 4,
+            new(CollectionResourceType.Race, "JRA", "20260926:Nakayama:5"), new("race-detail"), 4,
             CollectionReason.DefinitionChanged, CollectionLane.Normal, 50, "lease", now.AddMinutes(5), date,
             new Dictionary<string, string>(),
             [new(1, url, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null)]), CancellationToken.None);
@@ -101,7 +101,7 @@ public sealed class JraDirectCollectionHandlerTests
         var handler = new JraRaceDetailCollectionHandler(sessions, _ => cards, _ => results,
             timeProvider: new FixedTimeProvider(now));
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260926:Nakayama:5"), new("race-detail"), 5,
+            new(CollectionResourceType.Race, "JRA", "20260926:Nakayama:5"), new("race-detail"), 5,
             CollectionReason.DefinitionChanged, CollectionLane.Normal, 50, "lease", now.AddMinutes(5), date,
             new Dictionary<string, string>(),
             [new(1, url, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null)]), CancellationToken.None);
@@ -149,7 +149,7 @@ public sealed class JraDirectCollectionHandlerTests
             predictionSchedule: schedule,
             timeProvider: new FixedTimeProvider(now));
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260926:Nakayama:5"), new("race-detail"), CollectionDefinitionRevisions.RaceDetail,
+            new(CollectionResourceType.Race, "JRA", "20260926:Nakayama:5"), new("race-detail"), CollectionDefinitionRevisions.RaceDetail,
             CollectionReason.DefinitionChanged, CollectionLane.Normal, 50, "lease", now.AddMinutes(5), date,
             new Dictionary<string, string>(),
             [new(1, url, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null)]), CancellationToken.None);
@@ -195,7 +195,7 @@ public sealed class JraDirectCollectionHandlerTests
         var handler = new JraRaceDetailCollectionHandler(sessions, _ => cards, _ => results,
             timeProvider: new FixedTimeProvider(now));
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260926:Nakayama:5"), new("race-detail"), 5,
+            new(CollectionResourceType.Race, "JRA", "20260926:Nakayama:5"), new("race-detail"), 5,
             CollectionReason.DefinitionChanged, CollectionLane.Normal, 50, "lease", now.AddMinutes(5), date,
             new Dictionary<string, string>(),
             [new(1, url, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null)]), CancellationToken.None);
@@ -213,7 +213,7 @@ public sealed class JraDirectCollectionHandlerTests
     {
         var date = new DateOnly(2026, 4, 19);
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260419:Nakayama:9"), new("race-detail"), 1,
+            new(CollectionResourceType.Race, "JRA", "20260419:Nakayama:9"), new("race-detail"), 1,
             CollectionReason.Recovery, CollectionLane.Normal, 50, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date, new Dictionary<string, string>());
 
@@ -225,7 +225,7 @@ public sealed class JraDirectCollectionHandlerTests
     public void RaceDetail_LegacyTaskWithMismatchedResourceDate_IsRejected()
     {
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260420:Nakayama:9"), new("race-detail"), 1,
+            new(CollectionResourceType.Race, "JRA", "20260420:Nakayama:9"), new("race-detail"), 1,
             CollectionReason.Recovery, CollectionLane.Normal, 50, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), new DateOnly(2026, 4, 19), new Dictionary<string, string>());
 
@@ -255,7 +255,7 @@ public sealed class JraDirectCollectionHandlerTests
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 8, 0, 0, TimeSpan.Zero)));
 
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260912:Tokyo:11"), new("race-detail"), 1,
+            new(CollectionResourceType.Race, "JRA", "20260912:Tokyo:11"), new("race-detail"), 1,
             CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date,
             new Dictionary<string, string> { ["course"] = "東京", ["number"] = "11", ["startTime"] = "15:30" },
@@ -300,7 +300,7 @@ public sealed class JraDirectCollectionHandlerTests
             new LeasedCollectionTask(
                 Guid.NewGuid(),
                 Guid.NewGuid(),
-                new(ResourceType.Race, "JRA", "20260912:Nakayama:11"),
+                new(CollectionResourceType.Race, "JRA", "20260912:Nakayama:11"),
                 new("race-detail"),
                 1,
                 CollectionReason.Discovery,
@@ -337,7 +337,7 @@ public sealed class JraDirectCollectionHandlerTests
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 21, 8, 0, 0, TimeSpan.Zero)));
 
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260921:Tokyo:11"), new("race-detail"), 2,
+            new(CollectionResourceType.Race, "JRA", "20260921:Tokyo:11"), new("race-detail"), 2,
             CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date,
             new Dictionary<string, string> { ["course"] = "東京", ["number"] = "11", ["startTime"] = "15:30" }),
@@ -365,7 +365,7 @@ public sealed class JraDirectCollectionHandlerTests
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 21, 5, 0, 0, TimeSpan.Zero)));
 
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260921:Tokyo:11"), new("race-detail"), 2,
+            new(CollectionResourceType.Race, "JRA", "20260921:Tokyo:11"), new("race-detail"), 2,
             CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date,
             new Dictionary<string, string> { ["course"] = "東京", ["number"] = "11", ["startTime"] = "15:30" }),
@@ -407,7 +407,7 @@ public sealed class JraDirectCollectionHandlerTests
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 21, 8, 0, 0, TimeSpan.Zero)));
 
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260921:Nakayama:2"), new("race-detail"), 2,
+            new(CollectionResourceType.Race, "JRA", "20260921:Nakayama:2"), new("race-detail"), 2,
             CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), originalDate,
             new Dictionary<string, string> { ["course"] = "中山", ["number"] = "2", ["startTime"] = "10:20", ["domainRaceId"] = "old-domain" },
@@ -417,7 +417,7 @@ public sealed class JraDirectCollectionHandlerTests
         Assert.AreEqual(CollectionAttemptResult.NotApplicable, completion.Result);
         Assert.AreEqual("MeetingRescheduled", completion.ErrorCode);
         Assert.HasCount(1, sink.Requests);
-        Assert.AreEqual(new ResourceKey(ResourceType.Race, "JRA", "20260922:Nakayama:2"), sink.Requests[0].Resource);
+        Assert.AreEqual(new ResourceKey(CollectionResourceType.Race, "JRA", "20260922:Nakayama:2"), sink.Requests[0].Resource);
         Assert.AreEqual(CollectionReason.Recovery, sink.Requests[0].Reason);
         Assert.AreEqual(replacementDate, sink.Requests[0].EffectiveDate);
         Assert.AreEqual(original.ToString(), sink.Requests[0].Attributes["rescheduledFrom"]);
@@ -452,7 +452,7 @@ public sealed class JraDirectCollectionHandlerTests
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 21, 8, 0, 0, TimeSpan.Zero)));
 
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260921:Nakayama:2"), new("race-detail"), 2,
+            new(CollectionResourceType.Race, "JRA", "20260921:Nakayama:2"), new("race-detail"), 2,
             CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date,
             new Dictionary<string, string> { ["course"] = "中山", ["number"] = "2", ["startTime"] = "10:20" },
@@ -478,7 +478,7 @@ public sealed class JraDirectCollectionHandlerTests
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero)));
 
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260919:Tokyo:11"), new("race-detail"), 2,
+            new(CollectionResourceType.Race, "JRA", "20260919:Tokyo:11"), new("race-detail"), 2,
             CollectionReason.DefinitionChanged, CollectionLane.Normal, 50, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date,
             new Dictionary<string, string>
@@ -510,7 +510,7 @@ public sealed class JraDirectCollectionHandlerTests
             _ => new FakeJraRaceCardCollectionWorkflow(), _ => results,
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 8, 0, 0, TimeSpan.Zero)));
 
-        var completion = await handler.CollectAsync(CreateTask(ResourceType.Race, "race-detail", date),
+        var completion = await handler.CollectAsync(CreateTask(CollectionResourceType.Race, "race-detail", date),
             CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
@@ -536,7 +536,7 @@ public sealed class JraDirectCollectionHandlerTests
             }));
 
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260901:Tokyo:11"), new("race-detail"), 1,
+            new(CollectionResourceType.Race, "JRA", "20260901:Tokyo:11"), new("race-detail"), 1,
             CollectionReason.Backfill, CollectionLane.Background, 10, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date,
             new Dictionary<string, string> { ["course"] = "東京", ["number"] = "11" }),
@@ -558,7 +558,7 @@ public sealed class JraDirectCollectionHandlerTests
             timeProvider: new FixedTimeProvider(now));
 
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
+            new(CollectionResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
             CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
             now.AddMinutes(5), date, new Dictionary<string, string>
             {
@@ -587,7 +587,7 @@ public sealed class JraDirectCollectionHandlerTests
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero)));
 
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
+            new(CollectionResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
             CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date, new Dictionary<string, string>
             {
@@ -624,7 +624,7 @@ public sealed class JraDirectCollectionHandlerTests
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 19, 0, 0, 0, TimeSpan.Zero)));
 
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
+            new(CollectionResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
             CollectionReason.ManualRefresh, CollectionLane.Normal, 50, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date,
             new Dictionary<string, string> { ["course"] = "東京", ["number"] = "1" },
@@ -657,7 +657,7 @@ public sealed class JraDirectCollectionHandlerTests
             timeProvider: new FixedTimeProvider(now));
 
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
+            new(CollectionResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
             CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease", now.AddMinutes(5), date,
             new Dictionary<string, string>
             {
@@ -689,7 +689,7 @@ public sealed class JraDirectCollectionHandlerTests
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero)));
 
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
+            new(CollectionResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
             CollectionReason.ManualRefresh, CollectionLane.Normal, 50, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date, new Dictionary<string, string>
             {
@@ -727,7 +727,7 @@ public sealed class JraDirectCollectionHandlerTests
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero)));
 
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
+            new(CollectionResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
             CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date,
             new Dictionary<string, string> { ["course"] = "東京", ["number"] = "1" },
@@ -763,7 +763,7 @@ public sealed class JraDirectCollectionHandlerTests
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero)));
 
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
+            new(CollectionResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
             CollectionReason.DefinitionChanged, CollectionLane.Normal, 50, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date,
             new Dictionary<string, string>
@@ -803,7 +803,7 @@ public sealed class JraDirectCollectionHandlerTests
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero)));
 
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
+            new(CollectionResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
             CollectionReason.Recovery, CollectionLane.Normal, 50, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date,
             new Dictionary<string, string>
@@ -844,7 +844,7 @@ public sealed class JraDirectCollectionHandlerTests
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero)));
 
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
+            new(CollectionResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
             CollectionReason.ManualRefresh, CollectionLane.Normal, 50, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date,
             new Dictionary<string, string> { ["course"] = "東京", ["number"] = "1" },
@@ -876,7 +876,7 @@ public sealed class JraDirectCollectionHandlerTests
         var handler = new JraRaceCardCollectionHandler(sessions, _ => workflow,
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero)));
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.RaceCard, "JRA", "20260912:Tokyo:11"), new("race-card"), 1,
+            new(CollectionResourceType.RaceCard, "JRA", "20260912:Tokyo:11"), new("race-card"), 1,
             CollectionReason.ManualRefresh, CollectionLane.Realtime, 100, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date,
             new Dictionary<string, string> { ["course"] = "東京", ["number"] = "11" },
@@ -910,7 +910,7 @@ public sealed class JraDirectCollectionHandlerTests
         var workflow = new FakeJraRaceCardCollectionWorkflow();
         var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow,
                 timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero)))
-            .CollectAsync(CreateTask(ResourceType.RaceCard, "race-card", date, wrong, valid), CancellationToken.None);
+            .CollectAsync(CreateTask(CollectionResourceType.RaceCard, "race-card", date, wrong, valid), CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
         Assert.AreEqual(valid, result.RequestedUrl);
@@ -940,7 +940,7 @@ public sealed class JraDirectCollectionHandlerTests
         var workflow = new FakeJraRaceCardCollectionWorkflow();
         var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow,
                 timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero)))
-            .CollectAsync(CreateTask(ResourceType.RaceCard, "race-card", date, first, second), CancellationToken.None);
+            .CollectAsync(CreateTask(CollectionResourceType.RaceCard, "race-card", date, first, second), CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
         Assert.AreEqual(second, result.RequestedUrl);
@@ -975,7 +975,7 @@ public sealed class JraDirectCollectionHandlerTests
 
         var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow,
                 timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero)))
-            .CollectAsync(CreateTask(ResourceType.RaceCard, "race-card", date, first, second),
+            .CollectAsync(CreateTask(CollectionResourceType.RaceCard, "race-card", date, first, second),
                 CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
@@ -999,7 +999,7 @@ public sealed class JraDirectCollectionHandlerTests
         var workflow = new FakeJraRaceCardCollectionWorkflow();
         var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow,
                 timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero)))
-            .CollectAsync(CreateTask(ResourceType.RaceCard, "race-card", date, invalid), CancellationToken.None);
+            .CollectAsync(CreateTask(CollectionResourceType.RaceCard, "race-card", date, invalid), CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
         Assert.AreEqual(new Uri("https://example.test/card"), result.RequestedUrl);
@@ -1018,7 +1018,7 @@ public sealed class JraDirectCollectionHandlerTests
         {
             ThrowOnCollect = new JraCollectionException("出馬表を取得できませんでした。")
         };
-        var task = CreateTask(ResourceType.RaceCard, "race-card", date);
+        var task = CreateTask(CollectionResourceType.RaceCard, "race-card", date);
 
         var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow,
                 timeProvider: new FixedTimeProvider(now))
@@ -1046,7 +1046,7 @@ public sealed class JraDirectCollectionHandlerTests
 
         var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow,
                 timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero)))
-            .CollectAsync(CreateTask(ResourceType.RaceCard, "race-card", date), CancellationToken.None);
+            .CollectAsync(CreateTask(CollectionResourceType.RaceCard, "race-card", date), CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
         var stageOutcomes = result.StageOutcomes!;
@@ -1097,7 +1097,7 @@ public sealed class JraDirectCollectionHandlerTests
         };
         var workflow = new FakeJraRaceResultCollectionWorkflow();
         var result = await new JraRaceResultCollectionHandler(sessions, _ => workflow)
-            .CollectAsync(CreateTask(ResourceType.RaceResult, "race-result", date, wrongType, wrongRace, valid),
+            .CollectAsync(CreateTask(CollectionResourceType.RaceResult, "race-result", date, wrongType, wrongRace, valid),
                 CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
@@ -1124,7 +1124,7 @@ public sealed class JraDirectCollectionHandlerTests
         var workflow = new FakeJraRaceResultCollectionWorkflow();
 
         var result = await new JraRaceResultCollectionHandler(sessions, _ => workflow)
-            .CollectAsync(CreateTask(ResourceType.RaceResult, "race-result", date, invalid),
+            .CollectAsync(CreateTask(CollectionResourceType.RaceResult, "race-result", date, invalid),
                 CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
@@ -1132,7 +1132,7 @@ public sealed class JraDirectCollectionHandlerTests
         Assert.HasCount(1, workflow.Requests);
     }
 
-    private static LeasedCollectionTask CreateTask(ResourceType type, string definition, DateOnly date,
+    private static LeasedCollectionTask CreateTask(CollectionResourceType type, string definition, DateOnly date,
         params Uri[] locations) => new(Guid.NewGuid(), Guid.NewGuid(),
         new(type, "JRA", "20260912:Tokyo:11"), new(definition), 1,
         CollectionReason.ManualRefresh, CollectionLane.Realtime, 100, "lease",

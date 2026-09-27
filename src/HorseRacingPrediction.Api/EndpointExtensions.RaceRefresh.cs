@@ -1,7 +1,7 @@
 using EventFlow;
 using EventFlow.Queries;
 using EventFlow.EntityFramework;
-using HorseRacingPrediction.Api.Contracts;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Commands.Horses;
@@ -84,7 +84,7 @@ public static partial class EndpointExtensions
                     damsireName: source.DamsireName, coatColor: source.CoatColor), token);
             entries.Add(new(entryId, horseId, source.HorseNumber, jockeyId, trainerId,
                 source.GateNumber, source.AssignedWeight, source.SexCode, source.Age, source.BodyWeight,
-                source.BodyWeightChange, null, source.OwnerName, (RaceEntryParticipationStatus?)source.ParticipationStatus));
+                source.BodyWeightChange, null, source.OwnerName, (Domain.Races.RaceEntryParticipationStatus?)source.ParticipationStatus));
             results.Add(new(entryId, source.FinishPosition, source.OfficialTime, source.MarginText,
                 source.LastThreeFurlongTime, source.AbnormalResultCode, source.PrizeMoney, source.CornerPositions,
                 source.Popularity, source.OriginalFinishPosition, source.IsDeadHeat, source.Average1F,

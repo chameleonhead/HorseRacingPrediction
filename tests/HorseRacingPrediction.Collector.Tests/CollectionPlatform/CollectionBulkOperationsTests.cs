@@ -1,4 +1,5 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
@@ -11,8 +12,8 @@ public sealed class CollectionBulkOperationsTests
     {
         using var directory = new TemporaryDirectory();
         var store = await CreateStoreAsync(directory.Path);
-        var valid = new CollectionBulkTarget(new(ResourceType.Horse, "JRA", "H1"));
-        var invalid = new CollectionBulkTarget(new(ResourceType.Trainer, "JRA", "T1"));
+        var valid = new CollectionBulkTarget(new(CollectionResourceType.Horse, "JRA", "H1"));
+        var invalid = new CollectionBulkTarget(new(CollectionResourceType.Trainer, "JRA", "T1"));
 
         await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => store.ExecuteBulkRequestAsync(
             Definition, 1, CollectionReason.ManualRefresh, [valid, invalid], Now, "invalid-batch",
@@ -29,8 +30,8 @@ public sealed class CollectionBulkOperationsTests
         var store = await CreateStoreAsync(directory.Path);
         var targets = new[]
         {
-            new CollectionBulkTarget(new ResourceKey(ResourceType.Horse, "jra", "H1")),
-            new CollectionBulkTarget(new ResourceKey(ResourceType.Horse, "JRA", "H2")),
+            new CollectionBulkTarget(new ResourceKey(CollectionResourceType.Horse, "jra", "H1")),
+            new CollectionBulkTarget(new ResourceKey(CollectionResourceType.Horse, "JRA", "H2")),
         };
 
         var preview = await store.PreviewBulkRequestAsync(Definition, 1, targets);
@@ -52,12 +53,12 @@ public sealed class CollectionBulkOperationsTests
         using var directory = new TemporaryDirectory();
         var store = await CreateStoreAsync(directory.Path);
         var definition = new CollectionDefinitionId("race-detail");
-        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260404:Nakayama:10");
-        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "previous", false);
+        var resource = new ResourceKey(CollectionResourceType.Race, "JRA", "20260404:Nakayama:10");
+        await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 2, "previous", false);
         var previous = await store.RequestAsync(resource, definition, 2, CollectionReason.Recovery, Now,
             CollectionLane.Normal, 30, effectiveDate: new(2026, 4, 4));
         var revision = HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail;
-        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, revision, "fix", false);
+        await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, revision, "fix", false);
         var targets = new[] { new CollectionBulkTarget(resource) };
         Assert.AreEqual(1, (await store.PreviewBulkRequestAsync(definition, revision, targets)).TargetCount);
         Assert.AreEqual(2, (await store.GetStateAsync(resource, definition))!.RequiredRevision);
@@ -95,8 +96,8 @@ public sealed class CollectionBulkOperationsTests
     {
         using var directory = new TemporaryDirectory();
         var store = await CreateStoreAsync(directory.Path);
-        var failed = new ResourceKey(ResourceType.Horse, "JRA", "failed");
-        var current = new ResourceKey(ResourceType.Horse, "JRA", "current");
+        var failed = new ResourceKey(CollectionResourceType.Horse, "JRA", "failed");
+        var current = new ResourceKey(CollectionResourceType.Horse, "JRA", "current");
         await FinishAsync(store, failed, CollectionAttemptResult.PermanentFailure, Now);
         await FinishAsync(store, current, CollectionAttemptResult.Succeeded, Now.AddDays(2));
 
@@ -116,7 +117,7 @@ public sealed class CollectionBulkOperationsTests
     private static async Task<CollectionPlatformStore> CreateStoreAsync(string path)
     {
         var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions { StateDirectory = path }));
-        await store.RegisterDefinitionAsync(Definition, "Horse", ResourceType.Horse, 1, "initial", false);
+        await store.RegisterDefinitionAsync(Definition, "Horse", CollectionResourceType.Horse, 1, "initial", false);
         return store;
     }
     private static async Task FinishAsync(CollectionPlatformStore store, ResourceKey resource,

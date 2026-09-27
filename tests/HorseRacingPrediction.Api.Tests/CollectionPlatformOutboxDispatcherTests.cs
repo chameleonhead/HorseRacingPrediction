@@ -1,5 +1,6 @@
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -16,8 +17,8 @@ public sealed class CollectionPlatformOutboxDispatcherTests
         try
         {
             var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions { StateDirectory = directory }));
-            await store.RegisterDefinitionAsync(new("horse-profile"), "horse", ResourceType.Horse, 1, "initial", false);
-            var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", "H1"), new("horse-profile"),
+            await store.RegisterDefinitionAsync(new("horse-profile"), "horse", CollectionResourceType.Horse, 1, "initial", false);
+            var receipt = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "H1"), new("horse-profile"),
                 1, CollectionReason.Initial, DateTimeOffset.UtcNow.AddMinutes(-1));
             var queue = new WakeRecordingQueue();
             var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
@@ -48,11 +49,11 @@ public sealed class CollectionPlatformOutboxDispatcherTests
         try
         {
             var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions { StateDirectory = directory }));
-            await store.RegisterDefinitionAsync(new("race-card"), "card", ResourceType.RaceCard, 1, "initial", false);
+            await store.RegisterDefinitionAsync(new("race-card"), "card", CollectionResourceType.RaceCard, 1, "initial", false);
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
             var date = new DateOnly(2026, 9, 12);
             for (var index = 12; index >= 1; index--)
-                await store.RequestAsync(new(ResourceType.RaceCard, "JRA", $"R{index}"), new("race-card"), 1,
+                await store.RequestAsync(new(CollectionResourceType.RaceCard, "JRA", $"R{index}"), new("race-card"), 1,
                     CollectionReason.Initial, now.AddSeconds(index), CollectionLane.Realtime, index,
                     effectiveDate: date);
             var queue = new RecordingQueue();
@@ -88,12 +89,12 @@ public sealed class CollectionPlatformOutboxDispatcherTests
         try
         {
             var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions { StateDirectory = directory }));
-            await store.RegisterDefinitionAsync(new("race-card"), "card", ResourceType.RaceCard, 1, "initial", false);
+            await store.RegisterDefinitionAsync(new("race-card"), "card", CollectionResourceType.RaceCard, 1, "initial", false);
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
             for (var index = 0; index < 5; index++)
-                await store.RequestAsync(new(ResourceType.RaceCard, "JRA", $"R{index}"), new("race-card"), 1,
+                await store.RequestAsync(new(CollectionResourceType.RaceCard, "JRA", $"R{index}"), new("race-card"), 1,
                     CollectionReason.Initial, now, CollectionLane.Realtime, 100);
-            await store.RequestAsync(new(ResourceType.RaceCard, "JRA", "BACKGROUND"), new("race-card"), 1,
+            await store.RequestAsync(new(CollectionResourceType.RaceCard, "JRA", "BACKGROUND"), new("race-card"), 1,
                 CollectionReason.Backfill, now, CollectionLane.Background, 10);
             var queue = new RecordingQueue();
             var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
@@ -132,14 +133,14 @@ public sealed class CollectionPlatformOutboxDispatcherTests
         try
         {
             var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions { StateDirectory = directory }));
-            await store.RegisterDefinitionAsync(new("race-card"), "card", ResourceType.RaceCard, 1, "initial", false);
+            await store.RegisterDefinitionAsync(new("race-card"), "card", CollectionResourceType.RaceCard, 1, "initial", false);
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
             for (var index = 0; index < 8; index++)
-                await store.RequestAsync(new(ResourceType.RaceCard, "JRA", $"R{index}"), new("race-card"), 1,
+                await store.RequestAsync(new(CollectionResourceType.RaceCard, "JRA", $"R{index}"), new("race-card"), 1,
                     CollectionReason.Initial, now, CollectionLane.Realtime, 100);
-            await store.RequestAsync(new(ResourceType.RaceCard, "JRA", "NORMAL"), new("race-card"), 1,
+            await store.RequestAsync(new(CollectionResourceType.RaceCard, "JRA", "NORMAL"), new("race-card"), 1,
                 CollectionReason.Recovery, now, CollectionLane.Normal, 50);
-            await store.RequestAsync(new(ResourceType.RaceCard, "JRA", "BACKGROUND"), new("race-card"), 1,
+            await store.RequestAsync(new(CollectionResourceType.RaceCard, "JRA", "BACKGROUND"), new("race-card"), 1,
                 CollectionReason.Backfill, now, CollectionLane.Background, 10);
             var queue = new RecordingQueue();
             var options = Options.Create(new CollectionQueueOptions
@@ -178,11 +179,11 @@ public sealed class CollectionPlatformOutboxDispatcherTests
         try
         {
             var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions { StateDirectory = directory }));
-            await store.RegisterDefinitionAsync(new("race-card"), "card", ResourceType.RaceCard, 1, "initial", false);
+            await store.RegisterDefinitionAsync(new("race-card"), "card", CollectionResourceType.RaceCard, 1, "initial", false);
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
-            await store.RequestAsync(new(ResourceType.RaceCard, "JRA", "R1"), new("race-card"), 1,
+            await store.RequestAsync(new(CollectionResourceType.RaceCard, "JRA", "R1"), new("race-card"), 1,
                 CollectionReason.Initial, now, CollectionLane.Realtime, 100, effectiveDate: new(2026, 9, 12));
-            await store.RequestAsync(new(ResourceType.RaceCard, "JRA", "R2"), new("race-card"), 1,
+            await store.RequestAsync(new(CollectionResourceType.RaceCard, "JRA", "R2"), new("race-card"), 1,
                 CollectionReason.Initial, now, CollectionLane.Realtime, 100, effectiveDate: new(2026, 9, 13));
             var queue = new RecordingQueue();
             var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
@@ -218,14 +219,14 @@ public sealed class CollectionPlatformOutboxDispatcherTests
         try
         {
             var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions { StateDirectory = directory }));
-            await store.RegisterDefinitionAsync(new("race-card"), "card", ResourceType.RaceCard, 1, "initial", false);
-            await store.RegisterDefinitionAsync(new("race-result"), "result", ResourceType.RaceResult, 1, "initial", false);
+            await store.RegisterDefinitionAsync(new("race-card"), "card", CollectionResourceType.RaceCard, 1, "initial", false);
+            await store.RegisterDefinitionAsync(new("race-result"), "result", CollectionResourceType.RaceResult, 1, "initial", false);
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
             var date = new DateOnly(2026, 9, 13);
             var attributes = new Dictionary<string, string> { ["course"] = "Tokyo", ["number"] = "1" };
-            await store.RequestAsync(new(ResourceType.RaceCard, "JRA", "CARD"), new("race-card"), 1,
+            await store.RequestAsync(new(CollectionResourceType.RaceCard, "JRA", "CARD"), new("race-card"), 1,
                 CollectionReason.Initial, now, CollectionLane.Realtime, 80, effectiveDate: date, attributes: attributes);
-            await store.RequestAsync(new(ResourceType.RaceResult, "JRA", "RESULT"), new("race-result"), 1,
+            await store.RequestAsync(new(CollectionResourceType.RaceResult, "JRA", "RESULT"), new("race-result"), 1,
                 CollectionReason.Initial, now, CollectionLane.Realtime, 100, effectiveDate: date, attributes: attributes);
             var queue = new RecordingQueue();
             var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
@@ -246,7 +247,7 @@ public sealed class CollectionPlatformOutboxDispatcherTests
             Assert.AreEqual("2026-09-13", envelope.Compatibility.GroupKey);
             Assert.HasCount(2, envelope.Tasks);
             var tasks = (await store.GetTasksAsync()).ToDictionary(x => x.Resource.Type, x => x.TaskId);
-            CollectionAssert.AreEqual(new[] { tasks[ResourceType.RaceCard], tasks[ResourceType.RaceResult] },
+            CollectionAssert.AreEqual(new[] { tasks[CollectionResourceType.RaceCard], tasks[CollectionResourceType.RaceResult] },
                 envelope.Tasks.Select(x => x.TaskId).ToArray());
         }
         finally { Directory.Delete(directory, true); }
@@ -260,11 +261,11 @@ public sealed class CollectionPlatformOutboxDispatcherTests
         try
         {
             var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions { StateDirectory = directory }));
-            await store.RegisterDefinitionAsync(new("horse-profile"), "horse", ResourceType.Horse, 1, "initial", false);
+            await store.RegisterDefinitionAsync(new("horse-profile"), "horse", CollectionResourceType.Horse, 1, "initial", false);
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
             var attributes = new Dictionary<string, string> { ["weekendPriorityUntil"] = "2026-09-13" };
             for (var index = 1; index <= 2; index++)
-                await store.RequestAsync(new(ResourceType.Horse, "JRA", $"H{index}"), new("horse-profile"), 1,
+                await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", $"H{index}"), new("horse-profile"), 1,
                     CollectionReason.Discovery, now, CollectionLane.Realtime, 80, attributes: attributes);
             var queue = new RecordingQueue();
             var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
@@ -297,10 +298,10 @@ public sealed class CollectionPlatformOutboxDispatcherTests
             var options = Options.Create(new CollectionPlatformOptions { StateDirectory = directory });
             var store1 = new CollectionPlatformStore(options);
             var store2 = new CollectionPlatformStore(options);
-            await store1.RegisterDefinitionAsync(new("race-card"), "card", ResourceType.RaceCard, 1, "initial", false);
+            await store1.RegisterDefinitionAsync(new("race-card"), "card", CollectionResourceType.RaceCard, 1, "initial", false);
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
             for (var index = 1; index <= 2; index++)
-                await store1.RequestAsync(new(ResourceType.RaceCard, "JRA", $"R{index}"), new("race-card"), 1,
+                await store1.RequestAsync(new(CollectionResourceType.RaceCard, "JRA", $"R{index}"), new("race-card"), 1,
                     CollectionReason.Initial, now, CollectionLane.Realtime, 80,
                     effectiveDate: new DateOnly(2026, 9, 10 + index));
             var queue = new RecordingQueue();
@@ -331,11 +332,11 @@ public sealed class CollectionPlatformOutboxDispatcherTests
         try
         {
             var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions { StateDirectory = directory }));
-            await store.RegisterDefinitionAsync(new("race-card"), "card", ResourceType.RaceCard, 1, "initial", false);
+            await store.RegisterDefinitionAsync(new("race-card"), "card", CollectionResourceType.RaceCard, 1, "initial", false);
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
             var date = new DateOnly(2026, 9, 13);
             for (var index = 1; index <= 26; index++)
-                await store.RequestAsync(new(ResourceType.RaceCard, "JRA", $"R{index}"), new("race-card"), 1,
+                await store.RequestAsync(new(CollectionResourceType.RaceCard, "JRA", $"R{index}"), new("race-card"), 1,
                     CollectionReason.Initial, now, CollectionLane.Realtime, index >= 25 ? 100 : 10,
                     effectiveDate: date,
                     attributes: new Dictionary<string, string>

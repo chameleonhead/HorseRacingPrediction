@@ -1,16 +1,17 @@
 using Bunit;
-using System.Net.Http.Json;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Api.Web.Components.Pages;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Contracts.Time;
-using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.FluentUI.AspNetCore.Components;
+using System.Net.Http.Json;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -109,7 +110,7 @@ public sealed class CollectionAdministrationComponentTests
         StringAssert.Contains(link.GetAttribute("href"), "/jobs/Horse/jra/H001/horse-profile");
 
         var detailCut = context.Render<JobDetail>(parameters => parameters
-            .Add(x => x.ResourceTypeName, "Horse").Add(x => x.Provider, "jra")
+            .Add(x => x.CollectionResourceTypeName, "Horse").Add(x => x.Provider, "jra")
             .Add(x => x.ResourceId, "H001").Add(x => x.DefinitionId, "horse-profile"));
         detailCut.WaitForAssertion(() => StringAssert.Contains(detailCut.Markup, "通常の方法で再取得"));
         StringAssert.Contains(detailCut.Markup, "収集処理の概要");
@@ -203,7 +204,7 @@ public sealed class CollectionAdministrationComponentTests
 
         cut.WaitForAssertion(() => Assert.AreEqual(1, handler.ManualRequests));
         Assert.IsNotNull(handler.LastManualRequest);
-        Assert.AreEqual(ResourceType.Horse, handler.LastManualRequest.ResourceType);
+        Assert.AreEqual(CollectionResourceType.Horse, handler.LastManualRequest.ResourceType);
         Assert.AreEqual("H002", handler.LastManualRequest.ResourceId);
         Assert.AreEqual("horse-profile", handler.LastManualRequest.DefinitionId);
     }
@@ -231,7 +232,7 @@ public sealed class CollectionAdministrationComponentTests
 
         cut.WaitForAssertion(() => Assert.AreEqual(1, handler.ManualRequests));
         Assert.IsNotNull(handler.LastManualRequest);
-        Assert.AreEqual(ResourceType.Race, handler.LastManualRequest.ResourceType);
+        Assert.AreEqual(CollectionResourceType.Race, handler.LastManualRequest.ResourceType);
         Assert.AreEqual("race-detail", handler.LastManualRequest.DefinitionId);
         Assert.AreEqual(CollectionLane.Realtime, handler.LastManualRequest.Lane);
         Assert.AreEqual(100, handler.LastManualRequest.Priority);
@@ -382,7 +383,7 @@ public sealed class CollectionAdministrationComponentTests
     {
         public bool EmptyPlatform { get; init; }
         public IReadOnlyList<CollectionFailureGroup> FailureGroups { get; init; } = [];
-        private static readonly ResourceKey Resource = new(ResourceType.Horse, "jra", "H001");
+        private static readonly ResourceKey Resource = new(CollectionResourceType.Horse, "jra", "H001");
         private static readonly CollectionDefinitionId Definition = new("horse-profile");
         public int ManualRequests { get; private set; }
         public int Previews { get; private set; }
@@ -454,11 +455,11 @@ public sealed class CollectionAdministrationComponentTests
                     [new CollectionStateSnapshot(Resource, Definition, 1, 1, DateTimeOffset.UtcNow, null,
                         CollectionStateStatus.Current)]),
                 "/api/admin/collection/progress" when EmptyPlatform => new CollectionProgressSnapshot(
-                    new Dictionary<ResourceType, int>(), new Dictionary<CollectionStateStatus, int>(),
+                    new Dictionary<CollectionResourceType, int>(), new Dictionary<CollectionStateStatus, int>(),
                     new Dictionary<CollectionLane, int>(), new Dictionary<int, int>(),
                     new Dictionary<string, int>(), 0),
                 "/api/admin/collection/progress" => new CollectionProgressSnapshot(
-                    new Dictionary<ResourceType, int> { [ResourceType.Horse] = 1 },
+                    new Dictionary<CollectionResourceType, int> { [CollectionResourceType.Horse] = 1 },
                     new Dictionary<CollectionStateStatus, int> { [CollectionStateStatus.Pending] = 1 },
                     new Dictionary<CollectionLane, int>(), new Dictionary<int, int>(),
                     new Dictionary<string, int>(), 0),

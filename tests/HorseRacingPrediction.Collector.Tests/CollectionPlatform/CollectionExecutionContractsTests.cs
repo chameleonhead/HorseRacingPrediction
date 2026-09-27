@@ -1,5 +1,6 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using Microsoft.Extensions.Options;
 using System.Net;
@@ -13,15 +14,15 @@ public sealed class CollectionExecutionContractsTests
     public void Registry_RejectsDuplicateDefinitions()
     {
         Assert.ThrowsExactly<InvalidOperationException>(() => new CollectionDefinitionHandlerRegistry(
-            [new Handler("horse-profile", ResourceType.Horse), new Handler("horse-profile", ResourceType.Horse)]));
+            [new Handler("horse-profile", CollectionResourceType.Horse), new Handler("horse-profile", CollectionResourceType.Horse)]));
     }
 
     [TestMethod]
     public void Registry_RejectsResourceTypeMismatch()
     {
-        var registry = new CollectionDefinitionHandlerRegistry([new Handler("horse-profile", ResourceType.Horse)]);
+        var registry = new CollectionDefinitionHandlerRegistry([new Handler("horse-profile", CollectionResourceType.Horse)]);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => registry.Resolve(new("horse-profile"), ResourceType.Trainer));
+        Assert.ThrowsExactly<InvalidOperationException>(() => registry.Resolve(new("horse-profile"), CollectionResourceType.Trainer));
     }
 
     [TestMethod]
@@ -185,7 +186,7 @@ public sealed class CollectionExecutionContractsTests
     public void TaskContext_FillsMissingIdentificationAndPreservesSpecificIdentification()
     {
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Horse, "JRA", "horse-1"), new("horse-profile"), 1,
+            new(CollectionResourceType.Horse, "JRA", "horse-1"), new("horse-profile"), 1,
             CollectionReason.Initial, CollectionLane.Normal, 50, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), null, new Dictionary<string, string>());
 
@@ -207,8 +208,8 @@ public sealed class CollectionExecutionContractsTests
             var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
             { StateDirectory = directory }));
             var definition = new CollectionDefinitionId("horse-profile");
-            var resource = new ResourceKey(ResourceType.Horse, "JRA", "H-CANCEL");
-            await store.RegisterDefinitionAsync(definition, "Horse", ResourceType.Horse, 1, "initial", false);
+            var resource = new ResourceKey(CollectionResourceType.Horse, "JRA", "H-CANCEL");
+            await store.RegisterDefinitionAsync(definition, "Horse", CollectionResourceType.Horse, 1, "initial", false);
             var request = await store.RequestAsync(resource, definition, 1, CollectionReason.Initial,
                 DateTimeOffset.UtcNow);
             using var cancellation = new CancellationTokenSource();
@@ -232,10 +233,10 @@ public sealed class CollectionExecutionContractsTests
         }
     }
 
-    private sealed class Handler(string id, ResourceType type) : ICollectionDefinitionHandler
+    private sealed class Handler(string id, CollectionResourceType type) : ICollectionDefinitionHandler
     {
         public CollectionDefinitionId DefinitionId => new(id);
-        public ResourceType ResourceType => type;
+        public CollectionResourceType ResourceType => type;
         public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken cancellationToken)
             => Task.FromResult(new CollectionAttemptCompletion(CollectionAttemptResult.Succeeded));
     }
@@ -243,7 +244,7 @@ public sealed class CollectionExecutionContractsTests
     private sealed class CancellingHandler(CancellationTokenSource cancellation) : ICollectionDefinitionHandler
     {
         public CollectionDefinitionId DefinitionId => new("horse-profile");
-        public ResourceType ResourceType => ResourceType.Horse;
+        public CollectionResourceType ResourceType => CollectionResourceType.Horse;
         public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task,
             CancellationToken cancellationToken)
         {

@@ -90,7 +90,7 @@ public sealed class ApiOnlyPredictionWorkflow
     }
 
     private static List<ApiOnlyPredictionRanking> BuildRankings(
-        RacePredictionContextReadModel context,
+        RacePredictionContextDto context,
         MlPredictionResponse? mlPrediction)
     {
         var entriesById = context.Entries
@@ -123,7 +123,7 @@ public sealed class ApiOnlyPredictionWorkflow
     }
 
     private static string BuildSummary(
-        RacePredictionContextReadModel context,
+        RacePredictionContextDto context,
         IReadOnlyList<ApiOnlyPredictionRanking> rankings,
         bool usedMl)
     {

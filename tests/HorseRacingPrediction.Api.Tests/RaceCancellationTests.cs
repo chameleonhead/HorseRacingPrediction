@@ -1,13 +1,11 @@
-using System.Net;
-using System.Net.Http.Json;
-using HorseRacingPrediction.Api.Contracts;
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.Http;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Predictor.Scheduling;
-using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using Shared = HorseRacingPrediction.Contracts;
+using System.Net;
+using System.Net.Http.Json;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -18,8 +16,8 @@ public sealed class RaceCancellationTests
     {
         var (app, http) = await TestApplicationFactory.CreateAsync();
         var store = app.Services.GetRequiredService<CollectionPlatformStore>();
-        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse", ResourceType.Horse, 4, "test", true);
-        await store.RegisterDefinitionAsync(new("owner-identity"), "Owner", ResourceType.Owner, 1, "test", true);
+        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse", CollectionResourceType.Horse, 4, "test", true);
+        await store.RegisterDefinitionAsync(new("owner-identity"), "Owner", CollectionResourceType.Owner, 1, "test", true);
         return (app, http);
     }
     private static DeclareRaceResultBulkRequest Card(bool initiallyCancelled = true) => new(

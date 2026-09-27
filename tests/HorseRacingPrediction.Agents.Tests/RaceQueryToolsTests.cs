@@ -28,7 +28,7 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetRacePredictionContext_ExistingRace_ReturnsMarkdown()
     {
-        _fakeService.RaceContext = new RacePredictionContextReadModel();
+        _fakeService.RaceContext = new RacePredictionContextDto();
         _fakeService.RaceContext.SetTestData(
             "race-001", DateOnly.Parse("2024-10-27"), "05", 11, "天皇賞秋");
 
@@ -56,7 +56,7 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetHorseProfile_ExistingHorse_ReturnsMarkdown()
     {
-        _fakeService.HorseModel = new HorseReadModel();
+        _fakeService.HorseModel = new HorseReadDto();
         _fakeService.HorseModel.SetTestData("horse-001", "イクイノックス", "イクイノックス");
 
         var result = await _sut.GetHorseProfile("horse-001");
@@ -83,7 +83,7 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetJockeyProfile_ExistingJockey_ReturnsMarkdown()
     {
-        _fakeService.JockeyModel = new JockeyReadModel();
+        _fakeService.JockeyModel = new JockeyDto();
         _fakeService.JockeyModel.SetTestData("jockey-001", "川田将雅", "川田将雅");
 
         var result = await _sut.GetJockeyProfile("jockey-001");
@@ -145,7 +145,7 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetHorseRaceStats_ExistingHorse_ReturnsMarkdown()
     {
-        var model = new HorseRaceHistoryReadModel();
+        var model = new HorseRaceHistoryDto();
         model.SetTestData("horse-001");
         _fakeService.HorseHistoryModel = model;
 
@@ -173,7 +173,7 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetJockeyRaceStats_ExistingJockey_ReturnsMarkdown()
     {
-        var model = new JockeyRaceHistoryReadModel();
+        var model = new JockeyRaceHistoryDto();
         model.SetTestData("jockey-001");
         _fakeService.JockeyHistoryModel = model;
 
@@ -201,7 +201,7 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetRaceFieldAnalysis_ExistingRace_ReturnsMarkdown()
     {
-        _fakeService.RaceContext = new RacePredictionContextReadModel();
+        _fakeService.RaceContext = new RacePredictionContextDto();
         _fakeService.RaceContext.SetTestData("race-001", DateOnly.Parse("2024-10-27"), "05", 11, "天皇賞秋");
 
         var result = await _sut.GetRaceFieldAnalysis("race-001");
@@ -295,34 +295,34 @@ public class RaceQueryToolsTests
     private sealed class FakeRaceQueryService : IRaceQueryService
     {
         public List<RaceSearchSummary> RegisteredRaces { get; } = [];
-        public RacePredictionContextReadModel? RaceContext { get; set; }
-        public HorseReadModel? HorseModel { get; set; }
-        public JockeyReadModel? JockeyModel { get; set; }
-        public MemoBySubjectReadModel? MemoBySubjectModel { get; set; }
-        public HorseRaceHistoryReadModel? HorseHistoryModel { get; set; }
-        public JockeyRaceHistoryReadModel? JockeyHistoryModel { get; set; }
+        public RacePredictionContextDto? RaceContext { get; set; }
+        public HorseReadDto? HorseModel { get; set; }
+        public JockeyDto? JockeyModel { get; set; }
+        public MemoBySubjectDto? MemoBySubjectModel { get; set; }
+        public HorseRaceHistoryDto? HorseHistoryModel { get; set; }
+        public JockeyRaceHistoryDto? JockeyHistoryModel { get; set; }
         public MlPredictionResponse? MlPrediction { get; set; }
         public PredictionTicketSummaryReadModel? PredictionTicket { get; set; }
 
         public Task<IReadOnlyList<RaceSearchSummary>> SearchRegisteredRacesAsync(DateOnly raceDate, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<RaceSearchSummary>>(RegisteredRaces.Where(x => x.RaceDate == raceDate).ToList());
 
-        public Task<RacePredictionContextReadModel?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken = default)
+        public Task<RacePredictionContextDto?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken = default)
             => Task.FromResult(RaceContext);
 
-        public Task<HorseReadModel?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)
+        public Task<HorseReadDto?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)
             => Task.FromResult(HorseModel);
 
-        public Task<JockeyReadModel?> GetJockeyAsync(string jockeyId, CancellationToken cancellationToken = default)
+        public Task<JockeyDto?> GetJockeyAsync(string jockeyId, CancellationToken cancellationToken = default)
             => Task.FromResult(JockeyModel);
 
-        public Task<MemoBySubjectReadModel?> GetMemosBySubjectAsync(string subjectType, string subjectId, CancellationToken cancellationToken = default)
+        public Task<MemoBySubjectDto?> GetMemosBySubjectAsync(string subjectType, string subjectId, CancellationToken cancellationToken = default)
             => Task.FromResult(MemoBySubjectModel);
 
-        public Task<HorseRaceHistoryReadModel?> GetHorseRaceHistoryAsync(string horseId, CancellationToken cancellationToken = default)
+        public Task<HorseRaceHistoryDto?> GetHorseRaceHistoryAsync(string horseId, CancellationToken cancellationToken = default)
             => Task.FromResult(HorseHistoryModel);
 
-        public Task<JockeyRaceHistoryReadModel?> GetJockeyRaceHistoryAsync(string jockeyId, CancellationToken cancellationToken = default)
+        public Task<JockeyRaceHistoryDto?> GetJockeyRaceHistoryAsync(string jockeyId, CancellationToken cancellationToken = default)
             => Task.FromResult(JockeyHistoryModel);
 
         public Task<MlPredictionResponse?> GetMlPredictionAsync(string raceId, CancellationToken cancellationToken = default)
@@ -339,87 +339,87 @@ public class RaceQueryToolsTests
 internal static class ReadModelTestExtensions
 {
     public static void SetTestData(
-        this RacePredictionContextReadModel model,
+        this RacePredictionContextDto model,
         string raceId, DateOnly raceDate, string racecourseCode, int raceNumber, string raceName)
     {
         // リフレクションでプロパティをセット（テスト用）
-        typeof(RacePredictionContextReadModel)
-            .GetProperty(nameof(RacePredictionContextReadModel.RaceId))!
+        typeof(RacePredictionContextDto)
+            .GetProperty(nameof(RacePredictionContextDto.RaceId))!
             .SetValue(model, raceId);
-        typeof(RacePredictionContextReadModel)
-            .GetProperty(nameof(RacePredictionContextReadModel.RaceDate))!
+        typeof(RacePredictionContextDto)
+            .GetProperty(nameof(RacePredictionContextDto.RaceDate))!
             .SetValue(model, raceDate);
-        typeof(RacePredictionContextReadModel)
-            .GetProperty(nameof(RacePredictionContextReadModel.RacecourseCode))!
+        typeof(RacePredictionContextDto)
+            .GetProperty(nameof(RacePredictionContextDto.RacecourseCode))!
             .SetValue(model, racecourseCode);
-        typeof(RacePredictionContextReadModel)
-            .GetProperty(nameof(RacePredictionContextReadModel.RaceNumber))!
+        typeof(RacePredictionContextDto)
+            .GetProperty(nameof(RacePredictionContextDto.RaceNumber))!
             .SetValue(model, raceNumber);
-        typeof(RacePredictionContextReadModel)
-            .GetProperty(nameof(RacePredictionContextReadModel.RaceName))!
+        typeof(RacePredictionContextDto)
+            .GetProperty(nameof(RacePredictionContextDto.RaceName))!
             .SetValue(model, raceName);
     }
 
     public static void SetTestData(
-        this HorseReadModel model,
+        this HorseReadDto model,
         string horseId, string registeredName, string normalizedName)
     {
-        typeof(HorseReadModel)
-            .GetProperty(nameof(HorseReadModel.HorseId))!
+        typeof(HorseReadDto)
+            .GetProperty(nameof(HorseReadDto.HorseId))!
             .SetValue(model, horseId);
-        typeof(HorseReadModel)
-            .GetProperty(nameof(HorseReadModel.RegisteredName))!
+        typeof(HorseReadDto)
+            .GetProperty(nameof(HorseReadDto.RegisteredName))!
             .SetValue(model, registeredName);
-        typeof(HorseReadModel)
-            .GetProperty(nameof(HorseReadModel.NormalizedName))!
+        typeof(HorseReadDto)
+            .GetProperty(nameof(HorseReadDto.NormalizedName))!
             .SetValue(model, normalizedName);
     }
 
     public static void SetTestData(
-        this JockeyReadModel model,
+        this JockeyDto model,
         string jockeyId, string displayName, string normalizedName)
     {
-        typeof(JockeyReadModel)
-            .GetProperty(nameof(JockeyReadModel.JockeyId))!
+        typeof(JockeyDto)
+            .GetProperty(nameof(JockeyDto.JockeyId))!
             .SetValue(model, jockeyId);
-        typeof(JockeyReadModel)
-            .GetProperty(nameof(JockeyReadModel.DisplayName))!
+        typeof(JockeyDto)
+            .GetProperty(nameof(JockeyDto.DisplayName))!
             .SetValue(model, displayName);
-        typeof(JockeyReadModel)
-            .GetProperty(nameof(JockeyReadModel.NormalizedName))!
+        typeof(JockeyDto)
+            .GetProperty(nameof(JockeyDto.NormalizedName))!
             .SetValue(model, normalizedName);
     }
 
     public static void SetTestData(
-        this TrainerReadModel model,
+        this TrainerDto model,
         string trainerId, string displayName, string normalizedName)
     {
-        typeof(TrainerReadModel)
-            .GetProperty(nameof(TrainerReadModel.TrainerId))!
+        typeof(TrainerDto)
+            .GetProperty(nameof(TrainerDto.TrainerId))!
             .SetValue(model, trainerId);
-        typeof(TrainerReadModel)
-            .GetProperty(nameof(TrainerReadModel.DisplayName))!
+        typeof(TrainerDto)
+            .GetProperty(nameof(TrainerDto.DisplayName))!
             .SetValue(model, displayName);
-        typeof(TrainerReadModel)
-            .GetProperty(nameof(TrainerReadModel.NormalizedName))!
+        typeof(TrainerDto)
+            .GetProperty(nameof(TrainerDto.NormalizedName))!
             .SetValue(model, normalizedName);
     }
 
     public static void SetTestData(
-        this HorseRaceHistoryReadModel model,
+        this HorseRaceHistoryDto model,
         string horseId)
     {
-        typeof(HorseRaceHistoryReadModel)
-            .GetProperty(nameof(HorseRaceHistoryReadModel.HorseId))!
+        typeof(HorseRaceHistoryDto)
+            .GetProperty(nameof(HorseRaceHistoryDto.HorseId))!
             .SetValue(model, horseId);
     }
 
     public static void SetTestData(
-        this JockeyRaceHistoryReadModel model,
+        this JockeyRaceHistoryDto model,
         string jockeyId)
     {
-        typeof(JockeyRaceHistoryReadModel)
-            .GetProperty(nameof(JockeyRaceHistoryReadModel.JockeyId))!
+        typeof(JockeyRaceHistoryDto)
+            .GetProperty(nameof(JockeyRaceHistoryDto.JockeyId))!
             .SetValue(model, jockeyId);
     }
 }

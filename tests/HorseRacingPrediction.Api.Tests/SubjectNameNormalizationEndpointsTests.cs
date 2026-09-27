@@ -1,7 +1,6 @@
+using HorseRacingPrediction.Contracts;
 using System.Net;
 using System.Net.Http.Json;
-using HorseRacingPrediction.Api.Contracts;
-using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -35,9 +34,9 @@ public sealed class SubjectNameNormalizationEndpointsTests
         await RegisterJockeyAsync(jockeyId, "▲ 山田 太郎（栗東）", "▲山田太郎（栗東）");
         await RegisterTrainerAsync(trainerId, "村山 明（栗東）", "むらやまあきら");
 
-        var horse = await SearchAsync(ResourceType.Horse, horseId);
-        var jockey = await SearchAsync(ResourceType.Jockey, jockeyId);
-        var trainer = await SearchAsync(ResourceType.Trainer, trainerId);
+        var horse = await SearchAsync(CollectionResourceType.Horse, horseId);
+        var jockey = await SearchAsync(CollectionResourceType.Jockey, jockeyId);
+        var trainer = await SearchAsync(CollectionResourceType.Trainer, trainerId);
 
         Assert.AreEqual("テストホース", horse.Items.Single().ProposedDisplayName);
         Assert.AreEqual("テストホース", horse.Items.Single().ProposedNormalizedName);
@@ -56,7 +55,7 @@ public sealed class SubjectNameNormalizationEndpointsTests
         await RegisterTrainerAsync(firstId, "衝突 太郎（栗東）", "collision-one");
         await RegisterTrainerAsync(secondId, "衝突 太郎（美浦）", "collision-two");
 
-        var page = await SearchAsync(ResourceType.Trainer, "衝突 太郎");
+        var page = await SearchAsync(CollectionResourceType.Trainer, "衝突 太郎");
 
         Assert.HasCount(2, page.Items);
         Assert.IsTrue(page.Items.All(x => !x.CanApply && x.Evaluation == "Conflict"));
@@ -68,9 +67,9 @@ public sealed class SubjectNameNormalizationEndpointsTests
     {
         var trainerId = $"trainer-{Guid.NewGuid():D}";
         await RegisterTrainerAsync(trainerId, "適用 花子（美浦）", "old-normalized");
-        var candidate = (await SearchAsync(ResourceType.Trainer, trainerId)).Items.Single();
+        var candidate = (await SearchAsync(CollectionResourceType.Trainer, trainerId)).Items.Single();
         var request = new ApplySubjectNameNormalizationRequest(
-            [new(ResourceType.Trainer, trainerId, candidate.ManifestToken)]);
+            [new(CollectionResourceType.Trainer, trainerId, candidate.ManifestToken)]);
 
         var firstResponse = await _client.PostAsJsonAsync(
             "/api/admin/repairs/subject-name-normalization/apply", request);
@@ -93,7 +92,7 @@ public sealed class SubjectNameNormalizationEndpointsTests
     {
         var trainerId = $"trainer-{Guid.NewGuid():D}";
         await RegisterTrainerAsync(trainerId, "変更 前（栗東）", "before");
-        var candidate = (await SearchAsync(ResourceType.Trainer, trainerId)).Items.Single();
+        var candidate = (await SearchAsync(CollectionResourceType.Trainer, trainerId)).Items.Single();
         using var correction = await _client.PatchAsJsonAsync($"/api/trainers/{trainerId}",
             new CorrectTrainerDataRequest("変更 後（栗東）", "after", null, "並行更新"));
         correction.EnsureSuccessStatusCode();
@@ -101,7 +100,7 @@ public sealed class SubjectNameNormalizationEndpointsTests
         var response = await _client.PostAsJsonAsync(
             "/api/admin/repairs/subject-name-normalization/apply",
             new ApplySubjectNameNormalizationRequest(
-                [new(ResourceType.Trainer, trainerId, candidate.ManifestToken)]));
+                [new(CollectionResourceType.Trainer, trainerId, candidate.ManifestToken)]));
         var result = await response.Content.ReadFromJsonAsync<SubjectNameNormalizationApplyResult>();
 
         Assert.AreEqual(1, result!.SkippedCount);
@@ -120,7 +119,7 @@ public sealed class SubjectNameNormalizationEndpointsTests
         Assert.AreEqual(HttpStatusCode.BadRequest, owner.StatusCode);
     }
 
-    private async Task<SubjectNameNormalizationPage> SearchAsync(ResourceType type, string query) =>
+    private async Task<SubjectNameNormalizationPage> SearchAsync(CollectionResourceType type, string query) =>
         (await _client.GetFromJsonAsync<SubjectNameNormalizationPage>(
             $"/api/admin/repairs/subject-name-normalization?subjectType={type}&query={Uri.EscapeDataString(query)}"))!;
 

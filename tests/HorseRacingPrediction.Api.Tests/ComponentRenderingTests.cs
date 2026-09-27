@@ -1,7 +1,7 @@
 using Bunit;
 using HorseRacingPrediction.Api.Web.Components.Shared;
 using HorseRacingPrediction.Api.Web.Components.Shared.DesignSystem;
-using HorseRacingPrediction.Api.Contracts;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.FluentUI.AspNetCore.Components;
 

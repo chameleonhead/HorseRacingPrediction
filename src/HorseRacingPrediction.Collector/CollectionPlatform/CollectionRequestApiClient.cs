@@ -17,7 +17,7 @@ public interface ICollectionRequestSink
         var outcomes = new List<CollectionRequestBulkOutcome>();
         foreach (var item in request.Items)
         {
-            if (!Enum.TryParse<ResourceType>(item.ResourceType, true, out var resourceType)
+            if (!Enum.TryParse<CollectionResourceType>(item.ResourceType, true, out var resourceType)
                 || !Enum.TryParse<CollectionReason>(item.Reason, true, out var reason)
                 || !Enum.TryParse<CollectionLane>(item.Lane, true, out var lane)
                 || item.EffectiveDate is null)

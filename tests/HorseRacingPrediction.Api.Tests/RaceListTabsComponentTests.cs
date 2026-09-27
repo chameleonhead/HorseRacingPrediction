@@ -1,6 +1,6 @@
 using System.Net.Http.Json;
 using Bunit;
-using HorseRacingPrediction.Api.Contracts;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Api.Web.Components.Pages;

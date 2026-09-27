@@ -33,7 +33,7 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
     private readonly RaceDiscoveryCollectionOptions _options = options?.Value ?? new();
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
     public CollectionDefinitionId DefinitionId => new("race-discovery");
-    public ResourceType ResourceType => ResourceType.Race;
+    public CollectionResourceType ResourceType => CollectionResourceType.Race;
 
     public async Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task,
         CancellationToken cancellationToken)
@@ -154,13 +154,13 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                             if (race.StartTime is { } detailStart)
                                 attributes["startTime"] = detailStart.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
                             var cardUrl = JraRaceDetailUrl.Validate(
-                                CollectionHttpUrl.Resolve(race.RaceCardUrl, page.Url), ResourceType.RaceCard, race.Id);
+                                CollectionHttpUrl.Resolve(race.RaceCardUrl, page.Url), CollectionResourceType.RaceCard, race.Id);
                             detailUrl = cardUrl;
                             if (race.StartTime is { } start)
                             {
                                 var oddsAttributes = new Dictionary<string, string>(attributes)
                                 { ["startTime"] = start.ToString("HH:mm") };
-                                await requests.RequestAsync(new(ResourceType.RaceOdds, "JRA", id), new("race-odds"), 1,
+                                await requests.RequestAsync(new(CollectionResourceType.RaceOdds, "JRA", id), new("race-odds"), 1,
                                     CollectionReason.Discovery, CollectionLane.Realtime, 90, null, date,
                                     oddsAttributes, cancellationToken).ConfigureAwait(false);
                             }
@@ -168,9 +168,9 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                         else
                         {
                             detailUrl = JraRaceDetailUrl.Validate(
-                                CollectionHttpUrl.Resolve(race.ResultUrl, page.Url), ResourceType.RaceResult, race.Id);
+                                CollectionHttpUrl.Resolve(race.ResultUrl, page.Url), CollectionResourceType.RaceResult, race.Id);
                         }
-                        await requests.RequestAsync(new(ResourceType.Race, "JRA", id), new("race-detail"), HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
+                        await requests.RequestAsync(new(CollectionResourceType.Race, "JRA", id), new("race-detail"), HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
                             task.Reason is CollectionReason.Backfill or CollectionReason.PeriodRecollection
                                 ? task.Reason
                                 : CollectionReason.Discovery,
@@ -248,7 +248,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
     private readonly RaceDetailCollectionOptions _options = options?.Value ?? new();
     public CollectionDefinitionId DefinitionId => new("race-detail");
-    public ResourceType ResourceType => ResourceType.Race;
+    public CollectionResourceType ResourceType => CollectionResourceType.Race;
 
     public async Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task,
         CancellationToken cancellationToken)
@@ -302,7 +302,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         }
         foreach (var location in requiresCard
                      ? (task.Locations ?? []).Where(x => IsCandidateForArtifact(
-                         x, RaceArtifactKind.Card, ResourceType.RaceCard, raceId))
+                         x, RaceArtifactKind.Card, CollectionResourceType.RaceCard, raceId))
                      : [])
         {
             attemptedCardLocationIds.Add(location.LocationId);
@@ -566,7 +566,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         var resultWorkflow = resultWorkflows(session);
         RaceResultCollectionResult? raceResult = null;
         foreach (var location in (task.Locations ?? []).Where(x => !attemptedCardLocationIds.Contains(x.LocationId)
-                     && IsCandidateForArtifact(x, RaceArtifactKind.Result, ResourceType.RaceResult, raceId)))
+                     && IsCandidateForArtifact(x, RaceArtifactKind.Result, CollectionResourceType.RaceResult, raceId)))
         {
             JraRaceResultPage? resultPage;
             try
@@ -724,7 +724,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
     }
 
     private static bool IsCandidateForArtifact(ResourceLocationCandidate location, RaceArtifactKind artifact,
-        ResourceType resourceType, RaceId raceId)
+        CollectionResourceType resourceType, RaceId raceId)
     {
         if (location.Artifact is { } classified && classified != artifact) return false;
         return !location.Url.Host.Equals("www.jra.go.jp", StringComparison.OrdinalIgnoreCase)
@@ -793,7 +793,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 attributes["rescheduledFromDomainRaceId"] = sourceDomainRaceId;
             if (card.StartTime is { } start) attributes["startTime"] = start.ToString("HH:mm");
             var url = Uri.TryCreate(card.Url, UriKind.Absolute, out var parsed) ? parsed : null;
-            await requests.RequestAsync(new(ResourceType.Race, "JRA", id), new("race-detail"), HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
+            await requests.RequestAsync(new(CollectionResourceType.Race, "JRA", id), new("race-detail"), HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
                 CollectionReason.Recovery, CollectionLane.Realtime, 100, url, candidateId.Date,
                 attributes, cancellationToken).ConfigureAwait(false);
             return new(candidateId, url);

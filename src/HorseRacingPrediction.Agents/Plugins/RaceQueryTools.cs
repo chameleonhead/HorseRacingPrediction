@@ -366,7 +366,7 @@ public sealed class RaceQueryTools
     // private helpers
     // ------------------------------------------------------------------ //
 
-    private static string FormatRacePredictionContext(RacePredictionContextReadModel model)
+    private static string FormatRacePredictionContext(RacePredictionContextDto model)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"## レース予測コンテキスト: {model.RaceName ?? model.RaceId}");

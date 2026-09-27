@@ -55,10 +55,10 @@ public sealed class JraSubjectCollectionHandlerTests
     public async Task IdentityWithoutName_RemainsSubjectNotIdentified()
     {
         var handler = new JraSubjectProfileCollectionHandler(
-            JraSubjectCollectionDefinitions.For(ResourceType.Owner), new FakeJraSessionFactory(),
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Owner), new FakeJraSessionFactory(),
             new RecordingProfileSink());
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Owner, "JRA", "owner-missing"), new("owner-identity"), 1,
+            new(CollectionResourceType.Owner, "JRA", "owner-missing"), new("owner-identity"), 1,
             CollectionReason.Recovery, CollectionLane.Normal, 70, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), new DateOnly(2026, 9, 14),
             new Dictionary<string, string>());
@@ -76,7 +76,7 @@ public sealed class JraSubjectCollectionHandlerTests
         var url = new Uri("https://www.jra.go.jp/JRADB/accessU.html?CNAME=scheduled-horse");
         var sink = new RecordingProfileSink();
         var handler = new JraSubjectProfileCollectionHandler(
-            JraSubjectCollectionDefinitions.For(ResourceType.Horse), new FakeJraSessionFactory
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse), new FakeJraSessionFactory
             {
                 ConfigureNavigator = () => new FakeJraNavigator
                 {
@@ -87,7 +87,7 @@ public sealed class JraSubjectCollectionHandlerTests
                 },
             }, sink);
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Horse, "JRA", "horse-scheduled"), new("horse-profile"), 4,
+            new(CollectionResourceType.Horse, "JRA", "horse-scheduled"), new("horse-profile"), 4,
             CollectionReason.ScheduledRefresh, CollectionLane.Background, 30, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), new DateOnly(2026, 9, 25),
             new Dictionary<string, string>
@@ -107,12 +107,12 @@ public sealed class JraSubjectCollectionHandlerTests
     public async Task OwnerIdentity_WithoutLocation_UsesRaceEntryNameWithoutNavigation()
     {
         var handler = new JraSubjectProfileCollectionHandler(
-            JraSubjectCollectionDefinitions.For(ResourceType.Owner), new FakeJraSessionFactory
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Owner), new FakeJraSessionFactory
             {
                 ConfigureNavigator = () => new FakeJraNavigator(),
             }, new RecordingProfileSink(), ownerIdentities: new StubOwnerIdentityVerifier(true));
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Owner, "JRA", "owner-a"), new("owner-identity"), 1,
+            new(CollectionResourceType.Owner, "JRA", "owner-a"), new("owner-identity"), 1,
             CollectionReason.Discovery, CollectionLane.Background, 30, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), new DateOnly(2026, 9, 14),
             new Dictionary<string, string> { ["name"] = "テスト馬主" });
@@ -131,7 +131,7 @@ public sealed class JraSubjectCollectionHandlerTests
         var url = new Uri("https://www.jra.go.jp/JRADB/accessO.html?CNAME=owner-001");
         var sink = new RecordingProfileSink();
         var handler = new JraSubjectProfileCollectionHandler(
-            JraSubjectCollectionDefinitions.For(ResourceType.Owner), new FakeJraSessionFactory
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Owner), new FakeJraSessionFactory
             {
                 ConfigureNavigator = () => new FakeJraNavigator
                 {
@@ -141,7 +141,7 @@ public sealed class JraSubjectCollectionHandlerTests
                 },
             }, sink, ownerIdentities: new StubOwnerIdentityVerifier(true));
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Owner, "JRA", "owner-a"), new("owner-identity"), 1,
+            new(CollectionResourceType.Owner, "JRA", "owner-a"), new("owner-identity"), 1,
             CollectionReason.Recovery, CollectionLane.Normal, 70, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), new DateOnly(2026, 9, 14),
             new Dictionary<string, string> { ["name"] = "テスト馬主" },
@@ -159,10 +159,10 @@ public sealed class JraSubjectCollectionHandlerTests
     public async Task OwnerIdentity_UnknownCanonicalOwner_RemainsSubjectNotIdentified()
     {
         var handler = new JraSubjectProfileCollectionHandler(
-            JraSubjectCollectionDefinitions.For(ResourceType.Owner), new FakeJraSessionFactory(),
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Owner), new FakeJraSessionFactory(),
             new RecordingProfileSink(), ownerIdentities: new StubOwnerIdentityVerifier(false));
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Owner, "JRA", "owner-unknown"), new("owner-identity"), 1,
+            new(CollectionResourceType.Owner, "JRA", "owner-unknown"), new("owner-identity"), 1,
             CollectionReason.Discovery, CollectionLane.Background, 30, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), new DateOnly(2026, 9, 14),
             new Dictionary<string, string> { ["name"] = "未登録馬主" });
@@ -201,7 +201,7 @@ public sealed class JraSubjectCollectionHandlerTests
         };
 
         var completion = await new JraSubjectProfileCollectionHandler(
-                JraSubjectCollectionDefinitions.For(ResourceType.Horse), sessions, new RecordingProfileSink())
+                JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse), sessions, new RecordingProfileSink())
             .CollectAsync(task, CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
@@ -237,7 +237,7 @@ public sealed class JraSubjectCollectionHandlerTests
         };
 
         var completion = await new JraSubjectProfileCollectionHandler(
-                JraSubjectCollectionDefinitions.For(ResourceType.Horse), sessions, new RecordingProfileSink())
+                JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse), sessions, new RecordingProfileSink())
             .CollectAsync(task, CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
@@ -288,7 +288,7 @@ public sealed class JraSubjectCollectionHandlerTests
         };
 
         var completion = await new JraSubjectProfileCollectionHandler(
-                JraSubjectCollectionDefinitions.For(ResourceType.Horse), sessions, new RecordingProfileSink())
+                JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse), sessions, new RecordingProfileSink())
             .CollectAsync(task, CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
@@ -308,13 +308,13 @@ public sealed class JraSubjectCollectionHandlerTests
             },
         };
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Trainer, "JRA", "trainer-a"), new("trainer-profile"), 2,
+            new(CollectionResourceType.Trainer, "JRA", "trainer-a"), new("trainer-profile"), 2,
             CollectionReason.Recovery, CollectionLane.Background, 40, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), null,
             new Dictionary<string, string> { ["name"] = "テスト調教師" });
 
         var completion = await new JraSubjectProfileCollectionHandler(
-                JraSubjectCollectionDefinitions.For(ResourceType.Trainer), sessions, new RecordingProfileSink())
+                JraSubjectCollectionDefinitions.For(CollectionResourceType.Trainer), sessions, new RecordingProfileSink())
             .CollectAsync(task, CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.PermanentFailure, completion.Result);
@@ -367,7 +367,7 @@ public sealed class JraSubjectCollectionHandlerTests
             Locations = [new(1, new Uri(url), ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null)],
         };
         var completion = await new JraSubjectProfileCollectionHandler(
-            JraSubjectCollectionDefinitions.For(ResourceType.Horse), sessions, sink).CollectAsync(task, CancellationToken.None);
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse), sessions, sink).CollectAsync(task, CancellationToken.None);
         Assert.AreEqual(expectedSuccess ? CollectionAttemptResult.Succeeded : CollectionAttemptResult.ResourceNotFound, completion.Result);
         Assert.AreEqual(expectedSuccess ? 1 : 0, sink.Saves.Count);
         if (observed is not null) Assert.AreEqual(url, observed.SourceIdentity);
@@ -394,7 +394,7 @@ public sealed class JraSubjectCollectionHandlerTests
             timeProvider: new FixedTimeProvider(new(2026, 9, 11, 0, 0, 0, TimeSpan.Zero)));
 
         var raceResult = await raceHandler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.RaceCard, "JRA", "20260912:Tokyo:11"), new("race-card"), 1,
+            new(CollectionResourceType.RaceCard, "JRA", "20260912:Tokyo:11"), new("race-card"), 1,
             CollectionReason.Discovery, CollectionLane.Realtime, 80, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date,
             new Dictionary<string, string> { ["course"] = "東京", ["number"] = "11" },
@@ -409,7 +409,7 @@ public sealed class JraSubjectCollectionHandlerTests
     [TestMethod]
     public async Task HorseProfile_DeduplicatesParentsAndRejectsSelfReference()
     {
-        var descriptor = JraSubjectCollectionDefinitions.For(ResourceType.Horse);
+        var descriptor = JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse);
         var currentId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId("A");
         var requests = new RecordingRequestSink();
         var sessions = SubjectSessions("A", new Dictionary<string, string>
@@ -426,8 +426,8 @@ public sealed class JraSubjectCollectionHandlerTests
         await handler.CollectAsync(SubjectTask(currentId, "A", new Dictionary<string, string>()), CancellationToken.None);
 
         Assert.HasCount(2, requests.Requests);
-        Assert.HasCount(1, requests.Requests.Where(x => x.Resource.Type == ResourceType.Horse));
-        Assert.HasCount(1, requests.Requests.Where(x => x.Resource.Type == ResourceType.Trainer));
+        Assert.HasCount(1, requests.Requests.Where(x => x.Resource.Type == CollectionResourceType.Horse));
+        Assert.HasCount(1, requests.Requests.Where(x => x.Resource.Type == CollectionResourceType.Trainer));
         Assert.IsFalse(requests.Requests.Any(x => x.Resource.Id == currentId));
         Assert.IsTrue(requests.Requests.All(x => x.Attributes["discoveryDepth"] == "1"));
     }
@@ -435,7 +435,7 @@ public sealed class JraSubjectCollectionHandlerTests
     [TestMethod]
     public async Task RealtimeHorseProfile_DemotesPastRaceResultsToNormalLow()
     {
-        var descriptor = JraSubjectCollectionDefinitions.For(ResourceType.Horse);
+        var descriptor = JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse);
         var historyDate = new DateOnly(2026, 9, 6);
         var historyUrl = new Uri("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1006202604020520260906/2F");
         var page = SubjectPage("A", [new(historyDate, "中山", "過去走", new(historyUrl.AbsoluteUri, "結果", "content"), null)]);
@@ -449,7 +449,7 @@ public sealed class JraSubjectCollectionHandlerTests
             new Dictionary<string, string> { ["weekendPriorityUntil"] = "2026-09-19" }, CollectionLane.Realtime), CancellationToken.None);
 
         var request = requests.Requests.Single();
-        Assert.AreEqual(ResourceType.Race, request.Resource.Type);
+        Assert.AreEqual(CollectionResourceType.Race, request.Resource.Type);
         Assert.AreEqual(new CollectionDefinitionId("race-detail"), request.Definition);
         Assert.AreEqual("20260906:Nakayama:5", request.Resource.Id);
         Assert.AreEqual(CollectionLane.Normal, request.Lane);
@@ -463,7 +463,7 @@ public sealed class JraSubjectCollectionHandlerTests
     [DataRow(CollectionLane.Background)]
     public async Task NonRealtimeHorseProfile_DemotesPastRaceResultsToBackground(CollectionLane sourceLane)
     {
-        var descriptor = JraSubjectCollectionDefinitions.For(ResourceType.Horse);
+        var descriptor = JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse);
         var historyDate = new DateOnly(2026, 9, 6);
         var historyUrl = new Uri("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1006202604020520260906/2F");
         var page = SubjectPage("A", [new(historyDate, "中山", "過去走", new(historyUrl.AbsoluteUri, "結果", "content"), null)]);
@@ -492,14 +492,14 @@ public sealed class JraSubjectCollectionHandlerTests
             ["母"] = "フロンサック 産駒",
         });
         var handler = new JraSubjectProfileCollectionHandler(
-            JraSubjectCollectionDefinitions.For(ResourceType.Horse), sessions,
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse), sessions,
             new RecordingProfileSink(), requests);
 
         var completion = await handler.CollectAsync(SubjectTask("horse-a", "A",
             new Dictionary<string, string>()), CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
-        Assert.IsFalse(requests.Requests.Any(x => x.Resource.Type == ResourceType.Horse));
+        Assert.IsFalse(requests.Requests.Any(x => x.Resource.Type == CollectionResourceType.Horse));
     }
 
     [TestMethod]
@@ -514,11 +514,11 @@ public sealed class JraSubjectCollectionHandlerTests
                 kind, identity.SubjectType, identity.Name),
         };
         var handler = new JraSubjectProfileCollectionHandler(
-            JraSubjectCollectionDefinitions.For(ResourceType.Jockey),
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Jockey),
             new FakeJraSessionFactory { ConfigureNavigator = () => navigator },
             new RecordingProfileSink());
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Jockey, "JRA", "jockey-local"), new("jockey-profile"), 1,
+            new(CollectionResourceType.Jockey, "JRA", "jockey-local"), new("jockey-profile"), 1,
             CollectionReason.Discovery, CollectionLane.Normal, 30, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), null,
             new Dictionary<string, string> { ["name"] = "小谷 哲平" });
@@ -534,7 +534,7 @@ public sealed class JraSubjectCollectionHandlerTests
     {
         var page = SubjectPage("A", Enumerable.Range(0, 70).Select(HistoryRace).ToArray());
         var requests = new RecordingRequestSink();
-        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse),
             new FakeJraSessionFactory
             {
                 ConfigureNavigator = () => new FakeJraNavigator { SubjectFactory = _ => page },
@@ -568,7 +568,7 @@ public sealed class JraSubjectCollectionHandlerTests
         var page = SubjectPage("A", Enumerable.Range(0, 501).Select(HistoryRace).ToArray());
         var requests = new RecordingRequestSink();
         var task = SubjectTask("horse-a", "A", new Dictionary<string, string>());
-        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse),
             new FakeJraSessionFactory
             {
                 ConfigureNavigator = () => new FakeJraNavigator { SubjectFactory = _ => page },
@@ -589,7 +589,7 @@ public sealed class JraSubjectCollectionHandlerTests
         var race = HistoryRace(0);
         var page = SubjectPage("A", [race, race, HistoryRace(1)]);
         var requests = new RecordingRequestSink();
-        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse),
             new FakeJraSessionFactory
             {
                 ConfigureNavigator = () => new FakeJraNavigator { SubjectFactory = _ => page },
@@ -607,7 +607,7 @@ public sealed class JraSubjectCollectionHandlerTests
     {
         var firstPage = SubjectPage("A", [HistoryRace(0), HistoryRace(1)]);
         var requests = new RecordingRequestSink();
-        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse),
             new FakeJraSessionFactory
             {
                 ConfigureNavigator = () => new FakeJraNavigator
@@ -631,7 +631,7 @@ public sealed class JraSubjectCollectionHandlerTests
         var secondPage = SubjectPage("A", [HistoryRace(1)]);
         var requests = new RecordingRequestSink();
         var task = SubjectTask("horse-a", "A", new Dictionary<string, string>());
-        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse),
             new FakeJraSessionFactory
             {
                 ConfigureNavigator = () => new FakeJraNavigator
@@ -657,7 +657,7 @@ public sealed class JraSubjectCollectionHandlerTests
             new("https://www.jra.go.jp/JRADB/accessS.html?CNAME=invalid", "結果", "content"), null);
         var excluded = HistoryRace(0) with { ExclusionReason = "cancelled" };
         var requests = new RecordingRequestSink();
-        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse),
             new FakeJraSessionFactory
             {
                 ConfigureNavigator = () => new FakeJraNavigator
@@ -678,7 +678,7 @@ public sealed class JraSubjectCollectionHandlerTests
     {
         var page = SubjectPage("A", [HistoryRace(0)]);
         var requests = new RecordingRequestSink();
-        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse),
             new FakeJraSessionFactory
             {
                 ConfigureNavigator = () => new FakeJraNavigator
@@ -702,7 +702,7 @@ public sealed class JraSubjectCollectionHandlerTests
         {
             BatchResponseFactory = request => new([new(request.Items.Single().ItemKey, "Held", Guid.NewGuid(), null)]),
         };
-        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse),
             new FakeJraSessionFactory { ConfigureNavigator = () => new FakeJraNavigator { SubjectFactory = _ => page } },
             new RecordingProfileSink(), requests);
         var result = await handler.CollectAsync(SubjectTask("horse-a", "A", new Dictionary<string, string>()), CancellationToken.None);
@@ -720,7 +720,7 @@ public sealed class JraSubjectCollectionHandlerTests
                 new(request.Items.Single().ItemKey, "Rejected", ErrorCode: "InvalidRequest"),
             ]),
         };
-        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse),
             new FakeJraSessionFactory
             {
                 ConfigureNavigator = () => new FakeJraNavigator { SubjectFactory = _ => page },
@@ -750,7 +750,7 @@ public sealed class JraSubjectCollectionHandlerTests
         {
             var requests = new RecordingRequestSink { BatchResponseFactory = responseFactory };
             var handler = new JraSubjectProfileCollectionHandler(
-                JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+                JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse),
                 new FakeJraSessionFactory
                 {
                     ConfigureNavigator = () => new FakeJraNavigator { SubjectFactory = _ => page },
@@ -767,7 +767,7 @@ public sealed class JraSubjectCollectionHandlerTests
     [TestMethod]
     public async Task HorseProfile_CyclicParentGraphStopsAtAncestor()
     {
-        var descriptor = JraSubjectCollectionDefinitions.For(ResourceType.Horse);
+        var descriptor = JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse);
         var aId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId("A");
         var firstRequests = new RecordingRequestSink();
         await new JraSubjectProfileCollectionHandler(descriptor,
@@ -790,7 +790,7 @@ public sealed class JraSubjectCollectionHandlerTests
     {
         var id = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId("A");
         var requests = new RecordingRequestSink();
-        await new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+        await new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse),
                 SubjectSessions("A", new Dictionary<string, string> { ["生年月日"] = "2020年1月1日", ["父"] = "B" }),
                 new RecordingProfileSink(), requests)
             .CollectAsync(SubjectTask(id, "A", new Dictionary<string, string> { ["discoveryDepth"] = "3" }),
@@ -803,7 +803,7 @@ public sealed class JraSubjectCollectionHandlerTests
     public async Task ProfileWrite_MissingAuthoritativeSubject_IsIsolatedPermanentFailure()
     {
         var handler = new JraSubjectProfileCollectionHandler(
-            JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse),
             SubjectSessions("A", new Dictionary<string, string> { ["生年月日"] = "2020年1月1日" }),
             new NotFoundProfileSink());
 
@@ -827,7 +827,7 @@ public sealed class JraSubjectCollectionHandlerTests
             }
         };
         var handler = new JraSubjectProfileCollectionHandler(
-            JraSubjectCollectionDefinitions.For(ResourceType.Horse), sessions, new RecordingProfileSink());
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse), sessions, new RecordingProfileSink());
 
         var completion = await handler.CollectAsync(SubjectTask("horse-missing", "missing", new Dictionary<string, string>()),
             CancellationToken.None);
@@ -855,7 +855,7 @@ public sealed class JraSubjectCollectionHandlerTests
             },
         };
         var handler = new JraSubjectProfileCollectionHandler(
-            JraSubjectCollectionDefinitions.For(ResourceType.Horse), sessions, new RecordingProfileSink());
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse), sessions, new RecordingProfileSink());
 
         var completion = await handler.CollectAsync(
             SubjectTask("horse-missing", "missing", new Dictionary<string, string>()), CancellationToken.None);
@@ -890,7 +890,7 @@ public sealed class JraSubjectCollectionHandlerTests
         JraSubjectIdentity? received = null;
         var page = SubjectPage("ロンドンコーリング", []);
         var handler = new JraSubjectProfileCollectionHandler(
-            JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse),
             new FakeJraSessionFactory
             {
                 ConfigureNavigator = () => new FakeJraNavigator
@@ -925,7 +925,7 @@ public sealed class JraSubjectCollectionHandlerTests
         JraSubjectIdentity? received = null;
         var page = SubjectPage("ロンドンコーリング", []);
         var handler = new JraSubjectProfileCollectionHandler(
-            JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse),
             new FakeJraSessionFactory
             {
                 ConfigureNavigator = () => new FakeJraNavigator
@@ -965,7 +965,7 @@ public sealed class JraSubjectCollectionHandlerTests
         IReadOnlyDictionary<string, string> inherited, CollectionLane lane = CollectionLane.Background)
     {
         var attributes = new Dictionary<string, string>(inherited) { ["name"] = name };
-        return new(Guid.NewGuid(), Guid.NewGuid(), new(ResourceType.Horse, "JRA", id),
+        return new(Guid.NewGuid(), Guid.NewGuid(), new(CollectionResourceType.Horse, "JRA", id),
             new("horse-profile"), 1, CollectionReason.Discovery, lane, 30, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), new DateOnly(2026, 9, 12), attributes);
     }
@@ -983,7 +983,7 @@ public sealed class JraSubjectCollectionHandlerTests
             BatchRequests.Add(request);
             foreach (var item in request.Items)
             {
-                Requests.Add(new(new(Enum.Parse<ResourceType>(item.ResourceType), item.Provider, item.ResourceId),
+                Requests.Add(new(new(Enum.Parse<CollectionResourceType>(item.ResourceType), item.Provider, item.ResourceId),
                     new(item.DefinitionId),
                     Enum.Parse<CollectionLane>(item.Lane), item.Priority,
                     item.ExplicitUrl is null ? null : new Uri(item.ExplicitUrl), item.EffectiveDate!.Value,

@@ -1,11 +1,12 @@
-using System.Net.Http.Json;
-using System.Net;
-using System.Text.Json;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using Microsoft.Extensions.Options;
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
@@ -65,7 +66,7 @@ public sealed class JraRaceOddsCollectionHandler(IJraSessionFactory sessions, IR
 {
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
     public CollectionDefinitionId DefinitionId => new("race-odds");
-    public ResourceType ResourceType => ResourceType.RaceOdds;
+    public CollectionResourceType ResourceType => CollectionResourceType.RaceOdds;
     public async Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
     {
         var race = JraRaceDetailCollectionHandler.ParseRaceId(task);

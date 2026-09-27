@@ -1,3 +1,5 @@
+using HorseRacingPrediction.Contracts;
+
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 public sealed class JraCollectionSchedulePolicy : ICollectionSchedulePolicy
@@ -8,10 +10,10 @@ public sealed class JraCollectionSchedulePolicy : ICollectionSchedulePolicy
         var date = ParseDate(resource.Id);
         return resource.Type switch
         {
-            ResourceType.RaceOdds => Odds(date, localNow),
-            ResourceType.RaceCard => Card(date, localNow),
-            ResourceType.Race when state.Definition.Value == "race-detail" => Result(date, localNow, state),
-            ResourceType.Horse or ResourceType.Jockey or ResourceType.Trainer => Profile(state, now),
+            CollectionResourceType.RaceOdds => Odds(date, localNow),
+            CollectionResourceType.RaceCard => Card(date, localNow),
+            CollectionResourceType.Race when state.Definition.Value == "race-detail" => Result(date, localNow, state),
+            CollectionResourceType.Horse or CollectionResourceType.Jockey or CollectionResourceType.Trainer => Profile(state, now),
             _ => new(false, null, CollectionPriority.Background, CollectionLane.Background, "immutable"),
         };
     }

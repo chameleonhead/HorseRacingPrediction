@@ -248,7 +248,7 @@ public sealed class HorseRaceHistoryReadModelTests
         Assert.AreEqual(12, model.GetDaysFromLastRace(new DateOnly(2026, 6, 1)));
     }
 
-    private static HorseRaceHistoryReadModel CreateModel(params HorseRaceHistoryEntry[] entries)
+    private static HorseRaceHistoryDto CreateModel(params HorseRaceHistoryEntry[] entries)
         => new() { HorseId = "horse-1", Entries = entries.ToList() };
 
     private static HorseRaceHistoryEntry CreateEntry(

@@ -1,19 +1,16 @@
-using System.Security.Cryptography;
-using System.Text;
 using EventFlow;
-using EventFlow.Commands;
 using EventFlow.EntityFramework;
-using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Application.Commands.Horses;
 using HorseRacingPrediction.Application.Commands.Jockeys;
 using HorseRacingPrediction.Application.Commands.Trainers;
-using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Domain.Horses;
 using HorseRacingPrediction.Domain.Jockeys;
 using HorseRacingPrediction.Domain.Trainers;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace HorseRacingPrediction.Api;
 
@@ -24,10 +21,10 @@ public static partial class EndpointExtensions
     private static void MapSubjectNameNormalizationEndpoints(RouteGroupBuilder group)
     {
         group.MapGet("/admin/repairs/subject-name-normalization", async (
-            ResourceType subjectType, string? query, int? page, int? pageSize,
+            CollectionResourceType subjectType, string? query, int? page, int? pageSize,
             IDbContextProvider<EventStoreDbContext> provider, CancellationToken token) =>
         {
-            if (subjectType is not (ResourceType.Horse or ResourceType.Jockey or ResourceType.Trainer))
+            if (subjectType is not (CollectionResourceType.Horse or CollectionResourceType.Jockey or CollectionResourceType.Trainer))
                 return Results.BadRequest(new[] { "対象種別は競走馬、騎手、調教師から選択してください。" });
             var search = query?.Trim();
             if (string.IsNullOrWhiteSpace(search))
@@ -56,10 +53,10 @@ public static partial class EndpointExtensions
                 return Results.BadRequest(new[] { "補正対象が重複しています。" });
 
             using var db = provider.CreateContext();
-            var rowsByType = new Dictionary<ResourceType, IReadOnlyList<SubjectNameRow>>();
+            var rowsByType = new Dictionary<CollectionResourceType, IReadOnlyList<SubjectNameRow>>();
             foreach (var type in request.Items.Select(x => x.SubjectType).Distinct())
             {
-                if (type is not (ResourceType.Horse or ResourceType.Jockey or ResourceType.Trainer))
+                if (type is not (CollectionResourceType.Horse or CollectionResourceType.Jockey or CollectionResourceType.Trainer))
                     return Results.BadRequest(new[] { "補正対象に対応していない種別が含まれています。" });
                 rowsByType[type] = await GetAllSubjectNamesAsync(db, type, token).ConfigureAwait(false);
             }
@@ -96,15 +93,15 @@ public static partial class EndpointExtensions
                 {
                     var succeeded = item.SubjectType switch
                     {
-                        ResourceType.Horse => (await commandBus.PublishAsync(new CorrectHorseDataCommand(
+                        CollectionResourceType.Horse => (await commandBus.PublishAsync(new CorrectHorseDataCommand(
                             new HorseId(item.SubjectId), candidate.ProposedDisplayName,
                             candidate.ProposedNormalizedName, reason: SubjectNameNormalizationReason), token)
                             .ConfigureAwait(false)).IsSuccess,
-                        ResourceType.Jockey => (await commandBus.PublishAsync(new CorrectJockeyDataCommand(
+                        CollectionResourceType.Jockey => (await commandBus.PublishAsync(new CorrectJockeyDataCommand(
                             new JockeyId(item.SubjectId), candidate.ProposedDisplayName,
                             candidate.ProposedNormalizedName, reason: SubjectNameNormalizationReason), token)
                             .ConfigureAwait(false)).IsSuccess,
-                        ResourceType.Trainer => (await commandBus.PublishAsync(new CorrectTrainerDataCommand(
+                        CollectionResourceType.Trainer => (await commandBus.PublishAsync(new CorrectTrainerDataCommand(
                             new TrainerId(item.SubjectId), candidate.ProposedDisplayName,
                             candidate.ProposedNormalizedName, reason: SubjectNameNormalizationReason), token)
                             .ConfigureAwait(false)).IsSuccess,
@@ -126,10 +123,10 @@ public static partial class EndpointExtensions
     }
 
     private static async Task<SubjectNameSearchPage> SearchSubjectNamesAsync(EventStoreDbContext db,
-        ResourceType type, string query, int page, int pageSize, CancellationToken token)
+        CollectionResourceType type, string query, int page, int pageSize, CancellationToken token)
     {
         var skip = (page - 1) * pageSize;
-        if (type == ResourceType.Horse)
+        if (type == CollectionResourceType.Horse)
         {
             var source = db.Horses.AsNoTracking().Where(x => x.HorseId.Contains(query)
                 || x.RegisteredName.Contains(query) || x.NormalizedName.Contains(query));
@@ -137,7 +134,7 @@ public static partial class EndpointExtensions
                 .Select(x => new SubjectNameRow(x.HorseId, x.RegisteredName, x.NormalizedName))
                 .ToListAsync(token).ConfigureAwait(false), await source.CountAsync(token).ConfigureAwait(false));
         }
-        if (type == ResourceType.Jockey)
+        if (type == CollectionResourceType.Jockey)
         {
             var source = db.Jockeys.AsNoTracking().Where(x => x.JockeyId.Contains(query)
                 || x.DisplayName.Contains(query) || x.NormalizedName.Contains(query));
@@ -145,7 +142,7 @@ public static partial class EndpointExtensions
                 .Select(x => new SubjectNameRow(x.JockeyId, x.DisplayName, x.NormalizedName))
                 .ToListAsync(token).ConfigureAwait(false), await source.CountAsync(token).ConfigureAwait(false));
         }
-        if (type == ResourceType.Trainer)
+        if (type == CollectionResourceType.Trainer)
         {
             var source = db.Trainers.AsNoTracking().Where(x => x.TrainerId.Contains(query)
                 || x.DisplayName.Contains(query) || x.NormalizedName.Contains(query));
@@ -157,21 +154,21 @@ public static partial class EndpointExtensions
     }
 
     private static async Task<IReadOnlyList<SubjectNameRow>> GetAllSubjectNamesAsync(EventStoreDbContext db,
-        ResourceType type, CancellationToken token) => type switch
+        CollectionResourceType type, CancellationToken token) => type switch
         {
-            ResourceType.Horse => await db.Horses.AsNoTracking()
+            CollectionResourceType.Horse => await db.Horses.AsNoTracking()
                 .Select(x => new SubjectNameRow(x.HorseId, x.RegisteredName, x.NormalizedName))
                 .ToListAsync(token).ConfigureAwait(false),
-            ResourceType.Jockey => await db.Jockeys.AsNoTracking()
+            CollectionResourceType.Jockey => await db.Jockeys.AsNoTracking()
                 .Select(x => new SubjectNameRow(x.JockeyId, x.DisplayName, x.NormalizedName))
                 .ToListAsync(token).ConfigureAwait(false),
-            ResourceType.Trainer => await db.Trainers.AsNoTracking()
+            CollectionResourceType.Trainer => await db.Trainers.AsNoTracking()
                 .Select(x => new SubjectNameRow(x.TrainerId, x.DisplayName, x.NormalizedName))
                 .ToListAsync(token).ConfigureAwait(false),
             _ => [],
         };
 
-    private static SubjectNameNormalizationCandidate BuildSubjectNameNormalizationCandidate(ResourceType type,
+    private static SubjectNameNormalizationCandidate BuildSubjectNameNormalizationCandidate(CollectionResourceType type,
         SubjectNameRow row, IReadOnlyList<SubjectNameRow> all)
     {
         var subjectType = type.ToString();
@@ -201,7 +198,7 @@ public static partial class EndpointExtensions
             CreateSubjectNameManifest(type, row, proposedDisplay, proposedNormalized));
     }
 
-    private static string CreateSubjectNameManifest(ResourceType type, SubjectNameRow row,
+    private static string CreateSubjectNameManifest(CollectionResourceType type, SubjectNameRow row,
         string proposedDisplay, string proposedNormalized) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
         string.Join('|', type, row.Id, row.DisplayName, row.NormalizedName, proposedDisplay, proposedNormalized))))
         .ToLowerInvariant();

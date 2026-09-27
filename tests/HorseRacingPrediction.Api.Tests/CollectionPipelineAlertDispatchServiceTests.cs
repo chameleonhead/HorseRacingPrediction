@@ -1,6 +1,7 @@
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Api.Notifications;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -20,9 +21,9 @@ public sealed class CollectionPipelineAlertDispatchServiceTests
             var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
             { StateDirectory = directory }));
             var definition = new CollectionDefinitionId("horse-profile");
-            await store.RegisterDefinitionAsync(definition, "Horse profile", ResourceType.Horse, 1, "initial", false);
+            await store.RegisterDefinitionAsync(definition, "Horse profile", CollectionResourceType.Horse, 1, "initial", false);
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
-            var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", "horse-a"), definition, 1,
+            var receipt = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "horse-a"), definition, 1,
                 CollectionReason.Initial, now, attributes: new Dictionary<string, string> { ["name"] = "A" });
             var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
             var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
@@ -56,9 +57,9 @@ public sealed class CollectionPipelineAlertDispatchServiceTests
             var options = Options.Create(new CollectionPlatformOptions { StateDirectory = directory });
             var store = new CollectionPlatformStore(options);
             var definition = new CollectionDefinitionId("horse-profile");
-            await store.RegisterDefinitionAsync(definition, "Horse profile", ResourceType.Horse, 1, "initial", false);
+            await store.RegisterDefinitionAsync(definition, "Horse profile", CollectionResourceType.Horse, 1, "initial", false);
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
-            var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", "horse-a"), definition, 1,
+            var receipt = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "horse-a"), definition, 1,
                 CollectionReason.Initial, now, attributes: new Dictionary<string, string> { ["name"] = "A" });
             var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
             var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));

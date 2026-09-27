@@ -1,14 +1,15 @@
-using System.Net.Http.Json;
 using Bunit;
-using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Api.CollectionController;
+using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Api.Web.Components.Pages;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.FluentUI.AspNetCore.Components;
+using System.Net.Http.Json;
 using CollectionOperationsPage = HorseRacingPrediction.Api.Web.Components.Pages.CollectionOperations;
 using FailureGroupPage = HorseRacingPrediction.Api.Web.Components.Pages.CollectionFailureGroupDetail;
 
@@ -97,7 +98,7 @@ public sealed class CollectionOperationsComponentTests
             CancellationToken cancellationToken)
         {
             var notificationId = Guid.NewGuid();
-            var resource = new ResourceKey(ResourceType.Horse, "JRA", "horse-1");
+            var resource = new ResourceKey(CollectionResourceType.Horse, "JRA", "horse-1");
             var group = new CollectionFailureGroup("horse-profile|Failed|SubjectNotIdentified",
                 new("horse-profile"), CollectionTaskStatus.Failed, "SubjectNotIdentified",
                 "同定不能: 公開検索に一致候補が複数あります。", 1,
@@ -130,18 +131,18 @@ public sealed class CollectionOperationsComponentTests
             object value = path switch
             {
                 "/api/admin/collection/dashboard" => new CollectionOperationsDashboard(
-                    new CollectionProgressSnapshot(new Dictionary<ResourceType, int> { [ResourceType.Race] = 10 },
+                    new CollectionProgressSnapshot(new Dictionary<CollectionResourceType, int> { [CollectionResourceType.Race] = 10 },
                         new Dictionary<CollectionStateStatus, int> { [CollectionStateStatus.Failed] = 2 },
                         new Dictionary<CollectionLane, int> { [CollectionLane.Realtime] = 3 },
                         new Dictionary<int, int> { [100] = 3 }, new Dictionary<string, int>(), 2),
                     [new CollectionFailureGroup("race-result|Failed|UnexpectedPage", new("race-result"),
                         CollectionTaskStatus.Failed, "UnexpectedPage", "別ページ", 2,
                         DateTimeOffset.UtcNow.AddMinutes(-2), DateTimeOffset.UtcNow,
-                        [Guid.NewGuid(), Guid.NewGuid()], [new(ResourceType.RaceResult, "JRA", "R1")])],
+                        [Guid.NewGuid(), Guid.NewGuid()], [new(CollectionResourceType.RaceResult, "JRA", "R1")])],
                     [new BackfillBatchSnapshot("jra:2026-08", new(2026, 8, 1), new(2026, 8, 31),
                         31, 31, 0, 0, 30, 1, [], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow)], DateTimeOffset.UtcNow),
                 "/api/admin/collection/progress" => new CollectionProgressSnapshot(
-                    new Dictionary<ResourceType, int> { [ResourceType.Race] = 10 },
+                    new Dictionary<CollectionResourceType, int> { [CollectionResourceType.Race] = 10 },
                     new Dictionary<CollectionStateStatus, int> { [CollectionStateStatus.Failed] = 2 },
                     new Dictionary<CollectionLane, int> { [CollectionLane.Realtime] = 3 },
                     new Dictionary<int, int> { [100] = 3 }, new Dictionary<string, int>(), 2),
@@ -150,7 +151,7 @@ public sealed class CollectionOperationsComponentTests
                     new CollectionFailureGroup("race-result|Failed|UnexpectedPage", new("race-result"),
                         CollectionTaskStatus.Failed, "UnexpectedPage", "別ページ", 2,
                         DateTimeOffset.UtcNow.AddMinutes(-2), DateTimeOffset.UtcNow,
-                        [Guid.NewGuid(), Guid.NewGuid()], [new(ResourceType.RaceResult, "JRA", "R1")]),
+                        [Guid.NewGuid(), Guid.NewGuid()], [new(CollectionResourceType.RaceResult, "JRA", "R1")]),
                 },
                 "/api/admin/collection/failure-notifications/groups/race-result%7CFailed%7CUnexpectedPage" =>
                     FailurePage(),
@@ -167,7 +168,7 @@ public sealed class CollectionOperationsComponentTests
         private static CollectionFailureGroupPage FailurePage()
         {
             var notificationId = Guid.NewGuid();
-            var resource = new ResourceKey(ResourceType.RaceResult, "JRA", "R1");
+            var resource = new ResourceKey(CollectionResourceType.RaceResult, "JRA", "R1");
             var group = new CollectionFailureGroup("race-result|Failed|UnexpectedPage", new("race-result"),
                 CollectionTaskStatus.Failed, "UnexpectedPage", "別のレースページを検出", 1,
                 DateTimeOffset.UtcNow.AddMinutes(-2), DateTimeOffset.UtcNow, [notificationId], [resource]);

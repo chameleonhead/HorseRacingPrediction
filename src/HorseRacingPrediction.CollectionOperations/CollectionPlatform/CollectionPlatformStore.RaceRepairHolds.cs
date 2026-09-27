@@ -1,7 +1,8 @@
-using System.Text.Json;
 using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
@@ -27,7 +28,7 @@ public sealed partial class CollectionPlatformStore
     }
 
     private static bool IsRaceResource(CollectionResourceEntity resource) => (resource.Type is
-        ResourceType.Race or ResourceType.RaceCard or ResourceType.RaceResult or ResourceType.RaceOdds)
+        CollectionResourceType.Race or CollectionResourceType.RaceCard or CollectionResourceType.RaceResult or CollectionResourceType.RaceOdds)
         && !System.Text.RegularExpressions.Regex.IsMatch(resource.ResourceId, "^((backfill|recollection):[0-9]{8}|discovery:[0-9]{10})$");
 
     private string? CanonicalRace(CollectionResourceEntity resource)

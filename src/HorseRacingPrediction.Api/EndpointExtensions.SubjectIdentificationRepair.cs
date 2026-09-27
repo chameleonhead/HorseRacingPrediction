@@ -1,13 +1,12 @@
-using System.Security.Cryptography;
-using System.Text;
 using EventFlow.EntityFramework;
-using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Contracts.Time;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace HorseRacingPrediction.Api;
@@ -78,7 +77,7 @@ public static partial class EndpointExtensions
                         try
                         {
                             receipt = await collectionStore.RequestAsync(
-                                new(Enum.Parse<ResourceType>(issue.SubjectType), "JRA", target.Id),
+                                new(Enum.Parse<CollectionResourceType>(issue.SubjectType), "JRA", target.Id),
                                 new(issue.DefinitionId), CollectionDefinitionRevisions.Subject(issue.DefinitionId), CollectionReason.Recovery, JstTime.Now(),
                                 CollectionLane.Normal, (int)CollectionPriority.High, target.Url, recoveryKey,
                                 attributes: new Dictionary<string, string>
@@ -137,7 +136,7 @@ public static partial class EndpointExtensions
                         return Results.Conflict(new[] { $"{failure.Resource}: 収集状態が見つかりません。" });
                     HorseIdentityRepairCandidateResponse? merge = null;
                     string? redirectTarget = null;
-                    if (failure.Resource.Type == ResourceType.Horse)
+                    if (failure.Resource.Type == CollectionResourceType.Horse)
                     {
                         var matching = horsePreview.Candidates
                             .Where(x => x.SourceHorseId == failure.Resource.Id).ToArray();
@@ -176,13 +175,13 @@ public static partial class EndpointExtensions
                     if (plan.Merge is not null)
                     {
                         await ApplyHorseMergeAsync(db, plan.Merge, token).ConfigureAwait(false);
-                        recoveryResource = new(ResourceType.Horse, plan.Failure.Resource.Provider,
+                        recoveryResource = new(CollectionResourceType.Horse, plan.Failure.Resource.Provider,
                             plan.Merge.TargetHorseId);
                         merged++;
                     }
                     else if (plan.RedirectTarget is not null)
                     {
-                        recoveryResource = new(ResourceType.Horse, plan.Failure.Resource.Provider,
+                        recoveryResource = new(CollectionResourceType.Horse, plan.Failure.Resource.Provider,
                             plan.RedirectTarget);
                     }
                     receipts.Add(await collectionStore.RequestAsync(recoveryResource, plan.Failure.Definition,
@@ -259,11 +258,11 @@ public static partial class EndpointExtensions
                 .SelectMany(x => new[] { x.FinalUrl, x.RequestedUrl })
                 .FirstOrDefault(IsValidCorrectionUrl);
             var missingName = HasMissingNameFailure(detail, failure.TaskId);
-            var merges = failure.Resource.Type == ResourceType.Horse
+            var merges = failure.Resource.Type == CollectionResourceType.Horse
                 ? horsePreview.Candidates.Where(x => x.SourceHorseId == failure.Resource.Id).ToArray()
                 : [];
             var merge = merges.Length == 1 ? merges[0] : null;
-            var redirectedTarget = failure.Resource.Type == ResourceType.Horse
+            var redirectedTarget = failure.Resource.Type == CollectionResourceType.Horse
                 ? horseRedirects.GetValueOrDefault(failure.Resource.Id)
                 : null;
             var blocked = missingName ? "主体名がないため再収集できません。"
@@ -287,7 +286,7 @@ public static partial class EndpointExtensions
         foreach (var issue in issues)
         {
             var target = await ResolvePreDispatchRepairTargetAsync(db, issue, token).ConfigureAwait(false);
-            result.Add(new(issue.IssueId, Guid.Empty, Enum.Parse<ResourceType>(issue.SubjectType),
+            result.Add(new(issue.IssueId, Guid.Empty, Enum.Parse<CollectionResourceType>(issue.SubjectType),
                 issue.SubjectId, issue.DefinitionId, issue.ReasonMessage, issue.CreatedAt,
                 target is null ? "Blocked" : "MergeReady", target is not null,
                 target is null ? "補正先を一意に確認できません。" : null, issue.SourceUrl,
@@ -302,12 +301,12 @@ public static partial class EndpointExtensions
         if (string.IsNullOrWhiteSpace(issue.RequestedByRaceId)) return null;
         var race = await db.RacePredictionContexts.AsNoTracking()
             .SingleOrDefaultAsync(x => x.RaceId == issue.RequestedByRaceId, token).ConfigureAwait(false);
-        if (race is null || !Enum.TryParse<ResourceType>(issue.SubjectType, out var type)) return null;
+        if (race is null || !Enum.TryParse<CollectionResourceType>(issue.SubjectType, out var type)) return null;
         var ids = type switch
         {
-            ResourceType.Horse => race.Entries.Select(x => x.HorseId),
-            ResourceType.Jockey => race.Entries.Select(x => x.JockeyId).Where(x => x is not null).Cast<string>(),
-            ResourceType.Trainer => race.Entries.Select(x => x.TrainerId).Where(x => x is not null).Cast<string>(),
+            CollectionResourceType.Horse => race.Entries.Select(x => x.HorseId),
+            CollectionResourceType.Jockey => race.Entries.Select(x => x.JockeyId).Where(x => x is not null).Cast<string>(),
+            CollectionResourceType.Trainer => race.Entries.Select(x => x.TrainerId).Where(x => x is not null).Cast<string>(),
             _ => [],
         };
         var candidates = new List<(string Id, string Name)>();
@@ -315,11 +314,11 @@ public static partial class EndpointExtensions
         {
             var name = type switch
             {
-                ResourceType.Horse => await db.Horses.AsNoTracking().Where(x => x.HorseId == id)
+                CollectionResourceType.Horse => await db.Horses.AsNoTracking().Where(x => x.HorseId == id)
                     .Select(x => x.RegisteredName).SingleOrDefaultAsync(token),
-                ResourceType.Jockey => await db.Jockeys.AsNoTracking().Where(x => x.JockeyId == id)
+                CollectionResourceType.Jockey => await db.Jockeys.AsNoTracking().Where(x => x.JockeyId == id)
                     .Select(x => x.DisplayName).SingleOrDefaultAsync(token),
-                ResourceType.Trainer => await db.Trainers.AsNoTracking().Where(x => x.TrainerId == id)
+                CollectionResourceType.Trainer => await db.Trainers.AsNoTracking().Where(x => x.TrainerId == id)
                     .Select(x => x.DisplayName).SingleOrDefaultAsync(token),
                 _ => null,
             };
@@ -329,13 +328,13 @@ public static partial class EndpointExtensions
             if (!string.Equals(normalized, expectedName, StringComparison.Ordinal)) continue;
             var canonical = HorseRacingPrediction.Contracts.JraSubjectNameNormalizer.CanonicalizeDisplayName(type.ToString(), name);
             string expectedId;
-            if (type == ResourceType.Horse)
+            if (type == CollectionResourceType.Horse)
             {
                 try { expectedId = await CollectionIdentityResolver.HorseAsync(db, name, issue.SourceIdentity, null, token); }
                 catch (InvalidOperationException) { return null; }
             }
             else expectedId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId(
-                    type == ResourceType.Jockey ? "jockey" : "trainer",
+                    type == CollectionResourceType.Jockey ? "jockey" : "trainer",
                     HorseRacingPrediction.ApiClient.DeterministicIdGenerator.NormalizeKey(canonical));
             if (id == expectedId) candidates.Add((id, name));
         }
@@ -349,17 +348,17 @@ public static partial class EndpointExtensions
         (string.Equals(failure.ErrorCode, SubjectNotIdentifiedErrorCode, StringComparison.Ordinal)
             || string.Equals(failure.ErrorCode, "SubjectResourceMissing", StringComparison.Ordinal)
             || string.Equals(failure.ErrorCode, "SubjectProjectionNotReady", StringComparison.Ordinal))
-        && failure.Resource.Type is ResourceType.Horse or ResourceType.Jockey
-            or ResourceType.Trainer or ResourceType.Owner;
+        && failure.Resource.Type is CollectionResourceType.Horse or CollectionResourceType.Jockey
+            or CollectionResourceType.Trainer or CollectionResourceType.Owner;
 
     private static bool IsObsoleteSubjectReference(string? message) =>
         message?.Contains(" 産駒", StringComparison.Ordinal) == true
         || message?.Contains("公開検索に一致候補がありません", StringComparison.Ordinal) == true;
 
-    private static bool IsUnsafeStoredRepairEvidence(ResourceType resourceType, string? message) =>
+    private static bool IsUnsafeStoredRepairEvidence(CollectionResourceType resourceType, string? message) =>
         IsObsoleteSubjectReference(message)
         || (message?.Contains("取得プロフィールの名前が一致しません", StringComparison.Ordinal) == true
-            && (resourceType != ResourceType.Horse
+            && (resourceType != CollectionResourceType.Horse
                 || !IsCorrectableHorseRegistrationMarkMismatch(message)))
         || message?.Contains("取得したプロフィールの名前が対象と一致しません", StringComparison.Ordinal) == true
         || message?.Contains("公開識別子が一致しません", StringComparison.Ordinal) == true;

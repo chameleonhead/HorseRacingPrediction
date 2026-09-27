@@ -1,4 +1,5 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
 
@@ -122,10 +123,10 @@ public sealed class CollectionPlatformOutboxDispatcher(
 
     private static CollectionDispatchCompatibilityKey CreateCompatibility(PendingCollectionDispatch item)
     {
-        if (item.EffectiveDate.HasValue && item.Resource.Type is ResourceType.RaceCard or ResourceType.RaceResult or ResourceType.Race)
+        if (item.EffectiveDate.HasValue && item.Resource.Type is CollectionResourceType.RaceCard or CollectionResourceType.RaceResult or CollectionResourceType.Race)
             return new(item.Resource.Provider, item.Definition, item.EffectiveDate, item.Lane,
                 CollectionDispatchGroupKind.RaceDay, item.EffectiveDate.Value.ToString("yyyy-MM-dd"));
-        if (item.Resource.Type == ResourceType.Horse
+        if (item.Resource.Type == CollectionResourceType.Horse
             && item.Attributes?.GetValueOrDefault("weekendPriorityUntil") is { Length: > 0 } weekend)
             return new(item.Resource.Provider, item.Definition, item.EffectiveDate, item.Lane,
                 CollectionDispatchGroupKind.WeekendSubjects, weekend);
@@ -150,8 +151,8 @@ public sealed class CollectionPlatformOutboxDispatcher(
         => int.TryParse(item.Attributes?.GetValueOrDefault("number"), out var number) ? number : int.MaxValue;
     private static int RouteType(PendingCollectionDispatch item) => item.Resource.Type switch
     {
-        ResourceType.Race or ResourceType.RaceCard => 0,
-        ResourceType.RaceResult => 1,
+        CollectionResourceType.Race or CollectionResourceType.RaceCard => 0,
+        CollectionResourceType.RaceResult => 1,
         _ => 2,
     };
 

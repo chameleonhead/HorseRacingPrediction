@@ -1,9 +1,10 @@
-using System.Net;
-using System.Net.Http.Json;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Http;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.Logging;
+using System.Net;
+using System.Net.Http.Json;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -19,7 +20,7 @@ public sealed class CollectionPlatformWorkerTelemetryTests
 
         var summary = AssertSingleSummary(fixture.Logger);
         Assert.AreEqual("horse-profile", summary["Definition"]);
-        Assert.AreEqual(ResourceType.Horse, summary["ResourceType"]);
+        Assert.AreEqual(CollectionResourceType.Horse, summary["ResourceType"]);
         Assert.AreEqual("Succeeded", summary["Result"]);
         Assert.IsInstanceOfType<int>(summary["MemorySizeMiB"]);
         Assert.IsGreaterThanOrEqualTo(0, (int)summary["MemorySizeMiB"]!);
@@ -123,7 +124,7 @@ public sealed class CollectionPlatformWorkerTelemetryTests
     {
         var taskId = Guid.NewGuid();
         var clock = new ManualTelemetryClock();
-        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(ResourceType.Horse, "JRA", "resource-secret"),
+        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(CollectionResourceType.Horse, "JRA", "resource-secret"),
             new("horse-profile"), 1, CollectionReason.Initial, CollectionLane.Normal, 50,
             "lease-secret", DateTimeOffset.UtcNow.AddMinutes(15), null,
             new Dictionary<string, string> { ["payload"] = "payload-secret" });
@@ -168,7 +169,7 @@ public sealed class CollectionPlatformWorkerTelemetryTests
         CancellationTokenSource? cancellation, HttpClient? client) : ICollectionDefinitionHandler
     {
         public CollectionDefinitionId DefinitionId => new("horse-profile");
-        public ResourceType ResourceType => ResourceType.Horse;
+        public CollectionResourceType ResourceType => CollectionResourceType.Horse;
 
         public async Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
         {

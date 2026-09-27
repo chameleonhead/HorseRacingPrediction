@@ -1,6 +1,7 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
@@ -161,7 +162,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         var result = await handler.CollectAsync(CreateDiscoveryTask(date), CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
-        Assert.IsTrue(sink.Requests.Any(x => x.Resource.Type == ResourceType.Race
+        Assert.IsTrue(sink.Requests.Any(x => x.Resource.Type == CollectionResourceType.Race
             && x.Resource.Id == $"{date:yyyyMMdd}:Nakayama:1"));
         Assert.IsTrue(sink.Requests.Where(x => x.Definition.Value == "race-detail").All(x => x.RequestedRevision ==
             HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail));
@@ -188,7 +189,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink,
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero)));
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "discovery:2026091200"), new("race-discovery"), 1,
+            new(CollectionResourceType.Race, "JRA", "discovery:2026091200"), new("race-discovery"), 1,
             CollectionReason.Discovery, CollectionLane.Realtime, 70, "lease", DateTimeOffset.UtcNow.AddMinutes(5),
             date, new Dictionary<string, string>());
 
@@ -196,11 +197,11 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
         Assert.HasCount(2, sink.Requests);
-        Assert.IsTrue(sink.Requests.Any(x => x.Resource.Type == ResourceType.Race
+        Assert.IsTrue(sink.Requests.Any(x => x.Resource.Type == CollectionResourceType.Race
             && x.Definition == new CollectionDefinitionId("race-detail")));
-        Assert.IsTrue(sink.Requests.Any(x => x.Resource.Type == ResourceType.RaceOdds));
+        Assert.IsTrue(sink.Requests.Any(x => x.Resource.Type == CollectionResourceType.RaceOdds));
         Assert.IsTrue(sink.Requests.All(x => x.Resource.Id == "20260912:Tokyo:11"));
-        Assert.AreEqual("15:30", sink.Requests.Single(x => x.Resource.Type == ResourceType.Race).Attributes["startTime"]);
+        Assert.AreEqual("15:30", sink.Requests.Single(x => x.Resource.Type == CollectionResourceType.Race).Attributes["startTime"]);
         Assert.IsTrue(sink.Requests.All(x => x.Reason == CollectionReason.Discovery));
     }
 
@@ -238,7 +239,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         Assert.HasCount(1, sessions.LastNavigator.RaceResultListRequests);
         Assert.HasCount(1, sink.Requests);
         var request = sink.Requests.Single();
-        Assert.AreEqual(ResourceType.Race, request.Resource.Type);
+        Assert.AreEqual(CollectionResourceType.Race, request.Resource.Type);
         Assert.AreEqual(CollectionLane.Background, request.Lane);
         Assert.AreEqual(10, request.Priority);
         Assert.AreEqual(
@@ -307,7 +308,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
             .CollectAsync(CreateDiscoveryTask(date), CancellationToken.None);
 
         Assert.AreEqual(new Uri("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde1001123456780720260912/25"),
-            sink.Requests.Single(x => x.Resource.Type == ResourceType.Race).ExplicitUrl);
+            sink.Requests.Single(x => x.Resource.Type == CollectionResourceType.Race).ExplicitUrl);
     }
 
     [TestMethod]
@@ -332,7 +333,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
                 timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero)))
             .CollectAsync(CreateDiscoveryTask(date), CancellationToken.None);
 
-        Assert.IsNull(sink.Requests.Single(x => x.Resource.Type == ResourceType.Race).ExplicitUrl);
+        Assert.IsNull(sink.Requests.Single(x => x.Resource.Type == CollectionResourceType.Race).ExplicitUrl);
     }
 
     [TestMethod]
@@ -385,7 +386,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         var sink = new RecordingSink();
         var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink);
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "backfill:20200105"), new("race-discovery"), 1,
+            new(CollectionResourceType.Race, "JRA", "backfill:20200105"), new("race-discovery"), 1,
             CollectionReason.Backfill, CollectionLane.Background, 10, "lease", DateTimeOffset.UtcNow.AddMinutes(5),
             date, new Dictionary<string, string> { ["batchId"] = "jra:2020-01" });
 
@@ -420,7 +421,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         var sink = new RecordingSink();
         var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink);
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "period-recollection:20200105"), new("race-discovery"), 1,
+            new(CollectionResourceType.Race, "JRA", "period-recollection:20200105"), new("race-discovery"), 1,
             CollectionReason.PeriodRecollection, CollectionLane.Background, 10, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date,
             new Dictionary<string, string> { ["batchId"] = "period:2020-01-05" });
@@ -429,7 +430,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
 
         CollectionAssert.AreEqual(new[] { date }, visited);
         Assert.HasCount(1, sink.Requests);
-        Assert.AreEqual(ResourceType.Race, sink.Requests[0].Resource.Type);
+        Assert.AreEqual(CollectionResourceType.Race, sink.Requests[0].Resource.Type);
         Assert.AreEqual(new CollectionDefinitionId("race-detail"), sink.Requests[0].Definition);
         Assert.AreEqual(CollectionReason.PeriodRecollection, sink.Requests[0].Reason);
         Assert.AreEqual(date, sink.Requests[0].EffectiveDate);
@@ -599,7 +600,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
     }
 
     private static LeasedCollectionTask CreateDiscoveryTask(DateOnly date) => new(Guid.NewGuid(), Guid.NewGuid(),
-        new(ResourceType.Race, "JRA", $"discovery:{date:yyyyMMdd}00"), new("race-discovery"), 1,
+        new(CollectionResourceType.Race, "JRA", $"discovery:{date:yyyyMMdd}00"), new("race-discovery"), 1,
         CollectionReason.Discovery, CollectionLane.Realtime, 70, "lease", DateTimeOffset.UtcNow.AddMinutes(5),
         date, new Dictionary<string, string>());
 

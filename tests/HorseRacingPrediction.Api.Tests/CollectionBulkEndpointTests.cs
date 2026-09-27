@@ -1,13 +1,14 @@
-using System.Net;
-using System.Net.Http.Json;
 using EventFlow.EntityFramework;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using System.Net;
+using System.Net.Http.Json;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -23,7 +24,7 @@ public sealed class CollectionBulkEndpointTests
         {
             var collection = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
             { StateDirectory = Path.Combine(directory, "collection") }));
-            await collection.RegisterDefinitionAsync(new("horse-profile"), "Horse", ResourceType.Horse,
+            await collection.RegisterDefinitionAsync(new("horse-profile"), "Horse", CollectionResourceType.Horse,
                 1, "initial", false);
             using var domain = new SqliteDbContextProvider($"Data Source={Path.Combine(directory, "domain.db")}");
             using (var db = domain.CreateContext())
@@ -53,7 +54,7 @@ public sealed class CollectionBulkEndpointTests
             Assert.IsNotNull(preview);
             Assert.AreEqual(2, preview.TargetCount);
 
-            var mismatch = dateRequest with { ExpectedResources = [new(ResourceType.Horse, "JRA", "H1")] };
+            var mismatch = dateRequest with { ExpectedResources = [new(CollectionResourceType.Horse, "JRA", "H1")] };
             Assert.AreEqual(HttpStatusCode.Conflict,
                 (await client.PostAsJsonAsync("api/admin/collection/requests/bulk", mismatch)).StatusCode);
             Assert.IsEmpty(await collection.GetTasksAsync());
@@ -67,32 +68,32 @@ public sealed class CollectionBulkEndpointTests
                 "api/admin/collection/requests/bulk/preview", trainerRequest)).Content
                 .ReadFromJsonAsync<CollectionBulkPreview>();
             Assert.IsNotNull(trainerPreview);
-            CollectionAssert.AreEquivalent(new[] { new ResourceKey(ResourceType.Horse, "JRA", "H1") },
+            CollectionAssert.AreEquivalent(new[] { new ResourceKey(CollectionResourceType.Horse, "JRA", "H1") },
                 trainerPreview.Resources.ToArray());
 
-            await collection.SuppressResourceAsync(new(ResourceType.Horse, "JRA", "H1"),
+            await collection.SuppressResourceAsync(new(CollectionResourceType.Horse, "JRA", "H1"),
                 "Merged horse was deleted", "repair-1", DateTimeOffset.UtcNow);
             var suppressedDatePreview = await (await client.PostAsJsonAsync(
                 "api/admin/collection/requests/bulk/preview", dateRequest)).Content
                 .ReadFromJsonAsync<CollectionBulkPreview>();
             Assert.IsNotNull(suppressedDatePreview);
-            CollectionAssert.AreEquivalent(new[] { new ResourceKey(ResourceType.Horse, "JRA", "H2") },
+            CollectionAssert.AreEquivalent(new[] { new ResourceKey(CollectionResourceType.Horse, "JRA", "H2") },
                 suppressedDatePreview.Resources.ToArray());
             var explicitRequest = new BulkCollectionOperationRequest("horse-profile", 1,
                 CollectionReason.ManualRefresh, BulkCollectionSelection.SpecificResources,
-                Resources: [new(ResourceType.Horse, "JRA", "H1"), new(ResourceType.Horse, "JRA", "H2")]);
+                Resources: [new(CollectionResourceType.Horse, "JRA", "H1"), new(CollectionResourceType.Horse, "JRA", "H2")]);
             var explicitPreview = await (await client.PostAsJsonAsync(
                 "api/admin/collection/requests/bulk/preview", explicitRequest)).Content
                 .ReadFromJsonAsync<CollectionBulkPreview>();
             Assert.IsNotNull(explicitPreview);
-            CollectionAssert.AreEquivalent(new[] { new ResourceKey(ResourceType.Horse, "JRA", "H2") },
+            CollectionAssert.AreEquivalent(new[] { new ResourceKey(CollectionResourceType.Horse, "JRA", "H2") },
                 explicitPreview.Resources.ToArray());
         }
         finally { Directory.Delete(directory, true); }
     }
 
     private static RacePredictionContextReadModel CreateRace(string raceId, DateOnly date,
-        params RacePredictionContextEntry[] entries)
+        params Application.Queries.ReadModels.RacePredictionContextEntry[] entries)
     {
         var model = new RacePredictionContextReadModel();
         Set(model, nameof(model.RaceId), raceId);

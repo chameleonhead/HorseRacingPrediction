@@ -1,7 +1,8 @@
-using System.Text.Json;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 
 namespace HorseRacingPrediction.CollectionInitializer;
 
@@ -93,7 +94,7 @@ public static class CollectionInitializerCommand
 
     private static async Task RegisterDefinitionsAsync(CollectionPlatformStore store, CancellationToken token)
     {
-        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
+        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", CollectionResourceType.Race, HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
             "Race resource artifact state machine", false, token);
         await SubjectCollectionDefinitions.RegisterAsync(store, token);
     }

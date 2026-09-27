@@ -1,6 +1,7 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.PredictionScheduling;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Workflow;
@@ -28,7 +29,7 @@ internal sealed class JraRaceCardCollectionHandler
     public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
         => _inner.CollectAsync(task with
         {
-            Resource = new(ResourceType.Race, task.Resource.Provider, task.Resource.Id),
+            Resource = new(CollectionResourceType.Race, task.Resource.Provider, task.Resource.Id),
             Definition = new("race-detail"),
         }, token);
 }
@@ -47,7 +48,7 @@ internal sealed class JraRaceResultCollectionHandler
     public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
         => _inner.CollectAsync(task with
         {
-            Resource = new(ResourceType.Race, task.Resource.Provider, task.Resource.Id),
+            Resource = new(CollectionResourceType.Race, task.Resource.Provider, task.Resource.Id),
             Definition = new("race-detail"),
         }, token);
 

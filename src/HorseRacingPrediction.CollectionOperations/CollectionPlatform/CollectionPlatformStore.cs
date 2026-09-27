@@ -1,3 +1,4 @@
+using HorseRacingPrediction.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -61,7 +62,7 @@ public sealed partial class CollectionPlatformStore
         CollectionPlatformSchemaMigrator.Migrate(db);
     }
 
-    public async Task RegisterDefinitionAsync(CollectionDefinitionId id, string name, ResourceType resourceType,
+    public async Task RegisterDefinitionAsync(CollectionDefinitionId id, string name, CollectionResourceType resourceType,
         int currentRevision, string revisionDescription, bool mayRequireRecollection,
         CancellationToken cancellationToken = default)
     {
@@ -412,7 +413,7 @@ public sealed partial class CollectionPlatformStore
 
     private static RaceArtifactKind? InferRaceArtifact(ResourceKey resource, Uri url)
     {
-        if (resource.Type != ResourceType.Race
+        if (resource.Type != CollectionResourceType.Race
             || !url.Host.Equals("www.jra.go.jp", StringComparison.OrdinalIgnoreCase)) return null;
         if (url.AbsolutePath.Equals("/JRADB/accessD.html", StringComparison.OrdinalIgnoreCase))
             return RaceArtifactKind.Card;
@@ -745,13 +746,13 @@ public sealed partial class CollectionPlatformStore
             await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
             var taskAttributes = new Dictionary<string, string>(
                 DeserializeTaskMetadata(task.MetadataJson ?? resource.AttributesJson), StringComparer.Ordinal);
-            var raceEvidence = resource.Type == ResourceType.Race
+            var raceEvidence = resource.Type == CollectionResourceType.Race
                 ? await db.RaceSchedulingEvidence.AsNoTracking().SingleOrDefaultAsync(
                     x => x.ResourcePk == resource.ResourcePk, cancellationToken).ConfigureAwait(false)
                 : null;
             if (raceEvidence?.OfficialStartAt is { } officialStartAt)
                 taskAttributes["officialStartAt"] = officialStartAt.ToString("O");
-            if (resource.Type == ResourceType.Race)
+            if (resource.Type == CollectionResourceType.Race)
             {
                 taskAttributes.Remove("cardRevisionUpgradeRequired");
                 var facets = await db.RaceArtifactStates.AsNoTracking().Where(x =>
@@ -1121,8 +1122,8 @@ public sealed partial class CollectionPlatformStore
         await using var db = CreateDbContext();
         var resources = await (from active in db.ActiveTasks.AsNoTracking()
                                join resource in db.Resources.AsNoTracking() on active.ResourcePk equals resource.ResourcePk
-                               where resource.Type == ResourceType.Race || resource.Type == ResourceType.RaceCard
-                                   || resource.Type == ResourceType.RaceResult || resource.Type == ResourceType.RaceOdds
+                               where resource.Type == CollectionResourceType.Race || resource.Type == CollectionResourceType.RaceCard
+                                   || resource.Type == CollectionResourceType.RaceResult || resource.Type == CollectionResourceType.RaceOdds
                                select resource).ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         return resources.Where(IsRaceResource).Any(x => RaceResourceMatches(x.ResourceId, x.AttributesJson, raceId, conservative: true));
@@ -1139,8 +1140,8 @@ public sealed partial class CollectionPlatformStore
                          join resource in db.Resources.AsNoTracking() on active.ResourcePk equals resource.ResourcePk
                          where task.TaskId == taskId && task.Status == CollectionTaskStatus.Running
                              && task.LeaseToken == leaseToken
-                             && (resource.Type == ResourceType.Race || resource.Type == ResourceType.RaceCard
-                                 || resource.Type == ResourceType.RaceResult || resource.Type == ResourceType.RaceOdds)
+                             && (resource.Type == CollectionResourceType.Race || resource.Type == CollectionResourceType.RaceCard
+                                 || resource.Type == CollectionResourceType.RaceResult || resource.Type == CollectionResourceType.RaceOdds)
                          select new { resource.ResourceId, resource.AttributesJson, task.LeaseExpiresAt, task.RaceHoldGeneration }).SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
         if (row?.LeaseExpiresAt is null || row.LeaseExpiresAt <= HorseRacingPrediction.Contracts.Time.JstTime.Now()) return false;
@@ -1279,14 +1280,14 @@ public sealed partial class CollectionPlatformStore
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         failureRows = failureRows.OrderByDescending(x => x.Notification.FailedAt).ToList();
         var failures = failureRows.Select(ToFailure).ToList();
-        var artifactRows = item.Type == ResourceType.Race
+        var artifactRows = item.Type == CollectionResourceType.Race
             ? await db.RaceArtifactStates.AsNoTracking().Where(x => x.ResourcePk == item.ResourcePk)
                 .OrderBy(x => x.Artifact).ToListAsync(cancellationToken).ConfigureAwait(false)
             : [];
         var artifacts = artifactRows.Select(x => new RaceArtifactSnapshot(x.Artifact, x.Status,
             x.AppliedRevision, x.RequiredRevision, x.LastObservedAt, x.LastPersistedAt, x.NextDueAt,
             x.ErrorCode, x.ErrorMessage)).ToList();
-        var evidenceRow = item.Type == ResourceType.Race
+        var evidenceRow = item.Type == CollectionResourceType.Race
             ? await db.RaceSchedulingEvidence.AsNoTracking().SingleOrDefaultAsync(
                 x => x.ResourcePk == item.ResourcePk, cancellationToken).ConfigureAwait(false)
             : null;
@@ -2163,7 +2164,7 @@ public sealed partial class CollectionPlatformStore
         var rows = await query.OrderBy(x => x.resource.Type).ThenBy(x => x.resource.ResourceId)
             .ThenBy(x => x.state.DefinitionId).Skip((page - 1) * pageSize).Take(pageSize)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
-        var raceResourcePks = rows.Where(x => x.resource.Type == ResourceType.Race)
+        var raceResourcePks = rows.Where(x => x.resource.Type == CollectionResourceType.Race)
             .Select(x => x.resource.ResourcePk).Distinct().ToArray();
         var artifactRows = await db.RaceArtifactStates.AsNoTracking()
             .Where(x => raceResourcePks.Contains(x.ResourcePk)).ToListAsync(cancellationToken)
@@ -2394,7 +2395,7 @@ public sealed partial class CollectionPlatformStore
         try
         {
             await using var db = CreateDbContext();
-            var legacyTypes = new[] { ResourceType.RaceCard, ResourceType.RaceResult };
+            var legacyTypes = new[] { CollectionResourceType.RaceCard, CollectionResourceType.RaceResult };
             var legacy = await db.Resources.Where(x => legacyTypes.Contains(x.Type)).ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
             var errors = new List<string>();
@@ -2427,14 +2428,14 @@ public sealed partial class CollectionPlatformStore
             var raceDetailDefinition = await db.Definitions.AsNoTracking().SingleOrDefaultAsync(
                 x => x.DefinitionId == "race-detail", cancellationToken).ConfigureAwait(false);
             if (raceDetailDefinition is null || !raceDetailDefinition.Enabled
-                || raceDetailDefinition.ResourceType != ResourceType.Race || raceDetailDefinition.CurrentRevision < 1)
+                || raceDetailDefinition.ResourceType != CollectionResourceType.Race || raceDetailDefinition.CurrentRevision < 1)
                 errors.Add("The enabled race-detail revision 1 definition must be registered before migration.");
             var activeCount = await db.ActiveTasks.CountAsync(x => legacyPks.Contains(x.ResourcePk), cancellationToken)
                 .ConfigureAwait(false);
             if (!execute && activeCount > 0)
                 errors.Add($"Legacy race collection has {activeCount} active task(s); apply will cancel them.");
             var targetIds = mapped.Select(x => x.Id).Distinct().ToArray();
-            var activeTargetCount = await db.ActiveTasks.Join(db.Resources.Where(x => x.Type == ResourceType.Race
+            var activeTargetCount = await db.ActiveTasks.Join(db.Resources.Where(x => x.Type == CollectionResourceType.Race
                         && targetIds.Contains(x.ResourceId)), active => active.ResourcePk, resource => resource.ResourcePk,
                     (active, _) => active)
                 .CountAsync(x => x.DefinitionId == "race-detail", cancellationToken).ConfigureAwait(false);
@@ -2455,7 +2456,7 @@ public sealed partial class CollectionPlatformStore
                 {
                     var pks = group.Select(x => x.Source.ResourcePk).ToArray();
                     var groupStates = db.States.AsNoTracking().Where(x => pks.Contains(x.ResourcePk)).ToList();
-                    var unifiedState = db.States.AsNoTracking().Join(db.Resources.Where(x => x.Type == ResourceType.Race
+                    var unifiedState = db.States.AsNoTracking().Join(db.Resources.Where(x => x.Type == CollectionResourceType.Race
                             && x.Provider == group.Key.Provider && x.ResourceId == group.Key.Id),
                         state => state.ResourcePk, resource => resource.ResourcePk, (state, _) => state)
                         .SingleOrDefault(x => x.DefinitionId == "race-detail");
@@ -2477,7 +2478,7 @@ public sealed partial class CollectionPlatformStore
                                          join task in db.Tasks on active.TaskId equals task.TaskId
                                          join resource in db.Resources on active.ResourcePk equals resource.ResourcePk
                                          where legacyPks.Contains(resource.ResourcePk)
-                                             || (resource.Type == ResourceType.Race
+                                             || (resource.Type == CollectionResourceType.Race
                                                  && targetIds.Contains(resource.ResourceId)
                                                  && active.DefinitionId == "race-detail")
                                          select new { active, task }).ToListAsync(cancellationToken)
@@ -2503,14 +2504,14 @@ public sealed partial class CollectionPlatformStore
             foreach (var group in mapped.GroupBy(x => (x.Source.Provider, x.Id)))
             {
                 var first = group.First();
-                var target = await db.Resources.SingleOrDefaultAsync(x => x.Type == ResourceType.Race
+                var target = await db.Resources.SingleOrDefaultAsync(x => x.Type == CollectionResourceType.Race
                     && x.Provider == group.Key.Provider && x.ResourceId == group.Key.Id, cancellationToken)
                     .ConfigureAwait(false);
                 if (target is null)
                 {
                     target = new CollectionResourceEntity
                     {
-                        Type = ResourceType.Race,
+                        Type = CollectionResourceType.Race,
                         Provider = group.Key.Provider,
                         ResourceId = group.Key.Id,
                         EffectiveDate = first.Date,
@@ -3279,7 +3280,7 @@ public sealed partial class CollectionPlatformStore
         for (var date = from; date <= to; date = date.AddDays(1))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var resource = new ResourceKey(ResourceType.Race, provider, $"backfill:{date:yyyyMMdd}");
+            var resource = new ResourceKey(CollectionResourceType.Race, provider, $"backfill:{date:yyyyMMdd}");
             if (await GetStateAsync(resource, new("race-discovery"), cancellationToken).ConfigureAwait(false) is not null)
                 continue;
             await RequestAsync(resource, new("race-discovery"), 1, CollectionReason.Backfill, now,
@@ -3338,7 +3339,7 @@ public sealed partial class CollectionPlatformStore
         for (var date = from; date <= to; date = date.AddDays(1))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var resource = new ResourceKey(ResourceType.Race, provider, $"recollection:{date:yyyyMMdd}");
+            var resource = new ResourceKey(CollectionResourceType.Race, provider, $"recollection:{date:yyyyMMdd}");
             var receipt = await RequestAsync(resource, new("race-discovery"), 1,
                 CollectionReason.PeriodRecollection, now, CollectionLane.Background,
                 (int)CollectionPriority.Background, batchId: batchId, effectiveDate: date,
@@ -3789,10 +3790,10 @@ public sealed partial class CollectionPlatformStore
         var attributes = DeserializeTaskMetadata(first.task.MetadataJson ?? first.resource.AttributesJson);
         CollectionDispatchCompatibilityKey compatibility;
         if (first.resource.EffectiveDate.HasValue
-            && first.resource.Type is ResourceType.RaceCard or ResourceType.RaceResult or ResourceType.Race)
+            && first.resource.Type is CollectionResourceType.RaceCard or CollectionResourceType.RaceResult or CollectionResourceType.Race)
             compatibility = new(first.resource.Provider, new(first.task.DefinitionId), first.resource.EffectiveDate,
                 first.task.Lane, CollectionDispatchGroupKind.RaceDay, first.resource.EffectiveDate.Value.ToString("yyyy-MM-dd"));
-        else if (first.resource.Type == ResourceType.Horse
+        else if (first.resource.Type == CollectionResourceType.Horse
                  && attributes.GetValueOrDefault("weekendPriorityUntil") is { Length: > 0 } weekend)
             compatibility = new(first.resource.Provider, new(first.task.DefinitionId), first.resource.EffectiveDate,
                 first.task.Lane, CollectionDispatchGroupKind.WeekendSubjects, weekend);

@@ -1,4 +1,5 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Data.Sqlite;
 
 namespace HorseRacingPrediction.CollectionInitializer;
@@ -38,7 +39,7 @@ public sealed class DomainCollectionSeedReader(string domainDatabasePath)
                 var resultDeclared = !reader.IsDBNull(5)
                     && DateTimeOffset.TryParse(reader.GetString(5), out parsed);
                 var collectedAt = resultDeclared ? parsed : importedAt;
-                seeds.Add(new(new(ResourceType.Race, "JRA", $"{date:yyyyMMdd}:{CanonicalCourse(course)}:{number}"),
+                seeds.Add(new(new(CollectionResourceType.Race, "JRA", $"{date:yyyyMMdd}:{CanonicalCourse(course)}:{number}"),
                     new("race-detail"), 1, collectedAt, date, attributes, IsComplete: resultDeclared));
             }
         }
@@ -67,9 +68,9 @@ public sealed class DomainCollectionSeedReader(string domainDatabasePath)
             if (reader.IsDBNull(3) || !Uri.TryCreate(reader.GetString(1), UriKind.Absolute, out var sourceUrl)) continue;
             var type = reader.GetString(3) switch
             {
-                "Horse" => ResourceType.Horse,
-                "Jockey" => ResourceType.Jockey,
-                _ => ResourceType.Trainer,
+                "Horse" => CollectionResourceType.Horse,
+                "Jockey" => CollectionResourceType.Jockey,
+                _ => CollectionResourceType.Trainer,
             };
             var definition = SubjectCollectionDefinitions.For(type).Definition;
             var acquiredAt = DateTimeOffset.Parse(reader.GetString(2));

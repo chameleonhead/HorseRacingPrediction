@@ -18,7 +18,7 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
         using var http = client;
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var store = app.Services.GetRequiredService<CollectionPlatformStore>();
-        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race,
+        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", CollectionResourceType.Race,
             CollectionDefinitionRevisions.RaceDetail, "owner repair", false);
         var date = new DateOnly(2032, 9, 19);
         var create = new DeclareRaceResultBulkRequest(date, "阪神", 11, "馬主補完検証",
@@ -108,7 +108,7 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
 
         using var first = await http.PostAsJsonAsync("/api/races/result-bulk", card);
         using var replay = await http.PostAsJsonAsync("/api/races/result-bulk", card);
-        var race = await http.GetFromJsonAsync<HorseRacingPrediction.Api.Contracts.RaceResponse>(
+        var race = await http.GetFromJsonAsync<HorseRacingPrediction.Contracts.RaceResponse>(
             $"/api/races/{created.RaceId}");
 
         Assert.AreEqual(HttpStatusCode.OK, first.StatusCode);

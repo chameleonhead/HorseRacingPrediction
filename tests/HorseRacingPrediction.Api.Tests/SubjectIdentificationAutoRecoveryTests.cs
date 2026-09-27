@@ -1,4 +1,5 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace HorseRacingPrediction.Api.Tests;
@@ -14,9 +15,9 @@ public sealed class SubjectIdentificationAutoRecoveryTests
         using var http = client;
         var store = application.Services.GetRequiredService<CollectionPlatformStore>();
         var definition = new CollectionDefinitionId("horse-profile");
-        await store.RegisterDefinitionAsync(definition, "Horse profile", ResourceType.Horse,
+        await store.RegisterDefinitionAsync(definition, "Horse profile", CollectionResourceType.Horse,
             1, "old", false);
-        var resource = new ResourceKey(ResourceType.Horse, "JRA", $"horse-{Guid.NewGuid():N}");
+        var resource = new ResourceKey(CollectionResourceType.Horse, "JRA", $"horse-{Guid.NewGuid():N}");
         var now = DateTimeOffset.UtcNow.AddMinutes(-2);
         var receipt = await store.RequestAsync(resource, definition, 1, CollectionReason.Discovery, now,
             attributes: new Dictionary<string, string> { ["name"] = "アジアエクスプレス" });
@@ -26,7 +27,7 @@ public sealed class SubjectIdentificationAutoRecoveryTests
         await store.CompleteAttemptAsync(taskId, lease.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "登録区分付き見出しです。",
                 PageIdentification: "SubjectIdentification:ProfileNameMismatch"));
-        await store.RegisterDefinitionAsync(definition, "Horse profile", ResourceType.Horse,
+        await store.RegisterDefinitionAsync(definition, "Horse profile", CollectionResourceType.Horse,
             2, "normalized", true);
 
         var first = await SubjectIdentificationAutoRecovery.RunOnceAsync(store);
@@ -48,9 +49,9 @@ public sealed class SubjectIdentificationAutoRecoveryTests
         using var http = client;
         var store = application.Services.GetRequiredService<CollectionPlatformStore>();
         var definition = new CollectionDefinitionId("horse-profile");
-        await store.RegisterDefinitionAsync(definition, "Horse profile", ResourceType.Horse,
+        await store.RegisterDefinitionAsync(definition, "Horse profile", CollectionResourceType.Horse,
             1, "old", false);
-        var resource = new ResourceKey(ResourceType.Horse, "JRA", $"horse-{Guid.NewGuid():N}");
+        var resource = new ResourceKey(CollectionResourceType.Horse, "JRA", $"horse-{Guid.NewGuid():N}");
         var now = DateTimeOffset.UtcNow.AddMinutes(-2);
         var receipt = await store.RequestAsync(resource, definition, 1, CollectionReason.Discovery, now,
             attributes: new Dictionary<string, string> { ["name"] = "パネットーネ 産駒" });
@@ -60,7 +61,7 @@ public sealed class SubjectIdentificationAutoRecoveryTests
         await store.CompleteAttemptAsync(taskId, lease.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "候補なし",
                 PageIdentification: "SubjectIdentification:NoCandidate"));
-        await store.RegisterDefinitionAsync(definition, "Horse profile", ResourceType.Horse,
+        await store.RegisterDefinitionAsync(definition, "Horse profile", CollectionResourceType.Horse,
             2, "normalized", true);
 
         var result = await SubjectIdentificationAutoRecovery.RunOnceAsync(store);
@@ -80,9 +81,9 @@ public sealed class SubjectIdentificationAutoRecoveryTests
         using var http = client;
         var store = application.Services.GetRequiredService<CollectionPlatformStore>();
         var definition = new CollectionDefinitionId("trainer-profile");
-        await store.RegisterDefinitionAsync(definition, "Trainer profile", ResourceType.Trainer,
+        await store.RegisterDefinitionAsync(definition, "Trainer profile", CollectionResourceType.Trainer,
             2, "old wait", false);
-        var resource = new ResourceKey(ResourceType.Trainer, "JRA", $"trainer-{Guid.NewGuid():N}");
+        var resource = new ResourceKey(CollectionResourceType.Trainer, "JRA", $"trainer-{Guid.NewGuid():N}");
         var now = DateTimeOffset.UtcNow.AddMinutes(-2);
         var receipt = await store.RequestAsync(resource, definition, 2, CollectionReason.Discovery, now,
             CollectionLane.Background, 40,
@@ -93,7 +94,7 @@ public sealed class SubjectIdentificationAutoRecoveryTests
             new(CollectionAttemptResult.PermanentFailure, "JraCollectionException",
                 "調教師情報の見出しを確認できません。"));
         await store.SetPausedAsync(false, null, now.AddSeconds(2));
-        await store.RegisterDefinitionAsync(definition, "Trainer profile", ResourceType.Trainer,
+        await store.RegisterDefinitionAsync(definition, "Trainer profile", CollectionResourceType.Trainer,
             3, "semantic readiness", true);
 
         var result = await SubjectIdentificationAutoRecovery.RunOnceAsync(store);

@@ -1,4 +1,5 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
@@ -15,9 +16,9 @@ public sealed class CollectionDispatchReservationTests
         {
             var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
             { StateDirectory = directory }));
-            await store.RegisterDefinitionAsync(new("race-card"), "card", ResourceType.RaceCard, 1, "initial", false);
+            await store.RegisterDefinitionAsync(new("race-card"), "card", CollectionResourceType.RaceCard, 1, "initial", false);
             var now = DateTimeOffset.UtcNow;
-            await store.RequestAsync(new(ResourceType.RaceCard, "JRA", "R1"), new("race-card"), 1,
+            await store.RequestAsync(new(CollectionResourceType.RaceCard, "JRA", "R1"), new("race-card"), 1,
                 CollectionReason.Initial, now.AddMinutes(-1), effectiveDate: new DateOnly(2026, 9, 12));
             var pending = (await store.GetPendingDispatchesAsync(now, 10)).Single();
             var envelopeId = Guid.NewGuid();

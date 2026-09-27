@@ -31,47 +31,47 @@ public sealed class HttpRaceQueryService : IRaceQueryService
         return dto?.Items.Select(x => new RaceSearchSummary(x.RaceId, x.RaceDate, x.RacecourseCode, x.RaceNumber)).ToList() ?? [];
     }
 
-    public async Task<RacePredictionContextReadModel?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken = default)
+    public async Task<RacePredictionContextDto?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync($"/api/races/{Uri.EscapeDataString(raceId)}/context", cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<RacePredictionContextReadModel>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        return await response.Content.ReadFromJsonAsync<RacePredictionContextDto>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<HorseReadModel?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)
+    public async Task<HorseReadDto?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync($"/api/horses/{Uri.EscapeDataString(horseId)}", cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<HorseReadModel>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        return await response.Content.ReadFromJsonAsync<HorseReadDto>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<JockeyReadModel?> GetJockeyAsync(string jockeyId, CancellationToken cancellationToken = default)
+    public async Task<JockeyDto?> GetJockeyAsync(string jockeyId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<JockeyReadModel>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        return await response.Content.ReadFromJsonAsync<JockeyDto>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<TrainerReadModel?> GetTrainerAsync(string trainerId, CancellationToken cancellationToken = default)
+    public async Task<TrainerDto?> GetTrainerAsync(string trainerId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync($"/api/trainers/{Uri.EscapeDataString(trainerId)}", cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<TrainerReadModel>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        return await response.Content.ReadFromJsonAsync<TrainerDto>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<MemoBySubjectReadModel?> GetMemosBySubjectAsync(string subjectType, string subjectId, CancellationToken cancellationToken = default)
+    public async Task<MemoBySubjectDto?> GetMemosBySubjectAsync(string subjectType, string subjectId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient
             .GetAsync($"/api/memos/by-subject/{Uri.EscapeDataString(subjectType)}/{Uri.EscapeDataString(subjectId)}", cancellationToken)
@@ -85,7 +85,7 @@ public sealed class HttpRaceQueryService : IRaceQueryService
         if (memos is null || memos.Count == 0)
             return null;
 
-        return new MemoBySubjectReadModel
+        return new MemoBySubjectDto
         {
             SubjectKey = $"{subjectType.ToUpperInvariant()}:{subjectId}",
             Memos = memos.Select(m => new MemoSnapshot(
@@ -99,24 +99,24 @@ public sealed class HttpRaceQueryService : IRaceQueryService
         };
     }
 
-    public async Task<HorseRaceHistoryReadModel?> GetHorseRaceHistoryAsync(string horseId, CancellationToken cancellationToken = default)
+    public async Task<HorseRaceHistoryDto?> GetHorseRaceHistoryAsync(string horseId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync($"/api/horses/{Uri.EscapeDataString(horseId)}/race-history", cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<HorseRaceHistoryReadModel>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        return await response.Content.ReadFromJsonAsync<HorseRaceHistoryDto>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<JockeyRaceHistoryReadModel?> GetJockeyRaceHistoryAsync(string jockeyId, CancellationToken cancellationToken = default)
+    public async Task<JockeyRaceHistoryDto?> GetJockeyRaceHistoryAsync(string jockeyId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}/race-history", cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<JockeyRaceHistoryReadModel>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        return await response.Content.ReadFromJsonAsync<JockeyRaceHistoryDto>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<MlPredictionResponse?> GetMlPredictionAsync(string raceId, CancellationToken cancellationToken = default)

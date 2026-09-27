@@ -1,13 +1,12 @@
-using System.Net;
-using System.Net.Http.Json;
-using System.Text.Json;
-using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra;
 using Microsoft.Extensions.DependencyInjection;
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -109,10 +108,10 @@ public sealed class SharedOwnerIdentityTests
         var (app, client) = await TestApplicationFactory.CreateAsync();
         client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var store = app.Services.GetRequiredService<CollectionPlatformStore>();
-        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse", ResourceType.Horse, 4, "test", true);
-        await store.RegisterDefinitionAsync(new("jockey-profile"), "Jockey", ResourceType.Jockey, 3, "test", true);
-        await store.RegisterDefinitionAsync(new("trainer-profile"), "Trainer", ResourceType.Trainer, 3, "test", true);
-        await store.RegisterDefinitionAsync(new("owner-identity"), "Owner", ResourceType.Owner, 1, "test", true);
+        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse", CollectionResourceType.Horse, 4, "test", true);
+        await store.RegisterDefinitionAsync(new("jockey-profile"), "Jockey", CollectionResourceType.Jockey, 3, "test", true);
+        await store.RegisterDefinitionAsync(new("trainer-profile"), "Trainer", CollectionResourceType.Trainer, 3, "test", true);
+        await store.RegisterDefinitionAsync(new("owner-identity"), "Owner", CollectionResourceType.Owner, 1, "test", true);
         return (app, client);
     }
 
@@ -148,7 +147,7 @@ public sealed class SharedOwnerIdentityTests
         IReadOnlyList<CollectionTaskSummary> tasks)
     {
         var handler = new JraSubjectProfileCollectionHandler(
-            JraSubjectCollectionDefinitions.For(ResourceType.Owner), new ThrowingSessionFactory(),
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Owner), new ThrowingSessionFactory(),
             new JraSubjectProfileApiClient(http), ownerIdentities: new OwnerIdentityApiClient(http));
         var worker = new CollectionPlatformWorkerClient(http,
             new CollectionDefinitionHandlerRegistry([handler]));

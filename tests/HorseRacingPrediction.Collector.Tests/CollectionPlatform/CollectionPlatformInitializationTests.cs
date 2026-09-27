@@ -1,5 +1,6 @@
 using HorseRacingPrediction.CollectionInitializer;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
@@ -38,17 +39,17 @@ public sealed class CollectionPlatformInitializationTests
         Assert.AreEqual(3, preview.ResourcesAdded);
         Assert.AreEqual(3, preview.StatesAdded);
         Assert.AreEqual(2, preview.LocationsAdded);
-        Assert.IsNull(await store.GetStateAsync(new(ResourceType.RaceCard, "JRA", "race-1"), new("race-card")));
+        Assert.IsNull(await store.GetStateAsync(new(CollectionResourceType.RaceCard, "JRA", "race-1"), new("race-card")));
 
         var applied = await store.InitializeFromDomainDataAsync(seeds, dryRun: false);
         Assert.AreEqual(3, applied.ResourcesAdded);
         Assert.AreEqual(3, applied.StatesAdded);
         Assert.AreEqual(2, applied.LocationsAdded);
         Assert.AreEqual(CollectionStateStatus.Current,
-            (await store.GetStateAsync(new(ResourceType.Race, "JRA", "20240106:Tokyo:1"), new("race-detail")))!.Status);
-        Assert.HasCount(1, await store.ResolveLocationsAsync(new(ResourceType.Horse, "JRA", "horse-1"),
+            (await store.GetStateAsync(new(CollectionResourceType.Race, "JRA", "20240106:Tokyo:1"), new("race-detail")))!.Status);
+        Assert.HasCount(1, await store.ResolveLocationsAsync(new(CollectionResourceType.Horse, "JRA", "horse-1"),
             new("horse-profile")));
-        Assert.HasCount(1, await store.ResolveLocationsAsync(new(ResourceType.Jockey, "JRA", "jockey-1"),
+        Assert.HasCount(1, await store.ResolveLocationsAsync(new(CollectionResourceType.Jockey, "JRA", "jockey-1"),
             new("jockey-profile")));
 
         var repeated = await store.InitializeFromDomainDataAsync(seeds, dryRun: false);
@@ -97,7 +98,7 @@ public sealed class CollectionPlatformInitializationTests
     {
         var store = await CreateStoreAsync();
         var importedAt = new DateTimeOffset(2026, 9, 14, 1, 0, 0, TimeSpan.Zero);
-        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260914:Nakayama:1");
+        var resource = new ResourceKey(CollectionResourceType.Race, "JRA", "20260914:Nakayama:1");
         await store.InitializeFromDomainDataAsync([
             new(resource, new("race-detail"), 1, importedAt, new DateOnly(2026, 9, 14),
                 new Dictionary<string, string> { ["course"] = "中山", ["number"] = "1" },
@@ -137,10 +138,10 @@ public sealed class CollectionPlatformInitializationTests
         {
             StateDirectory = Path.Combine(_directory, "state")
         }));
-        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, 1, "initial", false);
-        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 1, "initial", false);
-        await store.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", ResourceType.Jockey, 1, "initial", false);
-        await store.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", ResourceType.Trainer, 1, "initial", false);
+        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", CollectionResourceType.Race, 1, "initial", false);
+        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", CollectionResourceType.Horse, 1, "initial", false);
+        await store.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", CollectionResourceType.Jockey, 1, "initial", false);
+        await store.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", CollectionResourceType.Trainer, 1, "initial", false);
         return store;
     }
 

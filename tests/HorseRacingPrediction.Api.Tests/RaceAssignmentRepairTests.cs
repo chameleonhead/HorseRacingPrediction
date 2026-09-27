@@ -78,7 +78,7 @@ public sealed class RaceAssignmentRepairTests
         var preview = await (await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/preview", manifest)).Content.ReadFromJsonAsync<JsonElement>();
         var ticketId = "predictionticket-" + Guid.NewGuid();
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync("/api/predictions",
-            new HorseRacingPrediction.Api.Contracts.CreatePredictionTicketRequest(raceId, "AI", "local", 0.5m, null, ticketId))).StatusCode);
+            new HorseRacingPrediction.Contracts.CreatePredictionTicketRequest(raceId, "AI", "local", 0.5m, null, ticketId))).StatusCode);
         // Simulate an independent legacy writer bypassing HTTP after the preview.
         var bus = app.Services.GetRequiredService<EventFlow.ICommandBus>();
         await bus.PublishAsync(new HorseRacingPrediction.Application.Commands.Predictions.CreatePredictionTicketCommand(
@@ -110,7 +110,7 @@ public sealed class RaceAssignmentRepairTests
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         Assert.ThrowsExactly<ArgumentException>(() => new HorseRacingPrediction.Domain.Memos.MemoId("notes-1"));
         var memoId = "memo-" + Guid.NewGuid();
-        var memo = new HorseRacingPrediction.Api.Contracts.CreateMemoRequest("human", "Note", "1番を注目", DateTimeOffset.UtcNow,
+        var memo = new HorseRacingPrediction.Contracts.CreateMemoRequest("human", "Note", "1番を注目", DateTimeOffset.UtcNow,
             [new("Horse", DeterministicIdGenerator.BuildHorseId("", HorseA))], MemoId: memoId);
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/memos", memo)).StatusCode);
         (await http.DeleteAsync("/api/memos/" + memoId)).EnsureSuccessStatusCode();
@@ -405,9 +405,9 @@ public sealed class RaceAssignmentRepairTests
     private static async Task<string> SeedAsync(WebApplication app, HttpClient http, int raceNumber = 5)
     {
         var store = app.Services.GetRequiredService<CollectionPlatformStore>();
-        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, CollectionDefinitionRevisions.RaceDetail, "repair test", true);
-        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 3, "repair test", true);
-        await store.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", ResourceType.Jockey, 3, "repair test", true);
+        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", CollectionResourceType.Race, CollectionDefinitionRevisions.RaceDetail, "repair test", true);
+        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", CollectionResourceType.Horse, 3, "repair test", true);
+        await store.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", CollectionResourceType.Jockey, 3, "repair test", true);
         if (!http.DefaultRequestHeaders.Contains("X-Api-Key")) http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var request = new DeclareRaceResultBulkRequest(new DateOnly(2026, 9, 26), "中山", raceNumber, "ローカル補正検証",
             EntryCount: 2, IsRaceCard: true, Entries:

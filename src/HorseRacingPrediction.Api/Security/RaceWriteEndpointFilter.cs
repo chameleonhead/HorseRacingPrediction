@@ -4,7 +4,7 @@ using EventFlow.EntityFramework;
 using EventFlow.Aggregates;
 using EventFlow.EventStores;
 using HorseRacingPrediction.Domain.Predictions;
-using HorseRacingPrediction.Api.Contracts;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;

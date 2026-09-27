@@ -27,7 +27,7 @@ public static partial class EndpointExtensions
             using var db = provider.CreateContext();
             var failures = await store.GetActionableFailureNotificationsAsync(DateTimeOffset.UtcNow, int.MaxValue, token);
             var result = new List<OwnerIdentityRecoveryCandidate>();
-            foreach (var failure in failures.Where(x => x.Resource.Type == ResourceType.Owner))
+            foreach (var failure in failures.Where(x => x.Resource.Type == CollectionResourceType.Owner))
                 result.Add(await PreviewOwnerIdentityRecoveryAsync(db, store, failure, token));
             return Results.Ok(result);
         });
@@ -55,7 +55,7 @@ public static partial class EndpointExtensions
             foreach (var (failure, candidate) in plans)
             {
                 // Durable idempotency key is recorded before suppression; a partial apply can be replayed.
-                var receipt = await store.RequestAsync(new(ResourceType.Owner, "JRA", candidate.TargetId!), new("owner-identity"),
+                var receipt = await store.RequestAsync(new(CollectionResourceType.Owner, "JRA", candidate.TargetId!), new("owner-identity"),
                     CollectionDefinitionRevisions.OwnerIdentity, CollectionReason.Recovery, DateTimeOffset.UtcNow,
                     CollectionLane.Normal, (int)CollectionPriority.High, batchId: OwnerRecoveryKey(failure.NotificationId),
                     attributes: new Dictionary<string, string> { ["name"] = candidate.Name!, ["requestedByRaceId"] = candidate.RaceId! },
@@ -76,7 +76,7 @@ public static partial class EndpointExtensions
     {
         OwnerIdentityRecoveryCandidate Block(string reason) => new(failure.NotificationId, failure.TaskId,
             failure.Resource.Id, null, null, null, null, reason);
-        if (failure.Resource.Type != ResourceType.Owner || failure.Resource.Provider != "JRA"
+        if (failure.Resource.Type != CollectionResourceType.Owner || failure.Resource.Provider != "JRA"
             || failure.Definition.Value != "owner-identity" || failure.ErrorCode != SubjectNotIdentifiedErrorCode
             || failure.Status is not (CollectionTaskStatus.Failed or CollectionTaskStatus.DeadLetter))
             return Block("NotConfirmedOwnerIdentityFailure");

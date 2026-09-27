@@ -14,26 +14,26 @@ public interface IRaceQueryService
     Task<IReadOnlyList<RaceSearchSummary>> SearchRegisteredRacesAsync(
         DateOnly raceDate, CancellationToken cancellationToken = default);
 
-    Task<RacePredictionContextReadModel?> GetRacePredictionContextAsync(
+    Task<RacePredictionContextDto?> GetRacePredictionContextAsync(
         string raceId, CancellationToken cancellationToken = default);
 
-    Task<HorseReadModel?> GetHorseAsync(
+    Task<HorseReadDto?> GetHorseAsync(
         string horseId, CancellationToken cancellationToken = default);
 
-    Task<JockeyReadModel?> GetJockeyAsync(
+    Task<JockeyDto?> GetJockeyAsync(
         string jockeyId, CancellationToken cancellationToken = default);
 
-    Task<TrainerReadModel?> GetTrainerAsync(
+    Task<TrainerDto?> GetTrainerAsync(
         string trainerId, CancellationToken cancellationToken = default)
-        => Task.FromResult<TrainerReadModel?>(null);
+        => Task.FromResult<TrainerDto?>(null);
 
-    Task<MemoBySubjectReadModel?> GetMemosBySubjectAsync(
+    Task<MemoBySubjectDto?> GetMemosBySubjectAsync(
         string subjectType, string subjectId, CancellationToken cancellationToken = default);
 
-    Task<HorseRaceHistoryReadModel?> GetHorseRaceHistoryAsync(
+    Task<HorseRaceHistoryDto?> GetHorseRaceHistoryAsync(
         string horseId, CancellationToken cancellationToken = default);
 
-    Task<JockeyRaceHistoryReadModel?> GetJockeyRaceHistoryAsync(
+    Task<JockeyRaceHistoryDto?> GetJockeyRaceHistoryAsync(
         string jockeyId, CancellationToken cancellationToken = default);
 
     Task<MlPredictionResponse?> GetMlPredictionAsync(

@@ -116,7 +116,7 @@ public sealed class JockeyRaceHistoryReadModelTests
         Assert.AreEqual(0d, model.GetHorseComboWinRate("horse-unknown"));
     }
 
-    private static JockeyRaceHistoryReadModel CreateModel(params JockeyRaceHistoryEntry[] entries)
+    private static JockeyRaceHistoryDto CreateModel(params JockeyRaceHistoryEntry[] entries)
         => new() { JockeyId = "jockey-1", Entries = entries.ToList() };
 
     private static JockeyRaceHistoryEntry CreateEntry(

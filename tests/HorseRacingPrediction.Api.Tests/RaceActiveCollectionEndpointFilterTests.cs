@@ -1,8 +1,9 @@
-using System.Net;
-using System.Net.Http.Json;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using System.Net;
+using System.Net.Http.Json;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -21,9 +22,9 @@ public sealed class RaceActiveCollectionEndpointFilterTests
         (await http.PostAsJsonAsync("/api/races", new { raceId, raceDate = date, racecourseCode = "中山", raceNumber = 5, raceName = "lease検証" })).EnsureSuccessStatusCode();
         var store = app.Services.GetRequiredService<CollectionPlatformStore>();
         var definition = new CollectionDefinitionId("race-detail");
-        await store.RegisterDefinitionAsync(definition, "detail", ResourceType.Race, 4, "test", true);
+        await store.RegisterDefinitionAsync(definition, "detail", CollectionResourceType.Race, 4, "test", true);
         var now = DateTimeOffset.UtcNow;
-        var receipt = await store.RequestAsync(new(ResourceType.Race, "JRA", "20260926:Nakayama:5"), definition, 4,
+        var receipt = await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "20260926:Nakayama:5"), definition, 4,
             CollectionReason.Initial, now, effectiveDate: date);
         var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
         var weather = new { observedAt = now, conditionCode = "SUNNY" };
@@ -46,8 +47,8 @@ public sealed class RaceActiveCollectionEndpointFilterTests
         client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var store = app.Services.GetRequiredService<CollectionPlatformStore>();
         var definition = new CollectionDefinitionId("race-card");
-        var race = new ResourceKey(ResourceType.RaceCard, "jra", "race-filter-test");
-        await store.RegisterDefinitionAsync(definition, "Race card", ResourceType.RaceCard,
+        var race = new ResourceKey(CollectionResourceType.RaceCard, "jra", "race-filter-test");
+        await store.RegisterDefinitionAsync(definition, "Race card", CollectionResourceType.RaceCard,
             1, "Initial", false);
         await store.RequestAsync(race, definition, 1, CollectionReason.Initial, DateTimeOffset.UtcNow);
 
@@ -67,8 +68,8 @@ public sealed class RaceActiveCollectionEndpointFilterTests
         client.DefaultRequestHeaders.Add("X-Collection-Worker", "true");
         var store = app.Services.GetRequiredService<CollectionPlatformStore>();
         var definition = new CollectionDefinitionId("race-card");
-        await store.RegisterDefinitionAsync(definition, "Race card", ResourceType.RaceCard, 1, "Initial", false);
-        await store.RequestAsync(new(ResourceType.RaceCard, "jra", "race-filter-spoof"), definition, 1,
+        await store.RegisterDefinitionAsync(definition, "Race card", CollectionResourceType.RaceCard, 1, "Initial", false);
+        await store.RequestAsync(new(CollectionResourceType.RaceCard, "jra", "race-filter-spoof"), definition, 1,
             CollectionReason.Initial, DateTimeOffset.UtcNow);
 
         var response = await client.PostAsJsonAsync(
@@ -86,8 +87,8 @@ public sealed class RaceActiveCollectionEndpointFilterTests
         client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var store = app.Services.GetRequiredService<CollectionPlatformStore>();
         var definition = new CollectionDefinitionId("race-result");
-        await store.RegisterDefinitionAsync(definition, "Race result", ResourceType.RaceResult, 1, "Initial", false);
-        await store.RequestAsync(new(ResourceType.RaceResult, "jra", "race-filter-body"), definition, 1,
+        await store.RegisterDefinitionAsync(definition, "Race result", CollectionResourceType.RaceResult, 1, "Initial", false);
+        await store.RequestAsync(new(CollectionResourceType.RaceResult, "jra", "race-filter-body"), definition, 1,
             CollectionReason.Initial, DateTimeOffset.UtcNow);
 
         var response = await client.PostAsJsonAsync("/api/races/result-bulk",
@@ -106,8 +107,8 @@ public sealed class RaceActiveCollectionEndpointFilterTests
         client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var store = app.Services.GetRequiredService<CollectionPlatformStore>();
         var definition = new CollectionDefinitionId("race-card");
-        await store.RegisterDefinitionAsync(definition, "Race card", ResourceType.RaceCard, 1, "Initial", false);
-        var receipt = await store.RequestAsync(new(ResourceType.RaceCard, "jra", raceId),
+        await store.RegisterDefinitionAsync(definition, "Race card", CollectionResourceType.RaceCard, 1, "Initial", false);
+        var receipt = await store.RequestAsync(new(CollectionResourceType.RaceCard, "jra", raceId),
             definition, 1, CollectionReason.Initial, DateTimeOffset.UtcNow);
         var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
         var lease = await store.AcquireAsync(taskId, 1, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(5));

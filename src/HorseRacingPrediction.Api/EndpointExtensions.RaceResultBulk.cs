@@ -7,15 +7,16 @@ using HorseRacingPrediction.Application.Commands.Jockeys;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Commands.Trainers;
 using HorseRacingPrediction.Application.Queries.ReadModels;
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Domain.Horses;
 using HorseRacingPrediction.Domain.Jockeys;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Domain.Trainers;
 using HorseRacingPrediction.Infrastructure.Persistence;
-using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.EntityFrameworkCore;
 using Shared = HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.Api;
@@ -95,7 +96,7 @@ public static partial class EndpointExtensions
                     DeterministicIdGenerator.NormalizeKey(canonicalTrainerName));
             var entry = new EntryDetails(entryId, horseId, item.HorseNumber, jockeyId, trainerId,
                 item.GateNumber, item.AssignedWeight, item.SexCode, item.Age, item.BodyWeight,
-                item.BodyWeightChange, null, item.OwnerName, (RaceEntryParticipationStatus?)item.ParticipationStatus);
+                item.BodyWeightChange, null, item.OwnerName, (Domain.Races.RaceEntryParticipationStatus?)item.ParticipationStatus);
             var result = new EntryResultDetails(entryId, item.FinishPosition, item.OfficialTime,
                 item.MarginText, item.LastThreeFurlongTime, item.AbnormalResultCode, item.PrizeMoney,
                 item.CornerPositions, item.Popularity, item.OriginalFinishPosition, item.IsDeadHeat,
@@ -236,13 +237,13 @@ public static partial class EndpointExtensions
             .ToDictionaryAsync(x => x.NormalizedAlias, x => x.OwnerId, cancellationToken).ConfigureAwait(false);
         var candidates = entries.SelectMany(item => new[]
             {
-                new SubjectJob(ResourceType.Horse, item.Entry.HorseId, item.HorseName,
+                new SubjectJob(CollectionResourceType.Horse, item.Entry.HorseId, item.HorseName,
                     item.Source.HorseSourceIdentity),
-                new SubjectJob(ResourceType.Jockey, item.Entry.JockeyId, item.JockeyName,
+                new SubjectJob(CollectionResourceType.Jockey, item.Entry.JockeyId, item.JockeyName,
                     item.Source.JockeyProfileUrl),
-                new SubjectJob(ResourceType.Trainer, item.Entry.TrainerId, item.TrainerName,
+                new SubjectJob(CollectionResourceType.Trainer, item.Entry.TrainerId, item.TrainerName,
                     item.Source.TrainerProfileUrl),
-                new SubjectJob(ResourceType.Owner,
+                new SubjectJob(CollectionResourceType.Owner,
                     OwnerIdentityContract.ResolveId(item.Source.OwnerName, ownerAliases),
                     item.Source.OwnerName, null),
             })
@@ -254,9 +255,9 @@ public static partial class EndpointExtensions
 
         var race = await db.Set<RacePredictionContextReadModel>().AsNoTracking()
             .SingleAsync(item => item.RaceId == raceId, cancellationToken).ConfigureAwait(false);
-        var horseIds = candidates.Where(x => x.Type == ResourceType.Horse).Select(x => x.Id!).ToArray();
-        var jockeyIds = candidates.Where(x => x.Type == ResourceType.Jockey).Select(x => x.Id!).ToArray();
-        var trainerIds = candidates.Where(x => x.Type == ResourceType.Trainer).Select(x => x.Id!).ToArray();
+        var horseIds = candidates.Where(x => x.Type == CollectionResourceType.Horse).Select(x => x.Id!).ToArray();
+        var jockeyIds = candidates.Where(x => x.Type == CollectionResourceType.Jockey).Select(x => x.Id!).ToArray();
+        var trainerIds = candidates.Where(x => x.Type == CollectionResourceType.Trainer).Select(x => x.Id!).ToArray();
         var horses = await db.Set<HorseReadModel>().AsNoTracking().Where(x => horseIds.Contains(x.HorseId))
             .ToDictionaryAsync(x => x.HorseId, cancellationToken).ConfigureAwait(false);
         var jockeys = await db.Set<JockeyReadModel>().AsNoTracking().Where(x => jockeyIds.Contains(x.JockeyId))
@@ -265,7 +266,7 @@ public static partial class EndpointExtensions
             .ToDictionaryAsync(x => x.TrainerId, cancellationToken).ConfigureAwait(false);
         var resolvedHorseJobs = new Dictionary<string, string>(StringComparer.Ordinal);
         var horseIdentities = await CollectionIdentityResolver.LoadHorsesAsync(db, cancellationToken);
-        foreach (var subject in candidates.Where(x => x.Type == ResourceType.Horse))
+        foreach (var subject in candidates.Where(x => x.Type == CollectionResourceType.Horse))
             resolvedHorseJobs[subject.Id!] = CollectionIdentityResolver.ResolveHorse(horseIdentities, subject.Name!, subject.SourceIdentity, null);
         var rejected = new List<CollectionRequestBatchOutcome>();
         var repairIssues = new List<SubjectIdentificationRepairIssue>();
@@ -273,27 +274,27 @@ public static partial class EndpointExtensions
         {
             var referenced = subject.Type switch
             {
-                ResourceType.Horse => race.Entries.Any(x => x.HorseId == subject.Id),
-                ResourceType.Jockey => race.Entries.Any(x => x.JockeyId == subject.Id),
-                ResourceType.Trainer => race.Entries.Any(x => x.TrainerId == subject.Id),
-                ResourceType.Owner => true,
+                CollectionResourceType.Horse => race.Entries.Any(x => x.HorseId == subject.Id),
+                CollectionResourceType.Jockey => race.Entries.Any(x => x.JockeyId == subject.Id),
+                CollectionResourceType.Trainer => race.Entries.Any(x => x.TrainerId == subject.Id),
+                CollectionResourceType.Owner => true,
                 _ => false,
             };
             var projectedName = subject.Type switch
             {
-                ResourceType.Horse when horses.TryGetValue(subject.Id!, out var horse) => horse.RegisteredName,
-                ResourceType.Jockey when jockeys.TryGetValue(subject.Id!, out var jockey) => jockey.DisplayName,
-                ResourceType.Trainer when trainers.TryGetValue(subject.Id!, out var trainer) => trainer.DisplayName,
-                ResourceType.Owner => subject.Name,
+                CollectionResourceType.Horse when horses.TryGetValue(subject.Id!, out var horse) => horse.RegisteredName,
+                CollectionResourceType.Jockey when jockeys.TryGetValue(subject.Id!, out var jockey) => jockey.DisplayName,
+                CollectionResourceType.Trainer when trainers.TryGetValue(subject.Id!, out var trainer) => trainer.DisplayName,
+                CollectionResourceType.Owner => subject.Name,
                 _ => null,
             };
             var valid = referenced && projectedName is not null
                 && string.Equals(Shared.JraSubjectNameNormalizer.NormalizeIdentityName(subject.Type.ToString(), projectedName),
                     Shared.JraSubjectNameNormalizer.NormalizeIdentityName(subject.Type.ToString(), subject.Name!),
                     StringComparison.Ordinal)
-                && string.Equals(subject.Id, subject.Type == ResourceType.Horse
+                && string.Equals(subject.Id, subject.Type == CollectionResourceType.Horse
                     ? resolvedHorseJobs[subject.Id!] : ExpectedSubjectJobId(subject), StringComparison.Ordinal);
-            if (valid || subject.Type == ResourceType.Owner) return true;
+            if (valid || subject.Type == CollectionResourceType.Owner) return true;
             rejected.Add(new($"{subject.Type}:{subject.Id}", "Rejected",
                 ErrorCode: "SubjectIdentityRepairRequired",
                 Message: "主体投影、名称、またはRaceEntry参照が一致しないためLambdaへ送信しません。"));
@@ -309,7 +310,7 @@ public static partial class EndpointExtensions
                 DefinitionId = SubjectCollectionDefinitions.For(subject.Type).Definition.Value,
                 RequestedByRaceId = raceId,
                 SourceIdentity = subject.SourceIdentity,
-                SourceUrl = subject.Type is ResourceType.Jockey or ResourceType.Trainer ? subject.SourceIdentity : null,
+                SourceUrl = subject.Type is CollectionResourceType.Jockey or CollectionResourceType.Trainer ? subject.SourceIdentity : null,
                 ReasonCode = "SubjectIdentityRepairRequired",
                 ReasonMessage = "主体投影、名称、決定論的ID、またはRaceEntry参照が一致しません。",
                 EvidenceFingerprint = fingerprint,
@@ -370,19 +371,19 @@ public static partial class EndpointExtensions
                 ["name"] = subject.Name!,
                 ["requestedByRaceId"] = raceId,
                 ["weekendPriorityUntil"] = raceDate.ToString("yyyy-MM-dd"),
-                ["discoveredFromType"] = ResourceType.Race.ToString(),
+                ["discoveredFromType"] = CollectionResourceType.Race.ToString(),
                 ["discoveredFromProvider"] = "JRA",
                 ["discoveredFromId"] = raceId,
             };
             Uri? explicitUrl = null;
-            if (subject.Type == ResourceType.Horse
+            if (subject.Type == CollectionResourceType.Horse
                 && JraSourceIdentity.TryNormalizeHorse(subject.SourceIdentity, out _))
             {
                 explicitUrl = JraSourceIdentity.NormalizeHorseUrl(subject.SourceIdentity);
                 attributes["sourceIdentity"] = explicitUrl!.AbsoluteUri;
                 attributes["sourceUrl"] = explicitUrl.AbsoluteUri;
             }
-            else if (subject.Type is ResourceType.Jockey or ResourceType.Trainer
+            else if (subject.Type is CollectionResourceType.Jockey or CollectionResourceType.Trainer
                      && IsAllowedJraProfileUrl(subject.SourceIdentity, subject.Type, out var profileUrl))
             {
                 explicitUrl = profileUrl!;
@@ -400,7 +401,7 @@ public static partial class EndpointExtensions
         return [.. accepted, .. rejected];
     }
 
-    private sealed record SubjectJob(ResourceType Type, string? Id, string? Name, string? SourceIdentity);
+    private sealed record SubjectJob(CollectionResourceType Type, string? Id, string? Name, string? SourceIdentity);
 
     private static string? ExpectedSubjectJobId(SubjectJob subject)
     {
@@ -408,19 +409,19 @@ public static partial class EndpointExtensions
             subject.Type.ToString(), subject.Name!);
         return subject.Type switch
         {
-            ResourceType.Jockey => DeterministicIdGenerator.BuildEntityId("jockey",
+            CollectionResourceType.Jockey => DeterministicIdGenerator.BuildEntityId("jockey",
                 DeterministicIdGenerator.NormalizeKey(canonical)),
-            ResourceType.Trainer => DeterministicIdGenerator.BuildEntityId("trainer",
+            CollectionResourceType.Trainer => DeterministicIdGenerator.BuildEntityId("trainer",
                 DeterministicIdGenerator.NormalizeKey(canonical)),
-            ResourceType.Owner => subject.Id,
+            CollectionResourceType.Owner => subject.Id,
             _ => null,
         };
     }
 
-    private static bool IsAllowedJraProfileUrl(string? value, ResourceType type, out Uri? uri)
+    private static bool IsAllowedJraProfileUrl(string? value, CollectionResourceType type, out Uri? uri)
     {
         uri = Uri.TryCreate(value, UriKind.Absolute, out var parsed) ? parsed : null;
-        var path = type == ResourceType.Jockey ? "/JRADB/accessK.html" : "/JRADB/accessC.html";
+        var path = type == CollectionResourceType.Jockey ? "/JRADB/accessK.html" : "/JRADB/accessC.html";
         return uri is not null && uri.Scheme == Uri.UriSchemeHttps
             && uri.Host.Equals("www.jra.go.jp", StringComparison.OrdinalIgnoreCase)
             && uri.AbsolutePath.Equals(path, StringComparison.OrdinalIgnoreCase)
@@ -450,16 +451,16 @@ public static partial class EndpointExtensions
         if (data.EntryResults.Any(item => !knownEntryIds.Contains(item.EntryId)))
             throw new ArgumentException("Every entry result must reference a registered or incoming entry.");
 
-        var effectiveStatus = existing?.Status ?? RaceStatus.Draft;
-        if (effectiveStatus == RaceStatus.Draft && data.EntryCount is > 0)
-            effectiveStatus = RaceStatus.CardPublished;
-        if (!string.IsNullOrWhiteSpace(data.WinningHorseName) && effectiveStatus < RaceStatus.ResultDeclared)
-            effectiveStatus = RaceStatus.ResultDeclared;
-        if (data.Entries.Count > 0 && effectiveStatus == RaceStatus.Draft)
+        var effectiveStatus = existing?.Status ?? Domain.Races.RaceStatus.Draft;
+        if (effectiveStatus == Domain.Races.RaceStatus.Draft && data.EntryCount is > 0)
+            effectiveStatus = Domain.Races.RaceStatus.CardPublished;
+        if (!string.IsNullOrWhiteSpace(data.WinningHorseName) && effectiveStatus < Domain.Races.RaceStatus.ResultDeclared)
+            effectiveStatus = Domain.Races.RaceStatus.ResultDeclared;
+        if (data.Entries.Count > 0 && effectiveStatus == Domain.Races.RaceStatus.Draft)
             throw new ArgumentException("Entries require a published race card.");
-        if (data.EntryResults.Count > 0 && effectiveStatus < RaceStatus.ResultDeclared)
+        if (data.EntryResults.Count > 0 && effectiveStatus < Domain.Races.RaceStatus.ResultDeclared)
             throw new ArgumentException("Entry results require a declared race result.");
-        if (data.Payouts is not null && effectiveStatus < RaceStatus.ResultDeclared)
+        if (data.Payouts is not null && effectiveStatus < Domain.Races.RaceStatus.ResultDeclared)
             throw new ArgumentException("Payouts require a declared race result.");
     }
 

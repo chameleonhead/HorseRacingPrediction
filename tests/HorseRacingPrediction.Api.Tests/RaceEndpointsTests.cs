@@ -1,14 +1,13 @@
+using EventFlow.EntityFramework;
+using EventFlow.EntityFramework.EventStores;
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
+using HorseRacingPrediction.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using HorseRacingPrediction.Api.Contracts;
-using HorseRacingPrediction.Contracts;
-using EventFlow.EntityFramework;
-using EventFlow.EntityFramework.EventStores;
-using HorseRacingPrediction.Infrastructure.Persistence;
-using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.EntityFrameworkCore;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -25,13 +24,13 @@ public class RaceEndpointsTests
         (_app, _client) = await TestApplicationFactory.CreateAsync();
         _client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var collectionStore = _app.Services.GetRequiredService<CollectionPlatformStore>();
-        await collectionStore.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse,
+        await collectionStore.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", CollectionResourceType.Horse,
             3, "Test", true);
-        await collectionStore.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", ResourceType.Jockey,
+        await collectionStore.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", CollectionResourceType.Jockey,
             3, "Test", true);
-        await collectionStore.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", ResourceType.Trainer,
+        await collectionStore.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", CollectionResourceType.Trainer,
             3, "Test", true);
-        await collectionStore.RegisterDefinitionAsync(new("owner-identity"), "Owner identity", ResourceType.Owner,
+        await collectionStore.RegisterDefinitionAsync(new("owner-identity"), "Owner identity", CollectionResourceType.Owner,
             1, "Test", false);
     }
 

@@ -1,13 +1,14 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using Microsoft.Data.Sqlite;
-using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Options;
+using System.Data.Common;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -21,9 +22,9 @@ public sealed class CollectionPlatformStoreTests
         var now = new DateTimeOffset(2026, 9, 27, 2, 28, 0, TimeSpan.Zero);
         var start = now.AddMinutes(-8);
         var definition = new CollectionDefinitionId("race-detail");
-        var race = new ResourceKey(ResourceType.Race, "JRA", "20260927:Hanshin:4");
+        var race = new ResourceKey(CollectionResourceType.Race, "JRA", "20260927:Hanshin:4");
         var revision = HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail;
-        await store.RegisterDefinitionAsync(definition, "Race", ResourceType.Race, revision, "DOM", false);
+        await store.RegisterDefinitionAsync(definition, "Race", CollectionResourceType.Race, revision, "DOM", false);
         var receipt = await store.RequestAsync(race, definition, revision, CollectionReason.Initial, now.AddMinutes(-10),
             effectiveDate: new DateOnly(2026, 9, 27));
         var initial = await store.AcquireAsync(receipt.TaskId!.Value, 1, now.AddMinutes(-10), TimeSpan.FromMinutes(15));
@@ -77,9 +78,9 @@ public sealed class CollectionPlatformStoreTests
     {
         var store = CreateStore();
         var definition = new CollectionDefinitionId("race-detail");
-        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260926:Nakayama:5");
+        var resource = new ResourceKey(CollectionResourceType.Race, "JRA", "20260926:Nakayama:5");
         var now = new DateTimeOffset(2026, 9, 24, 8, 0, 0, TimeSpan.Zero);
-        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 5, "horse-key entries", false);
+        await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 5, "horse-key entries", false);
         var first = await store.RequestAsync(resource, definition, 5, CollectionReason.Initial, now,
             effectiveDate: new DateOnly(2026, 9, 26));
         var a = new RaceEntry(null, "木曜馬A", null, null, null, OwnerName: "馬主A",
@@ -125,14 +126,14 @@ public sealed class CollectionPlatformStoreTests
     {
         var store = CreateStore();
         var definition = new CollectionDefinitionId("race-detail");
-        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260926:Nakayama:5");
+        var resource = new ResourceKey(CollectionResourceType.Race, "JRA", "20260926:Nakayama:5");
         var now = new DateTimeOffset(2026, 9, 24, 8, 0, 0, TimeSpan.Zero);
-        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 3, "old", false);
+        await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 3, "old", false);
         var initial = await store.RequestAsync(resource, definition, 3, CollectionReason.Initial, now, effectiveDate: new DateOnly(2026, 9, 26));
         var oldLease = await store.AcquireAsync(initial.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsTrue(await store.CompleteAttemptAsync(initial.TaskId!.Value, oldLease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.Succeeded, StageOutcomes: [new("PersistCard", RaceArtifactKind.Card, CollectionAttemptResult.Succeeded, Persisted: true)])));
-        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 4, "confirmed numbers", false);
+        await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 4, "confirmed numbers", false);
         var refresh = await store.RequestAsync(resource, definition, 4, CollectionReason.DefinitionChanged, now.AddSeconds(2));
         var lease = await store.AcquireAsync(refresh.TaskId!.Value, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
@@ -196,7 +197,7 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var now = new DateTimeOffset(2026, 9, 19, 0, 0, 0, TimeSpan.Zero);
         var receipt = await store.RequestAsync(
-            new(ResourceType.Horse, "JRA", "legacy-horse"), HorseProfile, 7,
+            new(CollectionResourceType.Horse, "JRA", "legacy-horse"), HorseProfile, 7,
             CollectionReason.Discovery, now, CollectionLane.Realtime, (int)CollectionPriority.High,
             explicitUrl: new Uri("https://www.jra.go.jp/JRADB/accessU.html?CNAME=legacy"),
             effectiveDate: new(2026, 9, 18),
@@ -243,7 +244,7 @@ public sealed class CollectionPlatformStoreTests
 
         async Task CreateFailedTask(string id, string errorCode, string? raceId)
         {
-            var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", id), HorseProfile, 7,
+            var receipt = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", id), HorseProfile, 7,
                 CollectionReason.Discovery, now,
                 attributes: raceId is null
                     ? new Dictionary<string, string> { ["name"] = id }
@@ -261,7 +262,7 @@ public sealed class CollectionPlatformStoreTests
     {
         var store = await CreateStoreAsync();
         var now = new DateTimeOffset(2026, 9, 19, 0, 0, 0, TimeSpan.Zero);
-        var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", "running-legacy"), HorseProfile, 7,
+        var receipt = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "running-legacy"), HorseProfile, 7,
             CollectionReason.Discovery, now, attributes: new Dictionary<string, string>
             {
                 ["name"] = "Running Legacy",
@@ -295,15 +296,15 @@ public sealed class CollectionPlatformStoreTests
             .UseSqlite($"Data Source={path};Pooling=False")
             .AddInterceptors(counter).Options;
         var store = new CollectionPlatformStore(options);
-        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", ResourceType.Horse, 7,
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", CollectionResourceType.Horse, 7,
             "Initial profile extractor", false);
         counter.Commits = 0;
 
         await store.RequestManyAsync("race-subjects:race-1",
         [
-            new("Horse:H001", new(ResourceType.Horse, "JRA", "H001"), HorseProfile, 7,
+            new("Horse:H001", new(CollectionResourceType.Horse, "JRA", "H001"), HorseProfile, 7,
                 CollectionReason.Discovery, CollectionLane.Realtime, 70, null, new(2026, 9, 12), null),
-            new("Horse:H002", new(ResourceType.Horse, "JRA", "H002"), HorseProfile, 7,
+            new("Horse:H002", new(CollectionResourceType.Horse, "JRA", "H002"), HorseProfile, 7,
                 CollectionReason.Discovery, CollectionLane.Realtime, 70, null, new(2026, 9, 12), null),
         ], DateTimeOffset.UtcNow);
 
@@ -321,7 +322,7 @@ public sealed class CollectionPlatformStoreTests
             ["referenceRaceCourse"] = "Nakayama",
             ["referenceRaceNumber"] = "2",
         };
-        var item = new CollectionRequestBatchItem("Horse:H001", new(ResourceType.Horse, "JRA", "H001"),
+        var item = new CollectionRequestBatchItem("Horse:H001", new(CollectionResourceType.Horse, "JRA", "H001"),
             HorseProfile, 7, CollectionReason.Discovery, CollectionLane.Realtime, 70, null,
             new DateOnly(2026, 9, 19), attributes);
 
@@ -340,7 +341,7 @@ public sealed class CollectionPlatformStoreTests
     {
         var firstStore = await CreateStoreAsync();
         var secondStore = CreateStore();
-        var item = new CollectionRequestBatchItem("Horse:H001", new(ResourceType.Horse, "JRA", "H001"),
+        var item = new CollectionRequestBatchItem("Horse:H001", new(CollectionResourceType.Horse, "JRA", "H001"),
             HorseProfile, 7, CollectionReason.Discovery, CollectionLane.Realtime, 70, null,
             new(2026, 9, 12), null);
         var now = DateTimeOffset.UtcNow;
@@ -369,11 +370,11 @@ public sealed class CollectionPlatformStoreTests
         var now = new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero);
         CollectionRequestBatchItem[] items =
         [
-            new("Horse:H001", new(ResourceType.Horse, "JRA", "H001"), HorseProfile, 7,
+            new("Horse:H001", new(CollectionResourceType.Horse, "JRA", "H001"), HorseProfile, 7,
                 CollectionReason.Discovery, CollectionLane.Realtime, 70, null, new(2026, 9, 12), null),
-            new("Horse:H002", new(ResourceType.Horse, "JRA", "H002"), HorseProfile, 7,
+            new("Horse:H002", new(CollectionResourceType.Horse, "JRA", "H002"), HorseProfile, 7,
                 CollectionReason.Discovery, CollectionLane.Realtime, 70, null, new(2026, 9, 12), null),
-            new("Horse:H003", new(ResourceType.Horse, "JRA", "H003"), new("missing-definition"), 1,
+            new("Horse:H003", new(CollectionResourceType.Horse, "JRA", "H003"), new("missing-definition"), 1,
                 CollectionReason.Discovery, CollectionLane.Realtime, 70, null, new(2026, 9, 12), null),
         ];
 
@@ -398,7 +399,7 @@ public sealed class CollectionPlatformStoreTests
 
         changed[0] = changed[0] with
         {
-            Resource = new ResourceKey(ResourceType.Horse, "JRA", "DIFFERENT-HORSE"),
+            Resource = new ResourceKey(CollectionResourceType.Horse, "JRA", "DIFFERENT-HORSE"),
             Priority = items[0].Priority,
         };
         var rebound = await store.RequestManyAsync("race-subjects:race-1", changed, now.AddMinutes(3));
@@ -413,10 +414,10 @@ public sealed class CollectionPlatformStoreTests
         var store = CreateStore();
         var concurrentStore = CreateStore();
         var definition = new CollectionDefinitionId("race-detail");
-        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 1,
+        await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 1,
             "Initial race extractor", false);
         var now = new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero);
-        var race = new ResourceKey(ResourceType.Race, "JRA", "20260913:Nakayama:11");
+        var race = new ResourceKey(CollectionResourceType.Race, "JRA", "20260913:Nakayama:11");
 
         CollectionRequestBatchItem Item(string horseId) => new(
             race.Id, race, definition, 1, CollectionReason.Discovery, CollectionLane.Background, 30,
@@ -452,7 +453,7 @@ public sealed class CollectionPlatformStoreTests
     public async Task RequestManyAsync_RejectsDuplicateItemKeysBeforeCreatingTasks()
     {
         var store = await CreateStoreAsync();
-        var item = new CollectionRequestBatchItem("Horse:H001", new(ResourceType.Horse, "JRA", "H001"),
+        var item = new CollectionRequestBatchItem("Horse:H001", new(CollectionResourceType.Horse, "JRA", "H001"),
             HorseProfile, 7, CollectionReason.Discovery, CollectionLane.Realtime, 70, null,
             new(2026, 9, 12), null);
 
@@ -736,7 +737,7 @@ public sealed class CollectionPlatformStoreTests
         var prior = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now,
             attributes: new Dictionary<string, string> { ["name"] = "other-resource" });
         await CompleteAsync(store, prior, now);
-        var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", "different-horse"),
+        var receipt = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "different-horse"),
             HorseProfile, 7, CollectionReason.Recovery, now.AddMinutes(2));
         var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now.AddMinutes(2), TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
@@ -752,7 +753,7 @@ public sealed class CollectionPlatformStoreTests
             attributes: new Dictionary<string, string> { ["name"] = "snapshot-name" });
         await CompleteAsync(store, prior, now);
         var otherDefinition = new CollectionDefinitionId("other-profile");
-        await store.RegisterDefinitionAsync(otherDefinition, "Other profile", ResourceType.Horse, 1, "initial", false);
+        await store.RegisterDefinitionAsync(otherDefinition, "Other profile", CollectionResourceType.Horse, 1, "initial", false);
         var other = await store.RequestAsync(Horse, otherDefinition, 1, CollectionReason.Discovery,
             now.AddMinutes(2), attributes: new Dictionary<string, string>
             {
@@ -804,7 +805,7 @@ public sealed class CollectionPlatformStoreTests
 
     private string _directory = null!;
     private static readonly CollectionDefinitionId HorseProfile = new("horse-profile");
-    private static readonly ResourceKey Horse = new(ResourceType.Horse, "jra", "H123");
+    private static readonly ResourceKey Horse = new(CollectionResourceType.Horse, "jra", "H123");
 
     [TestMethod]
     [DataRow("Succeeded")]
@@ -814,13 +815,13 @@ public sealed class CollectionPlatformStoreTests
     public async Task TerminalTask_MaterializesExactlyOneHigherRevisionRequest(string terminal)
     {
         var store = CreateStore();
-        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", ResourceType.Horse, 1,
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", CollectionResourceType.Horse, 1,
             "Initial revision", false);
         var now = new DateTimeOffset(2026, 9, 19, 0, 0, 0, TimeSpan.Zero);
         var first = await store.RequestAsync(Horse, HorseProfile, 1, CollectionReason.Initial, now);
         var lease = await store.AcquireAsync(first.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
-        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", ResourceType.Horse, 2,
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", CollectionResourceType.Horse, 2,
             "Revision materialization", true);
         var higher = await store.RequestAsync(Horse, HorseProfile, 2, CollectionReason.DefinitionChanged,
             now.AddSeconds(1), CollectionLane.Background, (int)CollectionPriority.Background,
@@ -928,8 +929,8 @@ public sealed class CollectionPlatformStoreTests
     {
         var store = CreateStore();
         var definition = new CollectionDefinitionId("race-detail");
-        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "combined", false);
-        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260920:Nakayama:6");
+        await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 2, "combined", false);
+        var resource = new ResourceKey(CollectionResourceType.Race, "JRA", "20260920:Nakayama:6");
         var now = new DateTimeOffset(2026, 9, 20, 0, 0, 0, TimeSpan.Zero);
         var cardUrl = new Uri("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604060620260920/0D");
         var resultUrl = new Uri("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde0106202604060620260920/C9");
@@ -957,7 +958,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsNotNull(lease);
         Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId!.Value, lease.LeaseToken, now.AddMinutes(1),
             new(CollectionAttemptResult.Succeeded)));
-        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", ResourceType.Horse, 8,
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", CollectionResourceType.Horse, 8,
             "Updated profile extractor", true);
 
         var updated = await store.RequestAsync(Horse, HorseProfile, 8, CollectionReason.Discovery, now.AddDays(1));
@@ -1070,16 +1071,16 @@ public sealed class CollectionPlatformStoreTests
     {
         var store = await CreateStoreAsync();
         var now = new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero);
-        await store.RequestAsync(new(ResourceType.Horse, "JRA", "H001"), HorseProfile, 7,
+        await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "H001"), HorseProfile, 7,
             CollectionReason.Initial, now, CollectionLane.Background, 10);
-        await store.RequestAsync(new(ResourceType.Horse, "JRA", "H002"), HorseProfile, 7,
+        await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "H002"), HorseProfile, 7,
             CollectionReason.Initial, now.AddMinutes(1), CollectionLane.Normal, 50);
-        await store.RequestAsync(new(ResourceType.Horse, "NAR", "H003"), HorseProfile, 7,
+        await store.RequestAsync(new(CollectionResourceType.Horse, "NAR", "H003"), HorseProfile, 7,
             CollectionReason.Initial, now.AddMinutes(2), CollectionLane.Normal, 50);
 
-        var firstPage = await store.SearchTasksAsync(new(ResourceType: ResourceType.Horse,
+        var firstPage = await store.SearchTasksAsync(new(ResourceType: CollectionResourceType.Horse,
             Provider: "jra", DefinitionId: "horse-profile", Page: 1, PageSize: 1));
-        var secondPage = await store.SearchTasksAsync(new(ResourceType: ResourceType.Horse,
+        var secondPage = await store.SearchTasksAsync(new(ResourceType: CollectionResourceType.Horse,
             Provider: "JRA", DefinitionId: "horse-profile", Page: 2, PageSize: 1));
         var searched = await store.SearchTasksAsync(new(Search: "H002"));
         var recent = await store.SearchTasksAsync(new(CreatedFrom: now.AddSeconds(30)));
@@ -1160,13 +1161,13 @@ public sealed class CollectionPlatformStoreTests
     {
         var store = await CreateStoreAsync();
         var now = new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero);
-        var failed = await store.RequestAsync(new(ResourceType.Horse, "JRA", "H001"), HorseProfile, 7,
+        var failed = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "H001"), HorseProfile, 7,
             CollectionReason.Initial, now);
         var failedLease = await store.AcquireAsync(failed.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(failedLease);
         await store.CompleteAttemptAsync(failed.TaskId!.Value, failedLease.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.PermanentFailure, "OldFailure", "old failure only"));
-        var latest = await store.RequestAsync(new(ResourceType.Horse, "JRA", "H001"), HorseProfile, 7,
+        var latest = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "H001"), HorseProfile, 7,
             CollectionReason.ManualRefresh, now.AddMinutes(1));
 
         var allLatest = await store.SearchTasksAsync(new(LatestOnly: true));
@@ -1192,9 +1193,9 @@ public sealed class CollectionPlatformStoreTests
     {
         var store = await CreateStoreAsync();
         var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
-        var expired = await store.RequestAsync(new(ResourceType.Horse, "JRA", "EXPIRED"),
+        var expired = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "EXPIRED"),
             HorseProfile, 7, CollectionReason.Initial, now.AddMinutes(-10));
-        var active = await store.RequestAsync(new(ResourceType.Horse, "JRA", "ACTIVE"),
+        var active = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "ACTIVE"),
             HorseProfile, 7, CollectionReason.Initial, now);
         Assert.IsNotNull(await store.AcquireAsync(active.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5)));
         Assert.IsNotNull(await store.AcquireAsync(expired.TaskId!.Value, 1, now.AddMinutes(-10), TimeSpan.FromMinutes(1)));
@@ -1218,22 +1219,22 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var alpha = new CollectionDefinitionId("alpha-profile");
         var beta = new CollectionDefinitionId("beta-profile");
-        await store.RegisterDefinitionAsync(alpha, "Alpha", ResourceType.Horse, 1, "initial", false);
-        await store.RegisterDefinitionAsync(beta, "Beta", ResourceType.Horse, 1, "initial", false);
+        await store.RegisterDefinitionAsync(alpha, "Alpha", CollectionResourceType.Horse, 1, "initial", false);
+        await store.RegisterDefinitionAsync(beta, "Beta", CollectionResourceType.Horse, 1, "initial", false);
         var now = new DateTimeOffset(2026, 9, 14, 0, 0, 0, TimeSpan.Zero);
 
-        var completedRealtime = await store.RequestAsync(new(ResourceType.Horse, "JRA", "COMPLETED"), beta, 1,
+        var completedRealtime = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "COMPLETED"), beta, 1,
             CollectionReason.Initial, now, CollectionLane.Realtime, 100);
         await CompleteAsync(store, completedRealtime, now);
-        await store.RequestAsync(new(ResourceType.Horse, "JRA", "BACKGROUND"), alpha, 1,
+        await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "BACKGROUND"), alpha, 1,
             CollectionReason.Initial, now.AddMinutes(1), CollectionLane.Background, 100);
-        await store.RequestAsync(new(ResourceType.Horse, "JRA", "NORMAL"), alpha, 1,
+        await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "NORMAL"), alpha, 1,
             CollectionReason.Initial, now.AddMinutes(2), CollectionLane.Normal, 100);
-        await store.RequestAsync(new(ResourceType.Horse, "JRA", "REALTIME-LOW"), alpha, 1,
+        await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "REALTIME-LOW"), alpha, 1,
             CollectionReason.Initial, now.AddMinutes(3), CollectionLane.Realtime, 80);
-        await store.RequestAsync(new(ResourceType.Horse, "JRA", "REALTIME-BETA"), beta, 1,
+        await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "REALTIME-BETA"), beta, 1,
             CollectionReason.Initial, now.AddMinutes(4), CollectionLane.Realtime, 90);
-        await store.RequestAsync(new(ResourceType.Horse, "JRA", "REALTIME-ALPHA"), alpha, 1,
+        await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "REALTIME-ALPHA"), alpha, 1,
             CollectionReason.Initial, now.AddMinutes(5), CollectionLane.Realtime, 90);
 
         var firstPage = await store.SearchTasksAsync(new(Page: 1, PageSize: 3));
@@ -1308,7 +1309,7 @@ public sealed class CollectionPlatformStoreTests
     {
         var now = new DateTimeOffset(2026, 9, 11, 0, 0, 0, TimeSpan.Zero);
         var store = await CreateStoreAsync();
-        var other = new ResourceKey(ResourceType.Horse, "JRA", "H999");
+        var other = new ResourceKey(CollectionResourceType.Horse, "JRA", "H999");
         var first = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now,
             effectiveDate: new DateOnly(2009, 1, 1), attributes: new Dictionary<string, string> { ["layout"] = "legacy" });
         var second = await store.RequestAsync(other, HorseProfile, 7, CollectionReason.Initial, now,
@@ -1415,9 +1416,9 @@ public sealed class CollectionPlatformStoreTests
     {
         var now = DateTimeOffset.UtcNow;
         var store = CreateStore();
-        await store.RegisterDefinitionAsync(new("race-card"), "Race card", ResourceType.RaceCard, 1,
+        await store.RegisterDefinitionAsync(new("race-card"), "Race card", CollectionResourceType.RaceCard, 1,
             "Initial", false);
-        var resource = new ResourceKey(ResourceType.RaceCard, "JRA", "R1");
+        var resource = new ResourceKey(CollectionResourceType.RaceCard, "JRA", "R1");
         var receipt = await store.RequestAsync(resource, new("race-card"), 1, CollectionReason.Initial, now,
             CollectionLane.Realtime, 80);
         var first = await store.UpsertLocationAsync(resource, new("race-card"),
@@ -1456,10 +1457,10 @@ public sealed class CollectionPlatformStoreTests
         var now = DateTimeOffset.UtcNow;
         var store = CreateStore();
         var definition = new CollectionDefinitionId("race-card");
-        await store.RegisterDefinitionAsync(definition, "Race card", ResourceType.RaceCard, 1,
+        await store.RegisterDefinitionAsync(definition, "Race card", CollectionResourceType.RaceCard, 1,
             "Initial", false);
-        var resource = new ResourceKey(ResourceType.RaceCard, "JRA", "R1");
-        var foreignResource = new ResourceKey(ResourceType.RaceCard, "JRA", "R2");
+        var resource = new ResourceKey(CollectionResourceType.RaceCard, "JRA", "R1");
+        var foreignResource = new ResourceKey(CollectionResourceType.RaceCard, "JRA", "R2");
         var receipt = await store.RequestAsync(resource, definition, 1, CollectionReason.Initial, now);
         await store.RequestAsync(foreignResource, definition, 1, CollectionReason.Initial, now);
         var own = await store.UpsertLocationAsync(resource, definition, new("https://example.test/r1"),
@@ -1555,7 +1556,7 @@ public sealed class CollectionPlatformStoreTests
             {
                 DefinitionId = HorseProfile.Value,
                 Name = "Existing definition",
-                ResourceType = ResourceType.Horse,
+                ResourceType = CollectionResourceType.Horse,
                 CurrentRevision = 7,
                 Enabled = true
             });
@@ -1737,7 +1738,7 @@ public sealed class CollectionPlatformStoreTests
     {
         var now = DateTimeOffset.UtcNow;
         var store = await CreateStoreAsync();
-        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
             1, "initial", false);
         var first = await store.CreateOrResumeBackfillBatchAsync("jra:2026-01", "jra",
             new(2026, 1, 1), new(2026, 1, 3), now);
@@ -1779,7 +1780,7 @@ public sealed class CollectionPlatformStoreTests
         var now = DateTimeOffset.UtcNow;
         var store = await CreateStoreAsync();
         var discovery = new CollectionDefinitionId("race-discovery");
-        await store.RegisterDefinitionAsync(discovery, "Race discovery", ResourceType.Race,
+        await store.RegisterDefinitionAsync(discovery, "Race discovery", CollectionResourceType.Race,
             1, "initial", false);
         await store.CreateOrResumeBackfillBatchAsync("jra:recovery", "jra",
             new(2026, 1, 1), new(2026, 1, 1), now);
@@ -1808,7 +1809,7 @@ public sealed class CollectionPlatformStoreTests
         var now = DateTimeOffset.UtcNow;
         var store = CreateStore();
         var discovery = new CollectionDefinitionId("race-discovery");
-        await store.RegisterDefinitionAsync(discovery, "Race discovery", ResourceType.Race,
+        await store.RegisterDefinitionAsync(discovery, "Race discovery", CollectionResourceType.Race,
             1, "initial", false);
         await store.CreateOrResumeBackfillBatchAsync("jra:same-time", "jra",
             new(2026, 1, 1), new(2026, 1, 1), now);
@@ -1836,7 +1837,7 @@ public sealed class CollectionPlatformStoreTests
         var now = DateTimeOffset.UtcNow;
         var store = CreateStore();
         var discovery = new CollectionDefinitionId("race-discovery");
-        await store.RegisterDefinitionAsync(discovery, "Race discovery", ResourceType.Race,
+        await store.RegisterDefinitionAsync(discovery, "Race discovery", CollectionResourceType.Race,
             1, "initial", false);
         await store.CreateOrResumeBackfillBatchAsync("jra:ordered", "jra",
             new(2026, 1, 1), new(2026, 1, 1), now);
@@ -1862,7 +1863,7 @@ public sealed class CollectionPlatformStoreTests
     public async Task BackfillList_OrdersBatchesWithoutSqliteDateTimeOffsetOrdering()
     {
         var store = CreateStore();
-        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
             1, "Initial", false);
         await store.CreateOrResumeBackfillBatchAsync("older", "jra", new(2026, 1, 1), new(2026, 1, 1),
             new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
@@ -1893,7 +1894,7 @@ public sealed class CollectionPlatformStoreTests
     public async Task Startup_Version7ConvertsExistingUtcValuesToTimezoneLessJst()
     {
         var store = CreateStore();
-        await store.RegisterDefinitionAsync(HorseProfile, "Horse", ResourceType.Horse, 1, "initial", false);
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse", CollectionResourceType.Horse, 1, "initial", false);
         await store.RequestAsync(Horse, HorseProfile, 1, CollectionReason.Initial,
             new DateTimeOffset(2026, 9, 13, 15, 30, 0, TimeSpan.Zero));
         var databasePath = Path.Combine(_directory, "collection-platform.db");
@@ -1950,7 +1951,7 @@ public sealed class CollectionPlatformStoreTests
     {
         var store = await CreateStoreAsync();
         var now = new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero);
-        var otherHorse = new ResourceKey(ResourceType.Horse, "JRA", "H456");
+        var otherHorse = new ResourceKey(CollectionResourceType.Horse, "JRA", "H456");
         var first = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
         var second = await store.RequestAsync(otherHorse, HorseProfile, 7, CollectionReason.Initial, now);
         var executionBatchId = Guid.NewGuid();
@@ -1992,7 +1993,7 @@ public sealed class CollectionPlatformStoreTests
         var now = new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero);
         for (var index = 0; index < 60; index++)
         {
-            var resource = new ResourceKey(ResourceType.Horse, "JRA", $"H{index:D3}");
+            var resource = new ResourceKey(CollectionResourceType.Horse, "JRA", $"H{index:D3}");
             var receipt = await store.RequestAsync(resource, HorseProfile, 7, CollectionReason.Initial, now);
             if (index == 55)
             {
@@ -2017,8 +2018,8 @@ public sealed class CollectionPlatformStoreTests
     {
         var store = CreateStore();
         var definition = new CollectionDefinitionId("race-detail");
-        var race = new ResourceKey(ResourceType.Race, "JRA", "20260919:Tokyo:10");
-        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "facets", false);
+        var race = new ResourceKey(CollectionResourceType.Race, "JRA", "20260919:Tokyo:10");
+        await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 2, "facets", false);
         var now = new DateTimeOffset(2026, 9, 19, 1, 0, 0, TimeSpan.Zero);
         var receipt = await store.RequestAsync(race, definition, 2, CollectionReason.Initial, now,
             effectiveDate: new DateOnly(2026, 9, 19));
@@ -2061,8 +2062,8 @@ public sealed class CollectionPlatformStoreTests
     {
         var store = CreateStore();
         var definition = new CollectionDefinitionId("race-detail");
-        var race = new ResourceKey(ResourceType.Race, "JRA", "20260919:Tokyo:10");
-        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "facets", false);
+        var race = new ResourceKey(CollectionResourceType.Race, "JRA", "20260919:Tokyo:10");
+        await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 2, "facets", false);
         var now = DateTimeOffset.UtcNow;
         var receipt = await store.RequestAsync(race, definition, 2, CollectionReason.Initial, now);
         var locationId = await store.UpsertLocationAsync(race, definition,
@@ -2082,10 +2083,10 @@ public sealed class CollectionPlatformStoreTests
     {
         var store = CreateStore();
         var definition = new CollectionDefinitionId("race-detail");
-        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260919:Tokyo:1");
+        var resource = new ResourceKey(CollectionResourceType.Race, "JRA", "20260919:Tokyo:1");
         var date = new DateOnly(2026, 9, 19);
         var now = new DateTimeOffset(2026, 9, 20, 8, 0, 0, TimeSpan.Zero);
-        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "facets", false);
+        await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 2, "facets", false);
         var initial = await store.RequestAsync(resource, definition, 2, CollectionReason.Initial, now,
             effectiveDate: date);
         var initialLease = await store.AcquireAsync(initial.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
@@ -2129,9 +2130,9 @@ public sealed class CollectionPlatformStoreTests
     {
         var store = CreateStore();
         var definition = new CollectionDefinitionId("race-detail");
-        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260919:Tokyo:1");
+        var resource = new ResourceKey(CollectionResourceType.Race, "JRA", "20260919:Tokyo:1");
         var now = new DateTimeOffset(2026, 9, 20, 8, 0, 0, TimeSpan.Zero);
-        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 1, "first", false);
+        await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 1, "first", false);
         var initial = await store.RequestAsync(resource, definition, 1, CollectionReason.Initial, now,
             effectiveDate: new DateOnly(2026, 9, 19));
         var initialLease = await store.AcquireAsync(initial.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
@@ -2141,7 +2142,7 @@ public sealed class CollectionPlatformStoreTests
                 new("PersistCard", RaceArtifactKind.Card, CollectionAttemptResult.Succeeded, Persisted: true),
                 new("PersistResult", RaceArtifactKind.Result, CollectionAttemptResult.Succeeded, Persisted: true),
             ])));
-        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "new parser", false);
+        await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 2, "new parser", false);
         var refresh = await store.RequestAsync(resource, definition, 2, CollectionReason.DefinitionChanged,
             now.AddSeconds(2));
         var lease = await store.AcquireAsync(refresh.TaskId!.Value, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
@@ -2175,9 +2176,9 @@ public sealed class CollectionPlatformStoreTests
     {
         var store = CreateStore();
         var definition = new CollectionDefinitionId("race-detail");
-        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260901:Tokyo:1");
+        var resource = new ResourceKey(CollectionResourceType.Race, "JRA", "20260901:Tokyo:1");
         var now = new DateTimeOffset(2026, 9, 20, 8, 0, 0, TimeSpan.Zero);
-        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 1, "first", false);
+        await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 1, "first", false);
         var initial = await store.RequestAsync(resource, definition, 1, CollectionReason.Initial, now,
             effectiveDate: new DateOnly(2026, 9, 1));
         var initialLease = await store.AcquireAsync(initial.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
@@ -2190,7 +2191,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsTrue(await store.CompleteAttemptAsync(initial.TaskId!.Value, initialLease!.LeaseToken,
             now.AddSeconds(1), new(CollectionAttemptResult.Succeeded, StageOutcomes: stages)));
         if (revision > 1)
-            await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, revision, "new parser", false);
+            await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, revision, "new parser", false);
         var refresh = await store.RequestAsync(resource, definition, revision, CollectionReason.ManualRefresh,
             now.AddSeconds(2));
         var lease = await store.AcquireAsync(refresh.TaskId!.Value, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
@@ -2230,7 +2231,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsFalse((await store.GetPipelineStateAsync()).IsPaused);
         if (unavailableUpgrade)
         {
-            await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 3, "third parser", false);
+            await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 3, "third parser", false);
             var next = await store.RequestAsync(resource, definition, 3, CollectionReason.DefinitionChanged, now.AddSeconds(4));
             var nextLease = await store.AcquireAsync(next.TaskId!.Value, 1, now.AddSeconds(4), TimeSpan.FromMinutes(5));
             var nextCompletion = await handler.CollectAsync(nextLease!, CancellationToken.None);
@@ -2252,16 +2253,16 @@ public sealed class CollectionPlatformStoreTests
     {
         var store = CreateStore();
         var definition = new CollectionDefinitionId("race-detail");
-        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260901:Tokyo:1");
+        var resource = new ResourceKey(CollectionResourceType.Race, "JRA", "20260901:Tokyo:1");
         var date = new DateOnly(2026, 9, 1);
         var now = new DateTimeOffset(2026, 9, 20, 8, 0, 0, TimeSpan.Zero);
-        await store.RegisterDefinitionAsync(new("race-card"), "Card", ResourceType.RaceCard, 7, "legacy", false);
-        await store.RegisterDefinitionAsync(new("race-result"), "Result", ResourceType.RaceResult, 7, "legacy", false);
-        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 1, "unified", false);
+        await store.RegisterDefinitionAsync(new("race-card"), "Card", CollectionResourceType.RaceCard, 7, "legacy", false);
+        await store.RegisterDefinitionAsync(new("race-result"), "Result", CollectionResourceType.RaceResult, 7, "legacy", false);
+        await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 1, "unified", false);
         var attributes = new Dictionary<string, string> { ["course"] = "東京", ["number"] = "1" };
         await store.InitializeFromDomainDataAsync([
-            new(new(ResourceType.RaceCard, "JRA", "legacy-card"), new("race-card"), 7, now.AddDays(-10), date, attributes),
-            new(new(ResourceType.RaceResult, "JRA", "legacy-result"), new("race-result"), 7, now.AddDays(-10), date, attributes),
+            new(new(CollectionResourceType.RaceCard, "JRA", "legacy-card"), new("race-card"), 7, now.AddDays(-10), date, attributes),
+            new(new(CollectionResourceType.RaceResult, "JRA", "legacy-result"), new("race-result"), 7, now.AddDays(-10), date, attributes),
         ], dryRun: false);
         if (existingFacet)
         {
@@ -2278,7 +2279,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual(1, card.AppliedRevision, "Legacy extractor revision 7 maps to unified revision 1.");
         Assert.AreEqual(existingFacet ? now.AddMinutes(-1) : now.AddDays(-10), card.LastPersistedAt);
         Assert.AreEqual(0, (await store.MergeLegacyRaceDetailsAsync(true, now.AddSeconds(1))).SourceResources);
-        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "upgrade", false);
+        await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 2, "upgrade", false);
         var refresh = await store.RequestAsync(resource, definition, 2, CollectionReason.DefinitionChanged, now.AddSeconds(2));
         var lease = await store.AcquireAsync(refresh.TaskId!.Value, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
         var results = new FakeJraRaceResultCollectionWorkflow
@@ -2305,12 +2306,12 @@ public sealed class CollectionPlatformStoreTests
         var store = CreateStore();
         var now = new DateTimeOffset(2026, 9, 20, 8, 0, 0, TimeSpan.Zero);
         var date = new DateOnly(2026, 9, 1);
-        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260901:Tokyo:1");
+        var resource = new ResourceKey(CollectionResourceType.Race, "JRA", "20260901:Tokyo:1");
         var definition = new CollectionDefinitionId("race-detail");
-        await store.RegisterDefinitionAsync(new("race-result"), "Result", ResourceType.RaceResult, 7, "legacy", false);
-        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "unified", false);
+        await store.RegisterDefinitionAsync(new("race-result"), "Result", CollectionResourceType.RaceResult, 7, "legacy", false);
+        await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 2, "unified", false);
         await store.InitializeFromDomainDataAsync([
-            new(new(ResourceType.RaceResult, "JRA", "legacy-result"), new("race-result"), 7, now.AddDays(-10), date,
+            new(new(CollectionResourceType.RaceResult, "JRA", "legacy-result"), new("race-result"), 7, now.AddDays(-10), date,
                 new Dictionary<string, string> { ["course"] = "Tokyo", ["number"] = "1" }, IsComplete: legacyComplete),
             new(resource, definition, 2, now.AddDays(-1), date, new Dictionary<string, string>(), IsComplete: unifiedComplete),
         ], dryRun: false);
@@ -2338,19 +2339,19 @@ public sealed class CollectionPlatformStoreTests
         var store = CreateStore();
         var now = new DateTimeOffset(2026, 9, 20, 8, 0, 0, TimeSpan.Zero);
         var date = new DateOnly(2026, 9, 1);
-        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260901:Tokyo:1");
+        var resource = new ResourceKey(CollectionResourceType.Race, "JRA", "20260901:Tokyo:1");
         var definition = new CollectionDefinitionId("race-detail");
-        await store.RegisterDefinitionAsync(new("race-card"), "Card", ResourceType.RaceCard, 7, "legacy", false);
-        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "unified", false);
+        await store.RegisterDefinitionAsync(new("race-card"), "Card", CollectionResourceType.RaceCard, 7, "legacy", false);
+        await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 2, "unified", false);
         await store.InitializeFromDomainDataAsync([
-            new(new(ResourceType.RaceCard, "JRA", "legacy-card"), new("race-card"), 7, now.AddDays(-10), date,
+            new(new(CollectionResourceType.RaceCard, "JRA", "legacy-card"), new("race-card"), 7, now.AddDays(-10), date,
                 new Dictionary<string, string> { ["course"] = "Tokyo", ["number"] = "1" }),
             new(resource, definition, 2, now.AddDays(-1), date, new Dictionary<string, string>()),
         ], dryRun: false);
         await using (var db = new CollectionPlatformDbContext(new DbContextOptionsBuilder<CollectionPlatformDbContext>()
             .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False").Options))
         {
-            var target = await db.Resources.SingleAsync(x => x.Type == ResourceType.Race);
+            var target = await db.Resources.SingleAsync(x => x.Type == CollectionResourceType.Race);
             if (existingFacet)
                 db.RaceArtifactStates.Add(new RaceArtifactStateEntity
                 {
@@ -2389,7 +2390,7 @@ public sealed class CollectionPlatformStoreTests
     private async Task<CollectionPlatformStore> CreateStoreAsync()
     {
         var store = CreateStore();
-        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", ResourceType.Horse, 7,
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", CollectionResourceType.Horse, 7,
             "Initial profile extractor", false);
         return store;
     }
@@ -2398,16 +2399,16 @@ public sealed class CollectionPlatformStoreTests
     public async Task LegacyRaceMigration_MergesResourcesAndQueuesMissingRecentResult()
     {
         var store = CreateStore();
-        await store.RegisterDefinitionAsync(new("race-card"), "Race card", ResourceType.RaceCard, 1, "initial", false);
-        await store.RegisterDefinitionAsync(new("race-result"), "Race result", ResourceType.RaceResult, 1, "initial", false);
-        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, 1, "initial", false);
+        await store.RegisterDefinitionAsync(new("race-card"), "Race card", CollectionResourceType.RaceCard, 1, "initial", false);
+        await store.RegisterDefinitionAsync(new("race-result"), "Race result", CollectionResourceType.RaceResult, 1, "initial", false);
+        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", CollectionResourceType.Race, 1, "initial", false);
         var now = new DateTimeOffset(2026, 9, 14, 1, 0, 0, TimeSpan.Zero);
         var date = new DateOnly(2026, 9, 13);
         var attributes = new Dictionary<string, string> { ["course"] = "中山", ["number"] = "11" };
         await store.InitializeFromDomainDataAsync([
-            new(new(ResourceType.RaceCard, "JRA", "legacy-card"), new("race-card"), 1, now.AddDays(-1),
+            new(new(CollectionResourceType.RaceCard, "JRA", "legacy-card"), new("race-card"), 1, now.AddDays(-1),
                 date, attributes),
-            new(new(ResourceType.RaceResult, "JRA", "legacy-result"), new("race-result"), 1, now.AddDays(-1),
+            new(new(CollectionResourceType.RaceResult, "JRA", "legacy-result"), new("race-result"), 1, now.AddDays(-1),
                 date, attributes, IsComplete: false),
         ], dryRun: false);
 
@@ -2420,12 +2421,12 @@ public sealed class CollectionPlatformStoreTests
         var applied = await store.MergeLegacyRaceDetailsAsync(true, now);
         Assert.IsEmpty(applied.Errors);
         Assert.AreEqual(1, applied.SupplementRequests);
-        var target = new ResourceKey(ResourceType.Race, "JRA", "20260913:Nakayama:11");
+        var target = new ResourceKey(CollectionResourceType.Race, "JRA", "20260913:Nakayama:11");
         var state = await store.GetStateAsync(target, new("race-detail"));
         Assert.IsNotNull(state);
         Assert.AreEqual(CollectionStateStatus.Pending, state.Status);
         Assert.HasCount(1, await store.GetTasksAsync());
-        Assert.IsNull(await store.GetStateAsync(new(ResourceType.RaceCard, "JRA", "legacy-card"), new("race-card")));
+        Assert.IsNull(await store.GetStateAsync(new(CollectionResourceType.RaceCard, "JRA", "legacy-card"), new("race-card")));
 
         var repeated = await store.MergeLegacyRaceDetailsAsync(true, now.AddMinutes(1));
         Assert.AreEqual(0, repeated.SourceResources);
@@ -2436,11 +2437,11 @@ public sealed class CollectionPlatformStoreTests
     public async Task LegacyRaceMigration_CancelsActiveLegacyTaskAndQueuesUnifiedReplacement()
     {
         var store = CreateStore();
-        await store.RegisterDefinitionAsync(new("race-card"), "Race card", ResourceType.RaceCard, 1, "initial", false);
-        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, 1, "initial", false);
+        await store.RegisterDefinitionAsync(new("race-card"), "Race card", CollectionResourceType.RaceCard, 1, "initial", false);
+        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", CollectionResourceType.Race, 1, "initial", false);
         var now = new DateTimeOffset(2026, 9, 14, 1, 0, 0, TimeSpan.Zero);
         var attributes = new Dictionary<string, string> { ["course"] = "中山", ["number"] = "11" };
-        var legacy = await store.RequestAsync(new(ResourceType.RaceCard, "JRA", "legacy-card"),
+        var legacy = await store.RequestAsync(new(CollectionResourceType.RaceCard, "JRA", "legacy-card"),
             new("race-card"), 1, CollectionReason.Initial, now, effectiveDate: new(2026, 9, 13),
             attributes: attributes);
 
@@ -2458,16 +2459,16 @@ public sealed class CollectionPlatformStoreTests
     public async Task Readiness_CountsOnlyActiveRequestsForRequestedRace()
     {
         var store = CreateStore();
-        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse", ResourceType.Horse, 1, "Initial", false);
-        await store.RegisterDefinitionAsync(new("jockey-profile"), "Jockey", ResourceType.Jockey, 1, "Initial", false);
-        await store.RegisterDefinitionAsync(new("trainer-profile"), "Trainer", ResourceType.Trainer, 1, "Initial", false);
+        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse", CollectionResourceType.Horse, 1, "Initial", false);
+        await store.RegisterDefinitionAsync(new("jockey-profile"), "Jockey", CollectionResourceType.Jockey, 1, "Initial", false);
+        await store.RegisterDefinitionAsync(new("trainer-profile"), "Trainer", CollectionResourceType.Trainer, 1, "Initial", false);
         var now = DateTimeOffset.UtcNow;
         var attributes = new Dictionary<string, string> { ["requestedByRaceId"] = "race-1" };
-        var horse = await store.RequestAsync(new(ResourceType.Horse, "JRA", "h1"), new("horse-profile"),
+        var horse = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "h1"), new("horse-profile"),
             1, CollectionReason.Discovery, now, attributes: attributes);
-        await store.RequestAsync(new(ResourceType.Jockey, "JRA", "j1"), new("jockey-profile"),
+        await store.RequestAsync(new(CollectionResourceType.Jockey, "JRA", "j1"), new("jockey-profile"),
             1, CollectionReason.Discovery, now, attributes: attributes);
-        await store.RequestAsync(new(ResourceType.Trainer, "JRA", "t2"), new("trainer-profile"),
+        await store.RequestAsync(new(CollectionResourceType.Trainer, "JRA", "t2"), new("trainer-profile"),
             1, CollectionReason.Discovery, now, attributes: new Dictionary<string, string> { ["requestedByRaceId"] = "race-2" });
 
         var before = await store.GetReadinessAsync("race-1");
@@ -2487,8 +2488,8 @@ public sealed class CollectionPlatformStoreTests
     {
         var store = CreateStore();
         var definition = new CollectionDefinitionId("horse-profile");
-        var resource = new ResourceKey(ResourceType.Horse, "JRA", "history-horse");
-        await store.RegisterDefinitionAsync(definition, "Horse", ResourceType.Horse, 1, "Initial", false);
+        var resource = new ResourceKey(CollectionResourceType.Horse, "JRA", "history-horse");
+        await store.RegisterDefinitionAsync(definition, "Horse", CollectionResourceType.Horse, 1, "Initial", false);
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
         for (var index = 0; index < 30; index++)
             await store.RequestAsync(resource, definition, 1, CollectionReason.ManualRefresh, now.AddSeconds(index));
@@ -2510,8 +2511,8 @@ public sealed class CollectionPlatformStoreTests
     {
         var store = CreateStore();
         var definition = new CollectionDefinitionId("horse-profile");
-        var resource = new ResourceKey(ResourceType.Horse, "JRA", "independent-history-horse");
-        await store.RegisterDefinitionAsync(definition, "Horse", ResourceType.Horse, 1, "Initial", false);
+        var resource = new ResourceKey(CollectionResourceType.Horse, "JRA", "independent-history-horse");
+        await store.RegisterDefinitionAsync(definition, "Horse", CollectionResourceType.Horse, 1, "Initial", false);
         var now = DateTimeOffset.UtcNow.AddMinutes(-10);
         var receipts = new List<CollectionRequestReceipt>();
         for (var index = 0; index < 3; index++)
@@ -2699,7 +2700,7 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var now = DateTimeOffset.UtcNow;
         var firstResource = Horse;
-        var secondResource = new ResourceKey(ResourceType.Horse, "JRA", "H456");
+        var secondResource = new ResourceKey(CollectionResourceType.Horse, "JRA", "H456");
         var ids = new List<Guid>();
         foreach (var resource in new[] { firstResource, secondResource })
         {
@@ -2793,7 +2794,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual(CollectionStateStatus.Unavailable, (await store.GetStateAsync(Horse, HorseProfile))!.Status);
         await Assert.ThrowsExactlyAsync<CollectionResourceSuppressedException>(() =>
             store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ManualRefresh, now.AddMinutes(2)));
-        var canonical = new ResourceKey(ResourceType.Horse, "JRA", "H456");
+        var canonical = new ResourceKey(CollectionResourceType.Horse, "JRA", "H456");
         Assert.IsTrue((await store.RequestAsync(canonical, HorseProfile, 7, CollectionReason.Initial,
             now.AddMinutes(2))).CreatedTask);
     }
@@ -2850,13 +2851,13 @@ public sealed class CollectionPlatformStoreTests
             ClosedSessionFailureThreshold = 3,
             ClosedSessionFailureWindowMinutes = 10,
         }));
-        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", ResourceType.Horse, 7,
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", CollectionResourceType.Horse, 7,
             "Initial profile extractor", false);
         var now = new DateTimeOffset(2026, 9, 19, 10, 0, 0, TimeSpan.Zero);
 
         for (var index = 1; index <= 3; index++)
         {
-            var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", $"CLOSED-{index}"),
+            var receipt = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", $"CLOSED-{index}"),
                 HorseProfile, 7, CollectionReason.Initial, now.AddSeconds(index));
             var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now.AddSeconds(index),
                 TimeSpan.FromMinutes(5));
@@ -2915,7 +2916,7 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var now = DateTimeOffset.UtcNow;
         await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
-        await store.RequestAsync(new(ResourceType.Horse, "JRA", "H456"), HorseProfile, 7,
+        await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "H456"), HorseProfile, 7,
             CollectionReason.Initial, now.AddMilliseconds(1));
         var pending = await store.GetPendingDispatchesAsync(now.AddSeconds(1), 10);
         var firstEnvelope = Guid.NewGuid();
@@ -2968,7 +2969,7 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var now = DateTimeOffset.UtcNow;
         foreach (var id in new[] { "SLOT-1", "SLOT-2", "SLOT-3" })
-            await store.RequestAsync(new(ResourceType.Horse, "JRA", id), HorseProfile, 7,
+            await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", id), HorseProfile, 7,
                 CollectionReason.Initial, now);
         var pending = await store.GetPendingDispatchesAsync(now.AddSeconds(1), 10);
 

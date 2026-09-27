@@ -1,3 +1,4 @@
+using HorseRacingPrediction.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
@@ -172,9 +173,9 @@ public sealed partial class CollectionPlatformStore
     {
         var attributes = JsonSerializer.Deserialize<Dictionary<string, string>>(resource.AttributesJson) ?? [];
         if (resource.EffectiveDate.HasValue
-            && resource.Type is ResourceType.RaceCard or ResourceType.RaceResult or ResourceType.Race)
+            && resource.Type is CollectionResourceType.RaceCard or CollectionResourceType.RaceResult or CollectionResourceType.Race)
             return $"{resource.Provider}|RaceDay|{resource.EffectiveDate:yyyy-MM-dd}|{lane}";
-        if (resource.Type == ResourceType.Horse
+        if (resource.Type == CollectionResourceType.Horse
             && attributes.GetValueOrDefault("weekendPriorityUntil") is { Length: > 0 } weekend)
             return $"{resource.Provider}|WeekendSubjects|{weekend}|{resource.EffectiveDate:yyyy-MM-dd}|{lane}";
         return $"{resource.Provider}|Definition|{definitionId}|{resource.EffectiveDate:yyyy-MM-dd}|{lane}";

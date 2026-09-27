@@ -1,9 +1,10 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra.Models;
-using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
+using HorseRacingPrediction.Scraping.Jra.Pages;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -172,7 +173,7 @@ public sealed class JraIncompleteResultTests
     private static LeasedCollectionTask CreateTask(
         IReadOnlyList<ResourceLocationCandidate> locations,
         IReadOnlyDictionary<string, string>? attributes = null)
-        => new(Guid.NewGuid(), Guid.NewGuid(), new(ResourceType.Race, "JRA", Race.ToString()),
+        => new(Guid.NewGuid(), Guid.NewGuid(), new(CollectionResourceType.Race, "JRA", Race.ToString()),
             new("race-detail"), 1, CollectionReason.ManualRefresh, CollectionLane.Realtime, 100,
             "lease", Now.AddMinutes(5), RaceDate,
             attributes ?? new Dictionary<string, string>

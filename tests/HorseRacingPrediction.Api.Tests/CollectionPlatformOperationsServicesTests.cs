@@ -1,8 +1,9 @@
-using System.Text.Json;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -28,7 +29,7 @@ public sealed class CollectionPlatformOperationsServicesTests
     public async Task DlqReconciler_AuditsWakeWithoutChangingTaskAndDeletesMessage()
     {
         var store = await CreateStoreAsync();
-        var receipt = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
+        var receipt = await store.RequestAsync(new(CollectionResourceType.Horse, "jra", "H1"), new("horse-profile"),
             1, CollectionReason.Initial, DateTimeOffset.UtcNow);
         var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
         var queue = new RecordingQueue(new CollectionPlatformDeadLetterMessage("receipt-1", JsonSerializer.Serialize(
@@ -61,7 +62,7 @@ public sealed class CollectionPlatformOperationsServicesTests
     public async Task DlqReconciler_RetainsLegacyTaskNotificationWithoutChangingTask()
     {
         var store = await CreateStoreAsync();
-        var receipt = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
+        var receipt = await store.RequestAsync(new(CollectionResourceType.Horse, "jra", "H1"), new("horse-profile"),
             1, CollectionReason.Initial, DateTimeOffset.UtcNow);
         var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
         var notification = new CollectionTaskNotification(taskId, 1);
@@ -97,7 +98,7 @@ public sealed class CollectionPlatformOperationsServicesTests
     public async Task DlqReconciler_DeletesRepeatedWakeWithoutCreatingTaskFailure()
     {
         var store = await CreateStoreAsync();
-        var receipt = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
+        var receipt = await store.RequestAsync(new(CollectionResourceType.Horse, "jra", "H1"), new("horse-profile"),
             1, CollectionReason.Initial, DateTimeOffset.UtcNow);
         var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
         var body = JsonSerializer.Serialize(new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "lease"),
@@ -120,7 +121,7 @@ public sealed class CollectionPlatformOperationsServicesTests
     public async Task DlqReconciler_DiscardsLegacyOrInvalidNotificationWithoutChangingTasks()
     {
         var store = await CreateStoreAsync();
-        var receipt = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
+        var receipt = await store.RequestAsync(new(CollectionResourceType.Horse, "jra", "H1"), new("horse-profile"),
             1, CollectionReason.Initial, DateTimeOffset.UtcNow);
         var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
         var queue = new RecordingQueue(
@@ -141,7 +142,7 @@ public sealed class CollectionPlatformOperationsServicesTests
     public async Task DlqReconciler_RetainsLegacyNotificationWithUnknownOrAmbiguousShape()
     {
         var store = await CreateStoreAsync();
-        var receipt = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
+        var receipt = await store.RequestAsync(new(CollectionResourceType.Horse, "jra", "H1"), new("horse-profile"),
             1, CollectionReason.Initial, DateTimeOffset.UtcNow);
         var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
         var queue = new RecordingQueue(
@@ -162,7 +163,7 @@ public sealed class CollectionPlatformOperationsServicesTests
         {
             StateDirectory = _directory
         }));
-        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse,
+        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", CollectionResourceType.Horse,
             1, "initial", false);
         return store;
     }

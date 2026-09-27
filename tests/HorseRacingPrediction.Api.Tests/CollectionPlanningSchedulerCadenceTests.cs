@@ -1,5 +1,6 @@
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Api.Tests;
@@ -27,7 +28,7 @@ public sealed class CollectionPlanningSchedulerCadenceTests
                 StateDirectory = directory,
             });
             var store = new CollectionPlatformStore(options);
-            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
+            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
                 1, "Initial", false);
             var scheduler = new CollectionPlanningScheduler(store);
             await scheduler.StartAsync(CancellationToken.None);

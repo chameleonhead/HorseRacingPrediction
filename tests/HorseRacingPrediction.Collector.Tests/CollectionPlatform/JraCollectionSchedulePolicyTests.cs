@@ -1,4 +1,5 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -11,8 +12,8 @@ public sealed class JraCollectionSchedulePolicyTests
     public void Odds_CloseToRace_IsCriticalAndRepeatsEveryMinute()
     {
         var now = new DateTimeOffset(2026, 9, 12, 15, 25, 0, TimeSpan.FromHours(9));
-        var result = _policy.Evaluate(new(ResourceType.RaceOdds, "JRA", "20260912-TOKYO-11"),
-            State(ResourceType.RaceOdds), now);
+        var result = _policy.Evaluate(new(CollectionResourceType.RaceOdds, "JRA", "20260912-TOKYO-11"),
+            State(CollectionResourceType.RaceOdds), now);
 
         Assert.IsTrue(result.ShouldCollect);
         Assert.AreEqual(CollectionPriority.Critical, result.Priority);
@@ -23,8 +24,8 @@ public sealed class JraCollectionSchedulePolicyTests
     [TestMethod]
     public void CurrentResult_DoesNotRepeat()
     {
-        var state = State(ResourceType.RaceResult) with { Status = CollectionStateStatus.Current };
-        var result = _policy.Evaluate(new(ResourceType.RaceResult, "JRA", "20260912-TOKYO-11"), state,
+        var state = State(CollectionResourceType.RaceResult) with { Status = CollectionStateStatus.Current };
+        var result = _policy.Evaluate(new(CollectionResourceType.RaceResult, "JRA", "20260912-TOKYO-11"), state,
             new DateTimeOffset(2026, 9, 12, 18, 0, 0, TimeSpan.FromHours(9)));
 
         Assert.IsFalse(result.ShouldCollect);
@@ -35,14 +36,14 @@ public sealed class JraCollectionSchedulePolicyTests
     public void RaceWeekCard_IsRealtimeHighPriority()
     {
         var now = new DateTimeOffset(2026, 9, 7, 9, 0, 0, TimeSpan.FromHours(9));
-        var result = _policy.Evaluate(new(ResourceType.RaceCard, "JRA", "20260912-TOKYO-11"),
-            State(ResourceType.RaceCard), now);
+        var result = _policy.Evaluate(new(CollectionResourceType.RaceCard, "JRA", "20260912-TOKYO-11"),
+            State(CollectionResourceType.RaceCard), now);
 
         Assert.IsTrue(result.ShouldCollect);
         Assert.AreEqual(CollectionPriority.High, result.Priority);
         Assert.AreEqual(CollectionLane.Realtime, result.Lane);
     }
 
-    private static CollectionStateSnapshot State(ResourceType type) => new(new(type, "JRA", "id"),
+    private static CollectionStateSnapshot State(CollectionResourceType type) => new(new(type, "JRA", "id"),
         new("test"), 1, 1, null, null, CollectionStateStatus.Pending);
 }

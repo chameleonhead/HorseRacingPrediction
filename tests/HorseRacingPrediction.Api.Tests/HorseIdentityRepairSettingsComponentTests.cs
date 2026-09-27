@@ -1,16 +1,15 @@
-using System.Net;
-using System.Net.Http.Json;
 using Bunit;
-using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Api.Security;
-using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Api.Web.Components.Pages;
+using HorseRacingPrediction.Contracts;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.FluentUI.AspNetCore.Components;
+using System.Net;
+using System.Net.Http.Json;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -323,7 +322,7 @@ public sealed class HorseIdentityRepairSettingsComponentTests
             var path = request.RequestUri?.AbsolutePath ?? string.Empty;
             if (request.Method == HttpMethod.Get && path.EndsWith("subject-name-normalization", StringComparison.Ordinal))
                 return Ok(new SubjectNameNormalizationPage([
-                    new(ResourceType.Trainer, "trainer-1", "村山 明（栗東）", "むらやまあきら", "村山 明", "村山明",
+                    new(CollectionResourceType.Trainer, "trainer-1", "村山 明（栗東）", "むらやまあきら", "村山 明", "村山明",
                         true, true, "Ready", null, [], "manifest-1")], 1, 1, 25));
             if (request.Method == HttpMethod.Post && path.EndsWith("subject-name-normalization/apply", StringComparison.Ordinal))
             {
@@ -331,7 +330,7 @@ public sealed class HorseIdentityRepairSettingsComponentTests
                     cancellationToken: cancellationToken);
                 Applied = body?.Items.Single().ManifestToken == "manifest-1";
                 return Ok(new SubjectNameNormalizationApplyResult(1, 1, 0, 0,
-                    [new(ResourceType.Trainer, "trainer-1", "Applied", "名称を補正しました。")]));
+                    [new(CollectionResourceType.Trainer, "trainer-1", "Applied", "名称を補正しました。")]));
             }
             if (path.EndsWith("subject-identification", StringComparison.Ordinal))
                 return Ok(new SubjectIdentificationRepairPreviewResponse([]));
@@ -390,16 +389,16 @@ public sealed class HorseIdentityRepairSettingsComponentTests
             if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath.EndsWith("subject-identification", StringComparison.Ordinal) == true)
             {
                 var items = missingNameOnly
-                    ? new[] { Subject("owner-missing", ResourceType.Owner, "Blocked", false, null,
+                    ? new[] { Subject("owner-missing", CollectionResourceType.Owner, "Blocked", false, null,
                         "主体名がないため再収集できません。", 4) }
                     : parameterlessOnly
-                    ? new[] { Subject("trainer-1", ResourceType.Trainer, "RetryReady", true, null, null, 3) }
+                    ? new[] { Subject("trainer-1", CollectionResourceType.Trainer, "RetryReady", true, null, null, 3) }
                     : new[]
                     {
-                        Subject("horse-1", ResourceType.Horse, "RetryReady", true, "https://www.jra.go.jp/JRADB/accessU.html?CNAME=horse-identity", null, 1),
-                        Subject("jockey-1", ResourceType.Jockey, "RetryReady", true, null, null, 2),
-                        Subject("trainer-1", ResourceType.Trainer, "RetryReady", true, null, null, 3),
-                        Subject("owner-1", ResourceType.Owner, "RetryReady", true, null, null, 4)
+                        Subject("horse-1", CollectionResourceType.Horse, "RetryReady", true, "https://www.jra.go.jp/JRADB/accessU.html?CNAME=horse-identity", null, 1),
+                        Subject("jockey-1", CollectionResourceType.Jockey, "RetryReady", true, null, null, 2),
+                        Subject("trainer-1", CollectionResourceType.Trainer, "RetryReady", true, null, null, 3),
+                        Subject("owner-1", CollectionResourceType.Owner, "RetryReady", true, null, null, 4)
                     };
                 return Ok(new SubjectIdentificationRepairPreviewResponse(
                     items.Where(x => !Dismissed.Contains(x.NotificationId)).ToArray()));
@@ -422,7 +421,7 @@ public sealed class HorseIdentityRepairSettingsComponentTests
             return Ok(new HorseIdentityRepairPreviewResponse("20260913-jra-horse-identity-repair", []));
         }
 
-        private static SubjectIdentificationRepairCandidateResponse Subject(string id, ResourceType type,
+        private static SubjectIdentificationRepairCandidateResponse Subject(string id, CollectionResourceType type,
             string evaluation, bool safe, string? suggested, string? blocked, int ordinal) =>
             new(Guid.Parse($"00000000-0000-0000-0000-{ordinal:000000000000}"), Guid.NewGuid(), type, id,
                 $"{type.ToString().ToLowerInvariant()}-profile", "識別できませんでした", DateTimeOffset.UtcNow,

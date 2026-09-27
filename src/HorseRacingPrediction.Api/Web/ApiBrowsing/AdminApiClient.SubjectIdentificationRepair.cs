@@ -1,5 +1,5 @@
 using System.Net.Http.Json;
-using HorseRacingPrediction.Api.Contracts;
+using HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.Api.Web.ApiBrowsing;
 

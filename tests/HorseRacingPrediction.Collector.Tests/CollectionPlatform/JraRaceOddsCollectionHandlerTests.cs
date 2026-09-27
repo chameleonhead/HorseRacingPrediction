@@ -1,6 +1,7 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using Microsoft.Extensions.Options;
@@ -67,7 +68,7 @@ public sealed class JraRaceOddsCollectionHandlerTests
     }
 
     private static LeasedCollectionTask CreateOddsTask() => new(Guid.NewGuid(), Guid.NewGuid(),
-        new(ResourceType.RaceOdds, "JRA", "20260912:Tokyo:11"), new("race-odds"), 1,
+        new(CollectionResourceType.RaceOdds, "JRA", "20260912:Tokyo:11"), new("race-odds"), 1,
         CollectionReason.Discovery, CollectionLane.Realtime, 90, "lease",
         DateTimeOffset.UtcNow.AddMinutes(5), new DateOnly(2026, 9, 12),
         new Dictionary<string, string> { ["course"] = "東京", ["number"] = "11" });
@@ -109,7 +110,7 @@ public sealed class JraRaceOddsCollectionHandlerTests
         var handler = new JraRaceOddsCollectionHandler(sessions, sink,
             Options.Create(new RaceOddsCollectionOptions { EarlyIntervalMinutes = 7 }));
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.RaceOdds, "JRA", "20260912:Tokyo:11"), new("race-odds"), 1,
+            new(CollectionResourceType.RaceOdds, "JRA", "20260912:Tokyo:11"), new("race-odds"), 1,
             CollectionReason.Discovery, CollectionLane.Realtime, 90, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date,
             new Dictionary<string, string> { ["course"] = "東京", ["number"] = "11", ["startTime"] = "15:00" });

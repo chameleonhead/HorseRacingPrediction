@@ -1,10 +1,11 @@
-using System.Net;
-using System.Net.Http.Json;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using System.Net;
+using System.Net.Http.Json;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -93,7 +94,7 @@ public sealed class CollectionOperationsEndpointTests
             using var client = app.GetTestClient();
 
             using var response = await client.PostAsJsonAsync("/api/admin/collection/requests",
-                new CreateCollectionRequest(ResourceType.Horse, "JRA", "H123", "horse-profile", 1,
+                new CreateCollectionRequest(CollectionResourceType.Horse, "JRA", "H123", "horse-profile", 1,
                     CollectionReason.ManualRefresh, ExplicitUrl: "file:///JRADB/accessS.html"));
 
             Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
@@ -109,14 +110,14 @@ public sealed class CollectionOperationsEndpointTests
         try
         {
             var store = await CreateStoreAsync(directory);
-            var resource = new ResourceKey(ResourceType.Horse, "JRA", "merged-source");
+            var resource = new ResourceKey(CollectionResourceType.Horse, "JRA", "merged-source");
             await store.SuppressResourceAsync(resource, "Merged horse was deleted", "repair-1",
                 DateTimeOffset.UtcNow);
             await using var app = await CreateApplicationAsync(store);
             using var client = app.GetTestClient();
 
             using var response = await client.PostAsJsonAsync("/api/admin/collection/requests",
-                new CreateCollectionRequest(ResourceType.Horse, "JRA", "merged-source", "horse-profile", 1,
+                new CreateCollectionRequest(CollectionResourceType.Horse, "JRA", "merged-source", "horse-profile", 1,
                     CollectionReason.ManualRefresh));
 
             Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
@@ -133,7 +134,7 @@ public sealed class CollectionOperationsEndpointTests
         {
             var store = await CreateStoreAsync(directory);
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
-            var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", "published"),
+            var receipt = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "published"),
                 new("horse-profile"), 1, CollectionReason.Initial, now);
             var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
             var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
@@ -164,9 +165,9 @@ public sealed class CollectionOperationsEndpointTests
         {
             var store = await CreateStoreAsync(directory);
             var now = DateTimeOffset.UtcNow;
-            await store.RequestAsync(new(ResourceType.Horse, "JRA", "H001"), new("horse-profile"), 1,
+            await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "H001"), new("horse-profile"), 1,
                 CollectionReason.Initial, now);
-            await store.RequestAsync(new(ResourceType.Horse, "JRA", "H002"), new("horse-profile"), 1,
+            await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "H002"), new("horse-profile"), 1,
                 CollectionReason.Initial, now);
             await using var app = await CreateApplicationAsync(store);
             using var client = app.GetTestClient();
@@ -190,9 +191,9 @@ public sealed class CollectionOperationsEndpointTests
         {
             var store = await CreateStoreAsync(directory);
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
-            await store.RequestAsync(new(ResourceType.Horse, "JRA", "H001"), new("horse-profile"), 1,
+            await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "H001"), new("horse-profile"), 1,
                 CollectionReason.Initial, now, CollectionLane.Background, 10);
-            await store.RequestAsync(new(ResourceType.Horse, "JRA", "H002"), new("horse-profile"), 1,
+            await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "H002"), new("horse-profile"), 1,
                 CollectionReason.Initial, now.AddSeconds(1), CollectionLane.Normal, 50);
             await using var app = await CreateApplicationAsync(store);
             using var client = app.GetTestClient();
@@ -220,7 +221,7 @@ public sealed class CollectionOperationsEndpointTests
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
             foreach (var id in new[] { "H001", "H002" })
             {
-                var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", id),
+                var receipt = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", id),
                     new("horse-profile"), 1, CollectionReason.Initial, now,
                     explicitUrl: new Uri($"https://explicit.example.test/{id}"));
                 var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
@@ -258,7 +259,7 @@ public sealed class CollectionOperationsEndpointTests
             var now = DateTimeOffset.UtcNow.AddMinutes(-2);
             foreach (var id in new[] { "H001", "H002", "OTHER" })
             {
-                var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", id),
+                var receipt = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", id),
                     new("horse-profile"), 1, CollectionReason.Initial, now,
                     explicitUrl: new Uri($"https://explicit.example.test/{id}"));
                 var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
@@ -328,7 +329,7 @@ public sealed class CollectionOperationsEndpointTests
         try
         {
             var store = await CreateStoreAsync(directory);
-            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race, 1, "initial", false);
+            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race, 1, "initial", false);
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
             var batch = await store.CreateOrResumeBackfillBatchAsync("2026-09", "JRA", new(2026, 9, 1), new(2026, 9, 1), now);
             var task = (await store.GetTasksAsync()).Single(x => x.Resource.Id == "backfill:20260901");
@@ -356,7 +357,7 @@ public sealed class CollectionOperationsEndpointTests
         try
         {
             var store = await CreateStoreAsync(directory);
-            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
+            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
                 1, "initial", false);
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
             await store.CreateOrResumeBackfillBatchAsync("retryable", "JRA",
@@ -392,7 +393,7 @@ public sealed class CollectionOperationsEndpointTests
         try
         {
             var store = await CreateStoreAsync(directory);
-            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
+            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
                 1, "initial", false);
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
             await store.CreateOrResumeBackfillBatchAsync("complete", "JRA",
@@ -423,7 +424,7 @@ public sealed class CollectionOperationsEndpointTests
         try
         {
             var store = await CreateStoreAsync(directory);
-            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
+            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
                 1, "initial", false);
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
             await store.CreateOrResumeBackfillBatchAsync("large", "JRA",
@@ -458,9 +459,9 @@ public sealed class CollectionOperationsEndpointTests
     {
         var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
         { StateDirectory = directory }));
-        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse", ResourceType.Horse,
+        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse", CollectionResourceType.Horse,
             1, "initial", false);
-        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
             1, "initial", false);
         return store;
     }

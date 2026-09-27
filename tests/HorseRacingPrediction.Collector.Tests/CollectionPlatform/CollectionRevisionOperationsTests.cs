@@ -1,4 +1,5 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
@@ -11,9 +12,9 @@ public sealed class CollectionRevisionOperationsTests
     {
         using var directory = new TemporaryDirectory();
         var store = await CreateStoreAsync(directory.Path);
-        var oldJra = new ResourceKey(ResourceType.Horse, "JRA", "same");
-        var oldOther = new ResourceKey(ResourceType.Horse, "NAR", "same");
-        var current = new ResourceKey(ResourceType.Horse, "JRA", "current");
+        var oldJra = new ResourceKey(CollectionResourceType.Horse, "JRA", "same");
+        var oldOther = new ResourceKey(CollectionResourceType.Horse, "NAR", "same");
+        var current = new ResourceKey(CollectionResourceType.Horse, "JRA", "current");
         await SeedCurrentAsync(store, oldJra, new(2009, 1, 1), "legacy");
         await SeedCurrentAsync(store, oldOther, new(2009, 1, 1), "current");
         await SeedCurrentAsync(store, current, new(2020, 1, 1), "current");
@@ -42,9 +43,9 @@ public sealed class CollectionRevisionOperationsTests
     {
         using var directory = new TemporaryDirectory();
         var store = await CreateStoreAsync(directory.Path);
-        var affectedSuccess = new ResourceKey(ResourceType.Horse, "JRA", "affected-1");
-        var affectedFailure = new ResourceKey(ResourceType.Horse, "JRA", "affected-2");
-        var unaffected = new ResourceKey(ResourceType.Horse, "JRA", "unaffected");
+        var affectedSuccess = new ResourceKey(CollectionResourceType.Horse, "JRA", "affected-1");
+        var affectedFailure = new ResourceKey(CollectionResourceType.Horse, "JRA", "affected-2");
+        var unaffected = new ResourceKey(CollectionResourceType.Horse, "JRA", "unaffected");
         foreach (var resource in new[] { affectedSuccess, affectedFailure, unaffected })
             await SeedCurrentAsync(store, resource, new(2020, 1, 1), "current");
         var impact = new RevisionImpact(RevisionImpactScopeType.SpecificResources,
@@ -79,7 +80,7 @@ public sealed class CollectionRevisionOperationsTests
     {
         using var directory = new TemporaryDirectory();
         var store = await CreateStoreAsync(directory.Path);
-        var resource = new ResourceKey(ResourceType.Horse, "JRA", "running-old-revision");
+        var resource = new ResourceKey(CollectionResourceType.Horse, "JRA", "running-old-revision");
         var old = await store.RequestAsync(resource, Definition, 7, CollectionReason.Initial, Now);
         var oldLease = await store.AcquireAsync(old.TaskId!.Value, 1, Now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(oldLease);
@@ -102,7 +103,7 @@ public sealed class CollectionRevisionOperationsTests
     private static async Task<CollectionPlatformStore> CreateStoreAsync(string path)
     {
         var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions { StateDirectory = path }));
-        await store.RegisterDefinitionAsync(Definition, "Horse profile", ResourceType.Horse, 7, "baseline", false);
+        await store.RegisterDefinitionAsync(Definition, "Horse profile", CollectionResourceType.Horse, 7, "baseline", false);
         return store;
     }
 

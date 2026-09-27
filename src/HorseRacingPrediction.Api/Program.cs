@@ -11,16 +11,17 @@ using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Domain.Races;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Contracts.Time;
+using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.MachineLearning;
 using HorseRacingPrediction.PredictionScheduling;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.FluentUI.AspNetCore.Components;
 using Microsoft.Data.Sqlite;
+using Microsoft.FluentUI.AspNetCore.Components;
 using Microsoft.OpenApi;
 using System.Net;
 
@@ -217,10 +218,10 @@ builder.Services.AddEventFlow(options =>
 var app = builder.Build();
 
 var collectionPlatform = app.Services.GetRequiredService<CollectionPlatformStore>();
-await collectionPlatform.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race, 1, "Initial", false);
-await collectionPlatform.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
+await collectionPlatform.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race, 1, "Initial", false);
+await collectionPlatform.RegisterDefinitionAsync(new("race-detail"), "Race detail", CollectionResourceType.Race, HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
     "Race resource artifact state machine", false);
-await collectionPlatform.RegisterDefinitionAsync(new("race-odds"), "Race odds", ResourceType.RaceOdds, 1, "Initial", false);
+await collectionPlatform.RegisterDefinitionAsync(new("race-odds"), "Race odds", CollectionResourceType.RaceOdds, 1, "Initial", false);
 await SubjectCollectionDefinitions.RegisterAsync(collectionPlatform);
 
 await app.Services.GetRequiredService<SqliteDatabaseMigrator>().MigrateAsync();

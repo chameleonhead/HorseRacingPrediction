@@ -1,11 +1,12 @@
-using System.Net;
-using System.Net.Http.Json;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using System.Net;
+using System.Net.Http.Json;
 using System.Text;
 
 namespace HorseRacingPrediction.Api.Tests;
@@ -23,7 +24,7 @@ public sealed class JraExplicitUrlCollectionTests
             "https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1006202604011120260905/2F");
 
         Assert.IsTrue(result.Identified);
-        Assert.AreEqual(new ResourceKey(ResourceType.Race, "JRA", "20260905:Nakayama:11"), result.Resource);
+        Assert.AreEqual(new ResourceKey(CollectionResourceType.Race, "JRA", "20260905:Nakayama:11"), result.Resource);
         Assert.AreEqual(new CollectionDefinitionId("race-detail"), result.Definition);
         Assert.AreEqual(new DateOnly(2026, 9, 5), result.EffectiveDate);
         Assert.AreEqual("中山", result.Attributes["course"]);
@@ -84,10 +85,10 @@ public sealed class JraExplicitUrlCollectionTests
     }
 
     [TestMethod]
-    [DataRow("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1001202604010120240229/2F", ResourceType.Race)]
-    [DataRow("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1010202604011220261231/2F", ResourceType.Race)]
-    [DataRow("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde1006202604010120260101/25", ResourceType.Race)]
-    public void Resolve_ValidBoundaryInput_IsIdentified(string url, ResourceType expectedType)
+    [DataRow("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1001202604010120240229/2F", CollectionResourceType.Race)]
+    [DataRow("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1010202604011220261231/2F", CollectionResourceType.Race)]
+    [DataRow("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde1006202604010120260101/25", CollectionResourceType.Race)]
+    public void Resolve_ValidBoundaryInput_IsIdentified(string url, CollectionResourceType expectedType)
     {
         var result = JraExplicitUrlResolver.Resolve(url);
 
@@ -102,7 +103,7 @@ public sealed class JraExplicitUrlCollectionTests
             "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde1006202604020520260906/25");
 
         Assert.IsTrue(result.Identified);
-        Assert.AreEqual(new ResourceKey(ResourceType.Race, "JRA", "20260906:Nakayama:5"), result.Resource);
+        Assert.AreEqual(new ResourceKey(CollectionResourceType.Race, "JRA", "20260906:Nakayama:5"), result.Resource);
         Assert.AreEqual(new CollectionDefinitionId("race-detail"), result.Definition);
     }
 
@@ -193,9 +194,9 @@ public sealed class JraExplicitUrlCollectionTests
         var directory = Path.Combine(Path.GetTempPath(), $"explicit-url-api-{Guid.NewGuid():N}");
         var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
         { StateDirectory = directory }));
-        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race,
+        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", CollectionResourceType.Race,
             1, "initial", false);
-        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race,
+        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", CollectionResourceType.Race,
             2, "current", false);
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();

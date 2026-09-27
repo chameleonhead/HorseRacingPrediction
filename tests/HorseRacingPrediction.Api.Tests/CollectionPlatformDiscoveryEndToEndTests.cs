@@ -1,8 +1,7 @@
-using System.Net.Http.Json;
-using System.Text.Json;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
@@ -11,9 +10,11 @@ using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
 using HorseRacingPrediction.Scraping.Jra.Workflow;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using Microsoft.Extensions.DependencyInjection;
+using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -31,11 +32,11 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             {
                 StateDirectory = directory,
             }));
-            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
+            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
                 1, "initial", false);
-            await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race,
+            await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", CollectionResourceType.Race,
                 HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail, "artifact state machine", false);
-            await store.RegisterDefinitionAsync(new("race-odds"), "Race odds", ResourceType.RaceOdds,
+            await store.RegisterDefinitionAsync(new("race-odds"), "Race odds", CollectionResourceType.RaceOdds,
                 1, "initial", false);
 
             var builder = WebApplication.CreateBuilder();
@@ -50,7 +51,7 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             var date = new DateOnly(2026, 9, 12);
             using var createResponse = await client.PostAsJsonAsync("api/admin/collection/requests", new
             {
-                ResourceType = ResourceType.Race,
+                ResourceType = CollectionResourceType.Race,
                 Provider = "JRA",
                 ResourceId = $"discovery:{date:yyyyMMdd}",
                 DefinitionId = "race-discovery",
@@ -108,7 +109,7 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
 
             using var rediscoveryResponse = await client.PostAsJsonAsync("api/admin/collection/requests", new
             {
-                ResourceType = ResourceType.Race,
+                ResourceType = CollectionResourceType.Race,
                 Provider = "JRA",
                 ResourceId = detail.Resource.Id,
                 DefinitionId = "race-detail",
@@ -140,7 +141,7 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
         {
             var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
             { StateDirectory = directory }));
-            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
+            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
                 1, "initial", false);
             var builder = WebApplication.CreateBuilder();
             builder.WebHost.UseTestServer();
@@ -155,7 +156,7 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             var future = new DateOnly(2026, 9, 19);
             using var createResponse = await client.PostAsJsonAsync("api/admin/collection/requests", new
             {
-                ResourceType = ResourceType.Race,
+                ResourceType = CollectionResourceType.Race,
                 Provider = "JRA",
                 ResourceId = $"discovery:{today:yyyyMMdd}",
                 DefinitionId = "race-discovery",

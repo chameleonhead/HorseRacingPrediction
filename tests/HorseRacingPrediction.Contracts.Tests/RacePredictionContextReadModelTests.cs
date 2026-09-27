@@ -8,7 +8,7 @@ public sealed class RacePredictionContextReadModelTests
     [TestMethod]
     public void LatestWeather_NoObservations_ReturnsNull()
     {
-        var model = new RacePredictionContextReadModel();
+        var model = new RacePredictionContextDto();
 
         Assert.IsNull(model.LatestWeather);
     }
@@ -21,7 +21,7 @@ public sealed class RacePredictionContextReadModelTests
         var newer = new WeatherObservationSnapshot(
             new DateTimeOffset(2026, 5, 1, 11, 0, 0, TimeSpan.Zero), "cloudy", "曇り", 18m, 60m, "N", 3m);
 
-        var model = new RacePredictionContextReadModel
+        var model = new RacePredictionContextDto
         {
             WeatherObservations = [older, newer],
         };
@@ -32,7 +32,7 @@ public sealed class RacePredictionContextReadModelTests
     [TestMethod]
     public void LatestTrackCondition_NoObservations_ReturnsNull()
     {
-        var model = new RacePredictionContextReadModel();
+        var model = new RacePredictionContextDto();
 
         Assert.IsNull(model.LatestTrackCondition);
     }
@@ -45,7 +45,7 @@ public sealed class RacePredictionContextReadModelTests
         var newer = new TrackConditionSnapshot(
             new DateTimeOffset(2026, 5, 1, 11, 0, 0, TimeSpan.Zero), "稍重", "稍重", "小雨");
 
-        var model = new RacePredictionContextReadModel
+        var model = new RacePredictionContextDto
         {
             TrackConditionObservations = [older, newer],
         };

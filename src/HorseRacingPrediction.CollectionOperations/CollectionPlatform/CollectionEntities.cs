@@ -1,9 +1,11 @@
+using HorseRacingPrediction.Contracts;
+
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 public sealed class CollectionResourceEntity
 {
     public long ResourcePk { get; set; }
-    public ResourceType Type { get; set; }
+    public CollectionResourceType Type { get; set; }
     public string Provider { get; set; } = string.Empty;
     public string ResourceId { get; set; } = string.Empty;
     public DateOnly? EffectiveDate { get; set; }
@@ -13,7 +15,7 @@ public sealed class CollectionResourceEntity
 
 public sealed class CollectionResourceSuppressionEntity
 {
-    public ResourceType Type { get; set; }
+    public CollectionResourceType Type { get; set; }
     public string Provider { get; set; } = string.Empty;
     public string ResourceId { get; set; } = string.Empty;
     public string Reason { get; set; } = string.Empty;
@@ -25,7 +27,7 @@ public sealed class CollectionDefinitionEntity
 {
     public string DefinitionId { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
-    public ResourceType ResourceType { get; set; }
+    public CollectionResourceType ResourceType { get; set; }
     public int CurrentRevision { get; set; }
     public bool Enabled { get; set; }
 }

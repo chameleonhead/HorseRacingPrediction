@@ -1,13 +1,12 @@
+using EventFlow.EntityFramework;
+using EventFlow.EntityFramework.EventStores;
+using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Contracts;
+using HorseRacingPrediction.Infrastructure.Persistence;
+using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using HorseRacingPrediction.Api.Contracts;
-using HorseRacingPrediction.ApiClient;
-using EventFlow.EntityFramework;
-using EventFlow.EntityFramework.EventStores;
-using HorseRacingPrediction.Infrastructure.Persistence;
-using Microsoft.Extensions.DependencyInjection;
-using HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -225,7 +224,7 @@ public class HorseEndpointsTests
         var response = await _client.GetAsync($"/api/horses/{horseId}/race-history");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        var history = await response.Content.ReadFromJsonAsync<HorseRaceHistoryReadModel>(JsonOptions);
+        var history = await response.Content.ReadFromJsonAsync<HorseRaceHistoryDto>(JsonOptions);
         Assert.IsNotNull(history);
         Assert.AreEqual(horseId, history.HorseId);
         Assert.AreEqual(1, history.Entries.Count);

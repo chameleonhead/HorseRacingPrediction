@@ -3,7 +3,7 @@ using EventFlow.Commands;
 using EventFlow.EntityFramework;
 using EventFlow.Queries;
 using ApiContracts = HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.Api.Contracts;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Commands.Horses;
@@ -567,7 +567,7 @@ public static partial class EndpointExtensions
                     request.DeclaredWeight,
                     request.DeclaredWeightDiff,
                     request.RunningStyleCode,
-                    request.OwnerName, (RaceEntryParticipationStatus?)request.ParticipationStatus);
+                    request.OwnerName, (Domain.Races.RaceEntryParticipationStatus?)request.ParticipationStatus);
 
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                 if (!result.IsSuccess) return Results.BadRequest(new[] { "Command execution failed." });
@@ -1231,7 +1231,7 @@ public static partial class EndpointExtensions
             .AddEndpointFilter<RacePredictionReadEndpointFilter>()
             .WithName("GetRacePredictionContext")
             .WithTags("Race API")
-            .Produces<ApiContracts.RacePredictionContextReadModel>(StatusCodes.Status200OK)
+            .Produces<ApiContracts.RacePredictionContextDto>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/api/races/{raceId}/comparison",
@@ -1417,7 +1417,7 @@ public static partial class EndpointExtensions
             })
             .WithName("GetHorseProfile")
             .WithTags("Horse API")
-            .Produces<ApiContracts.HorseReadModel>(StatusCodes.Status200OK)
+            .Produces<ApiContracts.HorseReadDto>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/api/horses",
@@ -1512,7 +1512,7 @@ public static partial class EndpointExtensions
             .AddEndpointFilter<RacePredictionReadEndpointFilter>()
             .WithName("GetHorseRaceHistory")
             .WithTags("Horse API")
-            .Produces<ApiContracts.HorseRaceHistoryReadModel>(StatusCodes.Status200OK)
+            .Produces<ApiContracts.HorseRaceHistoryDto>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/api/horses/{horseId}/weight-history",
@@ -1567,7 +1567,7 @@ public static partial class EndpointExtensions
             .AddEndpointFilter<RacePredictionReadEndpointFilter>()
             .WithName("GetJockeyRaceHistory")
             .WithTags("Jockey API")
-            .Produces<ApiContracts.JockeyRaceHistoryReadModel>(StatusCodes.Status200OK)
+            .Produces<ApiContracts.JockeyRaceHistoryDto>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/api/jockeys/{jockeyId}",
@@ -1584,7 +1584,7 @@ public static partial class EndpointExtensions
             })
             .WithName("GetJockeyProfile")
             .WithTags("Jockey API")
-            .Produces<ApiContracts.JockeyReadModel>(StatusCodes.Status200OK)
+            .Produces<ApiContracts.JockeyDto>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/api/jockeys/{jockeyId}/participations",
@@ -2359,7 +2359,7 @@ public static partial class EndpointExtensions
             _ => null
         };
 
-    private static ApiContracts.RacePredictionContextReadModel ToAgentRacePredictionContext(HorseRacingPrediction.Application.Queries.ReadModels.RacePredictionContextReadModel model)
+    private static ApiContracts.RacePredictionContextDto ToAgentRacePredictionContext(HorseRacingPrediction.Application.Queries.ReadModels.RacePredictionContextReadModel model)
         => new()
         {
             RaceId = model.RaceId,
@@ -2618,7 +2618,7 @@ public static partial class EndpointExtensions
     private static string CreateOwnerId(string normalizedName)
         => OwnerIdentityContract.CreateId(normalizedName);
 
-    private static ApiContracts.HorseReadModel ToAgentHorse(HorseRacingPrediction.Application.Queries.ReadModels.HorseReadModel model)
+    private static ApiContracts.HorseReadDto ToAgentHorse(HorseRacingPrediction.Application.Queries.ReadModels.HorseReadModel model)
         => new()
         {
             HorseId = model.HorseId,
@@ -2635,7 +2635,7 @@ public static partial class EndpointExtensions
             Aliases = model.Aliases.Select(x => new ApiContracts.HorseAliasEntry(x.AliasType, x.AliasValue, x.SourceName, x.IsPrimary)).ToList()
         };
 
-    private static ApiContracts.JockeyReadModel ToAgentJockey(HorseRacingPrediction.Application.Queries.ReadModels.JockeyReadModel model)
+    private static ApiContracts.JockeyDto ToAgentJockey(HorseRacingPrediction.Application.Queries.ReadModels.JockeyReadModel model)
         => new()
         {
             JockeyId = model.JockeyId,
@@ -2645,14 +2645,14 @@ public static partial class EndpointExtensions
             Aliases = model.Aliases.Select(x => new ApiContracts.JockeyAliasEntry(x.AliasType, x.AliasValue, x.SourceName, x.IsPrimary)).ToList()
         };
 
-    private static ApiContracts.HorseRaceHistoryReadModel ToAgentHorseRaceHistory(HorseRacingPrediction.Application.Queries.ReadModels.HorseRaceHistoryReadModel model)
+    private static ApiContracts.HorseRaceHistoryDto ToAgentHorseRaceHistory(HorseRacingPrediction.Application.Queries.ReadModels.HorseRaceHistoryReadModel model)
         => new()
         {
             HorseId = model.HorseId,
             Entries = model.Entries.Select(x => new ApiContracts.HorseRaceHistoryEntry(x.RaceId, x.EntryId, x.RaceDate, x.RacecourseCode, x.SurfaceCode, x.DistanceMeters, x.DirectionCode, x.GradeCode, x.GateNumber, x.AssignedWeight, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode, x.JockeyId, x.TrainerId, x.FinishPosition, x.LastThreeFurlongTime, x.CornerPositions, x.PrizeMoney)).ToList()
         };
 
-    private static ApiContracts.JockeyRaceHistoryReadModel ToAgentJockeyRaceHistory(HorseRacingPrediction.Application.Queries.ReadModels.JockeyRaceHistoryReadModel model)
+    private static ApiContracts.JockeyRaceHistoryDto ToAgentJockeyRaceHistory(HorseRacingPrediction.Application.Queries.ReadModels.JockeyRaceHistoryReadModel model)
         => new()
         {
             JockeyId = model.JockeyId,

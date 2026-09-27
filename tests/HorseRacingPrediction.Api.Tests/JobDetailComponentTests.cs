@@ -1,13 +1,14 @@
 using Bunit;
-using System.Net.Http.Json;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Api.Web.Components.Pages;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.FluentUI.AspNetCore.Components;
+using System.Net.Http.Json;
 using BatchDetailPage = HorseRacingPrediction.Api.Web.Components.Pages.CollectionExecutionBatchDetail;
 
 namespace HorseRacingPrediction.Api.Tests;
@@ -277,14 +278,14 @@ public sealed class JobDetailComponentTests
 
     private static IRenderedComponent<JobDetail> RenderDetail(BunitContext context) =>
         context.Render<JobDetail>(parameters => parameters
-            .Add(x => x.ResourceTypeName, "Horse")
+            .Add(x => x.CollectionResourceTypeName, "Horse")
             .Add(x => x.Provider, "jra")
             .Add(x => x.ResourceId, "H001")
             .Add(x => x.DefinitionId, "horse-profile"));
 
     private sealed class JobDetailHandler : HttpMessageHandler
     {
-        private static readonly ResourceKey Resource = new(ResourceType.Horse, "JRA", "H001");
+        private static readonly ResourceKey Resource = new(CollectionResourceType.Horse, "JRA", "H001");
         private static readonly CollectionDefinitionId Definition = new("horse-profile");
         private static readonly Guid ActiveTaskId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         private static readonly Guid ReceiptTaskId = Guid.Parse("22222222-2222-2222-2222-222222222222");

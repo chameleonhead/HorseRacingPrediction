@@ -1,10 +1,9 @@
-using System.Net;
-using System.Net.Http.Json;
-using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.DependencyInjection;
+using System.Net;
+using System.Net.Http.Json;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -60,14 +59,14 @@ public sealed class SharedCollectionIdentityTests
         Assert.IsNotNull(saved);
         Assert.IsTrue(saved.CorePersisted, string.Join(";", saved.Errors));
         var now = DateTimeOffset.UtcNow;
-        var source = new ResourceKey(ResourceType.Owner, "JRA", oldId);
+        var source = new ResourceKey(CollectionResourceType.Owner, "JRA", oldId);
         var original = await store.RequestAsync(source, definition, 1, CollectionReason.Discovery, now,
             attributes: new Dictionary<string, string> { ["name"] = name, ["requestedByRaceId"] = saved.RaceId });
         var lease = await store.AcquireAsync(original.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
         Assert.IsTrue(await store.CompleteAttemptAsync(lease.TaskId, lease.LeaseToken, DateTimeOffset.UtcNow,
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "OwnerNotRegistered")));
-        var unrelated = await store.RequestAsync(new(ResourceType.Owner, "JRA", "owner-" + Guid.NewGuid()), definition, 1,
+        var unrelated = await store.RequestAsync(new(CollectionResourceType.Owner, "JRA", "owner-" + Guid.NewGuid()), definition, 1,
             CollectionReason.Discovery, now, attributes: new Dictionary<string, string> { ["name"] = name, ["requestedByRaceId"] = saved.RaceId });
         var unrelatedLease = await store.AcquireAsync(unrelated.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(unrelatedLease);
@@ -121,12 +120,12 @@ public sealed class SharedCollectionIdentityTests
             Assert.AreEqual(id, (await resolved.Content.ReadFromJsonAsync<ResolvedIdentity>())!.Id);
         }
         var store = app.Services.GetRequiredService<CollectionPlatformStore>();
-        await store.RegisterDefinitionAsync(new("race-detail"), "Race", ResourceType.Race, CollectionDefinitionRevisions.RaceDetail, "test", true);
+        await store.RegisterDefinitionAsync(new("race-detail"), "Race", CollectionResourceType.Race, CollectionDefinitionRevisions.RaceDetail, "test", true);
         var now = DateTimeOffset.UtcNow;
-        await store.RegisterDefinitionAsync(new("race-discovery"), "Discovery", ResourceType.Race, 1, "test", false);
-        await store.RequestAsync(new(ResourceType.Race, "JRA", "discovery:2037092700"), new("race-discovery"), 1, CollectionReason.Initial, now);
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Discovery", CollectionResourceType.Race, 1, "test", false);
+        await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "discovery:2037092700"), new("race-discovery"), 1, CollectionReason.Initial, now);
         Assert.IsFalse(await store.HasActiveRaceMutationAsync(id));
-        var receipt = await store.RequestAsync(new(ResourceType.Race, "JRA", "20370927:Tokyo:1"), new("race-detail"),
+        var receipt = await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "20370927:Tokyo:1"), new("race-detail"),
             CollectionDefinitionRevisions.RaceDetail, CollectionReason.Initial, now);
         Assert.IsTrue(await store.HasActiveRaceMutationAsync(id));
         var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));

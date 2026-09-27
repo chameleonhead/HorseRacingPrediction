@@ -11,7 +11,7 @@ using HorseRacingPrediction.Scraping.Jra.Parsing;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
-public sealed record JraSubjectCollectionDefinition(ResourceType ResourceType,
+public sealed record JraSubjectCollectionDefinition(CollectionResourceType ResourceType,
     CollectionDefinitionId Definition, string SubjectType, string IdPrefix, bool PersistProfile,
     int CurrentRevision);
 
@@ -21,7 +21,7 @@ public static class JraSubjectCollectionDefinitions
         SubjectCollectionDefinitions.All.Select(x => new JraSubjectCollectionDefinition(x.ResourceType,
             x.Definition, x.SubjectType, x.IdPrefix, x.PersistProfile, x.CurrentRevision)).ToArray();
 
-    public static JraSubjectCollectionDefinition For(ResourceType type) =>
+    public static JraSubjectCollectionDefinition For(CollectionResourceType type) =>
         All.SingleOrDefault(x => x.ResourceType == type)
         ?? throw new InvalidOperationException($"No JRA subject collection definition exists for {type}.");
 }
@@ -70,7 +70,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
     private const int MaximumDiscoveryDepth = 3;
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
     public CollectionDefinitionId DefinitionId => descriptor.Definition;
-    public ResourceType ResourceType => descriptor.ResourceType;
+    public CollectionResourceType ResourceType => descriptor.ResourceType;
 
     public async Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task,
         CancellationToken cancellationToken)
@@ -83,7 +83,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             ParseDate(task.Attributes.GetValueOrDefault("birthDate")),
             task.Attributes.GetValueOrDefault("sourceIdentity"),
             ResolveReferenceRace(task));
-        if (descriptor.ResourceType == ResourceType.Horse && HasRaceSourceEvidence(task)
+        if (descriptor.ResourceType == CollectionResourceType.Horse && HasRaceSourceEvidence(task)
             && (!JraSourceIdentity.TryNormalizeHorse(identity.SourceIdentity, out _)
                 || (identity.ReferenceRace is null &&
                     (string.IsNullOrWhiteSpace(task.Attributes.GetValueOrDefault("requestedByRaceId"))
@@ -93,7 +93,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
                     !JraSourceIdentity.MatchesHorse(identity.SourceIdentity, task.Attributes["sourceUrl"]))))
             return IdentificationFailure(task, "レース由来の公式Horse identityとsourceUrlが一致しません。",
                 "SourceIdentityMismatch", null, null, []);
-        if (descriptor.ResourceType == ResourceType.Owner)
+        if (descriptor.ResourceType == CollectionResourceType.Owner)
         {
             if (ownerIdentities is null || !await ownerIdentities.ExistsAsync(
                     task.Resource.Id, cancellationToken).ConfigureAwait(false))
@@ -112,7 +112,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
     {
         JraSubjectPage? page = null;
         var preserveSourceIdentity = identity.ReferenceRace is not null
-            || (descriptor.ResourceType == ResourceType.Horse && HasRaceSourceEvidence(task));
+            || (descriptor.ResourceType == CollectionResourceType.Horse && HasRaceSourceEvidence(task));
         var validationIdentity = identity;
         var locationOutcomes = new List<ResourceLocationOutcome>();
         foreach (var location in task.Locations ?? [])
@@ -155,7 +155,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             }
             catch (JraSubjectIdentificationException ex)
             {
-                if (descriptor.ResourceType is ResourceType.Jockey or ResourceType.Trainer
+                if (descriptor.ResourceType is CollectionResourceType.Jockey or CollectionResourceType.Trainer
                     && ex.Kind == JraSubjectIdentificationFailureKind.NoCandidate)
                     return new(CollectionAttemptResult.NotApplicable, "SubjectNotInProviderDirectory", ex.Message,
                         ToUri(ex.RequestedUrl), ToUri(ex.FinalUrl),
@@ -195,7 +195,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
                     + ex.Message, LocationOutcomes: locationOutcomes,
                     FailureImpact: CollectionFailureImpact.Isolated);
             }
-        if (descriptor.ResourceType == ResourceType.Horse && requests is not null)
+        if (descriptor.ResourceType == CollectionResourceType.Horse && requests is not null)
         {
             try
             {
@@ -229,7 +229,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
 
     private static RaceId? ResolveReferenceRace(LeasedCollectionTask task)
     {
-        if (!string.Equals(task.Attributes.GetValueOrDefault("discoveredFromType"), ResourceType.Race.ToString(), StringComparison.Ordinal)
+        if (!string.Equals(task.Attributes.GetValueOrDefault("discoveredFromType"), CollectionResourceType.Race.ToString(), StringComparison.Ordinal)
             || !string.Equals(task.Attributes.GetValueOrDefault("discoveredFromProvider"), "JRA", StringComparison.OrdinalIgnoreCase)
             || !DateOnly.TryParse(task.Attributes.GetValueOrDefault("referenceRaceDate"), out var date)
             || !Enum.TryParse<RaceCourse>(task.Attributes.GetValueOrDefault("referenceRaceCourse"), true, out var course)
@@ -295,11 +295,11 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             .ToHashSet(StringComparer.Ordinal);
         static string? Field(IReadOnlyDictionary<string, string> fields, params string[] names) =>
             names.Select(fields.GetValueOrDefault).FirstOrDefault(x => !string.IsNullOrWhiteSpace(x))?.Trim();
-        var references = new (ResourceType Type, string? Name)[]
+        var references = new (CollectionResourceType Type, string? Name)[]
         {
-            (ResourceType.Trainer, Field(profile.Fields, "調教師", "調教師名")),
-            (ResourceType.Horse, NormalizePedigreeReference(Field(profile.Fields, "父", "父馬"))),
-            (ResourceType.Horse, NormalizePedigreeReference(Field(profile.Fields, "母", "母馬"))),
+            (CollectionResourceType.Trainer, Field(profile.Fields, "調教師", "調教師名")),
+            (CollectionResourceType.Horse, NormalizePedigreeReference(Field(profile.Fields, "父", "父馬"))),
+            (CollectionResourceType.Horse, NormalizePedigreeReference(Field(profile.Fields, "母", "母馬"))),
         };
         foreach (var reference in references.Where(x => !string.IsNullOrWhiteSpace(x.Name))
                      .Select(x => (x.Type, Name: x.Name!.Trim())).Distinct())
@@ -307,9 +307,9 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             var child = JraSubjectCollectionDefinitions.For(reference.Type);
             var childId = reference.Type switch
             {
-                ResourceType.Trainer when entityWriter is not null => await entityWriter.UpsertTrainerAsync(
+                CollectionResourceType.Trainer when entityWriter is not null => await entityWriter.UpsertTrainerAsync(
                     reference.Name, null, null, cancellationToken).ConfigureAwait(false),
-                ResourceType.Horse when entityWriter is not null => await entityWriter.UpsertHorseAsync(
+                CollectionResourceType.Horse when entityWriter is not null => await entityWriter.UpsertHorseAsync(
                     reference.Name, null, null, null, cancellationToken).ConfigureAwait(false),
                 _ => DeterministicIdGenerator.BuildEntityId(child.IdPrefix,
                     DeterministicIdGenerator.NormalizeKey(
@@ -416,7 +416,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             || !int.TryParse(match.Groups["number"].Value, CultureInfo.InvariantCulture, out var number)
             || number is < 1 or > 12 || !CourseCodes.TryGetValue(match.Groups["course"].Value, out var course)
             || history.Date != effectiveDate || RaceCourseNames.Parse(history.Course) != course) return false;
-        resource = new(ResourceType.Race, "JRA", $"{effectiveDate:yyyyMMdd}:{course}:{number}");
+        resource = new(CollectionResourceType.Race, "JRA", $"{effectiveDate:yyyyMMdd}:{course}:{number}");
         attributes = new Dictionary<string, string>
         {
             ["course"] = RaceCourseNames.GetJraName(course),

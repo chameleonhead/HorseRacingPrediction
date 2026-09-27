@@ -1,9 +1,10 @@
-using System.Net;
-using System.Net.Http.Json;
-using System.Text.Json;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
+using HorseRacingPrediction.Contracts;
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -14,7 +15,7 @@ public sealed class CollectionPlatformWorkerClientTests
     public async Task Completion_SendsPerCandidateLocationOutcomes()
     {
         var taskId = Guid.NewGuid();
-        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(ResourceType.RaceCard, "JRA", "R1"),
+        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(CollectionResourceType.RaceCard, "JRA", "R1"),
             new("race-card"), 1, CollectionReason.Initial, CollectionLane.Realtime, 80,
             "lease", DateTimeOffset.UtcNow.AddMinutes(15), null, new Dictionary<string, string>());
         var transport = new RecordingTransport(lease);
@@ -35,7 +36,7 @@ public sealed class CollectionPlatformWorkerClientTests
     public async Task Acquire_SendsCurrentExecutionCorrelationToApi()
     {
         var taskId = Guid.NewGuid();
-        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(ResourceType.RaceCard, "JRA", "R1"),
+        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(CollectionResourceType.RaceCard, "JRA", "R1"),
             new("race-card"), 1, CollectionReason.Initial, CollectionLane.Realtime, 80,
             "lease", DateTimeOffset.UtcNow.AddMinutes(15), null, new Dictionary<string, string>());
         var transport = new RecordingTransport(lease);
@@ -62,7 +63,7 @@ public sealed class CollectionPlatformWorkerClientTests
     public async Task Cancellation_ReportsRetryableAttemptThroughCompletionEndpoint()
     {
         var taskId = Guid.NewGuid();
-        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(ResourceType.Horse, "JRA", "H1"),
+        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(CollectionResourceType.Horse, "JRA", "H1"),
             new("horse-profile"), 1, CollectionReason.Initial, CollectionLane.Normal, 50,
             "lease", DateTimeOffset.UtcNow.AddMinutes(15), null, new Dictionary<string, string>());
         var transport = new RecordingTransport(lease);
@@ -90,7 +91,7 @@ public sealed class CollectionPlatformWorkerClientTests
         int statusCode, CollectionAttemptResult expectedResult)
     {
         var taskId = Guid.NewGuid();
-        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(ResourceType.Horse, "JRA", "H1"),
+        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(CollectionResourceType.Horse, "JRA", "H1"),
             new("horse-profile"), 1, CollectionReason.Initial, CollectionLane.Normal, 50,
             "lease", DateTimeOffset.UtcNow.AddMinutes(15), null, new Dictionary<string, string>());
         var transport = new RecordingTransport(lease);
@@ -112,7 +113,7 @@ public sealed class CollectionPlatformWorkerClientTests
     public async Task HandlerTimeout_IsReportedAsTransientFailure()
     {
         var taskId = Guid.NewGuid();
-        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(ResourceType.Horse, "JRA", "H1"),
+        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(CollectionResourceType.Horse, "JRA", "H1"),
             new("horse-profile"), 1, CollectionReason.Initial, CollectionLane.Normal, 50,
             "lease", DateTimeOffset.UtcNow.AddMinutes(15), null, new Dictionary<string, string>());
         var transport = new RecordingTransport(lease);
@@ -165,7 +166,7 @@ public sealed class CollectionPlatformWorkerClientTests
     public async Task EnvelopeCompatibilityMismatch_IsLeftUnresolvedWithoutRunningHandler()
     {
         var taskId = Guid.NewGuid();
-        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(ResourceType.RaceCard, "JRA", "R1"),
+        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(CollectionResourceType.RaceCard, "JRA", "R1"),
             new("race-card"), 1, CollectionReason.Initial, CollectionLane.Background, 80,
             "lease", DateTimeOffset.UtcNow.AddMinutes(15), new DateOnly(2026, 9, 12),
             new Dictionary<string, string>());
@@ -191,7 +192,7 @@ public sealed class CollectionPlatformWorkerClientTests
     {
         var taskId = Guid.NewGuid();
         var date = new DateOnly(2026, 9, 13);
-        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(ResourceType.RaceResult, "JRA", "RESULT"),
+        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(CollectionResourceType.RaceResult, "JRA", "RESULT"),
             new("race-result"), 1, CollectionReason.Initial, CollectionLane.Realtime, 100,
             "lease", DateTimeOffset.UtcNow.AddMinutes(15), date,
             new Dictionary<string, string> { ["course"] = "Tokyo", ["number"] = "1" });
@@ -214,7 +215,7 @@ public sealed class CollectionPlatformWorkerClientTests
     private sealed class CancellingHandler(Action cancel) : ICollectionDefinitionHandler
     {
         public CollectionDefinitionId DefinitionId => new("horse-profile");
-        public ResourceType ResourceType => ResourceType.Horse;
+        public CollectionResourceType ResourceType => CollectionResourceType.Horse;
         public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
         {
             cancel();
@@ -225,7 +226,7 @@ public sealed class CollectionPlatformWorkerClientTests
     private sealed class OutcomeHandler : ICollectionDefinitionHandler
     {
         public CollectionDefinitionId DefinitionId => new("race-card");
-        public ResourceType ResourceType => ResourceType.RaceCard;
+        public CollectionResourceType ResourceType => CollectionResourceType.RaceCard;
         public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
             => Task.FromResult(new CollectionAttemptCompletion(CollectionAttemptResult.Succeeded,
                 LocationOutcomes:
@@ -238,7 +239,7 @@ public sealed class CollectionPlatformWorkerClientTests
     private sealed class ThrowingHandler(Exception exception) : ICollectionDefinitionHandler
     {
         public CollectionDefinitionId DefinitionId => new("horse-profile");
-        public ResourceType ResourceType => ResourceType.Horse;
+        public CollectionResourceType ResourceType => CollectionResourceType.Horse;
         public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
             => Task.FromException<CollectionAttemptCompletion>(exception);
     }
@@ -247,7 +248,7 @@ public sealed class CollectionPlatformWorkerClientTests
     {
         public int CallCount { get; private set; }
         public CollectionDefinitionId DefinitionId => new("race-card");
-        public ResourceType ResourceType => ResourceType.RaceCard;
+        public CollectionResourceType ResourceType => CollectionResourceType.RaceCard;
         public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
         {
             CallCount++;
@@ -259,7 +260,7 @@ public sealed class CollectionPlatformWorkerClientTests
     {
         public int CallCount { get; private set; }
         public CollectionDefinitionId DefinitionId => new("race-result");
-        public ResourceType ResourceType => ResourceType.RaceResult;
+        public CollectionResourceType ResourceType => CollectionResourceType.RaceResult;
         public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
         {
             CallCount++;

@@ -1,15 +1,16 @@
-using System.Security.Cryptography;
-using System.Text.Json;
-using System.Text.RegularExpressions;
-using System.Web;
 using EventFlow;
 using EventFlow.EventStores;
 using EventFlow.Subscribers;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure.Persistence;
+using System.Security.Cryptography;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Web;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 
@@ -60,7 +61,7 @@ public static class RaceEntryRepairEndpointExtensions
                     var course = Array.IndexOf(japanese, race.RacecourseCode);
                     if (course < 0 || race.RaceDate is null || race.RaceNumber is null)
                         return Results.Conflict(new { code = "RepairHoldNeedsCollectionIdentity", hold = state });
-                    await collection.RequestAsync(new(ResourceType.Race, "JRA", $"{race.RaceDate:yyyyMMdd}:{english[course]}:{race.RaceNumber}"),
+                    await collection.RequestAsync(new(CollectionResourceType.Race, "JRA", $"{race.RaceDate:yyyyMMdd}:{english[course]}:{race.RaceNumber}"),
                         new("race-detail"), await collection.GetCurrentRevisionAsync(new("race-detail"), token),
                         CollectionReason.Recovery, DateTimeOffset.UtcNow,
                         batchId: "repair-hold:" + request.OperationId, attributes: new Dictionary<string, string> { ["domainRaceId"] = raceId },

@@ -1,4 +1,5 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Contracts.Time;
 
 namespace HorseRacingPrediction.Api;
@@ -74,7 +75,7 @@ internal static class SubjectIdentificationAutoRecovery
             .Where(x => (string.Equals(x.ErrorCode, "SubjectNotIdentified", StringComparison.Ordinal)
                     || string.Equals(x.ErrorCode, "StructuralPageFailure", StringComparison.Ordinal)
                     || x.ErrorMessage?.Contains("情報の見出しを確認できません", StringComparison.Ordinal) == true)
-                && x.Resource.Type is ResourceType.Horse or ResourceType.Jockey or ResourceType.Trainer)
+                && x.Resource.Type is CollectionResourceType.Horse or CollectionResourceType.Jockey or CollectionResourceType.Trainer)
             .ToArray();
         var candidates = new List<Candidate>();
         var skipped = 0;
@@ -102,13 +103,13 @@ internal static class SubjectIdentificationAutoRecovery
                 continue;
             }
 
-            var suppress = failure.Resource.Type == ResourceType.Horse
+            var suppress = failure.Resource.Type == CollectionResourceType.Horse
                 && name.EndsWith("産駒", StringComparison.Ordinal);
             var structuralFailure = string.Equals(failure.ErrorCode, "StructuralPageFailure", StringComparison.Ordinal)
                 || failure.ErrorMessage?.Contains("情報の見出しを確認できません", StringComparison.Ordinal) == true;
             var profileMismatch = string.Equals(attempt?.PageIdentification,
                 "SubjectIdentification:ProfileNameMismatch", StringComparison.Ordinal);
-            var directorySubject = failure.Resource.Type is ResourceType.Jockey or ResourceType.Trainer;
+            var directorySubject = failure.Resource.Type is CollectionResourceType.Jockey or CollectionResourceType.Trainer;
             if (!suppress && !structuralFailure && !profileMismatch && !directorySubject)
             {
                 skipped++;

@@ -1,9 +1,11 @@
+using HorseRacingPrediction.Contracts;
+
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 public interface ICollectionDefinitionHandler
 {
     CollectionDefinitionId DefinitionId { get; }
-    ResourceType ResourceType { get; }
+    CollectionResourceType ResourceType { get; }
     Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken cancellationToken);
 }
 
@@ -20,7 +22,7 @@ public sealed class CollectionDefinitionHandlerRegistry
         _handlers = items.ToDictionary(x => x.DefinitionId.Value, StringComparer.Ordinal);
     }
 
-    public ICollectionDefinitionHandler Resolve(CollectionDefinitionId definition, ResourceType resourceType)
+    public ICollectionDefinitionHandler Resolve(CollectionDefinitionId definition, CollectionResourceType resourceType)
     {
         if (!_handlers.TryGetValue(definition.Value, out var handler))
             throw new InvalidOperationException($"No collection handler is registered for {definition}.");

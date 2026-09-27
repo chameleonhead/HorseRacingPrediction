@@ -1,18 +1,9 @@
+using HorseRacingPrediction.Contracts;
+
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
-public enum ResourceType
-{
-    Race,
-    RaceCard,
-    RaceOdds,
-    RaceResult,
-    Horse,
-    Jockey,
-    Trainer,
-    Owner,
-}
 
-public readonly record struct ResourceKey(ResourceType Type, string Provider, string Id)
+public readonly record struct ResourceKey(CollectionResourceType Type, string Provider, string Id)
 {
     public ResourceKey Normalize() => new(Type, Provider.Trim().ToUpperInvariant(), Id.Trim());
 }
@@ -283,7 +274,7 @@ public sealed record CollectionTaskSummary(Guid TaskId, ResourceKey Resource, Co
 
 public sealed record CollectionTaskQuery(
     IReadOnlyCollection<CollectionTaskStatus>? Statuses = null,
-    ResourceType? ResourceType = null,
+    CollectionResourceType? ResourceType = null,
     string? Provider = null,
     string? DefinitionId = null,
     CollectionLane? Lane = null,
@@ -301,13 +292,13 @@ public sealed record CollectionTaskPage(int TotalCount, int Page, int PageSize,
 public sealed record CollectionTaskViewCounts(IReadOnlyDictionary<string, int> Counts);
 
 public sealed record CollectionStateQuery(IReadOnlyCollection<CollectionStateStatus>? Statuses = null,
-    ResourceType? ResourceType = null, string? Provider = null, string? DefinitionId = null,
+    CollectionResourceType? ResourceType = null, string? Provider = null, string? DefinitionId = null,
     string? Search = null, int Page = 1, int PageSize = 50);
 public sealed record CollectionStatePage(int TotalCount, int Page, int PageSize,
     IReadOnlyList<CollectionStateSnapshot> Items);
 
 public sealed record CollectionProgressSnapshot(
-    IReadOnlyDictionary<ResourceType, int> ResourcesByType,
+    IReadOnlyDictionary<CollectionResourceType, int> ResourcesByType,
     IReadOnlyDictionary<CollectionStateStatus, int> StatesByStatus,
     IReadOnlyDictionary<CollectionLane, int> ActiveTasksByLane,
     IReadOnlyDictionary<int, int> ActiveTasksByPriority,

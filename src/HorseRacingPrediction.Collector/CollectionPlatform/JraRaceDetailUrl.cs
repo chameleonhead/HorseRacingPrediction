@@ -1,7 +1,8 @@
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
+using HorseRacingPrediction.Scraping.Jra.Models;
 using System.Globalization;
 using System.Text.RegularExpressions;
-using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Scraping.Jra.Models;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
@@ -9,14 +10,14 @@ internal static partial class JraRaceDetailUrl
 {
     internal sealed record SourceIdentity(int Year, RaceCourse Course, int MeetingNumber, int MeetingDay, int RaceNumber);
 
-    public static Uri? Validate(Uri? url, ResourceType type, RaceId expected)
+    public static Uri? Validate(Uri? url, CollectionResourceType type, RaceId expected)
     {
         if (url is null || url.Scheme is not ("http" or "https")
             || !string.Equals(url.Host, "www.jra.go.jp", StringComparison.OrdinalIgnoreCase)) return null;
         var path = type switch
         {
-            ResourceType.RaceCard => "/JRADB/accessD.html",
-            ResourceType.RaceResult => "/JRADB/accessS.html",
+            CollectionResourceType.RaceCard => "/JRADB/accessD.html",
+            CollectionResourceType.RaceResult => "/JRADB/accessS.html",
             _ => string.Empty,
         };
         if (!string.Equals(url.AbsolutePath, path, StringComparison.OrdinalIgnoreCase)) return null;
