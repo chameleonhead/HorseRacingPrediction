@@ -1,0 +1,18 @@
+{
+  "schemaVersion":2,
+  "changeId":"20260928_restore-fluentui-local-soak",
+  "taskId":"T2",
+  "attemptId":"T2-A1",
+  "state":"completed",
+  "taskDifficulty":"high",
+  "acceptanceCriteria":["AC8"],
+  "route":{"tier":"lead","requestedModel":"gpt-6-astra","observedModel":null,"observationSource":null,"modelTelemetryReason":"observed runtime model unavailable"},
+  "usage":{"availability":"unavailable","totalTokens":null,"reason":"per-agent usage unavailable"},
+  "scope":[".codex/skills/learn-from-implementation-failures/SKILL.md","external isolated evidence helpers"],
+  "review":{"usageAvailability":"unavailable","totalTokens":null,"activeMinutes":null,"reason":"active review telemetry unavailable"},
+  "overhead":{"availability":"unavailable","preparationMinutes":null,"integrationMinutes":null,"auditMinutes":null,"reason":"active effort telemetry unavailable"},
+  "elapsed":{"availability":"unavailable","minutes":null,"reason":"active effort telemetry unavailable"},
+  "startRevision":"f44b8006",
+  "endRevisionOrPatch":"b0df806b",
+  "outcome":{"verificationPassed":true,"qualityPassed":true,"scopePassed":true,"independentChallenge":"Synthetic secret in response, exception and unknown log is absent from captured output; missing log returns fixed category; real 200/401 probe excludes configured credential.","retries":0,"leadCorrections":0,"reviewPasses":1,"promoted":false,"escapedDefects":0,"escalations":0,"reviewMode":"ac-group","detailReviewReason":null,"decision":"accept"}
+}
