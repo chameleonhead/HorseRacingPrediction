@@ -3,6 +3,8 @@ using EventFlow.EntityFramework;
 using EventFlow.EntityFramework.Extensions;
 using EventFlow.Extensions;
 using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.Api;
+using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Api.Web;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
@@ -15,8 +17,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.FluentUI.AspNetCore.Components;
-using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.PredictionScheduling;
 using HorseRacingPrediction.Contracts.Time;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
@@ -59,6 +61,10 @@ internal static class TestApplicationFactory
         builder.Services.AddSingleton<RaceWriteCoordinator>();
         builder.Services.AddSingleton<RaceWriteEndpointFilter>();
         builder.Services.AddSingleton<RacePredictionReadEndpointFilter>();
+        builder.Services.Configure<PredictionScheduleOptions>(options =>
+            options.StateDirectory = Path.Combine(Path.GetTempPath(), "horse-racing-api-tests", Guid.NewGuid().ToString("N")));
+        builder.Services.AddSingleton<PredictionScheduleStore>();
+        builder.Services.AddSingleton<IPredictionSchedule>(services => services.GetRequiredService<PredictionScheduleStore>());
         builder.Services.AddTransient<RaceEntryRepairInspector>();
         builder.Services.AddAdminAuthentication();
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
@@ -113,11 +119,7 @@ internal static class TestApplicationFactory
         app.UseAntiforgery();
         app.MapApiEndpoints();
         app.MapAdminEndpoints();
-        app.MapSubjectCollectionEndpoints();
-        app.MapRaceOddsEndpoints();
-        app.MapRaceEntryRepairEndpoints();
-        app.MapCollectionMonitoringEndpoints();
-        app.MapCollectionPlatformEndpoints();
+        app.MapCollectionApiV2Endpoints();
 
         await app.StartAsync();
         var client = app.GetTestClient();

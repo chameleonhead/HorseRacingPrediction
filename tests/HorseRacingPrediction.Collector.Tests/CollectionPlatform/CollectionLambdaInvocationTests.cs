@@ -223,16 +223,19 @@ public sealed class CollectionLambdaInvocationTests
         var worker = Worker(request =>
         {
             var path = request.RequestUri!.AbsolutePath;
-            if (path.EndsWith("/acquire-next", StringComparison.Ordinal))
+            if (path.EndsWith("/execution-leases", StringComparison.Ordinal))
                 return JsonResponse(new CollectionExecutionAcquireResult(
                     CollectionExecutionAcquireStatus.Acquired, executionBatchId, "lease-token", envelope));
-            if (path.EndsWith("/start", StringComparison.Ordinal)) return new(HttpStatusCode.OK);
-            if (path.EndsWith("/complete", StringComparison.Ordinal))
+            if (path.EndsWith("/execution-batches/" + executionBatchId, StringComparison.Ordinal))
             {
-                completeCalls++;
+                Assert.AreEqual(HttpMethod.Patch, request.Method);
+                using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+                var transition = body.RootElement.GetProperty("transition").GetString();
+                if (transition == "Complete") completeCalls++;
+                else Assert.AreEqual("Start", transition);
                 return new(HttpStatusCode.OK);
             }
-            if (path.Contains("/tasks/", StringComparison.Ordinal) && path.EndsWith("/acquire", StringComparison.Ordinal))
+            if (path.Contains("/tasks/", StringComparison.Ordinal) && path.EndsWith("/leases", StringComparison.Ordinal))
             {
                 var taskId = Guid.Parse(path.Split('/')[^2]);
                 taskAcquireCalls.Add(taskId);

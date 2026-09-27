@@ -40,7 +40,7 @@ public sealed class CollectionBulkEndpointTests
             builder.Services.AddSingleton(collection);
             builder.Services.AddSingleton<IDbContextProvider<EventStoreDbContext>>(domain);
             var app = builder.Build();
-            app.MapCollectionPlatformEndpoints();
+            app.MapCollectionApiV2Endpoints();
             await app.StartAsync();
             await using var lifetime = app;
             using var client = app.GetTestClient();
@@ -48,7 +48,7 @@ public sealed class CollectionBulkEndpointTests
             var dateRequest = new BulkCollectionOperationRequest("horse-profile", 1,
                 CollectionReason.ManualRefresh, BulkCollectionSelection.HorsesRacedInDateRange,
                 From: new(2026, 9, 10), To: new(2026, 9, 10));
-            var previewResponse = await client.PostAsJsonAsync("api/admin/collection/requests/bulk/preview", dateRequest);
+            var previewResponse = await client.PostAsJsonAsync("api/v2/admin/collection/task-batch-previews", dateRequest);
             previewResponse.EnsureSuccessStatusCode();
             var preview = await previewResponse.Content.ReadFromJsonAsync<CollectionBulkPreview>();
             Assert.IsNotNull(preview);
@@ -56,16 +56,22 @@ public sealed class CollectionBulkEndpointTests
 
             var mismatch = dateRequest with { ExpectedResources = [new(CollectionResourceType.Horse, "JRA", "H1")] };
             Assert.AreEqual(HttpStatusCode.Conflict,
-                (await client.PostAsJsonAsync("api/admin/collection/requests/bulk", mismatch)).StatusCode);
+                (await client.PostAsJsonAsync("api/v2/admin/collection/task-batches",
+                    ToPreviewSelection(mismatch))).StatusCode);
             Assert.IsEmpty(await collection.GetTasksAsync());
             var execute = dateRequest with { ExpectedResources = preview.Resources, BatchId = "manual:date" };
-            (await client.PostAsJsonAsync("api/admin/collection/requests/bulk", execute)).EnsureSuccessStatusCode();
+            var executionResponse = await client.PostAsJsonAsync("api/v2/admin/collection/task-batches",
+                ToPreviewSelection(execute));
+            executionResponse.EnsureSuccessStatusCode();
+            var execution = await executionResponse.Content.ReadFromJsonAsync<CollectionTaskBatchSubmissionResponse>();
+            Assert.AreEqual("PreviewSelection", execution?.Mode);
+            Assert.IsNotNull(execution?.PreviewSelection);
             Assert.HasCount(2, await collection.GetTasksAsync());
 
             var trainerRequest = new BulkCollectionOperationRequest("horse-profile", 1,
                 CollectionReason.ManualRefresh, BulkCollectionSelection.HorsesByTrainer, TrainerId: "T1");
             var trainerPreview = await (await client.PostAsJsonAsync(
-                "api/admin/collection/requests/bulk/preview", trainerRequest)).Content
+                "api/v2/admin/collection/task-batch-previews", trainerRequest)).Content
                 .ReadFromJsonAsync<CollectionBulkPreview>();
             Assert.IsNotNull(trainerPreview);
             CollectionAssert.AreEquivalent(new[] { new ResourceKey(CollectionResourceType.Horse, "JRA", "H1") },
@@ -74,7 +80,7 @@ public sealed class CollectionBulkEndpointTests
             await collection.SuppressResourceAsync(new(CollectionResourceType.Horse, "JRA", "H1"),
                 "Merged horse was deleted", "repair-1", DateTimeOffset.UtcNow);
             var suppressedDatePreview = await (await client.PostAsJsonAsync(
-                "api/admin/collection/requests/bulk/preview", dateRequest)).Content
+                "api/v2/admin/collection/task-batch-previews", dateRequest)).Content
                 .ReadFromJsonAsync<CollectionBulkPreview>();
             Assert.IsNotNull(suppressedDatePreview);
             CollectionAssert.AreEquivalent(new[] { new ResourceKey(CollectionResourceType.Horse, "JRA", "H2") },
@@ -83,7 +89,7 @@ public sealed class CollectionBulkEndpointTests
                 CollectionReason.ManualRefresh, BulkCollectionSelection.SpecificResources,
                 Resources: [new(CollectionResourceType.Horse, "JRA", "H1"), new(CollectionResourceType.Horse, "JRA", "H2")]);
             var explicitPreview = await (await client.PostAsJsonAsync(
-                "api/admin/collection/requests/bulk/preview", explicitRequest)).Content
+                "api/v2/admin/collection/task-batch-previews", explicitRequest)).Content
                 .ReadFromJsonAsync<CollectionBulkPreview>();
             Assert.IsNotNull(explicitPreview);
             CollectionAssert.AreEquivalent(new[] { new ResourceKey(CollectionResourceType.Horse, "JRA", "H2") },
@@ -101,6 +107,12 @@ public sealed class CollectionBulkEndpointTests
         Set(model, nameof(model.Entries), entries.ToList());
         return model;
     }
+
+    private static CollectionTaskBatchRequest ToPreviewSelection(BulkCollectionOperationRequest request)
+        => new("PreviewSelection", new(request.DefinitionId, request.RequestedRevision,
+            request.Reason, request.Selection.ToString(), request.Provider, request.Resources,
+            request.From, request.To, request.TrainerId, request.LastCollectedBefore,
+            request.ExpectedResources, request.BatchId, request.Lane, request.Priority));
 
     private static void Set<T>(RacePredictionContextReadModel model, string property, T value) =>
         typeof(RacePredictionContextReadModel).GetProperty(property)!.SetValue(model, value);

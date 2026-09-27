@@ -24,6 +24,7 @@ public sealed class CollectionPlatformWorkerClientTests
 
         await client.ExecuteAsync(new(taskId, 1), CancellationToken.None);
 
+        Assert.AreEqual($"/api/v2/internal/collection/tasks/{taskId:D}/attempts", transport.CompletionPath);
         using var document = JsonDocument.Parse(transport.CompletionBody!);
         var outcomes = document.RootElement.GetProperty("locationOutcomes");
         Assert.AreEqual(2, outcomes.GetArrayLength());
@@ -49,6 +50,7 @@ public sealed class CollectionPlatformWorkerClientTests
         using (CollectionAttemptCorrelationScope.Push(expected))
             await client.ExecuteAsync(new(taskId, 1), CancellationToken.None);
 
+        Assert.AreEqual($"/api/v2/internal/collection/tasks/{taskId:D}/leases", transport.AcquirePath);
         using var document = JsonDocument.Parse(transport.AcquireBody!);
         var correlation = document.RootElement.GetProperty("correlation");
         Assert.AreEqual(expected.ExecutionBatchId, correlation.GetProperty("executionBatchId").GetGuid());
@@ -75,6 +77,7 @@ public sealed class CollectionPlatformWorkerClientTests
             client.ExecuteAsync(new(taskId, 1), cancellation.Token));
 
         Assert.IsNotNull(transport.CompletionBody);
+        Assert.AreEqual($"/api/v2/internal/collection/tasks/{taskId:D}/attempts", transport.CompletionPath);
         using var document = JsonDocument.Parse(transport.CompletionBody);
         Assert.AreEqual((int)CollectionAttemptResult.TransientFailure,
             document.RootElement.GetProperty("result").GetInt32());
@@ -103,6 +106,7 @@ public sealed class CollectionPlatformWorkerClientTests
         await client.ExecuteAsync(new(taskId, 1), CancellationToken.None);
 
         using var document = JsonDocument.Parse(transport.CompletionBody!);
+        Assert.AreEqual($"/api/v2/internal/collection/tasks/{taskId:D}/attempts", transport.CompletionPath);
         Assert.AreEqual((int)expectedResult, document.RootElement.GetProperty("result").GetInt32());
         Assert.AreEqual(statusCode, document.RootElement.GetProperty("httpStatusCode").GetInt32());
         Assert.AreEqual("Definition=horse-profile; Resource=Horse:JRA:H1",
@@ -275,7 +279,7 @@ public sealed class CollectionPlatformWorkerClientTests
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
-            if (request.RequestUri!.AbsolutePath.EndsWith("/acquire", StringComparison.Ordinal))
+            if (request.RequestUri!.AbsolutePath.EndsWith("/leases", StringComparison.Ordinal))
                 return new(HttpStatusCode.OK) { Content = JsonContent.Create(acquire) };
             CompletionBody = await request.Content!.ReadAsStringAsync(cancellationToken);
             return new(HttpStatusCode.NoContent);
@@ -286,11 +290,14 @@ public sealed class CollectionPlatformWorkerClientTests
     {
         public string? AcquireBody { get; private set; }
         public string? CompletionBody { get; private set; }
+        public string? AcquirePath { get; private set; }
+        public string? CompletionPath { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
-            if (request.RequestUri!.AbsolutePath.EndsWith("/acquire", StringComparison.Ordinal))
+            if (request.RequestUri!.AbsolutePath.EndsWith("/leases", StringComparison.Ordinal))
             {
+                AcquirePath = request.RequestUri.AbsolutePath;
                 AcquireBody = await request.Content!.ReadAsStringAsync(token);
                 return new(HttpStatusCode.OK)
                 {
@@ -298,6 +305,7 @@ public sealed class CollectionPlatformWorkerClientTests
                         CollectionTaskAcquireStatus.Acquired, lease)),
                 };
             }
+            CompletionPath = request.RequestUri.AbsolutePath;
             CompletionBody = await request.Content!.ReadAsStringAsync(token);
             return new(HttpStatusCode.NoContent);
         }

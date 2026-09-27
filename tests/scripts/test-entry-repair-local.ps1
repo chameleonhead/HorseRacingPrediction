@@ -23,13 +23,16 @@ $created = Post-LocalJson '/api/races/result-bulk' @{
 }
 if (-not $created.corePersisted -or $created.errors.Count -ne 0) { throw ($created | ConvertTo-Json -Depth 8) }
 $raceId = $created.raceId
-$repairPath = "/api/admin/races/$raceId/entry-repair"
+$repairPath = "/api/v2/admin/races/$raceId/entry-repair/inspection"
+$holdPath = "/api/v2/admin/races/$raceId/entry-repair/hold"
+$previewPath = "/api/v2/admin/races/$raceId/entry-repair-previews"
+$applyPath = "/api/v2/admin/races/$raceId/entry-repairs"
 $before = Invoke-RestMethod -Uri ($BaseUrl + $repairPath) -Headers $headers
 $holdRequest = @{ operationId = [Guid]::NewGuid().ToString(); expectedGeneration = 0; reason = 'isolated cross-process smoke' }
-$hold = Invoke-RestMethod -Method Post -Uri ($AlternateBaseUrl + $repairPath + '/hold') -Headers $headers -ContentType 'application/json' -Body ($holdRequest | ConvertTo-Json)
+$hold = Invoke-RestMethod -Method Put -Uri ($AlternateBaseUrl + $holdPath) -Headers $headers -ContentType 'application/json' -Body ($holdRequest | ConvertTo-Json)
 if (-not $hold.isQuiescent) { throw ($hold | ConvertTo-Json -Depth 10) }
 $request = @{ resourceType = 0; provider = 'JRA'; resourceId = '20260926:Nakayama:5'; definitionId = 'race-detail'; requestedRevision = $hold.requiredRevision; reason = 5 }
-$deferred = Post-LocalJson '/api/admin/collection/requests' $request
+$deferred = Post-LocalJson '/api/v2/admin/collection/tasks' $request
 if (-not $deferred.deferredByRepairHold -or $deferred.createdTask) { throw 'Cross-process hold did not defer the request.' }
 $heldRead = Invoke-WebRequest -Uri ($BaseUrl + "/api/races/$raceId/context") -Headers $headers -SkipHttpErrorCheck
 if ($heldRead.StatusCode -ne 409) { throw 'Held prediction context was exposed.' }
@@ -40,7 +43,7 @@ $manifest = @{
     horses = @($entries | ForEach-Object { @{ sourceUrl = $_.horseSourceIdentity; horseNumber = $_.horseNumber % 14 + 1;
         gateNumber = [int][Math]::Floor(($_.horseNumber % 14) / 2) + 1; ownerName = "所有者$($_.horseNumber)" } })
 }
-$preview = Post-LocalJson ($repairPath + '/preview') $manifest
+$preview = Post-LocalJson $previewPath $manifest
 if (-not $preview.eligible) { throw ($preview | ConvertTo-Json -Depth 10) }
 $afterPreview = Invoke-RestMethod -Uri ($BaseUrl + $repairPath) -Headers $headers
 if ($afterPreview.version -ne $before.version) { throw 'Preview changed event version.' }
@@ -53,14 +56,14 @@ $client.Timeout = [TimeSpan]::FromSeconds(25)
 $client.DefaultRequestHeaders.Add('X-Api-Key', $headers['X-Api-Key'])
 try {
     $content = [System.Net.Http.StringContent]::new(($apply | ConvertTo-Json -Depth 20), [Text.Encoding]::UTF8, 'application/json')
-    $pending = $client.PostAsync($BaseUrl + $repairPath + '/apply', $content)
+    $pending = $client.PostAsync($BaseUrl + $applyPath, $content)
     Start-Sleep -Milliseconds 400
     if ($pending.IsCompleted) { throw 'API did not respect the lock held by another process.' }
     $stream.Dispose()
     $response = $pending.GetAwaiter().GetResult()
     if (-not $response.IsSuccessStatusCode) { throw $response.Content.ReadAsStringAsync().GetAwaiter().GetResult() }
 } finally { $stream.Dispose(); $client.Dispose() }
-$repeated = Post-LocalJson ($repairPath + '/apply') $apply
+$repeated = Post-LocalJson $applyPath $apply
 $after = Invoke-RestMethod -Uri ($BaseUrl + $repairPath) -Headers $headers
 if (-not $repeated.verified -or $after.version -ne $before.version + 1 -or $after.blockers.Count -ne 0) { throw 'Repair/retry verification failed.' }
 $package = Join-Path ($resolvedDatabase + '.race-locks/backups') $apply.operationId
@@ -69,25 +72,26 @@ foreach ($file in @('events.db', 'collection.db', 'manifest.json')) {
 }
 $release = @{ operationId = [Guid]::NewGuid().ToString(); holdOperationId = $hold.operationId; holdGeneration = $hold.generation;
     expectedVersion = $after.version; assignmentFingerprint = $repeated.assignmentFingerprint; repairOperationId = $apply.operationId; repairFingerprint = $apply.fingerprint }
-$released = Post-LocalJson ($repairPath + '/release') $release
-$releaseAgain = Post-LocalJson ($repairPath + '/release') $release
+$releaseBody = $release | ConvertTo-Json -Depth 20
+$released = Invoke-RestMethod -Method Patch -Uri ($BaseUrl + $holdPath) -Headers $headers -ContentType 'application/json' -Body $releaseBody
+$releaseAgain = Invoke-RestMethod -Method Patch -Uri ($BaseUrl + $holdPath) -Headers $headers -ContentType 'application/json' -Body $releaseBody
 if ($released.isActive -or $releaseAgain.isActive) { throw 'Verified repair did not release idempotently.' }
-$receipt = Post-LocalJson '/api/admin/collection/requests' $request
+$receipt = Post-LocalJson '/api/v2/admin/collection/tasks' $request
 if (-not $receipt.taskId -or $receipt.createdTask) { throw 'Release did not materialize exactly one current request.' }
-$acquired = Post-LocalJson "/api/internal/collection/tasks/$($receipt.taskId)/acquire" @{ dispatchGeneration = 1; leaseSeconds = 60 }
+$acquired = Post-LocalJson "/api/v2/internal/collection/tasks/$($receipt.taskId)/leases" @{ dispatchGeneration = 1; leaseSeconds = 60 }
 if (-not $acquired.task -or $acquired.task.raceHoldGeneration -ne $hold.generation -or $acquired.task.entryAssignmentFingerprint -ne $repeated.assignmentFingerprint) {
     throw 'Worker acquire did not carry the validated assignment fence.'
 }
 $odds = @{ observedAt = [DateTimeOffset]::UtcNow.ToString('o'); entries = @(@{ horseNumber = 1; winOdds = 2.5; popularity = 1 }) }
-$stale = Invoke-WebRequest -Method Post -Uri ($AlternateBaseUrl + "/api/admin/races/$raceId/odds-snapshots") -Headers $headers -ContentType 'application/json' -Body ($odds | ConvertTo-Json -Depth 5) -SkipHttpErrorCheck
+$stale = Invoke-WebRequest -Method Post -Uri ($AlternateBaseUrl + "/api/v2/admin/races/$raceId/odds-snapshot-records") -Headers $headers -ContentType 'application/json' -Body ($odds | ConvertTo-Json -Depth 5) -SkipHttpErrorCheck
 if ($stale.StatusCode -ne 409 -or $stale.Content -notmatch 'StaleRaceAssignmentFence') { throw 'A delayed unversioned odds write was accepted.' }
 $fencedHeaders = $headers.Clone()
 $fencedHeaders['X-Collection-Task-Id'] = $receipt.taskId
 $fencedHeaders['X-Collection-Lease-Token'] = $acquired.task.leaseToken
 $fencedHeaders['X-Race-Hold-Generation'] = [string]$acquired.task.raceHoldGeneration
 $fencedHeaders['X-Race-Assignment-Fingerprint'] = $acquired.task.entryAssignmentFingerprint
-Invoke-RestMethod -Method Post -Uri ($AlternateBaseUrl + "/api/admin/races/$raceId/odds-snapshots") -Headers $fencedHeaders -ContentType 'application/json' -Body ($odds | ConvertTo-Json -Depth 5) | Out-Null
-Post-LocalJson "/api/internal/collection/tasks/$($receipt.taskId)/complete" @{ leaseToken = $acquired.task.leaseToken; result = 1 } | Out-Null
+Invoke-RestMethod -Method Post -Uri ($AlternateBaseUrl + "/api/v2/admin/races/$raceId/odds-snapshot-records") -Headers $fencedHeaders -ContentType 'application/json' -Body ($odds | ConvertTo-Json -Depth 5) | Out-Null
+Post-LocalJson "/api/v2/internal/collection/tasks/$($receipt.taskId)/attempts" @{ leaseToken = $acquired.task.leaseToken; result = 1 } | Out-Null
 $context = Invoke-RestMethod -Uri ($BaseUrl + "/api/races/$raceId/context") -Headers $headers
 if ($context.gradeCode -ne 'G3' -or @($context.entries | Where-Object { $_.ownerName }).Count -ne 14) { throw 'Grade or owner enrichment failed.' }
 [pscustomobject]@{ target = $BaseUrl; raceId = $raceId; entries = $context.entries.Count; owners = 14;

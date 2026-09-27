@@ -206,6 +206,111 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
     }
 
     [TestMethod]
+    [DataRow(250, new[] { 500 })]
+    [DataRow(251, new[] { 500, 1 })]
+    public async Task Discovery_BatchesCombinedRaceAndOddsItemsAtThe500ItemBoundary(
+        int raceCount, int[] expectedBatchSizes)
+    {
+        var referenceDate = new DateOnly(2026, 9, 12);
+        var meetings = Enumerable.Range(-4, 12)
+            .SelectMany(offset => new[] { RaceCourse.Tokyo, RaceCourse.Nakayama }
+                .Select(course => (Date: referenceDate.AddDays(offset), Course: course)))
+            .Take((raceCount + 11) / 12)
+            .ToArray();
+        var raceRows = new Dictionary<(DateOnly Date, RaceCourse Course), IReadOnlyList<RaceSummary>>();
+        var remaining = raceCount;
+        var raceOrdinal = 0;
+        foreach (var meeting in meetings)
+        {
+            var meetingRaceCount = Math.Min(12, remaining);
+            raceRows[(meeting.Date, meeting.Course)] = Enumerable.Range(1, meetingRaceCount)
+                .Select(number =>
+                {
+                    var ordinal = raceOrdinal++;
+                    return new RaceSummary(new RaceId(meeting.Date, meeting.Course, number), "race",
+                        ordinal < 250 ? new TimeOnly(15, 0) : null, null, null);
+                }).ToArray();
+            remaining -= meetingRaceCount;
+        }
+
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                RaceCardListFactory = (date, course) => new JraRaceListPage(
+                    "https://example.test/list", date, course, raceRows[(date, course)]),
+            },
+        };
+        var schedule = new FakeJraScheduleCollectionWorkflow
+        {
+            CoursesByDate = date => meetings.Where(x => x.Date == date).Select(x => x.Course).ToArray(),
+        };
+        var sink = new RecordingBatchSink();
+        var task = CreateDiscoveryTask(referenceDate) with
+        {
+            Attributes = new Dictionary<string, string> { ["batchId"] = "discovery-run-42" },
+        };
+
+        var result = await new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink,
+                timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero)))
+            .CollectAsync(task, CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
+        CollectionAssert.AreEqual(expectedBatchSizes, sink.Batches.Select(x => x.Request.Items.Count).ToArray());
+        Assert.IsEmpty(sink.SingleRequests);
+        var firstRun = sink.Batches.SelectMany(x => x.Request.Items).ToArray();
+        Assert.AreEqual(raceCount + 250, firstRun.Length);
+        Assert.AreEqual(firstRun.Length, firstRun.Select(x => x.ItemKey).Distinct(StringComparer.Ordinal).Count());
+        foreach (var raceItem in firstRun.Where(x => x.ItemKey.StartsWith("race:", StringComparison.Ordinal)))
+        {
+            var oddsItem = firstRun.SingleOrDefault(x => x.ItemKey == "odds:" + raceItem.ItemKey[5..]);
+            if (oddsItem is null) continue;
+            Assert.AreEqual(raceItem.Provider, oddsItem.Provider);
+            Assert.AreEqual(raceItem.ResourceId, oddsItem.ResourceId);
+            Assert.AreEqual(raceItem.EffectiveDate, oddsItem.EffectiveDate);
+            Assert.AreEqual(raceItem.Attributes!["batchId"], oddsItem.Attributes!["batchId"]);
+            Assert.AreEqual(raceItem.Attributes["course"], oddsItem.Attributes["course"]);
+            Assert.AreEqual(raceItem.Attributes["number"], oddsItem.Attributes["number"]);
+            Assert.AreEqual(raceItem.Attributes["startTime"], oddsItem.Attributes["startTime"]);
+        }
+
+        var firstBatchIds = sink.Batches.Select(x => x.Request.BatchId).ToArray();
+        sink.Batches.Clear();
+        await new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink,
+                timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero)))
+            .CollectAsync(task, CancellationToken.None);
+        CollectionAssert.AreEqual(firstBatchIds, sink.Batches.Select(x => x.Request.BatchId).ToArray());
+        CollectionAssert.AreEqual(firstRun.Select(x => x.ItemKey).ToArray(),
+            sink.Batches.SelectMany(x => x.Request.Items).Select(x => x.ItemKey).ToArray());
+    }
+
+    [TestMethod]
+    public async Task Discovery_RejectsBatchWithPerItemFailureOrMissingOutcome()
+    {
+        var date = new DateOnly(2026, 9, 12);
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                RaceCardListFactory = (target, course) => new JraRaceListPage(
+                    "https://example.test/list", target, course,
+                    [new(new(target, course, 1), "race", new(15, 0), null, null)]),
+            },
+        };
+        var schedule = new FakeJraScheduleCollectionWorkflow
+        { CoursesByDate = target => target == date ? [RaceCourse.Tokyo] : [] };
+
+        foreach (var mode in new[] { "rejected", "missing" })
+        {
+            var sink = new RecordingBatchSink(mode);
+            await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
+                new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink,
+                        timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero)))
+                    .CollectAsync(CreateDiscoveryTask(date), CancellationToken.None));
+        }
+    }
+
+    [TestMethod]
     public async Task Discovery_CardBoundaryOutOfRange_FallsBackToResultWithoutOddsRequest()
     {
         var today = new DateOnly(2026, 9, 17);
@@ -622,6 +727,35 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         {
             Requests.Add((resource, definition, reason, lane, priority, effectiveDate, attributes, explicitUrl, requestedRevision));
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingBatchSink(string? failureMode = null) : ICollectionRequestSink
+    {
+        public List<(CollectionRequestBulkRequest Request, CollectionRequestBulkResponse Response)> Batches { get; } = [];
+        public List<string> SingleRequests { get; } = [];
+
+        public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, int requestedRevision,
+            CollectionReason reason, CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
+            IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken)
+        {
+            SingleRequests.Add(resource.Id);
+            return Task.CompletedTask;
+        }
+
+        public Task<CollectionRequestBulkResponse> RequestManyAsync(CollectionRequestBulkRequest request,
+            CancellationToken cancellationToken)
+        {
+            var outcomes = request.Items.Select((item, index) => new CollectionRequestBulkOutcome(
+                item.ItemKey,
+                failureMode == "rejected" ? "Rejected" : "Created",
+                RequestId: Guid.NewGuid(), TaskId: Guid.NewGuid(), CreatedTask: true,
+                ErrorCode: failureMode == "rejected" ? "RejectedForTest" : null,
+                Message: failureMode == "rejected" ? "Rejected for regression test." : null)).ToArray();
+            if (failureMode == "missing" && outcomes.Length > 0) outcomes = outcomes[..^1];
+            var response = new CollectionRequestBulkResponse(outcomes);
+            Batches.Add((request, response));
+            return Task.FromResult(response);
         }
     }
 }

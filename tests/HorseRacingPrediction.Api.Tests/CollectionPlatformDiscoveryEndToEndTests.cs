@@ -43,23 +43,27 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             builder.WebHost.UseTestServer();
             builder.Services.AddSingleton(store);
             var app = builder.Build();
-            app.MapCollectionPlatformEndpoints();
+            app.MapCollectionApiV2Endpoints();
             await app.StartAsync();
             await using var appLifetime = app;
             using var client = app.GetTestClient();
 
             var date = new DateOnly(2026, 9, 12);
-            using var createResponse = await client.PostAsJsonAsync("api/admin/collection/requests", new
+            using var createResponse = await client.PostAsJsonAsync("api/v2/admin/collection/tasks", new
             {
-                ResourceType = CollectionResourceType.Race,
-                Provider = "JRA",
-                ResourceId = $"discovery:{date:yyyyMMdd}",
-                DefinitionId = "race-discovery",
-                RequestedRevision = 1,
-                Reason = CollectionReason.Discovery,
-                Lane = CollectionLane.Realtime,
-                Priority = 100,
-                EffectiveDate = date,
+                Mode = "Resource",
+                Resource = new
+                {
+                    ResourceType = CollectionResourceType.Race,
+                    Provider = "JRA",
+                    ResourceId = $"discovery:{date:yyyyMMdd}",
+                    DefinitionId = "race-discovery",
+                    RequestedRevision = 1,
+                    Reason = CollectionReason.Discovery,
+                    Lane = CollectionLane.Realtime,
+                    Priority = 100,
+                    EffectiveDate = date,
+                }
             });
             createResponse.EnsureSuccessStatusCode();
 
@@ -107,23 +111,28 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             Assert.AreEqual(15, schedule.RequestedDates.Count); // the approved ±7 day discovery window
             Assert.HasCount(1, sessions.Navigator.RaceListRequests);
 
-            using var rediscoveryResponse = await client.PostAsJsonAsync("api/admin/collection/requests", new
+            using var rediscoveryResponse = await client.PostAsJsonAsync("api/v2/admin/collection/tasks", new
             {
-                ResourceType = CollectionResourceType.Race,
-                Provider = "JRA",
-                ResourceId = detail.Resource.Id,
-                DefinitionId = "race-detail",
-                RequestedRevision = HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
-                Reason = CollectionReason.Discovery,
-                Lane = CollectionLane.Realtime,
-                Priority = 80,
-                EffectiveDate = date,
+                Mode = "Resource",
+                Resource = new
+                {
+                    ResourceType = CollectionResourceType.Race,
+                    Provider = "JRA",
+                    ResourceId = detail.Resource.Id,
+                    DefinitionId = "race-detail",
+                    RequestedRevision = HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
+                    Reason = CollectionReason.Discovery,
+                    Lane = CollectionLane.Realtime,
+                    Priority = 80,
+                    EffectiveDate = date,
+                }
             });
             rediscoveryResponse.EnsureSuccessStatusCode();
-            var rediscovery = await rediscoveryResponse.Content.ReadFromJsonAsync<CollectionRequestReceipt>();
+            var rediscovery = await rediscoveryResponse.Content.ReadFromJsonAsync<CollectionTaskSubmissionResponse>();
             Assert.IsNotNull(rediscovery);
-            Assert.IsFalse(rediscovery.CreatedTask);
-            Assert.AreEqual(detail.TaskId, rediscovery.TaskId);
+            Assert.AreEqual("Resource", rediscovery.Mode);
+            Assert.IsFalse(rediscovery.Receipt.CreatedTask);
+            Assert.AreEqual(detail.TaskId, rediscovery.Receipt.TaskId);
             Assert.HasCount(3, await store.GetTasksAsync(limit: 10));
         }
         finally
@@ -147,24 +156,28 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             builder.WebHost.UseTestServer();
             builder.Services.AddSingleton(store);
             var app = builder.Build();
-            app.MapCollectionPlatformEndpoints();
+            app.MapCollectionApiV2Endpoints();
             await app.StartAsync();
             await using var appLifetime = app;
             using var client = app.GetTestClient();
 
             var today = new DateOnly(2026, 9, 12);
             var future = new DateOnly(2026, 9, 19);
-            using var createResponse = await client.PostAsJsonAsync("api/admin/collection/requests", new
+            using var createResponse = await client.PostAsJsonAsync("api/v2/admin/collection/tasks", new
             {
-                ResourceType = CollectionResourceType.Race,
-                Provider = "JRA",
-                ResourceId = $"discovery:{today:yyyyMMdd}",
-                DefinitionId = "race-discovery",
-                RequestedRevision = 1,
-                Reason = CollectionReason.Discovery,
-                Lane = CollectionLane.Realtime,
-                Priority = 100,
-                EffectiveDate = today,
+                Mode = "Resource",
+                Resource = new
+                {
+                    ResourceType = CollectionResourceType.Race,
+                    Provider = "JRA",
+                    ResourceId = $"discovery:{today:yyyyMMdd}",
+                    DefinitionId = "race-discovery",
+                    RequestedRevision = 1,
+                    Reason = CollectionReason.Discovery,
+                    Lane = CollectionLane.Realtime,
+                    Priority = 100,
+                    EffectiveDate = today,
+                }
             });
             createResponse.EnsureSuccessStatusCode();
 
@@ -192,11 +205,11 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
                 .ExecuteAsync(new(notification.TaskId, notification.DispatchGeneration), CancellationToken.None);
 
             var tasks = await client.GetFromJsonAsync<CollectionTaskPage>(
-                "api/admin/collection/tasks/search?statuses=Ready");
+                "api/v2/admin/collection/tasks?statuses=Ready");
             var states = await client.GetFromJsonAsync<CollectionStatePage>(
-                "api/admin/collection/states/search?statuses=Pending");
+                "api/v2/admin/collection/states?statuses=Pending");
             var failures = await client.GetFromJsonAsync<IReadOnlyList<PendingCollectionFailureNotification>>(
-                "api/admin/collection/failure-notifications");
+                "api/v2/admin/collection/failure-notifications?view=Actionable");
             Assert.IsNotNull(tasks);
             Assert.HasCount(1, tasks.Items);
             Assert.IsGreaterThan(new DateTimeOffset(2026, 9, 12, 1, 0, 0, TimeSpan.Zero),

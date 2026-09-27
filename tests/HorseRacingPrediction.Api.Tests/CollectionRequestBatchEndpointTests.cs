@@ -27,7 +27,7 @@ public sealed class CollectionRequestBatchEndpointTests
             builder.WebHost.UseTestServer();
             builder.Services.AddSingleton(store);
             var app = builder.Build();
-            app.MapCollectionPlatformEndpoints();
+            app.MapCollectionApiV2Endpoints();
             await app.StartAsync();
             await using var lifetime = app;
             using var client = app.GetTestClient();
@@ -51,7 +51,14 @@ public sealed class CollectionRequestBatchEndpointTests
 
             var duplicate = request with { Items = [request.Items[0], request.Items[0]] };
             Assert.AreEqual(HttpStatusCode.BadRequest,
-                (await client.PostAsJsonAsync("api/admin/collection/requests/batch", duplicate)).StatusCode);
+                (await client.PostAsJsonAsync("api/v2/admin/collection/task-batches",
+                    new CollectionTaskBatchRequest("ExplicitItems", ExplicitItems: duplicate))).StatusCode);
+            Assert.AreEqual(HttpStatusCode.BadRequest,
+                (await client.PostAsJsonAsync("api/v2/admin/collection/task-batches",
+                    new CollectionTaskBatchRequest("ExplicitItems", PreviewSelection:
+                        new("horse-profile", 1, CollectionReason.Discovery, "SpecificResources"),
+                        ExplicitItems: request))).StatusCode,
+                "A merged batch request must not combine selector modes.");
             Assert.HasCount(1, await store.GetTasksAsync());
         }
         finally { Directory.Delete(directory, true); }
@@ -60,8 +67,12 @@ public sealed class CollectionRequestBatchEndpointTests
     private static async Task<CollectionRequestBulkResponse> PostAsync(HttpClient client,
         CollectionRequestBulkRequest request)
     {
-        var response = await client.PostAsJsonAsync("api/admin/collection/requests/batch", request);
+        var response = await client.PostAsJsonAsync("api/v2/admin/collection/task-batches",
+            new CollectionTaskBatchRequest("ExplicitItems", ExplicitItems: request));
         response.EnsureSuccessStatusCode();
-        return (await response.Content.ReadFromJsonAsync<CollectionRequestBulkResponse>())!;
+        var submission = await response.Content.ReadFromJsonAsync<CollectionTaskBatchSubmissionResponse>();
+        Assert.IsNotNull(submission);
+        Assert.AreEqual("ExplicitItems", submission.Mode);
+        return submission.ExplicitItems!;
     }
 }

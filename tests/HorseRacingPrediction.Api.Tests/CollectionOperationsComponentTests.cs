@@ -130,7 +130,7 @@ public sealed class CollectionOperationsComponentTests
 
             object value = path switch
             {
-                "/api/admin/collection/dashboard" => new CollectionOperationsDashboard(
+                "/api/v2/admin/collection/operations/dashboard" => new CollectionOperationsDashboard(
                     new CollectionProgressSnapshot(new Dictionary<CollectionResourceType, int> { [CollectionResourceType.Race] = 10 },
                         new Dictionary<CollectionStateStatus, int> { [CollectionStateStatus.Failed] = 2 },
                         new Dictionary<CollectionLane, int> { [CollectionLane.Realtime] = 3 },
@@ -141,21 +141,21 @@ public sealed class CollectionOperationsComponentTests
                         [Guid.NewGuid(), Guid.NewGuid()], [new(CollectionResourceType.RaceResult, "JRA", "R1")])],
                     [new BackfillBatchSnapshot("jra:2026-08", new(2026, 8, 1), new(2026, 8, 31),
                         31, 31, 0, 0, 30, 1, [], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow)], DateTimeOffset.UtcNow),
-                "/api/admin/collection/progress" => new CollectionProgressSnapshot(
+                "/api/v2/admin/collection/operations/progress" => new CollectionProgressSnapshot(
                     new Dictionary<CollectionResourceType, int> { [CollectionResourceType.Race] = 10 },
                     new Dictionary<CollectionStateStatus, int> { [CollectionStateStatus.Failed] = 2 },
                     new Dictionary<CollectionLane, int> { [CollectionLane.Realtime] = 3 },
                     new Dictionary<int, int> { [100] = 3 }, new Dictionary<string, int>(), 2),
-                "/api/admin/collection/failure-notifications/groups" => new[]
+                "/api/v2/admin/collection/failure-notification-groups" => new[]
                 {
                     new CollectionFailureGroup("race-result|Failed|UnexpectedPage", new("race-result"),
                         CollectionTaskStatus.Failed, "UnexpectedPage", "別ページ", 2,
                         DateTimeOffset.UtcNow.AddMinutes(-2), DateTimeOffset.UtcNow,
                         [Guid.NewGuid(), Guid.NewGuid()], [new(CollectionResourceType.RaceResult, "JRA", "R1")]),
                 },
-                "/api/admin/collection/failure-notifications/groups/race-result%7CFailed%7CUnexpectedPage" =>
+                "/api/v2/admin/collection/failure-notification-groups/race-result%7CFailed%7CUnexpectedPage" =>
                     FailurePage(),
-                "/api/admin/collection/backfills" => new[]
+                "/api/v2/admin/collection/backfill-batches" => new[]
                 {
                     new BackfillBatchSnapshot("jra:2026-08", new(2026, 8, 1), new(2026, 8, 31),
                         31, 31, 0, 0, 30, 1, [], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow),

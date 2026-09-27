@@ -19,10 +19,10 @@ public sealed class CollectionMonitoringServiceTests
         using var http = client;
 
         Assert.AreEqual(HttpStatusCode.Unauthorized,
-            (await http.GetAsync("/api/admin/collection/monitoring/findings")).StatusCode);
+            (await http.GetAsync("/api/v2/admin/collection/operations/monitoring-findings")).StatusCode);
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var report = await http.GetFromJsonAsync<CollectionMonitoringReport>(
-            "/api/admin/collection/monitoring/findings");
+            "/api/v2/admin/collection/operations/monitoring-findings");
 
         Assert.IsNotNull(report);
         Assert.IsTrue(report.Enabled);

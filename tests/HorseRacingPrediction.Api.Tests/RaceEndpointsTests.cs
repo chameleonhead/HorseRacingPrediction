@@ -235,10 +235,10 @@ public class RaceEndpointsTests
             "jockey", DeterministicIdGenerator.NormalizeKey("識別 騎手")), entry.JockeyId);
         Assert.AreEqual(DeterministicIdGenerator.BuildEntityId(
             "trainer", DeterministicIdGenerator.NormalizeKey("識別 調教師")), entry.TrainerId);
-        var tasks = await _client.GetFromJsonAsync<IReadOnlyList<CollectionTaskSummary>>(
-            "/api/admin/collection/tasks?limit=1000", JsonOptions);
+        var tasks = await _client.GetFromJsonAsync<CollectionTaskPage>(
+            "/api/v2/admin/collection/tasks?limit=1000", JsonOptions);
         Assert.IsNotNull(tasks);
-        var subjectTasks = tasks.Where(task => task.Resource.Id is not null
+        var subjectTasks = tasks.Items.Where(task => task.Resource.Id is not null
             && new[] { entry.HorseId, entry.JockeyId, entry.TrainerId }.Contains(task.Resource.Id)).ToArray();
         Assert.HasCount(3, subjectTasks);
         Assert.IsTrue(subjectTasks.Any(task => task.Resource.Id == entry.HorseId
@@ -250,10 +250,10 @@ public class RaceEndpointsTests
 
         var replay = await _client.PostAsJsonAsync("/api/races/result-bulk", request, JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, replay.StatusCode);
-        var replayTasks = await _client.GetFromJsonAsync<IReadOnlyList<CollectionTaskSummary>>(
-            "/api/admin/collection/tasks?limit=1000", JsonOptions);
+        var replayTasks = await _client.GetFromJsonAsync<CollectionTaskPage>(
+            "/api/v2/admin/collection/tasks?limit=1000", JsonOptions);
         CollectionAssert.AreEquivalent(subjectTasks.Select(task => task.TaskId).ToArray(),
-            replayTasks!.Where(task => subjectTasks.Select(existingTask => existingTask.Resource.Id)
+            replayTasks!.Items.Where(task => subjectTasks.Select(existingTask => existingTask.Resource.Id)
                     .Contains(task.Resource.Id)).Select(task => task.TaskId).ToArray());
     }
 

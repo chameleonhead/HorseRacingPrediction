@@ -137,10 +137,10 @@ public sealed class SharedOwnerIdentityTests
 
     private static async Task<IReadOnlyList<CollectionTaskSummary>> OwnerTasksAsync(HttpClient http)
     {
-        var tasks = await http.GetFromJsonAsync<IReadOnlyList<CollectionTaskSummary>>(
-            "/api/admin/collection/tasks?limit=1000", JsonOptions);
+        var tasks = await http.GetFromJsonAsync<CollectionTaskPage>(
+            "/api/v2/admin/collection/tasks?limit=1000", JsonOptions);
         Assert.IsNotNull(tasks);
-        return tasks.Where(x => x.Definition.Value == "owner-identity").ToArray();
+        return tasks.Items.Where(x => x.Definition.Value == "owner-identity").ToArray();
     }
 
     private static async Task ExecuteOwnerTasksAsync(HttpClient http,

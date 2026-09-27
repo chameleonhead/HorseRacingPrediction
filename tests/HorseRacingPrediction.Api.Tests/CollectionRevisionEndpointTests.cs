@@ -30,26 +30,26 @@ public sealed class CollectionRevisionEndpointTests
             builder.WebHost.UseTestServer();
             builder.Services.AddSingleton(store);
             var app = builder.Build();
-            app.MapCollectionPlatformEndpoints();
+            app.MapCollectionApiV2Endpoints();
             await app.StartAsync();
             await using var lifetime = app;
             using var client = app.GetTestClient();
             var impact = new RevisionImpactRequest(RevisionImpactScopeType.SpecificResources, [affected]);
 
-            var previewResponse = await client.PostAsJsonAsync("api/admin/collection/revisions/preview",
+            var previewResponse = await client.PostAsJsonAsync("api/v2/admin/collection/revision-impact-previews",
                 new RevisionImpactPreviewRequest(definition.Value, 8, impact));
             previewResponse.EnsureSuccessStatusCode();
             var preview = await previewResponse.Content.ReadFromJsonAsync<RevisionImpactPreview>();
             Assert.IsNotNull(preview);
             CollectionAssert.AreEquivalent(new[] { affected.Normalize() }, preview.AffectedResources.ToArray());
 
-            (await client.PostAsJsonAsync("api/admin/collection/revisions/apply",
+            (await client.PostAsJsonAsync($"api/v2/admin/collection/definitions/{definition.Value}/revisions",
                 new ApplyCollectionRevisionRequest(definition.Value, 8, "specific fix", impact)))
                 .EnsureSuccessStatusCode();
-            (await client.PostAsJsonAsync($"api/admin/collection/revisions/{definition.Value}/8/recollect",
-                new RevisionRecollectionRequest())).EnsureSuccessStatusCode();
+            (await client.PostAsJsonAsync("api/v2/admin/collection/recollection-batches",
+                new { Mode = "Revision", DefinitionId = definition.Value, Revision = 8, Lane = "Normal", Priority = 50 })).EnsureSuccessStatusCode();
             var progress = await client.GetFromJsonAsync<RevisionRecollectionProgress>(
-                $"api/admin/collection/revisions/{definition.Value}/8/progress");
+                $"api/v2/admin/collection/recollection-batches?definition={definition.Value}&revision=8");
 
             Assert.IsNotNull(progress);
             Assert.AreEqual(1, progress.Affected);

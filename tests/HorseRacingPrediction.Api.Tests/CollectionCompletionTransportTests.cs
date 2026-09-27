@@ -50,7 +50,7 @@ public sealed class CollectionCompletionTransportTests
             await worker.ExecuteAsync(new(taskId, 1), CancellationToken.None);
 
             var detail = await client.GetFromJsonAsync<CollectionResourceDetail>(
-                "api/admin/collection/resources/Race/JRA/20260920%3ANakayama%3A3/race-detail");
+                "api/v2/admin/collection/resources/Race/JRA/20260920%3ANakayama%3A3/definitions/race-detail");
             Assert.IsNotNull(detail);
             Assert.AreEqual(ownerValidationFails ? CollectionTaskStatus.Failed : CollectionTaskStatus.Succeeded,
                 detail.LatestTask!.Status);
@@ -86,7 +86,7 @@ public sealed class CollectionCompletionTransportTests
             var receipt = await store.RequestAsync(resource, definition, 2, CollectionReason.Initial, now);
             var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
             var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
-            using var response = await client.PostAsJsonAsync($"api/internal/collection/tasks/{taskId}/complete",
+            using var response = await client.PostAsJsonAsync($"api/v2/internal/collection/tasks/{taskId}/attempts",
                 new { lease!.LeaseToken, Result = CollectionAttemptResult.Succeeded });
             response.EnsureSuccessStatusCode();
             var detail = await store.GetResourceDetailAsync(resource, definition);
@@ -108,7 +108,7 @@ public sealed class CollectionCompletionTransportTests
             builder.WebHost.UseTestServer();
             builder.Services.AddSingleton(store);
             await using var app = builder.Build();
-            app.MapCollectionPlatformEndpoints();
+            app.MapCollectionApiV2Endpoints();
             await app.StartAsync();
             using var client = app.GetTestClient();
             await test(store, client);

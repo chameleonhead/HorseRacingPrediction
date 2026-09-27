@@ -62,9 +62,11 @@ public sealed class CollectionPlatformStoreTests
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            if (request.RequestUri!.AbsolutePath.EndsWith("/acquire", StringComparison.Ordinal))
+            if (request.RequestUri!.AbsolutePath.EndsWith("/leases", StringComparison.Ordinal))
                 return new(System.Net.HttpStatusCode.OK)
                 { Content = System.Net.Http.Json.JsonContent.Create(new CollectionTaskAcquireResult(CollectionTaskAcquireStatus.Acquired, lease)) };
+            Assert.AreEqual("/api/v2/internal/collection/tasks/" + lease.TaskId + "/attempts", request.RequestUri.AbsolutePath);
+            Assert.AreEqual(HttpMethod.Post, request.Method);
             var body = await request.Content!.ReadAsStringAsync(cancellationToken);
             var completion = System.Text.Json.JsonSerializer.Deserialize<CollectionAttemptCompletion>(body,
                 new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;

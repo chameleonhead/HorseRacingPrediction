@@ -114,18 +114,18 @@ public sealed class JraExplicitUrlCollectionTests
         await using var application = app;
         using var http = client;
 
-        var before = await http.GetFromJsonAsync<IReadOnlyList<CollectionTaskSummary>>(
-            "/api/admin/collection/tasks?limit=100");
-        using var response = await http.PostAsJsonAsync("/api/admin/collection/requests/by-url",
-            new CreateExplicitUrlCollectionRequest("https://example.test/not-jra"));
+        var before = await http.GetFromJsonAsync<CollectionTaskPage>(
+            "/api/v2/admin/collection/tasks?limit=100");
+        using var response = await http.PostAsJsonAsync("/api/v2/admin/collection/tasks",
+            new { Mode = "SourceUrl", SourceUrl = new { Url = "https://example.test/not-jra" } });
 
         Assert.AreEqual(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         var error = await response.Content.ReadFromJsonAsync<ExplicitUrlCollectionResult>();
         Assert.IsNotNull(error);
         Assert.AreEqual("UnidentifiedExplicitLocation", error.ErrorCode);
-        var after = await http.GetFromJsonAsync<IReadOnlyList<CollectionTaskSummary>>(
-            "/api/admin/collection/tasks?limit=100");
-        Assert.AreEqual(before!.Count, after!.Count);
+        var after = await http.GetFromJsonAsync<CollectionTaskPage>(
+            "/api/v2/admin/collection/tasks?limit=100");
+        Assert.AreEqual(before!.Items.Count, after!.Items.Count);
     }
 
     [TestMethod]
@@ -136,17 +136,16 @@ public sealed class JraExplicitUrlCollectionTests
         using var http = client;
         var invalidBodies = new[]
         {
-            "{}",
-            "{\"url\":null}",
-            "{\"url\":\"\"}",
-            "{\"url\":\"https://www.jra.go.jp/JRADB/accessS.html?CNAME=one&CNAME=two\"}",
-            "{\"url\":\"https://www.jra.go.jp.evil.test/JRADB/accessS.html?CNAME=pw01sde1006202604011120260905/2F\"}",
-            "{\"url\":\"https://www.jra.go.jp/JRADB/accessS.html?CNAME=%ZZ\"}",
+            "{\"mode\":\"SourceUrl\",\"sourceUrl\":{\"url\":null}}",
+            "{\"mode\":\"SourceUrl\",\"sourceUrl\":{\"url\":\"\"}}",
+            "{\"mode\":\"SourceUrl\",\"sourceUrl\":{\"url\":\"https://www.jra.go.jp/JRADB/accessS.html?CNAME=one&CNAME=two\"}}",
+            "{\"mode\":\"SourceUrl\",\"sourceUrl\":{\"url\":\"https://www.jra.go.jp.evil.test/JRADB/accessS.html?CNAME=pw01sde1006202604011120260905/2F\"}}",
+            "{\"mode\":\"SourceUrl\",\"sourceUrl\":{\"url\":\"https://www.jra.go.jp/JRADB/accessS.html?CNAME=%ZZ\"}}",
         };
 
         foreach (var body in invalidBodies)
         {
-            using var response = await http.PostAsync("/api/admin/collection/requests/by-url",
+            using var response = await http.PostAsync("/api/v2/admin/collection/tasks",
                 new StringContent(body, Encoding.UTF8, "application/json"));
             Assert.AreEqual(HttpStatusCode.UnprocessableEntity, response.StatusCode, body);
             var error = await response.Content.ReadFromJsonAsync<ExplicitUrlCollectionResult>();
@@ -169,17 +168,17 @@ public sealed class JraExplicitUrlCollectionTests
         using var http = client;
         const string url = "https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1006202604011120260905/2F";
 
-        using var response = await http.PostAsJsonAsync("/api/admin/collection/requests/by-url",
-            new CreateExplicitUrlCollectionRequest(url));
+        using var response = await http.PostAsJsonAsync("/api/v2/admin/collection/tasks",
+            new { Mode = "SourceUrl", SourceUrl = new { Url = url } });
 
         response.EnsureSuccessStatusCode();
-        var result = await response.Content.ReadFromJsonAsync<ExplicitUrlCollectionResult>();
+        var result = await response.Content.ReadFromJsonAsync<CollectionTaskSubmissionResponse>();
         Assert.IsNotNull(result);
-        Assert.IsTrue(result.Identified);
+        Assert.AreEqual("SourceUrl", result.Mode);
         Assert.IsNotNull(result.Receipt);
-        var tasks = await http.GetFromJsonAsync<IReadOnlyList<CollectionTaskSummary>>(
-            "/api/admin/collection/tasks?limit=100");
-        var task = tasks!.Single(x => x.Resource == result.Resource && x.Definition == result.Definition);
+        var tasks = await http.GetFromJsonAsync<CollectionTaskPage>(
+            "/api/v2/admin/collection/tasks?limit=100");
+        var task = tasks!.Items.Single(x => x.Resource == result.Resource && x.Definition == result.Definition);
         Assert.AreEqual(2, task.RequestedRevision);
     }
 
@@ -202,7 +201,7 @@ public sealed class JraExplicitUrlCollectionTests
         builder.WebHost.UseTestServer();
         builder.Services.AddSingleton(store);
         var app = builder.Build();
-        app.MapCollectionPlatformEndpoints();
+        app.MapCollectionApiV2Endpoints();
         await app.StartAsync();
         return (app, app.GetTestClient(), directory);
     }

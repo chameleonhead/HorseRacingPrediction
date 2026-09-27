@@ -38,9 +38,9 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
         Assert.IsEmpty(oldCreated.Errors, string.Join("; ", oldCreated.Errors));
 
         var preview = await http.GetFromJsonAsync<RaceEntryOwnerRepairPreview>(
-            $"/api/admin/collection/repairs/race-entry-owners/preview?date={date:yyyy-MM-dd}");
+            $"/api/v2/admin/collection/race-entry-owner-repair-candidates?date={date:yyyy-MM-dd}");
         var repeated = await http.GetFromJsonAsync<RaceEntryOwnerRepairPreview>(
-            $"/api/admin/collection/repairs/race-entry-owners/preview?date={date:yyyy-MM-dd}");
+            $"/api/v2/admin/collection/race-entry-owner-repair-candidates?date={date:yyyy-MM-dd}");
 
         Assert.IsNotNull(preview);
         Assert.HasCount(1, preview.Candidates);
@@ -49,7 +49,7 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
             repeated!.Candidates.Select(x => x.RaceId).ToArray());
 
         using var migrationPreviewResponse = await http.PostAsync(
-            "/api/admin/collection/migrations/race-entry-owners/preview", null);
+            "/api/v2/admin/collection/migration-previews/race-entry-owner-repair", null);
         var migrationPreview = await migrationPreviewResponse.Content
             .ReadFromJsonAsync<RaceEntryOwnerMigrationProgress>();
         Assert.IsNotNull(migrationPreview);
@@ -62,9 +62,9 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
 
         await store.SetPausedAsync(true, "test migration", DateTimeOffset.UtcNow);
         using var apply = await http.PostAsync(
-            "/api/admin/collection/migrations/race-entry-owners/apply", null);
+            "/api/v2/admin/collection/migrations/race-entry-owner-repair", null);
         using var repeatedApply = await http.PostAsync(
-            "/api/admin/collection/migrations/race-entry-owners/apply", null);
+            "/api/v2/admin/collection/migrations/race-entry-owner-repair", null);
         var progress = await repeatedApply.Content.ReadFromJsonAsync<RaceEntryOwnerMigrationProgress>();
 
         Assert.AreEqual(HttpStatusCode.OK, apply.StatusCode);

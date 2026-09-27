@@ -194,10 +194,10 @@ public sealed class SharedCollectionIdentityTests
         var id = "horse-" + Guid.NewGuid();
         const string source = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024123456/00";
         (await http.PostAsJsonAsync("/api/horses", new RegisterHorseRequest("サンプル", "サンプル", "M", new(2024, 1, 1), id))).EnsureSuccessStatusCode();
-        var path = $"/api/admin/subjects/Horse/{id}/profile";
+        var path = $"/api/v2/admin/subjects/Horse/{id}/profile";
         var profile = new JraSubjectProfileDto("Horse", "マル外 サンプル", source, source,
             new() { ["生年月日"] = "2024年1月1日" }, DateTimeOffset.UtcNow);
-        (await http.PostAsJsonAsync(path, profile)).EnsureSuccessStatusCode();
+        (await http.PutAsJsonAsync(path, profile)).EnsureSuccessStatusCode();
         (await http.PostAsJsonAsync(path, profile with { SourceIdentity = source + "&extra=1" })).EnsureSuccessStatusCode();
         var resolved = await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("サンプル", source));
         resolved.EnsureSuccessStatusCode();

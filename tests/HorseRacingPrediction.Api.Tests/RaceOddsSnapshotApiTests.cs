@@ -33,7 +33,7 @@ public sealed class RaceOddsSnapshotApiTests
         }
 
         var snapshots = await client.GetFromJsonAsync<List<RaceOddsSnapshot>>(
-            $"/api/admin/races/{raceId}/odds-snapshots");
+            $"/api/v2/admin/races/{raceId}/odds-snapshot-records");
         Assert.IsNotNull(snapshots);
         Assert.HasCount(2, snapshots);
         Assert.AreEqual(firstAt, snapshots[0].ObservedAt);
@@ -76,7 +76,7 @@ public sealed class RaceOddsSnapshotApiTests
         response.EnsureSuccessStatusCode();
 
         var snapshots = await client.GetFromJsonAsync<List<RaceOddsSnapshot>>(
-            $"/api/admin/races/{raceId}/odds-snapshots");
+            $"/api/v2/admin/races/{raceId}/odds-snapshot-records");
         Assert.IsNotNull(snapshots);
         Assert.HasCount(1, snapshots);
         Assert.HasCount(5, snapshots[0].Observations!);
@@ -102,7 +102,7 @@ public sealed class RaceOddsSnapshotApiTests
         var raceId = $"race-{Guid.NewGuid()}";
         await CreateRaceWithEntriesAsync(client, raceId, 1, (1, $"horse-{Guid.NewGuid()}"));
         var fence = await GetFenceAsync(client, raceId);
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/admin/races/{raceId}/odds-snapshots")
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/admin/races/{raceId}/odds-snapshot-records")
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json"),
         };
@@ -157,7 +157,7 @@ public sealed class RaceOddsSnapshotApiTests
         }
 
         var snapshots = await client.GetFromJsonAsync<List<RaceOddsSnapshot>>(
-            $"/api/admin/races/{raceId}/odds-snapshots");
+            $"/api/v2/admin/races/{raceId}/odds-snapshot-records");
         Assert.IsNotNull(snapshots);
         Assert.HasCount(2, snapshots);
         Assert.IsTrue(snapshots.All(x => x.Observations is [{ Market: "Win", Selection: "1", Value: 2.5m }]));
@@ -204,7 +204,7 @@ public sealed class RaceOddsSnapshotApiTests
                    new RecordRaceOddsSnapshotRequest(at.AddMinutes(2), [new(1, 2.1m)]), afterFence))
             Assert.AreEqual(HttpStatusCode.Accepted, current.StatusCode);
 
-        var snapshots = await client.GetFromJsonAsync<List<RaceOddsSnapshot>>($"/api/admin/races/{raceId}/odds-snapshots");
+        var snapshots = await client.GetFromJsonAsync<List<RaceOddsSnapshot>>($"/api/v2/admin/races/{raceId}/odds-snapshot-records");
         Assert.IsNotNull(snapshots);
         Assert.HasCount(2, snapshots);
         Assert.AreEqual(firstHorse, snapshots[0].Assignments!.Single(x => x.HorseNumber == 1).HorseId);
@@ -234,7 +234,7 @@ public sealed class RaceOddsSnapshotApiTests
         using (var unknown = await PostOddsAsync(client, raceId,
                    new RecordRaceOddsSnapshotRequest(at, [new(9, 2.5m)]), fence))
             Assert.AreNotEqual(HttpStatusCode.Accepted, unknown.StatusCode);
-        var snapshots = await client.GetFromJsonAsync<List<RaceOddsSnapshot>>($"/api/admin/races/{raceId}/odds-snapshots");
+        var snapshots = await client.GetFromJsonAsync<List<RaceOddsSnapshot>>($"/api/v2/admin/races/{raceId}/odds-snapshot-records");
         Assert.IsNotNull(snapshots);
         Assert.IsEmpty(snapshots);
     }
@@ -275,7 +275,7 @@ public sealed class RaceOddsSnapshotApiTests
 
     private static async Task<(string Fingerprint, long Generation)> GetFenceAsync(HttpClient client, string raceId)
     {
-        using var response = await client.GetAsync($"/api/admin/races/{raceId}/entry-repair/assignment-fence");
+        using var response = await client.GetAsync($"/api/v2/admin/races/{raceId}/entry-repair/assignment-fence-state");
         response.EnsureSuccessStatusCode();
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         return (document.RootElement.GetProperty("assignmentFingerprint").GetString()!,
@@ -285,7 +285,7 @@ public sealed class RaceOddsSnapshotApiTests
     private static async Task<HttpResponseMessage> PostOddsAsync(HttpClient client, string raceId,
         RecordRaceOddsSnapshotRequest request, (string Fingerprint, long Generation) fence)
     {
-        using var message = new HttpRequestMessage(HttpMethod.Post, $"/api/admin/races/{raceId}/odds-snapshots")
+        using var message = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/admin/races/{raceId}/odds-snapshot-records")
         {
             Content = JsonContent.Create(request),
         };

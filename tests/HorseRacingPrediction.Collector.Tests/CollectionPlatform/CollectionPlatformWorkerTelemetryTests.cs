@@ -216,7 +216,7 @@ public sealed class CollectionPlatformWorkerTelemetryTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
-            if (request.RequestUri!.AbsolutePath.EndsWith("/acquire", StringComparison.Ordinal))
+            if (request.RequestUri!.AbsolutePath.EndsWith("/leases", StringComparison.Ordinal))
             {
                 clock.Advance(TimeSpan.FromMilliseconds(20));
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
