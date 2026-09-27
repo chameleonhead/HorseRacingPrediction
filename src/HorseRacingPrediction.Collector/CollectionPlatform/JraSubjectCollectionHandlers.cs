@@ -83,6 +83,16 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             ParseDate(task.Attributes.GetValueOrDefault("birthDate")),
             task.Attributes.GetValueOrDefault("sourceIdentity"),
             ResolveReferenceRace(task));
+        if (descriptor.ResourceType == ResourceType.Horse && HasRaceSourceEvidence(task)
+            && (!JraSourceIdentity.TryNormalizeHorse(identity.SourceIdentity, out _)
+                || (identity.ReferenceRace is null &&
+                    (string.IsNullOrWhiteSpace(task.Attributes.GetValueOrDefault("requestedByRaceId"))
+                        || task.Attributes.GetValueOrDefault("discoveredFromId") != task.Attributes.GetValueOrDefault("requestedByRaceId")
+                        || !JraSourceIdentity.MatchesHorse(identity.SourceIdentity, task.Attributes.GetValueOrDefault("sourceUrl"))))
+                || (task.Attributes.ContainsKey("sourceUrl") &&
+                    !JraSourceIdentity.MatchesHorse(identity.SourceIdentity, task.Attributes["sourceUrl"]))))
+            return IdentificationFailure(task, "レース由来の公式Horse identityとsourceUrlが一致しません。",
+                "SourceIdentityMismatch", null, null, []);
         if (descriptor.ResourceType == ResourceType.Owner)
         {
             if (ownerIdentities is null || !await ownerIdentities.ExistsAsync(
@@ -101,6 +111,9 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         JraSubjectIdentity identity, JraSession session, CancellationToken cancellationToken)
     {
         JraSubjectPage? page = null;
+        var preserveSourceIdentity = identity.ReferenceRace is not null
+            || (descriptor.ResourceType == ResourceType.Horse && HasRaceSourceEvidence(task));
+        var validationIdentity = identity;
         var locationOutcomes = new List<ResourceLocationOutcome>();
         foreach (var location in task.Locations ?? [])
         {
@@ -134,9 +147,8 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             // replace them. A source identity corroborated by a reference race is stronger:
             // keep it during discovery so a context-dependent JRA link cannot fall back to a
             // different same-name horse after direct navigation redirects to the search page.
-            var discoveryIdentity = identity.ReferenceRace is null
-                ? identity with { SourceIdentity = null }
-                : identity;
+            var discoveryIdentity = preserveSourceIdentity ? identity : identity with { SourceIdentity = null };
+            validationIdentity = discoveryIdentity;
             try
             {
                 page = await session.Navigate.ToSubjectProfileAsync(discoveryIdentity, cancellationToken).ConfigureAwait(false);
@@ -165,7 +177,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         }
         try
         {
-            SubjectProfilePageParser.Validate(page, identity with { SourceIdentity = null });
+            SubjectProfilePageParser.Validate(page, validationIdentity);
         }
         catch (JraSubjectIdentificationException ex)
         {
@@ -194,6 +206,12 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
     }
 
     private static DateOnly? ParseDate(string? value) => DateOnly.TryParse(value, out var result) ? result : null;
+
+    private static bool HasRaceSourceEvidence(LeasedCollectionTask task) =>
+        task.Attributes.GetValueOrDefault("discoveredFromType") == "Race"
+        && string.Equals(task.Attributes.GetValueOrDefault("discoveredFromProvider"), "JRA", StringComparison.OrdinalIgnoreCase)
+        && (!string.IsNullOrWhiteSpace(task.Attributes.GetValueOrDefault("sourceIdentity"))
+            || !string.IsNullOrWhiteSpace(task.Attributes.GetValueOrDefault("sourceUrl")));
 
     private static RaceId? ResolveReferenceRace(LeasedCollectionTask task)
     {

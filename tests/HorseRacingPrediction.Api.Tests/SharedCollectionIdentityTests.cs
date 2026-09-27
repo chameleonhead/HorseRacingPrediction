@@ -12,6 +12,36 @@ namespace HorseRacingPrediction.Api.Tests;
 public sealed class SharedCollectionIdentityTests
 {
     [TestMethod]
+    public async Task CardReacquisition_CorrectsJockeyWithoutChangingHorseOrEntryIdentity()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var http = client;
+        http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        const string source = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002022103875/DA";
+        var dirty = new DeclareRaceResultBulkRequest(new(2037, 9, 27), "中山", 11, "DOM re-extraction", EntryCount: 1, IsRaceCard: true,
+            Entries: [new(2, null, null, null, null, null, null, HorseName: "アイサンサン", JockeyName: "幸 英明 106 M", HorseSourceIdentity: source)]);
+        var first = await (await http.PostAsJsonAsync("/api/races/result-bulk", dirty)).Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>();
+        Assert.IsNotNull(first);
+        Assert.IsTrue(first.CorePersisted, string.Join(";", first.Errors));
+        using var before = System.Text.Json.JsonDocument.Parse(await http.GetStringAsync($"/api/races/{first.RaceId}"));
+        var oldEntry = before.RootElement.GetProperty("entries")[0];
+        var clean = dirty with { Entries = [dirty.Entries![0] with { JockeyName = "幸 英明" }] };
+        var second = await (await http.PostAsJsonAsync("/api/races/result-bulk", clean)).Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>();
+        Assert.IsNotNull(second);
+        Assert.IsTrue(second.CorePersisted, string.Join(";", second.Errors));
+        Assert.AreEqual(first.RaceId, second.RaceId);
+        using var after = System.Text.Json.JsonDocument.Parse(await http.GetStringAsync($"/api/races/{first.RaceId}"));
+        var entry = after.RootElement.GetProperty("entries")[0];
+        Assert.AreEqual(oldEntry.GetProperty("entryId").GetString(), entry.GetProperty("entryId").GetString());
+        Assert.AreEqual(oldEntry.GetProperty("horseId").GetString(), entry.GetProperty("horseId").GetString());
+        Assert.AreEqual("幸 英明", entry.GetProperty("jockeyName").GetString());
+        Assert.AreNotEqual(oldEntry.GetProperty("jockeyId").GetString(), entry.GetProperty("jockeyId").GetString());
+        using var oldMaster = System.Text.Json.JsonDocument.Parse(await http.GetStringAsync($"/api/jockeys/{oldEntry.GetProperty("jockeyId").GetString()}"));
+        Assert.AreEqual("幸 英明 106 M", oldMaster.RootElement.GetProperty("displayName").GetString());
+    }
+
+    [TestMethod]
     public async Task OwnerRecovery_RequiresUnchangedPreviewAndPause_ReplaysWithoutErasingFailure()
     {
         var (app, client) = await TestApplicationFactory.CreateAsync();

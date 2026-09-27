@@ -64,6 +64,24 @@ public sealed class HttpDataCollectionWriteServiceUpsertTests
     }
 
     [TestMethod]
+    public async Task EntryRecollection_ResolvesCurrentRiderWithoutRenamingOldMasterOrMovingHorse()
+    {
+        var handler = new EntryHandler("horse-existing", jockeyId: "jockey-contaminated");
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("https://example.invalid") };
+        var sut = new HttpDataCollectionWriteService(client, new AgentAcquisitionStatusRecorder());
+        await sut.UpsertRaceEntryAsync("race-test", 8, "テスト馬", "幸 英明", null, null, null, null, null, null, null);
+        var correctId = DeterministicIdGenerator.BuildEntityId("jockey",
+            DeterministicIdGenerator.NormalizeKey("幸 英明"));
+        Assert.IsTrue(handler.Writes.Any(x => x.Path == $"/api/jockeys/{correctId}"));
+        Assert.IsFalse(handler.Writes.Any(x => x.Path.Contains("jockey-contaminated", StringComparison.Ordinal)));
+        using var json = JsonDocument.Parse(handler.Writes.Single(x => x.Path.EndsWith("/entries")).Body);
+        Assert.AreEqual(correctId, json.RootElement.GetProperty("jockeyId").GetString());
+        Assert.AreEqual("horse-existing", json.RootElement.GetProperty("horseId").GetString());
+        Assert.AreEqual(DeterministicIdGenerator.BuildRaceEntryId("race-test", "horse-existing"),
+            json.RootElement.GetProperty("entryId").GetString());
+    }
+
+    [TestMethod]
     public async Task EntryUpdate_UsesHorseIdentityAndRetainsCollectedAttributes()
     {
         var horseId = DeterministicIdGenerator.BuildHorseId("テスト馬");
@@ -97,7 +115,8 @@ public sealed class HttpDataCollectionWriteServiceUpsertTests
             handler.Writes.Single().Path);
     }
 
-    private sealed class EntryHandler(string horseId, HttpStatusCode resultStatus = HttpStatusCode.OK) : HttpMessageHandler
+    private sealed class EntryHandler(string horseId, HttpStatusCode resultStatus = HttpStatusCode.OK,
+        string? jockeyId = null) : HttpMessageHandler
     {
         public List<(string Path, string Body)> Writes { get; } = [];
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -118,7 +137,7 @@ public sealed class HttpDataCollectionWriteServiceUpsertTests
                         raceId = "race-test",
                         entries = new[] { new {
                         entryId = DeterministicIdGenerator.BuildRaceEntryId("race-test", horseId), horseId,
-                        horseNumber = 8, gateNumber = 4, runningStyleCode = "逃", ownerName = "所有者" } }
+                        horseNumber = 8, gateNumber = 4, jockeyId, runningStyleCode = "逃", ownerName = "所有者" } }
                     })
                     : JsonContent.Create(new { horseId, registeredName = "テスト馬" }),
             };

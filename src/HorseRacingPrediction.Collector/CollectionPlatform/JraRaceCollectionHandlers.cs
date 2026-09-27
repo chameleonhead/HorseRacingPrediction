@@ -583,6 +583,10 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
             }
             catch (Exception ex) when (ex is not (OperationCanceledException or CollectionRepairHeldException))
             {
+                if (ex is JraIncompleteResultException incomplete
+                    && IncompleteResultWait(task, raceId, raceEvidence, incomplete,
+                        locationOutcomes, stageOutcomes, location.Url) is { } wait)
+                    return wait;
                 var outcome = ResourceLocationOutcomeClassifier.Failed(location, ex, RaceArtifactKind.Result);
                 locationOutcomes.Add(outcome);
                 if (outcome.Result is CollectionAttemptResult.AccessLimited or CollectionAttemptResult.TransientFailure)
@@ -615,6 +619,13 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         try
         {
             raceResult ??= await resultWorkflow.RefreshAsync(raceId, domainRaceId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (JraIncompleteResultException ex)
+        {
+            var wait = IncompleteResultWait(task, raceId, raceEvidence, ex,
+                locationOutcomes, stageOutcomes, successfulLocation ?? ToUri(result?.SourceUrl));
+            if (wait is not null) return wait;
+            throw;
         }
         catch (JraNavigationException ex)
         {
@@ -794,6 +805,43 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
     private sealed record RescheduledRace(RaceId RaceId, Uri? Url)
     {
         public DateOnly Date => RaceId.Date;
+    }
+
+    private CollectionAttemptCompletion? IncompleteResultWait(
+        LeasedCollectionTask task, RaceId raceId, RaceSchedulingEvidence? evidence,
+        JraIncompleteResultException exception, List<ResourceLocationOutcome> locations,
+        List<CollectionStageOutcome> stages, Uri? requestedUrl)
+    {
+        var now = _time.GetUtcNow();
+        DateTimeOffset? start = evidence?.OfficialStartAt;
+        if (start is null && task.Attributes.TryGetValue("officialStartAt", out var value)
+            && DateTimeOffset.TryParse(value, out var parsed))
+            start = parsed;
+        if (exception.RaceId != raceId || raceId.Date != TodayJst()
+            || start is null || now < start.Value || now >= start.Value.AddMinutes(30))
+            return null;
+        var deadline = start.Value.AddMinutes(30);
+        var retry = now.AddMinutes(5) < deadline ? now.AddMinutes(5) : deadline;
+        var diagnostic = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            reason = "FinishedTimeCellEmpty",
+            exception.RaceId,
+            exception.HorseNumber,
+            exception.Headers,
+            exception.Cells,
+            exception.Url,
+            observedAt = now,
+            officialStartAt = start,
+            deadline
+        });
+        stages.Add(new("ResolveResult", RaceArtifactKind.Result,
+            CollectionAttemptResult.ResourceNotYetAvailable, "RecentResultIncomplete",
+            diagnostic, requestedUrl, ToUri(exception.Url), Persisted: false));
+        return new(CollectionAttemptResult.ResourceNotYetAvailable, "RecentResultIncomplete", diagnostic,
+            RequestedUrl: requestedUrl, FinalUrl: ToUri(exception.Url), RetryAt: retry,
+            PageIdentification: $"RaceResultIncomplete:JRA:{task.Resource.Id}",
+            LocationOutcomes: locations, StageOutcomes: stages, RaceEvidence: evidence,
+            FailureImpact: CollectionFailureImpact.Isolated);
     }
 
     private DateTimeOffset? FirstResultCheck(DateOnly date, IReadOnlyDictionary<string, string> attributes,

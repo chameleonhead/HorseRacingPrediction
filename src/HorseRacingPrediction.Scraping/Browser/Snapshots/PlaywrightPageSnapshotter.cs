@@ -225,6 +225,7 @@ public sealed class PlaywrightPageSnapshotter : IPageSnapshotter
         => dto is null ? null : new PageSourceReference(dto.TagName, EmptyToNull(dto.ElementId), EmptyToNull(dto.LocatorHint))
         {
             AncestorClassTokens = dto.AncestorClassTokens is { Length: > 0 } ? dto.AncestorClassTokens : null,
+            ClassTokens = dto.ClassTokens is { Length: > 0 } ? dto.ClassTokens : null,
         };
 
     private static Uri ParseRequiredUri(
@@ -297,7 +298,7 @@ public sealed class PlaywrightPageSnapshotter : IPageSnapshotter
 
     private sealed record BrowserLocation(double X, double Y, double Width, double Height);
     private sealed record BrowserSource(string? TagName, string? ElementId, string? LocatorHint,
-        string[]? AncestorClassTokens);
+        string[]? AncestorClassTokens, string[]? ClassTokens);
     private sealed record BrowserMetadata(
         string? Description,
         string? CanonicalUrl,
@@ -386,7 +387,7 @@ public sealed class PlaywrightPageSnapshotter : IPageSnapshotter
                     for (let parent = element.parentElement; parent; parent = parent.parentElement)
                         ancestorClassTokens.push(...parent.classList);
                 }
-                return { tagName, elementId, locatorHint, ancestorClassTokens: [...new Set(ancestorClassTokens)] };
+                return { tagName, elementId, locatorHint, classTokens: [...element.classList], ancestorClassTokens: [...new Set(ancestorClassTokens)] };
             };
             const ownText = element => normalize(Array.from(element.childNodes)
                 .filter(node => node.nodeType === Node.TEXT_NODE)

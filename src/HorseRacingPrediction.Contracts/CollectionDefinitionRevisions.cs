@@ -2,11 +2,11 @@ namespace HorseRacingPrediction.Contracts;
 
 public static class CollectionDefinitionRevisions
 {
-    // Preserve cancelled/excluded card entries and refresh participation status on existing cards.
-    public const int RaceDetail = 5;
-    public const int HorseProfile = 4;
-    public const int JockeyProfile = 3;
-    public const int TrainerProfile = 3;
+    // Re-extract DOM names and retry profiles with corrected official navigation/identity rules.
+    public const int RaceDetail = 6;
+    public const int HorseProfile = 5;
+    public const int JockeyProfile = 4;
+    public const int TrainerProfile = 4;
     public const int OwnerIdentity = 1;
 
     public static int Subject(string definition) => definition switch

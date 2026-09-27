@@ -78,6 +78,7 @@ public sealed class RaceResultPageParser
     public IJraPage Parse(
         SemanticPageSnapshot source)
     {
+        JraJockeyNameParser.EnsureCompleteSnapshot(source, JraPageKind.RaceResult);
         var snapshot = JraSnapshotView.Create(source);
         var officiallyCancelled = IsOfficiallyCancelled(snapshot);
         var table = FindResultTable(snapshot);
@@ -100,7 +101,8 @@ public sealed class RaceResultPageParser
             ? $"{RaceCourseNames.GetJraName(course)}{number}R"
             : ParseRaceName(snapshot);
 
-        IReadOnlyList<RaceResultEntry> results = table is null ? [] : ParseResults(table, snapshot.Url);
+        IReadOnlyList<RaceResultEntry> results = table is null ? [] : ParseResults(table, snapshot.Url,
+            new RaceId(date, course, number));
 
         // 依頼書29節: RaceResult全体Validationとして「結果行が1件以上存在する」ことを
         // 必須とする。着順テーブル自体は見つかったが結果行が0件の場合、成績なしの
@@ -1338,7 +1340,8 @@ public sealed class RaceResultPageParser
 
     private static IReadOnlyList<RaceResultEntry> ParseResults(
         JraTableView table,
-        string url)
+        string url,
+        RaceId raceId)
     {
         var finishIndex = FindFinishPositionColumnIndex(table.Headers);
         var horseNumberIndex = FindHorseNumberColumnIndex(table.Headers);
@@ -1470,7 +1473,8 @@ public sealed class RaceResultPageParser
 
             var jockeyName =
                 jockeyIndex >= 0 && jockeyIndex < row.Count && !string.IsNullOrWhiteSpace(row[jockeyIndex])
-                    ? row[jockeyIndex]
+                    ? JraJockeyNameParser.Parse(table.GetCell(rowIndex, jockeyIndex),
+                        table.Headers[jockeyIndex], url, JraPageKind.RaceResult)
                     : null;
 
             TimeSpan? time = null;
@@ -1505,6 +1509,9 @@ public sealed class RaceResultPageParser
                         "Time",
                         row[timeIndex]);
                 }
+
+                if (timeIndex >= 0 && timeIndex < row.Count)
+                    throw new JraIncompleteResultException(url, raceId, horseNumber, table.Headers, row);
 
                 throw new JraResultConsistencyException(
                     JraPageKind.RaceResult,

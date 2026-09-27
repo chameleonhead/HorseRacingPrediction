@@ -59,6 +59,8 @@ internal sealed class TestPageSection
 
 internal sealed record TestPageSnapshot(string Url, string Title, List<TestPageSection> Sections)
 {
+    // Explicit test data for the direct text of span.txt, not parsed from flattened headings.
+    public string? HorseName { get; init; }
     public List<string> Headings => Sections.Count == 0 ? [] : Sections[0].Headings;
     public List<TestPageTable> Tables => Sections.SelectMany(section => section.Tables).ToList();
 
@@ -75,6 +77,11 @@ internal sealed record TestPageSnapshot(string Url, string Title, List<TestPageS
             {
                 Kind = PageContentKind.Heading,
                 Text = heading,
+                Children = fixture.HorseName is null ? [] : [new PageContentNode
+                {
+                    Kind = PageContentKind.Text, Text = fixture.HorseName,
+                    Source = new("span", null, "span.txt") { ClassTokens = ["txt"] },
+                }],
             }));
             if (!string.IsNullOrWhiteSpace(section.MainText))
             {

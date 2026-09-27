@@ -66,5 +66,6 @@ public sealed class SharedSubjectIdentityTests
         => new(url, "競走馬情報", [new(
             "競走馬情報", string.Empty, [], [],
             [new(["項目", "値"], [["生年月日", "2024年4月11日"]])],
-            [$"競走馬情報 {name}"])]);
+            [$"競走馬情報 {name}"])])
+        { HorseName = name };
 }

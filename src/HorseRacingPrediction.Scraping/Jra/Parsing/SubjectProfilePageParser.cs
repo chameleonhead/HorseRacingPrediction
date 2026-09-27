@@ -4,6 +4,8 @@ using System.Text.RegularExpressions;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Scraping.Browser;
+using PageContentNode = HorseRacingPrediction.Scraping.Browser.Snapshots.PageContentNode;
+using PageContentKind = HorseRacingPrediction.Scraping.Browser.Snapshots.PageContentKind;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
@@ -25,8 +27,9 @@ public static class SubjectProfilePageParser
         var prefix = subjectType switch { "Horse" => "競走馬情報", "Jockey" => "騎手情報", _ => "調教師情報" };
         var heading = snapshot.Headings.FirstOrDefault(x => x.StartsWith(prefix, StringComparison.Ordinal));
         if (heading is null) throw new JraCollectionException(prefix + "の見出しを確認できません。");
-        var name = CanonicalizeDisplayName(subjectType,
-            Regex.Split(heading[prefix.Length..].Trim(), subjectType == "Horse" ? "[A-Za-z（(]" : "[（(]")[0]);
+        var name = CanonicalizeDisplayName(subjectType, subjectType == "Horse"
+            ? HorseName(source.Root)
+            : Regex.Split(heading[prefix.Length..].Trim(), "[（(]")[0]);
         if (name.Length == 0) throw new JraCollectionException("プロフィールの名前を取得できません。");
         var fields = new Dictionary<string, string>();
         foreach (var keyValue in source.KeyValues)
@@ -86,6 +89,27 @@ public static class SubjectProfilePageParser
                 page.Profile.Name,
                 [new(page.Profile.Name, page.Profile.SourceIdentity ?? page.Url)],
                 expected.SourceIdentity, page.Url);
+    }
+
+    private static string HorseName(PageContentNode root)
+    {
+        // Text provenance belongs to its immediate DOM parent. Image alt, opt and
+        // name_en descendants are deliberately not a source of the horse's name.
+        var headings = Descendants(root).Where(node => node.Kind == PageContentKind.Heading)
+            .Select(node => Descendants(node).Where(child => child.Kind == PageContentKind.Text
+                && child.Source?.TagName == "span" && child.Source.ClassTokens?.Contains("txt") == true)
+                .Select(child => child.Text).Where(text => !string.IsNullOrWhiteSpace(text)).ToArray())
+            .Where(parts => parts.Length > 0).ToArray();
+        if (headings.Length != 1 || headings[0].Length != 1)
+            throw new JraCollectionException("競走馬情報の見出しを確認できません。専用DOMの名前が欠落または曖昧です。");
+        return headings[0][0]!;
+    }
+
+    private static IEnumerable<PageContentNode> Descendants(PageContentNode node)
+    {
+        yield return node;
+        foreach (var child in node.Children)
+            foreach (var descendant in Descendants(child)) yield return descendant;
     }
 
     private static bool SourceIdentityMatches(string subjectType, string expected, string? actual) =>

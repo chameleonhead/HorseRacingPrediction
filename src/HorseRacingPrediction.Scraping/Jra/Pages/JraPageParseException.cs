@@ -156,7 +156,7 @@ public sealed class JraPageKindMismatchException
 /// 例：ResultStatus=FinishedなのにFinishPositionが存在しない、降着表現を検出した
 /// のに元の入線順位を解析できない等。
 /// </summary>
-public sealed class JraResultConsistencyException
+public class JraResultConsistencyException
     : JraPageParseException
 {
     public JraResultConsistencyException(
@@ -168,4 +168,20 @@ public sealed class JraResultConsistencyException
         : base(pageKind, url, message, fieldName, rawValue)
     {
     }
+}
+
+/// <summary>A numeric finisher has an existing but empty time cell. No result may be saved.</summary>
+public sealed class JraIncompleteResultException(
+    string url, Models.RaceId raceId, int horseNumber,
+    IReadOnlyList<string> headers, IReadOnlyList<string> cells)
+    : JraResultConsistencyException(JraPageKind.RaceResult, url,
+        $"ResultStatus=Finishedの馬番{horseNumber}にTimeが存在しません。", "Time", string.Empty)
+{
+    public Models.RaceId RaceId { get; } = raceId;
+    public int HorseNumber { get; } = horseNumber;
+    public IReadOnlyList<string> Headers { get; } = Bound(headers);
+    public IReadOnlyList<string> Cells { get; } = Bound(cells);
+
+    private static string[] Bound(IReadOnlyList<string> values) =>
+        values.Take(24).Select(value => value.Length > 128 ? value[..128] : value).ToArray();
 }
