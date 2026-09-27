@@ -1,4 +1,4 @@
-namespace HorseRacingPrediction.ApiClient;
+namespace HorseRacingPrediction.Contracts;
 
 public sealed record RaceOddsEntryRequest(int HorseNumber, decimal WinOdds, int? Popularity = null);
 public sealed record RaceOddsObservationRequest(string Market, string Selection, decimal Value,

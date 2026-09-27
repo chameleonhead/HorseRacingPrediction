@@ -294,7 +294,7 @@ public class RaceQueryToolsTests
 
     private sealed class FakeRaceQueryService : IRaceQueryService
     {
-        public List<RaceSearchSummary> RegisteredRaces { get; } = [];
+        public List<RaceSearchSummaryDto> RegisteredRaces { get; } = [];
         public RacePredictionContextDto? RaceContext { get; set; }
         public HorseReadDto? HorseModel { get; set; }
         public JockeyDto? JockeyModel { get; set; }
@@ -304,8 +304,8 @@ public class RaceQueryToolsTests
         public MlPredictionResponse? MlPrediction { get; set; }
         public PredictionTicketSummaryReadModel? PredictionTicket { get; set; }
 
-        public Task<IReadOnlyList<RaceSearchSummary>> SearchRegisteredRacesAsync(DateOnly raceDate, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<RaceSearchSummary>>(RegisteredRaces.Where(x => x.RaceDate == raceDate).ToList());
+        public Task<IReadOnlyList<RaceSearchSummaryDto>> SearchRegisteredRacesAsync(DateOnly raceDate, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<RaceSearchSummaryDto>>(RegisteredRaces.Where(x => x.RaceDate == raceDate).ToList());
 
         public Task<RacePredictionContextDto?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken = default)
             => Task.FromResult(RaceContext);

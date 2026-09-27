@@ -11,7 +11,7 @@ namespace HorseRacingPrediction.ApiClient;
 /// </summary>
 public interface IRaceQueryService
 {
-    Task<IReadOnlyList<RaceSearchSummary>> SearchRegisteredRacesAsync(
+    Task<IReadOnlyList<RaceSearchSummaryDto>> SearchRegisteredRacesAsync(
         DateOnly raceDate, CancellationToken cancellationToken = default);
 
     Task<RacePredictionContextDto?> GetRacePredictionContextAsync(

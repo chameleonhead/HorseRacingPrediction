@@ -1,6 +1,6 @@
-namespace HorseRacingPrediction.ApiClient;
+namespace HorseRacingPrediction.Contracts;
 
-public sealed record RaceSearchSummary(
+public sealed record RaceSearchSummaryDto(
     string RaceId,
     DateOnly? RaceDate,
     string? RacecourseCode,

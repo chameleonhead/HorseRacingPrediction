@@ -9,10 +9,10 @@ internal static class ResolveRaceIdentityEndpoint
 {
     internal static void Map(RouteGroupBuilder group)
     {
-        group.MapPost("/identity/race", async (ResolveRaceIdentityRequest request, IDbContextProvider<EventStoreDbContext> provider, CancellationToken token) =>
+        group.MapPost("/identity/race", async (HorseRacingPrediction.Contracts.ResolveRaceIdentityRequest request, IDbContextProvider<EventStoreDbContext> provider, CancellationToken token) =>
                 {
                     using var db = provider.CreateContext();
-                    try { return Results.Ok(new ResolvedIdentity(await CollectionIdentityResolver.RaceAsync(db, request.Date, request.Course, request.Number, token))); }
+                    try { return Results.Ok(new HorseRacingPrediction.Contracts.ResolvedIdentity(await CollectionIdentityResolver.RaceAsync(db, request.Date, request.Course, request.Number, token))); }
                     catch (InvalidOperationException ex) { return Results.Conflict(new { code = ex.Message }); }
                 });
     }

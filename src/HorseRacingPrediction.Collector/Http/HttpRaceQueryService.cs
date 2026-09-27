@@ -16,7 +16,7 @@ public sealed class HttpRaceQueryService : IRaceQueryService
         _httpClient = httpClient;
     }
 
-    public async Task<IReadOnlyList<RaceSearchSummary>> SearchRegisteredRacesAsync(DateOnly raceDate, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<RaceSearchSummaryDto>> SearchRegisteredRacesAsync(DateOnly raceDate, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient
             .GetAsync($"/api/races?raceDateFrom={raceDate:yyyy-MM-dd}&raceDateTo={raceDate:yyyy-MM-dd}&page=1&pageSize=100&sortBy=raceNumber&sortDescending=false", cancellationToken)
@@ -28,7 +28,7 @@ public sealed class HttpRaceQueryService : IRaceQueryService
             .ReadFromJsonAsync<PagedResponseDto<RaceSummaryDto>>(JsonOptions, cancellationToken)
             .ConfigureAwait(false);
 
-        return dto?.Items.Select(x => new RaceSearchSummary(x.RaceId, x.RaceDate, x.RacecourseCode, x.RaceNumber)).ToList() ?? [];
+        return dto?.Items.Select(x => new RaceSearchSummaryDto(x.RaceId, x.RaceDate, x.RacecourseCode, x.RaceNumber)).ToList() ?? [];
     }
 
     public async Task<RacePredictionContextDto?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken = default)

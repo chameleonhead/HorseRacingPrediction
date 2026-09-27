@@ -1,11 +1,10 @@
 using EventFlow;
 using EventFlow.Queries;
-using EventFlow.ReadStores;
+using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Domain.Races;
-using HorseRacingPrediction.ApiClient;
-using HorseRacingPrediction.Api.Security;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 
@@ -22,7 +21,7 @@ public static class RaceOddsEndpointExtensions
             if (errors.Count > 0) return Results.ValidationProblem(errors);
             var race = await queries.ProcessAsync(new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId), token);
             if (race is null) return Results.NotFound();
-            var activeEntries = race.Entries.Where(entry => entry.ParticipationStatus == RaceEntryParticipationStatus.Active).ToArray();
+            var activeEntries = race.Entries.Where(entry => entry.ParticipationStatus == HorseRacingPrediction.Domain.Races.RaceEntryParticipationStatus.Active).ToArray();
             if (activeEntries.Length == 0 || activeEntries.Any(entry => entry.HorseNumber is null or <= 0))
                 return Results.Conflict(new { ErrorCode = "RaceAssignmentNotConfirmed", Message = "Confirmed horse assignments are required for odds." });
             if (entries.Any(entry => !activeEntries.Any(assignment => assignment.HorseNumber == entry.HorseNumber)))

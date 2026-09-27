@@ -1,5 +1,4 @@
 using EventFlow.EntityFramework;
-using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Infrastructure.Persistence;
 
