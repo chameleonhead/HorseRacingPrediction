@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260927_collection-rest-api",
+  "taskId": "T2",
+  "attemptId": "T2-A8",
+  "state": "completed",
+  "taskDifficulty": "high",
+  "acceptanceCriteria": ["AC1", "AC2", "AC3", "AC4", "AC5", "AC6", "AC7", "AC8"],
+  "route": { "tier": "worker", "requestedModel": "not captured", "observedModel": null, "observationSource": null, "modelTelemetryReason": "parent dispatch did not expose model metadata" },
+  "usage": { "availability": "unavailable", "totalTokens": null, "reason": "per-agent token telemetry was not exposed" },
+  "scope": ["src/HorseRacingPrediction.Api/Endpoints/Collection", "src/HorseRacingPrediction.Api/Endpoints/PredictionScheduling", "src/HorseRacingPrediction.Api/Endpoints/Subjects", "src/HorseRacingPrediction.Api/Endpoints/Races", "src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformContracts.cs", "src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformEndpointSupport.cs", "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs", "src/HorseRacingPrediction.Api/Extensions/EndpointExtensions.cs", "src/HorseRacingPrediction.Api/Program.cs", "src/HorseRacingPrediction.Api/Security/RaceWriteEndpointFilter.cs", "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionApiRequests.cs", "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.cs", "src/HorseRacingPrediction.CollectionOperations/PredictionScheduling/PredictionScheduleHttp.cs", "tests/HorseRacingPrediction.Api.Tests"],
+  "review": { "usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "review usage telemetry was not exposed" },
+  "overhead": { "availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "effort telemetry was not exposed" },
+  "elapsed": { "availability": "unavailable", "minutes": null, "reason": "reliable elapsed effort was not exposed" },
+  "startRevision": "660d0fec",
+  "endRevisionOrPatch": "8eda7cc3; eab0e62f",
+  "outcome": { "verificationPassed": true, "qualityPassed": true, "scopePassed": true, "independentChallenge": "Explicit DI source metadata resolves the isolated endpoint binding failures; full API suite passed 324, skipped 1, failed 0 on the temporary 4.14.4 compatibility archive.", "retries": 0, "leadCorrections": 0, "reviewPasses": 1, "promoted": false, "escapedDefects": 0, "escalations": 0, "reviewMode": "ac-group", "detailReviewReason": null, "decision": "accept" }
+}

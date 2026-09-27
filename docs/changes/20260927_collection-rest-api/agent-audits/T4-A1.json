@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260927_collection-rest-api",
+  "taskId": "T4",
+  "attemptId": "T4-A1",
+  "state": "completed",
+  "taskDifficulty": "high",
+  "acceptanceCriteria": ["AC1", "AC2", "AC3", "AC4", "AC5", "AC6", "AC7", "AC8"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "not captured",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "parent dispatch did not expose requested or observed model metadata"
+  },
+  "usage": { "availability": "unavailable", "totalTokens": null, "reason": "per-agent token telemetry was not exposed" },
+  "scope": ["tests/HorseRacingPrediction.Api.Tests", "tests/HorseRacingPrediction.Collector.Tests"],
+  "review": { "usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "review usage telemetry was not exposed" },
+  "overhead": { "availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "effort telemetry was not exposed" },
+  "elapsed": { "availability": "unavailable", "minutes": null, "reason": "reliable elapsed effort was not exposed" },
+  "startRevision": "660d0fec",
+  "endRevisionOrPatch": "eab0e62f",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Fresh isolated API suite progressed from 42 to 28 to 8 failures, then 324 passed, 1 skipped, 0 failed; final API build also passed. Collector suite passed 392/392. Stale DTOs/routes and minimal-host DI were corrected; repo package references stayed 5.0.0.",
+    "retries": 3,
+    "leadCorrections": 3,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 42,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}
