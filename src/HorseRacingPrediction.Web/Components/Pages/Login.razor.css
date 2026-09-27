@@ -1,0 +1,37 @@
+﻿.login {
+    width: min(100%, 360px);
+}
+
+.login-header {
+    margin-bottom: 24px;
+}
+
+.app-name {
+    margin-bottom: 24px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 32px;
+}
+
+p {
+    margin: 8px 0 0;
+}
+
+.form {
+    display: grid;
+    gap: 16px;
+}
+
+.forgot-password {
+    justify-self: start;
+}
+
+.login-button {
+    width: 100%;
+}

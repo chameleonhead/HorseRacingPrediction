@@ -1,0 +1,7 @@
+﻿.login-layout {
+    box-sizing: border-box;
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
+    padding: 24px;
+}

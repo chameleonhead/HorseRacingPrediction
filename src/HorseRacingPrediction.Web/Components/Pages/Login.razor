@@ -1,0 +1,131 @@
+﻿@using System.ComponentModel.DataAnnotations
+@using HorseRacingPrediction.Web.Authentication
+@using Microsoft.AspNetCore.Components.Authorization
+
+@page "/login"
+@layout LoginLayout
+@attribute [AllowAnonymous]
+
+@inject ILoginService LoginService
+@inject NavigationManager Navigation
+
+<PageTitle>サインイン</PageTitle>
+
+<FluentCard class="login">
+    <header class="login-header">
+        <div class="app-name">
+            Horse Racing Prediction
+        </div>
+
+        <h1>サインイン</h1>
+    </header>
+
+    <EditForm Model="@Model"
+              FormName="Login"
+              OnValidSubmit="@LoginAsync">
+
+        @if (!string.IsNullOrEmpty(ErrorMessage))
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Error">
+                @ErrorMessage
+            </FluentMessageBar>
+        }
+
+        <div class="form">
+            <FluentTextInput Label="ユーザー名"
+                             Name="Model.Username"
+                             @bind-Value="@Model.Username"
+                             TextInputType="TextInputType.Text"
+                             AutoComplete="username" />
+            <FluentTextInput Label="パスワード"
+                             Name="Model.Password"
+                             @bind-Value="@Model.Password"
+                             TextInputType="TextInputType.Password"
+                             AutoComplete="current-password" />
+
+            <FluentButton Type="ButtonType.Submit"
+                          Appearance="ButtonAppearance.Primary">
+                サインイン
+            </FluentButton>
+        </div>
+    </EditForm>
+</FluentCard>
+
+@code {
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromForm(FormName = "Login")]
+    private LoginForm Model { get; set; } = null!;
+
+    private string? ErrorMessage;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Model ??= new()
+        {
+            Username = "user",
+        };
+
+        if (LoginService.IsAuthenticated())
+        {
+            RedirectToReturnUrl();
+            return;
+        }
+    }
+
+    private void RedirectToReturnUrl()
+    {
+        var target = GetSafeReturnUrl();
+
+        Navigation.NavigateTo(target, forceLoad: true);
+    }
+
+    private string GetSafeReturnUrl()
+    {
+        if (string.IsNullOrWhiteSpace(ReturnUrl))
+            return "/";
+
+        if (!Uri.IsWellFormedUriString(
+                ReturnUrl,
+                UriKind.Relative))
+        {
+            return "/";
+        }
+
+        return ReturnUrl;
+    }
+
+    private async Task LoginAsync()
+    {
+        if (Model is null)
+        {
+            ErrorMessage = "フォームの内容が不正です。";
+            return;
+        }
+
+        var result = await LoginService.AuthenticateAsync(
+            Model.Username,
+            Model.Password);
+
+        if (!result.Succeeded)
+        {
+            ErrorMessage = "パスワードが正しくありません。";
+            return;
+        }
+
+        RedirectToReturnUrl();
+    }
+
+    public sealed class LoginForm
+    {
+        [Required]
+        public string Username { get; set; } = "";
+        [Required]
+        public string Password { get; set; } = "";
+    }
+
+}

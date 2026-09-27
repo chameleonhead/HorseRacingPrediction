@@ -1,20 +1,44 @@
-﻿<FluentNav>
-    <FluentNavItem Href="/"
-                   Match="NavLinkMatch.All"
-                   IconRest="@(new Icons.Regular.Size20.Home())"
-                   IconActive="@(new Icons.Filled.Size20.Home())">
-        ホーム
-    </FluentNavItem>
+﻿<div class="navigation-surface">
+    <FluentNav Density="NavDensity.Small" UseIcons="false" Width="260px">
+        <FluentNavSectionHeader Title="競馬" />
+        <FluentNavItem Href="/races">
+            レース
+        </FluentNavItem>
+        <FluentNavItem Href="/horses">
+            馬
+        </FluentNavItem>
+        <FluentNavItem Href="/jockeys">
+            騎手
+        </FluentNavItem>
+        <FluentNavItem Href="/trainers">
+            調教師
+        </FluentNavItem>
+        <FluentNavItem Href="/owners">
+            馬主
+        </FluentNavItem>
 
-    <FluentNavItem Href="/races"
-                   IconRest="@(new Icons.Regular.Size20.Calendar())"
-                   IconActive="@(new Icons.Filled.Size20.Calendar())">
-        レース
-    </FluentNavItem>
+        <FluentNavSectionHeader Title="分析" />
+        <FluentNavItem Href="/predictions">
+            予想
+        </FluentNavItem>
+        <FluentNavItem Href="/models">
+            モデル
+        </FluentNavItem>
+        <FluentNavItem Href="/backtestings">
+            バックテスト
+        </FluentNavItem>
 
-    <FluentNavItem Href="/settings"
-                   IconRest="@(new Icons.Regular.Size20.Settings())"
-                   IconActive="@(new Icons.Filled.Size20.Settings())">
-        設定
-    </FluentNavItem>
-</FluentNav>
+        <FluentNavSectionHeader Title="データ" />
+        <FluentNavItem Href="/collections">
+            収集
+        </FluentNavItem>
+        <FluentNavItem Href="/jobs">
+            ジョブ
+        </FluentNavItem>
+
+        <FluentNavSectionHeader Title="管理" />
+        <FluentNavItem Href="/settings">
+            設定
+        </FluentNavItem>
+    </FluentNav>
+</div>

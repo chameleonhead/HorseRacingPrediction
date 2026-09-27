@@ -1,5 +1,7 @@
 ﻿@inherits LayoutComponentBase
 
+@inject NavigationManager Navigation
+
 <FluentLayout>
     <FluentLayoutItem Area="LayoutArea.Header">
         <FluentLayoutHamburger />
@@ -7,26 +9,31 @@
         <strong>Horse Racing Prediction</strong>
 
         <FluentSpacer />
+        <form method="post" action="/logout" @formname="Logout">
+            <AntiforgeryToken />
 
-        <FluentButton Appearance="ButtonAppearance.Subtle"
-                      IconStart="@(new Icons.Regular.Size20.Alert())"
-                      Title="通知" />
-
-        <FluentButton Appearance="ButtonAppearance.Subtle"
-                      IconStart="@(new Icons.Regular.Size20.Person())">
-            ユーザー
-        </FluentButton>
+            <FluentButton Type="ButtonType.Submit">
+                ログアウト
+            </FluentButton>
+        </form>
     </FluentLayoutItem>
 
-    <FluentLayoutItem Area="LayoutArea.Navigation"
-                      Padding="@Padding.All0">
+    <FluentLayoutItem Area="LayoutArea.Navigation">
         <NavMenu />
     </FluentLayoutItem>
 
-    <FluentLayoutItem Area="LayoutArea.Content"
-                      Padding="@Padding.All4">
+    <FluentLayoutItem Area="LayoutArea.Content">
         @Body
     </FluentLayoutItem>
 </FluentLayout>
 
 <FluentProviders />
+
+@code {
+    private void Logout()
+    {
+        Navigation.NavigateTo(
+            "/logout",
+            forceLoad: true);
+    }
+}
