@@ -143,6 +143,13 @@ public sealed class RaceCardPageParserTests
                 ],
             ]);
 
+        table = table with
+        {
+            Cells = table.Rows.Select(row => (IReadOnlyList<TestPageCell>)[
+                new(row[0]), new(row[1]), new(row[2]),
+                new(row[3], [new("p", ["jockey"], jockeyName)])
+            ]).ToArray()
+        };
         var section = new TestPageSection(
             title: "出馬表",
             mainText: "発走 10:05",
@@ -232,7 +239,8 @@ public sealed class RaceCardPageParserTests
                 ]),
                 new(rows[0][3],
                 [
-                    new("a", ["jockey"], "騎手A", "/JRADB/accessK.html?CNAME=pw01dud1020260456/B2"),
+                    new("p", ["jockey"], "騎手A"),
+                    new("a", [], "騎手A", "/JRADB/accessK.html?CNAME=pw01dud1020260456/B2"),
                 ]),
             ],
         };

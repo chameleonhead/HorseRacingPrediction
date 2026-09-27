@@ -120,7 +120,7 @@ public sealed class RaceCardCancellationTests
               <td>{frame}</td>
               <td>{horseNumber}</td>
               <td><div class="name">{source}</div><div class="past">{pastText}</div><p class="owner">{owner}</p><div class="trainer">調教師（栗東）</div></td>
-              <td>牡3/栗<br>57.0kg<br>騎手</td>
+              <td>牡3/栗<p class="weight">57.0kg</p><p class="jockey">騎手</p></td>
             </tr>
             """;
     }

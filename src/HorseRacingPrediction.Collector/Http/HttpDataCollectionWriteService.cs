@@ -422,10 +422,11 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             // 既存エントリの場合でも、関連エンティティ欠落や名称欠落を補完する。
             await EnsureHorseExistsByIdAsync(existingEntry.HorseId, horseName, sexCode, cancellationToken).ConfigureAwait(false);
 
-            if (!string.IsNullOrWhiteSpace(existingEntry.JockeyId))
-            {
-                await EnsureJockeyExistsByIdAsync(existingEntry.JockeyId, cleanedJockeyName, cancellationToken).ConfigureAwait(false);
-            }
+            // A fresh, source-selected rider can differ from the previous collection.
+            // Resolve the incoming name instead of renaming the old master under its old ID.
+            var updatedJockeyId = string.IsNullOrWhiteSpace(cleanedJockeyName)
+                ? existingEntry.JockeyId
+                : await UpsertJockeyAsync(cleanedJockeyName, null, null, cancellationToken).ConfigureAwait(false);
 
             if (!string.IsNullOrWhiteSpace(existingEntry.TrainerId))
             {
@@ -438,7 +439,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
                 HorseId = existingEntry.HorseId,
                 HorseNumber = horseNumber ?? existingEntry.HorseNumber,
                 GateNumber = gateNumber ?? existingEntry.GateNumber,
-                JockeyId = existingEntry.JockeyId,
+                JockeyId = updatedJockeyId,
                 TrainerId = existingEntry.TrainerId,
                 HorseName = horseName,
                 AssignedWeight = assignedWeight ?? existingEntry.AssignedWeight,

@@ -1,5 +1,7 @@
 # JRAサイト収集契約
 
+> 2026-09-27 確認事実と承認済み実装: 中山11Rの結合セルは `td.jockey > p.jockey` が騎手名、兄弟の `div.rating` がプレレーティング。騎手名anchor自身にjockey classはなく、href=#/doActionのPOST導線である。馬プロフィールh1は `span.txt` の直接テキストが馬名、`horse_icon` の画像altと `name_en` は別情報。公開ディレクトリのリンク文言は「引退騎手」「引退調教師」。これらをセル/見出し全文の後処理で混ぜない。[DOM名取得と現行障害の変更記録](changes/20260927_dom-jockey-and-collection-errors/README.md)にURL・観測・再現・検証を記録した。本番配備/補正/再開は別承認待ち。後から正常だった阪神4Rのページだけを根拠に、失敗時が公開途中だったとは断定しない。
+
 > 2026-09-27 実装済み（本番検証中）: 馬検索候補・選択・profile保存検証に同じ名前/公式identity同値規則を使い、別馬/誕生日矛盾/不正hostの拒否を保持する。登録記号やURL差の反例はコード契約の検証用であり、全表記を公式サイトで実観測したとは扱わない。詳細は[識別ルール共通化](changes/20260927_shared-identity-contracts/README.md)を参照。
 
 - Document owner: Collection platform maintainer

@@ -38,7 +38,8 @@ public sealed class SubjectProfilePageParserTests
                 new(["年月日", "場", "レース名"], rows, cells),
                 new(["年月日", "場", "レース名"], [["2025年3月1日", "海外", "海外競走"]]),
             ],
-            ["競走馬情報 テストホースTest Horse（JPN）"])]);
+            ["競走馬情報 テストホースTest Horse（JPN）"])])
+        { HorseName = "テストホース" };
         var page = SubjectProfilePageParser.Parse(snapshot, "Horse");
         Assert.AreEqual("テストホース", page.Profile.Name); Assert.AreEqual("父馬", page.Profile.Fields["父"]);
         Assert.AreEqual(71, page.Races.Count); Assert.AreEqual(70, page.Races.Count(x => x.ExclusionReason is null));
@@ -69,7 +70,8 @@ public sealed class SubjectProfilePageParserTests
         var snapshot = new TestPageSnapshot("https://www.jra.go.jp/horse", "競走馬情報", [new(
             "プロフィール", "", [], [],
             [new(["項目", "値"], [["生年月日", "2011年2月9日"]])],
-            ["競走馬情報 マルガイ アジアエクスプレス（USA）"])]);
+            ["競走馬情報 マルガイ アジアエクスプレス（USA）"])])
+        { HorseName = "アジアエクスプレス" };
 
         var page = SubjectProfilePageParser.Parse(snapshot, "Horse");
 

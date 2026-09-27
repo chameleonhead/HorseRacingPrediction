@@ -1,0 +1,151 @@
+[
+  {
+    "url": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604091120260927/5A",
+    "capturedAt": "2026-09-27T03:54:03.7679664+00:00",
+    "parsed": {
+      "RaceId": {
+        "Date": "2026-09-27",
+        "Course": 6,
+        "Number": 11
+      },
+      "entries": [
+        {
+          "HorseName": "レッドモンレーヴ",
+          "HorseNumber": 1,
+          "HorseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002019105496/F0",
+          "JockeyName": "酒井 学",
+          "horseId": "horse-5909a812-dbc9-5b81-aef5-64244ccc8ded",
+          "jockeyId": "jockey-9a1f5d58-1950-5f62-a3a3-03315a50e1dd"
+        },
+        {
+          "HorseName": "アイサンサン",
+          "HorseNumber": 2,
+          "HorseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002022103875/DA",
+          "JockeyName": "幸 英明",
+          "horseId": "horse-4d5c7651-a434-5c45-8e95-d47cb60e684c",
+          "jockeyId": "jockey-887d509e-84ff-5cd3-a113-ef6cfedad819"
+        },
+        {
+          "HorseName": "ママコチャ",
+          "HorseNumber": 3,
+          "HorseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002019105394/D9",
+          "JockeyName": "武 豊",
+          "horseId": "horse-84e03a60-3247-5207-980b-5ecadc8a18ed",
+          "jockeyId": "jockey-372ea4d6-88aa-5e5d-a9c2-d0875edf2870"
+        },
+        {
+          "HorseName": "ジューンブレア",
+          "HorseNumber": 4,
+          "HorseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002021110099/B3",
+          "JockeyName": "坂井 瑠星",
+          "horseId": "horse-322be648-b773-56df-a2a1-c0bec3481211",
+          "jockeyId": "jockey-018fed07-2feb-54cb-8712-92fe3c68a568"
+        },
+        {
+          "HorseName": "サウンドモリアーナ",
+          "HorseNumber": 5,
+          "HorseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002022102057/29",
+          "JockeyName": "吉田 隼人",
+          "horseId": "horse-169b94fa-4b6a-58d8-97f1-3f98f6a67de9",
+          "jockeyId": "jockey-36f7350c-f29b-591e-a96e-76dc3a760a11"
+        },
+        {
+          "HorseName": "ワールズエンド",
+          "HorseNumber": 6,
+          "HorseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002021105864/A9",
+          "JockeyName": "津村 明秀",
+          "horseId": "horse-a3808415-2209-5e90-8684-35fe84c8a9f9",
+          "jockeyId": "jockey-e425896b-216a-59eb-9f1c-795b13da1b59"
+        },
+        {
+          "HorseName": "ペアポルックス",
+          "HorseNumber": 7,
+          "HorseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002021102320/DB",
+          "JockeyName": "岩田 康誠",
+          "horseId": "horse-25acb6c2-d151-5711-a072-542559a2f41d",
+          "jockeyId": "jockey-69fedac2-a00b-58d7-8c86-cba44c9fa839"
+        },
+        {
+          "HorseName": "エーティーマクフィ",
+          "HorseNumber": 8,
+          "HorseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002019105859/CD",
+          "JockeyName": "富田 暁",
+          "horseId": "horse-bba29932-2b4c-56f2-9110-c3a557d2c676",
+          "jockeyId": "jockey-7ba4e439-e8ab-557c-9fe4-c44633e4bc8d"
+        },
+        {
+          "HorseName": "スターアニス",
+          "HorseNumber": 9,
+          "HorseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002023106920/D5",
+          "JockeyName": "C.ルメール",
+          "horseId": "horse-9ad256cf-afbd-521d-8c77-7314df314c38",
+          "jockeyId": "jockey-bfc3a5c6-446d-55b7-b7f5-3f1f9c857d9d"
+        },
+        {
+          "HorseName": "レイピア",
+          "HorseNumber": 10,
+          "HorseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002022103066/B5",
+          "JockeyName": "横山 武史",
+          "horseId": "horse-3f2d164c-4adf-5724-99c7-7d6ad557cd89",
+          "jockeyId": "jockey-4032a1b7-a3b3-5578-8e70-f2137510a64f"
+        },
+        {
+          "HorseName": "ルガル",
+          "HorseNumber": 11,
+          "HorseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002020106851/A3",
+          "JockeyName": "鮫島 克駿",
+          "horseId": "horse-4e8c30c9-7a7a-5015-a472-0ce3432f4454",
+          "jockeyId": "jockey-1cb0740b-243d-5d6c-a08f-54539066097a"
+        },
+        {
+          "HorseName": "ブラックチャリス",
+          "HorseNumber": 12,
+          "HorseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002023107008/83",
+          "JockeyName": "浜中 俊",
+          "horseId": "horse-489827db-e312-5244-8b24-5172b0d0314c",
+          "jockeyId": "jockey-3280e796-3fae-5ecb-b6f8-cd72187ab7a9"
+        },
+        {
+          "HorseName": "パンジャタワー",
+          "HorseNumber": 13,
+          "HorseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002022101732/32",
+          "JockeyName": "松山 弘平",
+          "horseId": "horse-f327c333-40cb-529a-b628-14b1dceb63f2",
+          "jockeyId": "jockey-b615716e-a6ac-5547-96ce-1f87d91f3ecb"
+        },
+        {
+          "HorseName": "ウインカーネリアン",
+          "HorseNumber": 14,
+          "HorseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002017101429/05",
+          "JockeyName": "三浦 皇成",
+          "horseId": "horse-d32b73e7-b8e5-53a0-9997-a8b6f197f05b",
+          "jockeyId": "jockey-02c9ad15-1755-5027-a2f3-b44ec4c9824e"
+        },
+        {
+          "HorseName": "フリッカージャブ",
+          "HorseNumber": 15,
+          "HorseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002022102020/D4",
+          "JockeyName": "西村 淳也",
+          "horseId": "horse-16203451-c4fb-5b6a-86d1-0385590cfbff",
+          "jockeyId": "jockey-abb504d6-4706-5af5-913d-1588a3ae7638"
+        },
+        {
+          "HorseName": "ピューロマジック",
+          "HorseNumber": 16,
+          "HorseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002021107058/BB",
+          "JockeyName": "岩田 望来",
+          "horseId": "horse-00206716-e878-5742-b5e0-ca859a5d2cbc",
+          "jockeyId": "jockey-675ed89f-cd2a-56cc-a05e-9ee67527e75f"
+        }
+      ]
+    }
+  },
+  {
+    "url": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002002100816/4A",
+    "capturedAt": "2026-09-27T03:54:04.6205699+00:00",
+    "parsed": {
+      "Name": "ディープインパクト",
+      "SourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002002100816/4A"
+    }
+  }
+]

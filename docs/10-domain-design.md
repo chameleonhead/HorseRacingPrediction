@@ -1,5 +1,7 @@
 # 競馬予想ドメイン設計
 
+> 2026-09-27 承認済み実装（本番未配備）: [DOM名取得と現行障害対応](changes/20260927_dom-jockey-and-collection-errors/README.md)では、DOMから分離した正しい騎手名を通常保存/refreshの両方へ接続し、再取得時に誤った既存JockeyIdを無条件で保持しない。旧masterを文字列操作で改名・統合せず、Race/Horse/Entry ID、予想・結果・履歴を保持する。本番補正は根拠付きpreviewと追加承認が必要。名前だけの血統馬は根拠不足なら未同定のまま保持する。
+
 > 2026-09-27 実装済み（本番検証中）: 馬主の別名/統合先、馬の公式identity/fallback、競馬場とRace identityの生成・照合を共通契約へ接続する。既存ID/events/予想結果は再採番せず、一意な既存対象を保持し、複数候補・矛盾は自動統合しない。承認・互換境界・検証は[識別ルール共通化](changes/20260927_shared-identity-contracts/README.md)を正とする。
 
 ## 目的

@@ -207,7 +207,7 @@ public sealed class RaceCardPublicationTests
                 <p class="owner">馬主 HTML</p><div class="breeder">HTML牧場</div>
                 <div class="trainer">HTML調教師（栗東）</div>
               </td>
-              <td>牡3/栗<br>57.0kg<br>HTML騎手</td>
+              <td>牡3/栗<p class="weight">57.0kg</p><p class="jockey">HTML騎手</p></td>
             </tr>
             """;
     }
@@ -260,7 +260,8 @@ public sealed class RaceCardPublicationTests
                             new PageElementFragmentSnapshot { TagName = "div", ClassTokens = ["trainer"], Text = "調教師（栗東）" },
                         ],
                     },
-                    new() { Text = "牡3/栗\n57.0kg\n騎手" },
+                    new() { Text = "牡3/栗\n57.0kg\n騎手",
+                        Fragments = [new() { TagName = "p", ClassTokens = ["jockey"], Text = "騎手" }] },
                     new() { Text = "57.0kg" },
                 ],
             });

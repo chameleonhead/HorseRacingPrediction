@@ -52,6 +52,8 @@ public sealed record PageElementLocation(double X, double Y, double Width, doubl
 
 public sealed record PageSourceReference(string? TagName, string? ElementId, string? LocatorHint)
 {
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? ClassTokens { get; init; }
     // Provenance survives pruning of transparent wrappers; consumers need not search flattened text.
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<string>? AncestorClassTokens { get; init; }

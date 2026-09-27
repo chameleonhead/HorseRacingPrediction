@@ -43,7 +43,7 @@ public sealed partial class JraNavigator
         }
         // 引退者も公開一覧から探す。現役一覧にないことを取得成功として扱わない。
         await _browser.NavigateForSnapshotAsync(directoryUrl, cancellationToken);
-        var retiredLabel = isJockey ? "引退騎手一覧" : "引退調教師一覧";
+        var retiredLabel = isJockey ? "引退騎手" : "引退調教師";
         var retiredLink = SelectUniqueJraLink(
             await _browser.GetLinksAsync(cancellationToken: cancellationToken), retiredLabel)
             ?? throw new JraCollectionException($"{retiredLabel}の公開リンクが見つかりません。");

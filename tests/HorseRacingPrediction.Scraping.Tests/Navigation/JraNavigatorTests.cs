@@ -61,9 +61,9 @@ public sealed class JraNavigatorTests
     }
 
     [TestMethod]
-    [DataRow("Trainer", "村山 明（栗東）", "引退調教師一覧",
+    [DataRow("Trainer", "村山 明（栗東）", "引退調教師",
         "https://www.jra.go.jp/datafile/meikan/trainer.html")]
-    [DataRow("Jockey", "テスト騎手", "引退騎手一覧",
+    [DataRow("Jockey", "テスト騎手", "引退騎手",
         "https://www.jra.go.jp/datafile/meikan/jockey.html")]
     public async Task ToSubjectProfileAsync_SubjectUsesOfficialDirectoryWithoutAmbiguousMenuClick(
         string subjectType,
@@ -86,11 +86,11 @@ public sealed class JraNavigatorTests
     public void SelectUniqueJraLink_DuplicateSameDestination_ReturnsFirst()
     {
         var first = new PageLinkSnapshot(
-            "https://www.jra.go.jp/datafile/meikan/retire/trainer.html", "引退調教師一覧");
+            "https://www.jra.go.jp/datafile/meikan/retire/trainer.html", "引退調教師");
         var second = new PageLinkSnapshot(
-            "https://www.jra.go.jp/datafile/meikan/retire/trainer.html", "引退調教師一覧");
+            "https://www.jra.go.jp/datafile/meikan/retire/trainer.html", "引退調教師");
 
-        var selected = JraNavigator.SelectUniqueJraLink([first, second], "引退調教師一覧");
+        var selected = JraNavigator.SelectUniqueJraLink([first, second], "引退調教師");
 
         Assert.AreSame(first, selected);
     }
@@ -100,12 +100,12 @@ public sealed class JraNavigatorTests
     {
         var links = new[]
         {
-            new PageLinkSnapshot("https://www.jra.go.jp/datafile/meikan/retire/a.html", "引退調教師一覧"),
-            new PageLinkSnapshot("https://www.jra.go.jp/datafile/meikan/retire/b.html", "引退調教師一覧"),
+            new PageLinkSnapshot("https://www.jra.go.jp/datafile/meikan/retire/a.html", "引退調教師"),
+            new PageLinkSnapshot("https://www.jra.go.jp/datafile/meikan/retire/b.html", "引退調教師"),
         };
 
         Assert.ThrowsExactly<JraCollectionException>(() =>
-            JraNavigator.SelectUniqueJraLink(links, "引退調教師一覧"));
+            JraNavigator.SelectUniqueJraLink(links, "引退調教師"));
     }
 
     [TestMethod]
@@ -116,17 +116,17 @@ public sealed class JraNavigatorTests
     {
         var links = new[]
         {
-            new PageLinkSnapshot(url, "引退調教師一覧"),
+            new PageLinkSnapshot(url, "引退調教師"),
         };
 
         Assert.ThrowsExactly<JraCollectionException>(() =>
-            JraNavigator.SelectUniqueJraLink(links, "引退調教師一覧"));
+            JraNavigator.SelectUniqueJraLink(links, "引退調教師"));
     }
 
     [TestMethod]
     public void SelectUniqueJraLink_Missing_ReturnsNull()
     {
-        Assert.IsNull(JraNavigator.SelectUniqueJraLink([], "引退調教師一覧"));
+        Assert.IsNull(JraNavigator.SelectUniqueJraLink([], "引退調教師"));
     }
 
     private static TestPageSnapshot BuildCalendarSnapshot(
@@ -1552,7 +1552,8 @@ public sealed class JraNavigatorTests
         browser.SetClickDestination("テストホース", profileUrl);
         browser.SetSnapshot(profileUrl, new TestPageSnapshot(profileUrl, "競走馬情報", [new(
             "競走馬情報", string.Empty, [], [], [new(["項目", "値"], [["生年月日", "2020年1月2日"]])],
-            ["競走馬情報 テストホース"])]));
+            ["競走馬情報 テストホース"])])
+        { HorseName = "テストホース" });
         var navigator = new JraNavigator(browser, CreateReader(browser));
 
         var page = await navigator.ToSubjectProfileAsync(new("Horse", "テストホース"));
@@ -1674,6 +1675,7 @@ public sealed class JraNavigatorTests
             tables.Add(new(["年月日", "場", "レース名"], rows, cells));
         }
         return new(profileUrl, "競走馬情報", [new(
-            "競走馬情報", string.Empty, [], [], tables, [$"競走馬情報 {name}"])]);
+            "競走馬情報", string.Empty, [], [], tables, [$"競走馬情報 {name}"])])
+        { HorseName = name };
     }
 }

@@ -72,6 +72,7 @@ public sealed class RaceCardPageParser
     public IJraPage Parse(
         SemanticPageSnapshot source)
     {
+        JraJockeyNameParser.EnsureCompleteSnapshot(source, JraPageKind.RaceCard);
         var snapshot = JraSnapshotView.Create(source);
         var table =
             FindEntryTable(snapshot)
@@ -428,7 +429,8 @@ public sealed class RaceCardPageParser
 
             var jockeyName =
                 jockeyIndex >= 0 && jockeyIndex < row.Count
-                    ? ExtractJockeyName(row[jockeyIndex])
+                    ? JraJockeyNameParser.Parse(table.GetCell(rowIndex, jockeyIndex),
+                        table.Headers[jockeyIndex], url, JraPageKind.RaceCard)
                     : null;
 
             decimal? assignedWeight = null;
@@ -520,31 +522,6 @@ public sealed class RaceCardPageParser
         IReadOnlyList<string> headers)
         => row.Count > 0 && headers.Count > 0 &&
            string.Equals(row[0], headers[0], StringComparison.Ordinal);
-
-    /// <summary>
-    /// 「性齢/毛色 負担重量 騎手名」のように結合されたセルから騎手名だけを取り出す。
-    /// 実ページでは "牡4/栗 58.0kg △坂口 智康" のように、体重を表す "kg" の直後に
-    /// 手綱を示す記号（減量マーク）と騎手名が続く（Task16実サイト確認で判明）。
-    /// </summary>
-    private static string? ExtractJockeyName(string cell)
-    {
-        if (string.IsNullOrWhiteSpace(cell))
-        {
-            return null;
-        }
-
-        var kgIndex =
-            cell.IndexOf("kg", StringComparison.OrdinalIgnoreCase);
-
-        var rest =
-            kgIndex >= 0
-                ? cell[(kgIndex + 2)..]
-                : cell;
-
-        rest = JockeyNameNormalizer.Normalize(rest);
-
-        return string.IsNullOrWhiteSpace(rest) ? null : rest;
-    }
 
     /// <summary>
     /// 馬名セルの1行から調教師名だけを取り出す。括弧（所属表記）より前の部分を

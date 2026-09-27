@@ -1,0 +1,73 @@
+{
+  "sourceRevision": "f32e2f41",
+  "command": "dotnet test HorseRacingPrediction.sln --no-build --configuration Release -m:1 --filter TestCategory!=External --logger trx;LogFileName=dom-collection-serial.trx",
+  "projects": [
+    {
+      "project": "HorseRacingPrediction.Scraping.Tests",
+      "passed": 360,
+      "failed": 0,
+      "total": 360,
+      "skipped": 0
+    },
+    {
+      "project": "HorseRacingPrediction.Contracts.Tests",
+      "passed": 43,
+      "failed": 0,
+      "total": 43,
+      "skipped": 0
+    },
+    {
+      "project": "HorseRacingPrediction.Application.Tests",
+      "passed": 58,
+      "failed": 0,
+      "total": 58,
+      "skipped": 0
+    },
+    {
+      "project": "HorseRacingPrediction.Infrastructure.Tests",
+      "passed": 16,
+      "failed": 0,
+      "total": 16,
+      "skipped": 0
+    },
+    {
+      "project": "HorseRacingPrediction.Collector.Tests",
+      "passed": 372,
+      "failed": 0,
+      "total": 372,
+      "skipped": 0
+    },
+    {
+      "project": "HorseRacingPrediction.MachineLearning.Tests",
+      "passed": 14,
+      "failed": 0,
+      "total": 14,
+      "skipped": 0
+    },
+    {
+      "project": "HorseRacingPrediction.Domain.Tests",
+      "passed": 126,
+      "failed": 0,
+      "total": 126,
+      "skipped": 0
+    },
+    {
+      "project": "HorseRacingPrediction.Api.Tests",
+      "passed": 318,
+      "failed": 0,
+      "total": 319,
+      "skipped": 1
+    },
+    {
+      "project": "HorseRacingPrediction.Agents.Tests",
+      "passed": 106,
+      "failed": 0,
+      "total": 106,
+      "skipped": 0
+    }
+  ],
+  "passed": 1413,
+  "failed": 0,
+  "skipped": 1,
+  "existingSkip": "RaceDiscovery_IsRegisteredByNewScheduler"
+}

@@ -234,7 +234,9 @@ public sealed class JraSubjectCollectionHandlerTests
                 SubjectFactory = identity =>
                 {
                     discoveryIdentity = identity;
-                    return SubjectPage("ロンドンコーリング", []);
+                    return new JraSubjectPage(new JraSubjectProfileDto("Horse", "ロンドンコーリング",
+                        failedUrl.AbsoluteUri, failedUrl.AbsoluteUri,
+                        new Dictionary<string, string> { ["生年月日"] = "2020年1月1日" }, DateTimeOffset.UtcNow), [], null);
                 },
             },
         };
@@ -290,6 +292,58 @@ public sealed class JraSubjectCollectionHandlerTests
         Assert.AreEqual(CollectionAttemptResult.PermanentFailure, completion.Result);
         Assert.AreEqual("StructuralPageFailure", completion.ErrorCode);
         Assert.AreEqual(CollectionFailureImpact.Isolated, completion.FailureImpact);
+    }
+
+    [TestMethod]
+    [DataRow("matching", true)]
+    [DataRow("other-horse", false)]
+    [DataRow("birth-mismatch", false)]
+    [DataRow("conflicting-url", false)]
+    [DataRow("untrusted-host", false)]
+    [DataRow("conflicting-origin", false)]
+    public async Task RaceSourceMetadata_RemainsBindingThroughFallback(string scenario, bool expectedSuccess)
+    {
+        const string url = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024100699/AF";
+        var attributes = new Dictionary<string, string>
+        {
+            ["sourceIdentity"] = url,
+            ["sourceUrl"] = url,
+            ["birthDate"] = "2024-01-01",
+            ["discoveredFromType"] = "Race",
+            ["discoveredFromProvider"] = "JRA",
+            ["discoveredFromId"] = "race-current",
+            ["requestedByRaceId"] = "race-current",
+        };
+        if (scenario == "conflicting-url") attributes["sourceUrl"] = url + "X";
+        if (scenario == "untrusted-host") attributes["sourceUrl"] = url.Replace("www.jra.go.jp", "evil.test");
+        if (scenario == "conflicting-origin") attributes["discoveredFromId"] = "race-other";
+        JraSubjectIdentity? observed = null;
+        var sink = new RecordingProfileSink();
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = _ => throw new HttpRequestException("temporary redirect"),
+                SubjectFactory = identity =>
+                {
+                    observed = identity;
+                    var actual = scenario == "other-horse" ? url + "X" : url;
+                    return new JraSubjectPage(new JraSubjectProfileDto("Horse", "レジームチェンジ", actual, actual,
+                        new Dictionary<string, string> { ["生年月日"] = scenario == "birth-mismatch" ? "2005年1月1日" : "2024年1月1日" },
+                        DateTimeOffset.UtcNow), [], null);
+                },
+            },
+        };
+        var task = SubjectTask("horse-current", "レジームチェンジ", attributes) with
+        {
+            Locations = [new(1, new Uri(url), ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null)],
+        };
+        var completion = await new JraSubjectProfileCollectionHandler(
+            JraSubjectCollectionDefinitions.For(ResourceType.Horse), sessions, sink).CollectAsync(task, CancellationToken.None);
+        Assert.AreEqual(expectedSuccess ? CollectionAttemptResult.Succeeded : CollectionAttemptResult.ResourceNotFound, completion.Result);
+        Assert.AreEqual(expectedSuccess ? 1 : 0, sink.Saves.Count);
+        if (observed is not null) Assert.AreEqual(url, observed.SourceIdentity);
+        if (expectedSuccess) Assert.IsNotNull(observed);
     }
 
     [TestMethod]

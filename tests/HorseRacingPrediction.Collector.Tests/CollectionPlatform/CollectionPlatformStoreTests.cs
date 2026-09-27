@@ -15,6 +15,64 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class CollectionPlatformStoreTests
 {
     [TestMethod]
+    public async Task IncompleteResult_WorkerTransportPersistsEvidenceAndFiveMinuteRetry()
+    {
+        var store = CreateStore();
+        var now = new DateTimeOffset(2026, 9, 27, 2, 28, 0, TimeSpan.Zero);
+        var start = now.AddMinutes(-8);
+        var definition = new CollectionDefinitionId("race-detail");
+        var race = new ResourceKey(ResourceType.Race, "JRA", "20260927:Hanshin:4");
+        var revision = HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail;
+        await store.RegisterDefinitionAsync(definition, "Race", ResourceType.Race, revision, "DOM", false);
+        var receipt = await store.RequestAsync(race, definition, revision, CollectionReason.Initial, now.AddMinutes(-10),
+            effectiveDate: new DateOnly(2026, 9, 27));
+        var initial = await store.AcquireAsync(receipt.TaskId!.Value, 1, now.AddMinutes(-10), TimeSpan.FromMinutes(15));
+        Assert.IsTrue(await store.CompleteAttemptAsync(initial!.TaskId, initial.LeaseToken, now.AddMinutes(-9),
+            new(CollectionAttemptResult.ResourceNotYetAvailable, "ResultNotConfirmed", RetryAt: now,
+                StageOutcomes: [new("PersistCard", RaceArtifactKind.Card, CollectionAttemptResult.Succeeded, Persisted: true)],
+                RaceEvidence: new(start, "JRA-RaceCard", now.AddMinutes(-10)))));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 2, now, TimeSpan.FromMinutes(15));
+        Assert.IsNotNull(lease);
+        var results = new FakeJraRaceResultCollectionWorkflow
+        {
+            ThrowOnCollect = new JraIncompleteResultException("https://www.jra.go.jp/JRADB/accessS.html?CNAME=result",
+                new(new(2026, 9, 27), RaceCourse.Hanshin, 4), 3, ["着順", "馬番", "タイム"], ["2", "3", ""]),
+        };
+        var handler = new JraRaceDetailCollectionHandler(new FakeJraSessionFactory(),
+            _ => new FakeJraRaceCardCollectionWorkflow(), _ => results, timeProvider: new FixedTimeProvider(now));
+        using var http = new HttpClient(new CompletionStoreTransport(store, lease, now)) { BaseAddress = new("https://api.test/") };
+        var worker = new CollectionPlatformWorkerClient(http, new CollectionDefinitionHandlerRegistry([handler]));
+        await worker.ExecuteAsync(new(lease.TaskId, 2), CancellationToken.None);
+        var detail = (await store.GetResourceDetailAsync(race, definition))!;
+        var attempt = detail.Attempts.Single(x => x.ErrorCode == "RecentResultIncomplete");
+        Assert.AreEqual("RecentResultIncomplete", attempt.ErrorCode);
+        using var evidence = System.Text.Json.JsonDocument.Parse(attempt.ErrorMessage!);
+        Assert.AreEqual("FinishedTimeCellEmpty", evidence.RootElement.GetProperty("reason").GetString());
+        Assert.AreEqual(3, evidence.RootElement.GetProperty("HorseNumber").GetInt32());
+        Assert.AreEqual(start.AddMinutes(30), evidence.RootElement.GetProperty("deadline").GetDateTimeOffset());
+        Assert.AreEqual(attempt.ErrorMessage, detail.StageOutcomes!.Single(x => x.ErrorCode == "RecentResultIncomplete").ErrorMessage);
+        Assert.IsFalse(detail.StageOutcomes!.Any(x => x.Artifact == RaceArtifactKind.Result && x.Persisted));
+        Assert.IsNull(await store.AcquireAsync(lease.TaskId, 3, now.AddMinutes(4), TimeSpan.FromMinutes(15)));
+        Assert.IsNotNull(await store.AcquireAsync(lease.TaskId, 3, now.AddMinutes(5), TimeSpan.FromMinutes(15)));
+    }
+
+    private sealed class CompletionStoreTransport(CollectionPlatformStore store, LeasedCollectionTask lease,
+        DateTimeOffset now) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/acquire", StringComparison.Ordinal))
+                return new(System.Net.HttpStatusCode.OK)
+                { Content = System.Net.Http.Json.JsonContent.Create(new CollectionTaskAcquireResult(CollectionTaskAcquireStatus.Acquired, lease)) };
+            var body = await request.Content!.ReadAsStringAsync(cancellationToken);
+            var completion = System.Text.Json.JsonSerializer.Deserialize<CollectionAttemptCompletion>(body,
+                new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+            Assert.IsTrue(await store.CompleteAttemptAsync(lease.TaskId, lease.LeaseToken, now.AddSeconds(1), completion));
+            return new(System.Net.HttpStatusCode.OK);
+        }
+    }
+
+    [TestMethod]
     public async Task RaceDetail_ProvisionalCardIsSavedButDueUntilNumbersArrive()
     {
         var store = CreateStore();
