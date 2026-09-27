@@ -134,7 +134,17 @@ for label, members in groups.items():
     for member_id in members:
         method, uri = parse_route(readme[member_id][3], member_id, "canonical")
         contracts.append((urlsplit(uri).path, readme[member_id][5]))
-    if len({path for path, _ in contracts}) != 1 or len({target for _, target in contracts}) != 1:
+    if len({path for path, _ in contracts}) != 1:
+        raise SystemExit(f"{label}: merge pair must converge on one URI path")
+    if set(members) == {"ER-03", "ER-04"}:
+        expected_targets = {
+            "Endpoints/Races/UpdateRaceEntryRepairHoldEndpoint.cs",
+            "Endpoints/Races/ReleaseRaceEntryRepairHoldEndpoint.cs",
+        }
+        actual_targets = {target.strip("`") for _, target in contracts}
+        if actual_targets != expected_targets:
+            raise SystemExit(f"{label}: PUT/PATCH resource operations must use the separate expected handler files")
+    elif len({target for _, target in contracts}) != 1:
         raise SystemExit(f"{label}: merge pair must converge on one URI path and one endpoint file")
 
 # A shared URI/path is legal only as one declared pair, implemented by one endpoint file.
@@ -147,4 +157,18 @@ for route, members in canonical_routes.items():
     if len(members) != 2 or len(member_groups) != 1 or next(iter(member_groups)) == "Replace" or len(endpoint_files) != 1:
         raise SystemExit(f"canonical route collision {route}: rows must be one declared merge pair with one endpoint contract; rows={members}")
 
-print("PASS: 69 IDs/old pairs; 65 + 4 scope; 48 Replace + 20 Merge/10 pairs + CP-24 Delete; required fields/contracts, /api/v2 namespace, no legacy collisions, CP-24 zero-callsite/deletion proof, merge targets and route-map synchronization verified.")
+unique_resource_contracts = replacements + len(groups)
+method_path_registrations = len(canonical_routes)
+operation_files = {
+    target.strip("`")
+    for members in canonical_routes.values()
+    for _, _, target in members
+}
+if (unique_resource_contracts, method_path_registrations, len(operation_files)) != (58, 59, 59):
+    raise SystemExit(
+        "expected 58 unique resource/path contracts, 59 method+path registrations, and "
+        f"59 operation files; found {unique_resource_contracts}, {method_path_registrations}, "
+        f"and {len(operation_files)}"
+    )
+
+print("PASS: 69 IDs/old pairs; 65 + 4 scope; 48 Replace + 20 Merge/10 pairs + CP-24 Delete; 58 resource/path contracts, 59 method+path registrations and 59 operation files; required fields/contracts, /api/v2 namespace, no legacy collisions, CP-24 zero-callsite/deletion proof, ER-03/04 split-handler resource and route-map synchronization verified.")

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260927_collection-rest-api",
+  "taskId": "T4",
+  "attemptId": "T4-A2",
+  "state": "completed",
+  "taskDifficulty": "high",
+  "acceptanceCriteria": ["AC1", "AC2", "AC3", "AC4", "AC5", "AC6", "AC7", "AC8"],
+  "route": { "tier": "worker", "requestedModel": "not captured", "observedModel": null, "observationSource": null, "modelTelemetryReason": "parent dispatch did not expose model metadata" },
+  "usage": { "availability": "unavailable", "totalTokens": null, "reason": "per-agent token telemetry was not exposed" },
+  "scope": ["tests/HorseRacingPrediction.Api.Tests", "tests/HorseRacingPrediction.Collector.Tests"],
+  "review": { "usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "review usage telemetry was not exposed" },
+  "overhead": { "availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "effort telemetry was not exposed" },
+  "elapsed": { "availability": "unavailable", "minutes": null, "reason": "reliable elapsed effort was not exposed" },
+  "startRevision": "9d5a994c",
+  "endRevisionOrPatch": "0fc58582; verified corrective T4-A2 patch",
+  "outcome": { "verificationPassed": true, "qualityPassed": true, "scopePassed": true, "independentChallenge": "Strengthened the HTTP route inventory to count duplicate method/path registrations and reject extra migration-scope mappings; fetched and parsed generated Swagger to verify all canonical operations, retired operation absence, and unique WithName/operationId values. The targeted test passes on the isolated 4.14.4 compatibility harness.", "retries": 5, "leadCorrections": 0, "reviewPasses": 1, "promoted": false, "escapedDefects": 1, "escalations": 0, "reviewMode": "ac-group", "detailReviewReason": null, "decision": "accept" }
+}
