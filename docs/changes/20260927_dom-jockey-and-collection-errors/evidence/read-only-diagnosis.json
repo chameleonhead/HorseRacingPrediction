@@ -1,0 +1,1458 @@
+{
+  "observedAt": "2026-09-27T11:54:00+09:00",
+  "mutationPerformed": "none; local browser DOM fault injection only",
+  "baseline": {
+    "observedAt": "2026-09-27T11:40:09.4261095+09:00",
+    "pipeline": {
+      "isPaused": true,
+      "reason": "Unexpected collection failure notification d0b3fbc4-3479-44ce-9467-617a624b0834: Task=673399d8-72af-43cf-a557-b657bddb7af6; Error=JraResultConsistencyException; JRAページ解析に失敗しました。 Kind=RaceResult, Url=https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde0109202604090420260927/C1, Reason=ResultStatus=Finishedの馬番3にTimeが存在しません。, FieldName=Time, RawValue=",
+      "updatedAt": "2026-09-27T11:28:41.7236933+09:00"
+    },
+    "groups": [
+      {
+        "groupKey": "0F125030C6A41AC7",
+        "definition": {
+          "value": "race-detail"
+        },
+        "status": 6,
+        "errorCode": "JraResultConsistencyException",
+        "errorMessage": "JRAページ解析に失敗しました。 Kind=RaceResult, Url=https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde0109202604090420260927/C1, Reason=ResultStatus=Finishedの馬番3にTimeが存在しません。, FieldName=Time, RawValue=",
+        "count": 1,
+        "firstFailedAt": "2026-09-27T11:28:41.7236933+09:00",
+        "lastFailedAt": "2026-09-27T11:28:41.7236933+09:00",
+        "notificationIds": [
+          "d0b3fbc4-3479-44ce-9467-617a624b0834"
+        ],
+        "sampleResources": [
+          {
+            "type": 0,
+            "provider": "JRA",
+            "id": "20260927:Hanshin:4"
+          }
+        ]
+      },
+      {
+        "groupKey": "02D78CBC10B10F67",
+        "definition": {
+          "value": "jockey-profile"
+        },
+        "status": 6,
+        "errorCode": "JraCollectionException",
+        "errorMessage": "引退騎手一覧の公開リンクが見つかりません。",
+        "count": 1,
+        "firstFailedAt": "2026-09-27T03:08:07.2072162+09:00",
+        "lastFailedAt": "2026-09-27T03:08:07.2072162+09:00",
+        "notificationIds": [
+          "7a10af2c-8b5e-489c-87e7-4b0a248ed859"
+        ],
+        "sampleResources": [
+          {
+            "type": 5,
+            "provider": "JRA",
+            "id": "jockey-41a4f9cf-57d1-5ab0-b32e-58be0ecc50d6"
+          }
+        ]
+      },
+      {
+        "groupKey": "E56D934CCA551769",
+        "definition": {
+          "value": "horse-profile"
+        },
+        "status": 6,
+        "errorCode": "SubjectNotIdentified",
+        "errorMessage": "同定不能: 公開検索に一致候補がありません。期待=Horse:アニマルキングダム",
+        "count": 14,
+        "firstFailedAt": "2026-09-27T02:34:08.8624512+09:00",
+        "lastFailedAt": "2026-09-27T03:07:15.6076703+09:00",
+        "notificationIds": [
+          "930fbd24-78f6-416c-8a03-5f6a882959b0",
+          "d1a606f2-767e-4067-91e5-7c31effee6b6",
+          "907d2016-ce63-40c6-afff-c4a9eb62ca71",
+          "bd9eebd2-6b47-460b-8338-441ada813d6d",
+          "44fdc932-3d67-4729-9bc0-28f12122ef62",
+          "5db0c197-d04c-40da-bf79-4049ec24199c",
+          "c3f2b12f-9fc8-43e2-8bc6-59906d7f6786",
+          "f07eb216-43a3-4faa-b117-b9a9d9dfdf1d",
+          "8559928d-97ed-4d2e-8ef7-8fb0bd27a776",
+          "2864e14a-3cf6-4a82-b9cd-bd1a76d781e6",
+          "3b4239aa-be5b-4e0e-93c7-cdc82c21730d",
+          "646e84be-6808-46ee-9aed-9bd1962fdde2",
+          "04935cb9-f1ae-411c-9a8d-30d5070062dd",
+          "8cb3b342-3d53-4b86-a5e2-b9cfa4b19d26"
+        ],
+        "sampleResources": [
+          {
+            "type": 4,
+            "provider": "JRA",
+            "id": "horse-8e22258b-a90e-58b9-9b8b-ec30a4901dd3"
+          },
+          {
+            "type": 4,
+            "provider": "JRA",
+            "id": "horse-57dd150f-6b08-5345-97a3-56a0b8eba15f"
+          },
+          {
+            "type": 4,
+            "provider": "JRA",
+            "id": "horse-146cf00a-e65a-574b-acff-423fa86d8441"
+          },
+          {
+            "type": 4,
+            "provider": "JRA",
+            "id": "horse-76528136-3bdd-5d0d-908b-4d794509a250"
+          },
+          {
+            "type": 4,
+            "provider": "JRA",
+            "id": "horse-8e770b2a-0913-5adb-a750-d17c8717ccfd"
+          },
+          {
+            "type": 4,
+            "provider": "JRA",
+            "id": "horse-59ad96a9-5ede-5db6-8c85-3a2328eb431e"
+          },
+          {
+            "type": 4,
+            "provider": "JRA",
+            "id": "horse-bdd4ff7a-084b-582f-a6c6-79f99778f134"
+          },
+          {
+            "type": 4,
+            "provider": "JRA",
+            "id": "horse-21095a6c-00a0-5005-a782-541679f9ec13"
+          },
+          {
+            "type": 4,
+            "provider": "JRA",
+            "id": "horse-852bbcff-8ebc-546e-9203-b6464798407d"
+          },
+          {
+            "type": 4,
+            "provider": "JRA",
+            "id": "horse-faf6fd67-b366-5a57-b6a0-94411ce3d59d"
+          },
+          {
+            "type": 4,
+            "provider": "JRA",
+            "id": "horse-906c0898-a8c6-5681-aa13-36e2fb25c965"
+          },
+          {
+            "type": 4,
+            "provider": "JRA",
+            "id": "horse-618a0796-b82a-5b49-b81c-fa1ac52a02d9"
+          },
+          {
+            "type": 4,
+            "provider": "JRA",
+            "id": "horse-8c45cee3-843a-5374-a092-4cae488e10e0"
+          },
+          {
+            "type": 4,
+            "provider": "JRA",
+            "id": "horse-9768fe94-3836-5f9e-833d-2c6e3e3adc1d"
+          }
+        ]
+      }
+    ]
+  },
+  "horseTargets": [
+    {
+      "id": "horse-9768fe94-3836-5f9e-833d-2c6e3e3adc1d",
+      "taskId": "b6387063-c33c-436a-bbb6-3553d8904724",
+      "error": "同定不能: 公開検索に一致候補がありません。期待=Horse:アニマルキングダム",
+      "metadata": {
+        "name": "アニマルキングダム",
+        "discoveryDepth": "1",
+        "discoveryAncestors": "horse-b07f4ce7-ff13-597d-bc2c-fe8f2780e490",
+        "discoveredFromType": "Horse",
+        "discoveredFromProvider": "JRA",
+        "discoveredFromId": "horse-b07f4ce7-ff13-597d-bc2c-fe8f2780e490"
+      },
+      "locations": [],
+      "status": 6
+    },
+    {
+      "id": "horse-8c45cee3-843a-5374-a092-4cae488e10e0",
+      "taskId": "5b6c549b-23db-4a02-8174-c0d8a428f08c",
+      "error": "同定不能: 公開検索に一致候補が複数あります。期待=Horse:レジームチェンジ; 候補=レジームチェンジ [/JRADB/accessU.html?CNAME=pw01dud002024100699/AF], レジームチェンジ [/JRADB/accessU.html?CNAME=pw01dud002005102576/99]",
+      "metadata": {
+        "name": "レジームチェンジ",
+        "requestedByRaceId": "race-22535d5a-ab55-50ba-bbb9-7bebaeb9119f",
+        "weekendPriorityUntil": "2026-09-27",
+        "discoveredFromType": "Race",
+        "discoveredFromProvider": "JRA",
+        "discoveredFromId": "race-22535d5a-ab55-50ba-bbb9-7bebaeb9119f",
+        "sourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024100699/AF",
+        "sourceUrl": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024100699/AF"
+      },
+      "locations": [
+        {
+          "locationId": 431,
+          "url": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024100699/AF",
+          "source": 0,
+          "status": 2,
+          "lastVerifiedAt": null,
+          "artifact": null
+        }
+      ],
+      "status": 6
+    },
+    {
+      "id": "horse-618a0796-b82a-5b49-b81c-fa1ac52a02d9",
+      "taskId": "1ece32b1-a572-47dc-a1c2-28dcc2a3eec5",
+      "error": "同定不能: 公開検索に一致候補が複数あります。期待=Horse:プラチナリーフ; 候補=プラチナリーフ [/JRADB/accessU.html?CNAME=pw01dud002024106171/9C], プラチナリーフ [/JRADB/accessU.html?CNAME=pw01dud002000101312/60]",
+      "metadata": {
+        "name": "プラチナリーフ",
+        "requestedByRaceId": "race-4d854898-087b-582c-b881-fc788c1d4733",
+        "weekendPriorityUntil": "2026-09-26",
+        "discoveredFromType": "Race",
+        "discoveredFromProvider": "JRA",
+        "discoveredFromId": "race-4d854898-087b-582c-b881-fc788c1d4733",
+        "sourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024106171/9C",
+        "sourceUrl": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024106171/9C"
+      },
+      "locations": [
+        {
+          "locationId": 105,
+          "url": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024106171/9C",
+          "source": 0,
+          "status": 2,
+          "lastVerifiedAt": null,
+          "artifact": null
+        }
+      ],
+      "status": 6
+    },
+    {
+      "id": "horse-906c0898-a8c6-5681-aa13-36e2fb25c965",
+      "taskId": "d6c435eb-519a-4b0d-a6e7-863baf68ad41",
+      "error": "同定不能: 公開検索に一致候補がありません。期待=Horse:Corniche",
+      "metadata": {
+        "name": "Corniche",
+        "discoveryDepth": "1",
+        "discoveryAncestors": "horse-1d975b52-5da8-5b2c-acb4-f9c8ea492810",
+        "discoveredFromType": "Horse",
+        "discoveredFromProvider": "JRA",
+        "discoveredFromId": "horse-1d975b52-5da8-5b2c-acb4-f9c8ea492810"
+      },
+      "locations": [],
+      "status": 6
+    },
+    {
+      "id": "horse-faf6fd67-b366-5a57-b6a0-94411ce3d59d",
+      "taskId": "29157d1c-7365-4bdb-9af9-e525bafd8f27",
+      "error": "同定不能: 公開検索に一致候補がありません。期待=Horse:ヴェントリナ",
+      "metadata": {
+        "name": "ヴェントリナ",
+        "requestedByRaceId": "race-f0192dd6-f365-506e-8a5e-b136244fed65",
+        "weekendPriorityUntil": "2026-09-26",
+        "discoveredFromType": "Race",
+        "discoveredFromProvider": "JRA",
+        "discoveredFromId": "race-f0192dd6-f365-506e-8a5e-b136244fed65",
+        "sourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024101041/90",
+        "sourceUrl": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024101041/90"
+      },
+      "locations": [
+        {
+          "locationId": 98,
+          "url": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024101041/90",
+          "source": 0,
+          "status": 2,
+          "lastVerifiedAt": null,
+          "artifact": null
+        }
+      ],
+      "status": 6
+    },
+    {
+      "id": "horse-852bbcff-8ebc-546e-9203-b6464798407d",
+      "taskId": "0a13f55a-7671-4838-abe1-96da03e4f618",
+      "error": "同定不能: 公開検索に一致候補が複数あります。期待=Horse:リキマル; 候補=リキマル [/JRADB/accessU.html?CNAME=pw01dud002024104688/E8], リキマル [/JRADB/accessU.html?CNAME=pw01dud002011100463/5C]",
+      "metadata": {
+        "name": "リキマル",
+        "requestedByRaceId": "race-f0192dd6-f365-506e-8a5e-b136244fed65",
+        "weekendPriorityUntil": "2026-09-26",
+        "discoveredFromType": "Race",
+        "discoveredFromProvider": "JRA",
+        "discoveredFromId": "race-f0192dd6-f365-506e-8a5e-b136244fed65",
+        "sourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024104688/E8",
+        "sourceUrl": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024104688/E8"
+      },
+      "locations": [
+        {
+          "locationId": 92,
+          "url": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024104688/E8",
+          "source": 0,
+          "status": 2,
+          "lastVerifiedAt": null,
+          "artifact": null
+        }
+      ],
+      "status": 6
+    },
+    {
+      "id": "horse-21095a6c-00a0-5005-a782-541679f9ec13",
+      "taskId": "93a3248d-8179-4d0c-977a-7d148517f3b5",
+      "error": "同定不能: 取得プロフィールの名前が一致しません。期待=Horse:ディープインパクト; 取得名=マルイチ ディープインパクト; 候補=ディープインパクト [/JRADB/accessU.html?CNAME=pw01dud002002100816/4A]",
+      "metadata": {
+        "name": "ディープインパクト",
+        "discoveryDepth": "2",
+        "discoveryAncestors": "horse-167a2ad4-1b23-513f-ad77-dc7f0c1e9aa4|horse-67be0bf7-a3ed-5f42-88b3-d24379defe99",
+        "discoveredFromType": "Horse",
+        "discoveredFromProvider": "JRA",
+        "discoveredFromId": "horse-167a2ad4-1b23-513f-ad77-dc7f0c1e9aa4"
+      },
+      "locations": [],
+      "status": 6
+    },
+    {
+      "id": "horse-bdd4ff7a-084b-582f-a6c6-79f99778f134",
+      "taskId": "ae67c5a2-c197-4d5f-a470-d6326f98dd3f",
+      "error": "同定不能: 公開検索に一致候補が複数あります。期待=Horse:クリソベリル; 候補=クリソベリル [/JRADB/accessU.html?CNAME=pw01dud002016104458/03], クリソベリル [/JRADB/accessU.html?CNAME=pw01dud001988103717/6A]",
+      "metadata": {
+        "name": "クリソベリル",
+        "discoveryDepth": "1",
+        "discoveryAncestors": "horse-dee9aa5b-eaf8-57f0-b20b-9731bad086f6",
+        "discoveredFromType": "Horse",
+        "discoveredFromProvider": "JRA",
+        "discoveredFromId": "horse-dee9aa5b-eaf8-57f0-b20b-9731bad086f6"
+      },
+      "locations": [],
+      "status": 6
+    },
+    {
+      "id": "horse-59ad96a9-5ede-5db6-8c85-3a2328eb431e",
+      "taskId": "6b7e92a7-f901-41c2-8081-529b59ab9162",
+      "error": "同定不能: 公開検索に一致候補がありません。期待=Horse:Maximus Mischief",
+      "metadata": {
+        "name": "Maximus Mischief",
+        "discoveryDepth": "1",
+        "discoveryAncestors": "horse-c6ba97e0-a1ed-58c8-a12e-adda265a25f8",
+        "discoveredFromType": "Horse",
+        "discoveredFromProvider": "JRA",
+        "discoveredFromId": "horse-c6ba97e0-a1ed-58c8-a12e-adda265a25f8"
+      },
+      "locations": [],
+      "status": 6
+    },
+    {
+      "id": "horse-8e770b2a-0913-5adb-a750-d17c8717ccfd",
+      "taskId": "e3f90186-ce84-4512-8dc7-8bfbfea2a013",
+      "error": "同定不能: 公開検索に一致候補がありません。期待=Horse:ディスクリートキャット",
+      "metadata": {
+        "name": "ディスクリートキャット",
+        "discoveryDepth": "1",
+        "discoveryAncestors": "horse-de1e4ad5-74d8-50be-afc5-c2ebe0a95f57",
+        "discoveredFromType": "Horse",
+        "discoveredFromProvider": "JRA",
+        "discoveredFromId": "horse-de1e4ad5-74d8-50be-afc5-c2ebe0a95f57"
+      },
+      "locations": [],
+      "status": 6
+    },
+    {
+      "id": "horse-76528136-3bdd-5d0d-908b-4d794509a250",
+      "taskId": "2cd264e8-215e-45c4-85da-10f05821fd1f",
+      "error": "同定不能: 公開検索に一致候補がありません。期待=Horse:フォーウィールドライブ",
+      "metadata": {
+        "name": "フォーウィールドライブ",
+        "discoveryDepth": "1",
+        "discoveryAncestors": "horse-7b61afd8-46e8-5643-b190-895c18d32039",
+        "discoveredFromType": "Horse",
+        "discoveredFromProvider": "JRA",
+        "discoveredFromId": "horse-7b61afd8-46e8-5643-b190-895c18d32039"
+      },
+      "locations": [],
+      "status": 6
+    },
+    {
+      "id": "horse-146cf00a-e65a-574b-acff-423fa86d8441",
+      "taskId": "74fb2d01-f45c-416a-8181-97a39a93858f",
+      "error": "同定不能: 公開検索に一致候補がありません。期待=Horse:タリスマニック",
+      "metadata": {
+        "name": "タリスマニック",
+        "discoveryDepth": "1",
+        "discoveryAncestors": "horse-71e5e1ce-2752-5031-ba37-7c1ed36a50a2",
+        "discoveredFromType": "Horse",
+        "discoveredFromProvider": "JRA",
+        "discoveredFromId": "horse-71e5e1ce-2752-5031-ba37-7c1ed36a50a2"
+      },
+      "locations": [],
+      "status": 6
+    },
+    {
+      "id": "horse-57dd150f-6b08-5345-97a3-56a0b8eba15f",
+      "taskId": "a2322773-77ff-4141-a9f0-c68b77e55908",
+      "error": "同定不能: 公開検索に一致候補が複数あります。期待=Horse:ジャンダルム; 候補=ジャンダルム [/JRADB/accessU.html?CNAME=pw01dud002015110013/46], ジャンダルム [/JRADB/accessU.html?CNAME=pw01dud001985106961/93]",
+      "metadata": {
+        "name": "ジャンダルム",
+        "discoveryDepth": "1",
+        "discoveryAncestors": "horse-38d857c8-9d12-5d23-9996-2e9d9c76a856",
+        "discoveredFromType": "Horse",
+        "discoveredFromProvider": "JRA",
+        "discoveredFromId": "horse-38d857c8-9d12-5d23-9996-2e9d9c76a856"
+      },
+      "locations": [],
+      "status": 6
+    },
+    {
+      "id": "horse-8e22258b-a90e-58b9-9b8b-ec30a4901dd3",
+      "taskId": "157e3084-2d40-44da-93da-9ccb4e88ca5a",
+      "error": "同定不能: 公開検索に一致候補が複数あります。期待=Horse:ハクタカ; 候補=ハクタカ [/JRADB/accessU.html?CNAME=pw01dud002024103502/96], ハクタカ [/JRADB/accessU.html?CNAME=pw01dud002003101849/4E]",
+      "metadata": {
+        "name": "ハクタカ",
+        "requestedByRaceId": "race-f3f8044a-e19e-5dfa-8c81-b22f9032aff2",
+        "weekendPriorityUntil": "2026-09-26",
+        "discoveredFromType": "Race",
+        "discoveredFromProvider": "JRA",
+        "discoveredFromId": "race-f3f8044a-e19e-5dfa-8c81-b22f9032aff2",
+        "sourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024103502/96",
+        "sourceUrl": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024103502/96"
+      },
+      "locations": [
+        {
+          "locationId": 80,
+          "url": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024103502/96",
+          "source": 0,
+          "status": 2,
+          "lastVerifiedAt": null,
+          "artifact": null
+        }
+      ],
+      "status": 6
+    }
+  ],
+  "raceFailure": {
+    "state": {
+      "resource": {
+        "type": 0,
+        "provider": "JRA",
+        "id": "20260927:Hanshin:4"
+      },
+      "definition": {
+        "value": "race-detail"
+      },
+      "appliedRevision": 0,
+      "requiredRevision": 4,
+      "lastCollectedAt": null,
+      "nextCollectionAt": "2026-09-27T11:25:00+09:00",
+      "status": 1,
+      "raceArtifacts": null
+    },
+    "locations": [
+      {
+        "locationId": 410,
+        "url": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0109202604090420260927/05",
+        "source": 0,
+        "status": 0,
+        "lastVerifiedAt": null,
+        "artifact": 0
+      }
+    ],
+    "requests": [
+      {
+        "requestId": "4ea7c86e-5626-414e-81de-fba521c34201",
+        "requestedRevision": 4,
+        "reason": 3,
+        "requestedAt": "2026-09-27T11:29:13.78432+09:00",
+        "explicitUrl": null,
+        "batchId": null
+      },
+      {
+        "requestId": "ef09e8f2-ff40-4a20-b618-9dba976a24b3",
+        "requestedRevision": 4,
+        "reason": 2,
+        "requestedAt": "2026-09-27T00:53:06.2045233+09:00",
+        "explicitUrl": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0109202604090420260927/05",
+        "batchId": null
+      }
+    ],
+    "tasks": [
+      {
+        "taskId": "e4d8bdb7-4022-4f65-a382-6ee3e85566cb",
+        "resource": {
+          "type": 0,
+          "provider": "JRA",
+          "id": "20260927:Hanshin:4"
+        },
+        "definition": {
+          "value": "race-detail"
+        },
+        "status": 1,
+        "lane": 0,
+        "priority": 100,
+        "requestedRevision": 4,
+        "availableAt": "2026-09-27T11:29:13.78432+09:00",
+        "attemptCount": 0,
+        "metadata": {
+          "course": "阪神",
+          "number": "4"
+        }
+      },
+      {
+        "taskId": "673399d8-72af-43cf-a557-b657bddb7af6",
+        "resource": {
+          "type": 0,
+          "provider": "JRA",
+          "id": "20260927:Hanshin:4"
+        },
+        "definition": {
+          "value": "race-detail"
+        },
+        "status": 6,
+        "lane": 0,
+        "priority": 100,
+        "requestedRevision": 4,
+        "availableAt": "2026-09-27T11:25:00+09:00",
+        "attemptCount": 2,
+        "metadata": {
+          "course": "阪神",
+          "number": "4"
+        }
+      }
+    ],
+    "attempts": [
+      {
+        "attemptId": "e1bbfca6-cac7-44ec-bf6f-4815c99560a2",
+        "taskId": "673399d8-72af-43cf-a557-b657bddb7af6",
+        "attemptNumber": 2,
+        "startedAt": "2026-09-27T11:28:39.9255536+09:00",
+        "finishedAt": "2026-09-27T11:28:41.7236933+09:00",
+        "result": 3,
+        "errorCode": "JraResultConsistencyException",
+        "errorMessage": "JRAページ解析に失敗しました。 Kind=RaceResult, Url=https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde0109202604090420260927/C1, Reason=ResultStatus=Finishedの馬番3にTimeが存在しません。, FieldName=Time, RawValue=",
+        "requestedUrl": null,
+        "finalUrl": null,
+        "httpStatusCode": null,
+        "pageIdentification": "Definition=race-detail; Resource=Race:JRA:20260927:Hanshin:4",
+        "executionBatchId": "b2e014d3-37b8-419a-beb2-568b4516560e",
+        "dispatchEnvelopeId": "e9fe83d4-502e-49d5-b002-065101f45c5c",
+        "queueMessageId": "ab87affa-9c5e-463a-98bf-c88cacbf8cb1",
+        "lambdaRequestId": "c5b672d2-f3cf-5732-992b-11e07283adcd",
+        "batchTaskOrdinal": 6,
+        "batchTaskCount": 10
+      },
+      {
+        "attemptId": "e8eae335-208a-4b75-987a-45c1d6c191d2",
+        "taskId": "673399d8-72af-43cf-a557-b657bddb7af6",
+        "attemptNumber": 1,
+        "startedAt": "2026-09-27T02:22:50.5704392+09:00",
+        "finishedAt": "2026-09-27T02:22:52.8903827+09:00",
+        "result": 5,
+        "errorCode": "RaceNotStarted",
+        "errorMessage": "Race result is not available before the first result check.",
+        "requestedUrl": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0109202604090420260927/05",
+        "finalUrl": null,
+        "httpStatusCode": null,
+        "pageIdentification": "Definition=race-detail; Resource=Race:JRA:20260927:Hanshin:4",
+        "executionBatchId": "2ed67a71-b129-4a19-a3a0-07ae063f42f7",
+        "dispatchEnvelopeId": "ce27f250-9868-4d0a-87e8-5252f8d17e9e",
+        "queueMessageId": "21d4258b-af0e-458a-ab03-33fffa9b2678",
+        "lambdaRequestId": "6198b991-00c2-517e-9653-daa301a93270",
+        "batchTaskOrdinal": 15,
+        "batchTaskCount": 24
+      }
+    ],
+    "requestTotal": 2,
+    "taskTotal": 2,
+    "attemptTotal": 2,
+    "historyPage": 1,
+    "historyPageSize": 100,
+    "latestTask": {
+      "taskId": "e4d8bdb7-4022-4f65-a382-6ee3e85566cb",
+      "resource": {
+        "type": 0,
+        "provider": "JRA",
+        "id": "20260927:Hanshin:4"
+      },
+      "definition": {
+        "value": "race-detail"
+      },
+      "status": 1,
+      "lane": 0,
+      "priority": 100,
+      "requestedRevision": 4,
+      "availableAt": "2026-09-27T11:29:13.78432+09:00",
+      "attemptCount": 0,
+      "metadata": {
+        "course": "阪神",
+        "number": "4"
+      }
+    },
+    "taskHistoryPage": 1,
+    "attemptHistoryPage": 1,
+    "failures": [
+      {
+        "notificationId": "d0b3fbc4-3479-44ce-9467-617a624b0834",
+        "taskId": "673399d8-72af-43cf-a557-b657bddb7af6",
+        "resource": {
+          "type": 0,
+          "provider": "JRA",
+          "id": "20260927:Hanshin:4"
+        },
+        "definition": {
+          "value": "race-detail"
+        },
+        "status": 6,
+        "errorCode": "JraResultConsistencyException",
+        "errorMessage": "JRAページ解析に失敗しました。 Kind=RaceResult, Url=https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde0109202604090420260927/C1, Reason=ResultStatus=Finishedの馬番3にTimeが存在しません。, FieldName=Time, RawValue=",
+        "attemptCount": 2,
+        "failedAt": "2026-09-27T11:28:41.7236933+09:00",
+        "resolutionStatus": 0,
+        "recoveryTaskId": null,
+        "recoveryStartedAt": null,
+        "resolvedAt": null
+      }
+    ],
+    "raceArtifacts": [
+      {
+        "artifact": 0,
+        "status": 4,
+        "appliedRevision": 4,
+        "requiredRevision": 4,
+        "lastObservedAt": "2026-09-27T02:22:52.8903827+09:00",
+        "lastPersistedAt": "2026-09-27T02:22:52.8903827+09:00",
+        "nextDueAt": null,
+        "errorCode": null,
+        "errorMessage": null
+      },
+      {
+        "artifact": 1,
+        "status": 1,
+        "appliedRevision": 0,
+        "requiredRevision": 4,
+        "lastObservedAt": "2026-09-27T02:22:52.8903827+09:00",
+        "lastPersistedAt": null,
+        "nextDueAt": "2026-09-27T11:25:00+09:00",
+        "errorCode": "RaceNotStarted",
+        "errorMessage": "Race result is not available before the first result check."
+      }
+    ],
+    "raceEvidence": {
+      "officialStartAt": "2026-09-27T11:20:00+09:00",
+      "provenance": "JRA-RaceCard",
+      "verifiedAt": "2026-09-27T02:22:52.190393+09:00"
+    },
+    "stageOutcomes": [
+      {
+        "stageOutcomeId": "7ca137ef-6002-453c-99fb-17a4040b24b5",
+        "attemptId": "e8eae335-208a-4b75-987a-45c1d6c191d2",
+        "stage": "PersistCard",
+        "artifact": 0,
+        "result": 1,
+        "errorCode": null,
+        "errorMessage": null,
+        "requestedUrl": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0109202604090420260927/05",
+        "finalUrl": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0109202604090420260927/05",
+        "persisted": true
+      },
+      {
+        "stageOutcomeId": "38651847-fb55-4fd0-88cc-915b288c916c",
+        "attemptId": "e8eae335-208a-4b75-987a-45c1d6c191d2",
+        "stage": "ValidateCardOwners",
+        "artifact": 0,
+        "result": 1,
+        "errorCode": null,
+        "errorMessage": "OwnerCount=7/7",
+        "requestedUrl": null,
+        "finalUrl": null,
+        "persisted": true
+      },
+      {
+        "stageOutcomeId": "0b976af5-6d23-4795-855d-7cd64f13962b",
+        "attemptId": "e8eae335-208a-4b75-987a-45c1d6c191d2",
+        "stage": "AwaitOfficialStart",
+        "artifact": 1,
+        "result": 5,
+        "errorCode": "RaceNotStarted",
+        "errorMessage": "Race result is not available before the first result check.",
+        "requestedUrl": null,
+        "finalUrl": null,
+        "persisted": false
+      }
+    ],
+    "requestHistoryPage": 1,
+    "effectiveTaskHistoryPage": 1,
+    "effectiveAttemptHistoryPage": 1
+  },
+  "jockeyCard": {
+    "url": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604091120260927/5A",
+    "capturedAt": "2026-09-27T02:50:27.9675292+00:00",
+    "scope": "only detected entry table; past performance cells excluded",
+    "entries": [
+      {
+        "horseNumber": 1,
+        "horseName": "レッドモンレーヴ",
+        "horseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002019105496/F0",
+        "currentParserName": "酒井 学 114 S",
+        "domName": "酒井 学",
+        "rating": "114\nS"
+      },
+      {
+        "horseNumber": 2,
+        "horseName": "アイサンサン",
+        "horseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002022103875/DA",
+        "currentParserName": "幸 英明 106 M",
+        "domName": "幸 英明",
+        "rating": "106\nM"
+      },
+      {
+        "horseNumber": 3,
+        "horseName": "ママコチャ",
+        "horseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002019105394/D9",
+        "currentParserName": "武 豊 108 S",
+        "domName": "武 豊",
+        "rating": "108\nS"
+      },
+      {
+        "horseNumber": 4,
+        "horseName": "ジューンブレア",
+        "horseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002021110099/B3",
+        "currentParserName": "坂井 瑠星",
+        "domName": "坂井 瑠星",
+        "rating": null
+      },
+      {
+        "horseNumber": 5,
+        "horseName": "サウンドモリアーナ",
+        "horseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002022102057/29",
+        "currentParserName": "吉田 隼人 110 S",
+        "domName": "吉田 隼人",
+        "rating": "110\nS"
+      },
+      {
+        "horseNumber": 6,
+        "horseName": "ワールズエンド",
+        "horseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002021105864/A9",
+        "currentParserName": "津村 明秀 117 M",
+        "domName": "津村 明秀",
+        "rating": "117\nM"
+      },
+      {
+        "horseNumber": 7,
+        "horseName": "ペアポルックス",
+        "horseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002021102320/DB",
+        "currentParserName": "岩田 康誠 112 S",
+        "domName": "岩田 康誠",
+        "rating": "112\nS"
+      },
+      {
+        "horseNumber": 8,
+        "horseName": "エーティーマクフィ",
+        "horseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002019105859/CD",
+        "currentParserName": "富田 暁 109 S",
+        "domName": "富田 暁",
+        "rating": "109\nS"
+      },
+      {
+        "horseNumber": 9,
+        "horseName": "スターアニス",
+        "horseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002023106920/D5",
+        "currentParserName": "C.ルメール 116 M",
+        "domName": "C.ルメール",
+        "rating": "116\nM"
+      },
+      {
+        "horseNumber": 10,
+        "horseName": "レイピア",
+        "horseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002022103066/B5",
+        "currentParserName": "横山 武史 111 S",
+        "domName": "横山 武史",
+        "rating": "111\nS"
+      },
+      {
+        "horseNumber": 11,
+        "horseName": "ルガル",
+        "horseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002020106851/A3",
+        "currentParserName": "鮫島 克駿 114 S",
+        "domName": "鮫島 克駿",
+        "rating": "114\nS"
+      },
+      {
+        "horseNumber": 12,
+        "horseName": "ブラックチャリス",
+        "horseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002023107008/83",
+        "currentParserName": "浜中 俊 105 S,M",
+        "domName": "浜中 俊",
+        "rating": "105\nS,M"
+      },
+      {
+        "horseNumber": 13,
+        "horseName": "パンジャタワー",
+        "horseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002022101732/32",
+        "currentParserName": "松山 弘平 116 M",
+        "domName": "松山 弘平",
+        "rating": "116\nM"
+      },
+      {
+        "horseNumber": 14,
+        "horseName": "ウインカーネリアン",
+        "horseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002017101429/05",
+        "currentParserName": "三浦 皇成 113 S",
+        "domName": "三浦 皇成",
+        "rating": "113\nS"
+      },
+      {
+        "horseNumber": 15,
+        "horseName": "フリッカージャブ",
+        "horseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002022102020/D4",
+        "currentParserName": "西村 淳也 114 S",
+        "domName": "西村 淳也",
+        "rating": "114\nS"
+      },
+      {
+        "horseNumber": 16,
+        "horseName": "ピューロマジック",
+        "horseSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002021107058/BB",
+        "currentParserName": "岩田 望来 109 S",
+        "domName": "岩田 望来",
+        "rating": "109\nS"
+      }
+    ],
+    "persistedEntries": [
+      {
+        "horseNumber": 1,
+        "horseId": "horse-5909a812-dbc9-5b81-aef5-64244ccc8ded",
+        "jockeyId": "jockey-be1c6299-5619-52bd-9535-6e6e9856345e",
+        "jockeyName": "酒井 学 114 S"
+      },
+      {
+        "horseNumber": 2,
+        "horseId": "horse-4d5c7651-a434-5c45-8e95-d47cb60e684c",
+        "jockeyId": "jockey-41a4f9cf-57d1-5ab0-b32e-58be0ecc50d6",
+        "jockeyName": "幸 英明 106 M"
+      },
+      {
+        "horseNumber": 3,
+        "horseId": "horse-84e03a60-3247-5207-980b-5ecadc8a18ed",
+        "jockeyId": "jockey-fefd2c6d-0a5a-524f-a7be-40f78e263f1d",
+        "jockeyName": "武 豊 108 S"
+      },
+      {
+        "horseNumber": 4,
+        "horseId": "horse-322be648-b773-56df-a2a1-c0bec3481211",
+        "jockeyId": "jockey-018fed07-2feb-54cb-8712-92fe3c68a568",
+        "jockeyName": "坂井 瑠星"
+      },
+      {
+        "horseNumber": 5,
+        "horseId": "horse-169b94fa-4b6a-58d8-97f1-3f98f6a67de9",
+        "jockeyId": "jockey-bb28835c-6c58-51c6-a49d-e371b8a8a3ac",
+        "jockeyName": "吉田 隼人 110 S"
+      },
+      {
+        "horseNumber": 6,
+        "horseId": "horse-a3808415-2209-5e90-8684-35fe84c8a9f9",
+        "jockeyId": "jockey-4e069d29-80af-5cca-bd70-491a1a8dab9b",
+        "jockeyName": "津村 明秀 117 M"
+      },
+      {
+        "horseNumber": 7,
+        "horseId": "horse-25acb6c2-d151-5711-a072-542559a2f41d",
+        "jockeyId": "jockey-1d830ef6-ad7b-5bee-9dbf-e06f53b50608",
+        "jockeyName": "岩田 康誠 112 S"
+      },
+      {
+        "horseNumber": 8,
+        "horseId": "horse-bba29932-2b4c-56f2-9110-c3a557d2c676",
+        "jockeyId": "jockey-a81afaad-fbca-5a1b-9b71-5ffbf46f81ba",
+        "jockeyName": "富田 暁 109 S"
+      },
+      {
+        "horseNumber": 9,
+        "horseId": "horse-9ad256cf-afbd-521d-8c77-7314df314c38",
+        "jockeyId": "jockey-69682a61-c1d6-5a09-a47b-f0e659b84522",
+        "jockeyName": "C.ルメール 116 M"
+      },
+      {
+        "horseNumber": 10,
+        "horseId": "horse-3f2d164c-4adf-5724-99c7-7d6ad557cd89",
+        "jockeyId": "jockey-37639f47-1924-5a2a-829b-e8de266f001d",
+        "jockeyName": "横山 武史 111 S"
+      },
+      {
+        "horseNumber": 11,
+        "horseId": "horse-4e8c30c9-7a7a-5015-a472-0ce3432f4454",
+        "jockeyId": "jockey-9536ac6d-db45-5c86-93c5-213d7315569b",
+        "jockeyName": "鮫島 克駿 114 S"
+      },
+      {
+        "horseNumber": 12,
+        "horseId": "horse-489827db-e312-5244-8b24-5172b0d0314c",
+        "jockeyId": "jockey-a16d8f5d-1c93-5dd9-b247-6febb777c2e6",
+        "jockeyName": "浜中 俊 105 S,M"
+      },
+      {
+        "horseNumber": 13,
+        "horseId": "horse-f327c333-40cb-529a-b628-14b1dceb63f2",
+        "jockeyId": "jockey-b4cff9c5-7821-566f-82f4-dee039cd3863",
+        "jockeyName": "松山 弘平 116 M"
+      },
+      {
+        "horseNumber": 14,
+        "horseId": "horse-d32b73e7-b8e5-53a0-9997-a8b6f197f05b",
+        "jockeyId": "jockey-6304eec5-eb36-5921-bb87-ec04dce08740",
+        "jockeyName": "三浦 皇成 113 S"
+      },
+      {
+        "horseNumber": 15,
+        "horseId": "horse-16203451-c4fb-5b6a-86d1-0385590cfbff",
+        "jockeyId": "jockey-f1fb7281-65e6-52c5-b901-6d4cb029d95c",
+        "jockeyName": "西村 淳也 114 S"
+      },
+      {
+        "horseNumber": 16,
+        "horseId": "horse-00206716-e878-5742-b5e0-ca859a5d2cbc",
+        "jockeyId": "jockey-e00c0055-ff7c-582b-a3c1-812dab1e7f5b",
+        "jockeyName": "岩田 望来 109 S"
+      }
+    ]
+  },
+  "resultProbe": {
+    "url": "https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde0109202604090420260927/C1",
+    "capturedAt": "2026-09-27T02:50:28.4422131+00:00",
+    "result": [
+      {
+        "horseNumber": 4,
+        "status": 0,
+        "time": "00:02:00.8000000"
+      },
+      {
+        "horseNumber": 3,
+        "status": 0,
+        "time": "00:02:01.2000000"
+      },
+      {
+        "horseNumber": 7,
+        "status": 0,
+        "time": "00:02:01.3000000"
+      },
+      {
+        "horseNumber": 2,
+        "status": 0,
+        "time": "00:02:01.5000000"
+      },
+      {
+        "horseNumber": 1,
+        "status": 0,
+        "time": "00:02:01.6000000"
+      },
+      {
+        "horseNumber": 6,
+        "status": 0,
+        "time": "00:02:01.7000000"
+      },
+      {
+        "horseNumber": 5,
+        "status": 0,
+        "time": "00:02:01.9000000"
+      }
+    ],
+    "controlledEmptyTime": {
+      "error": "JraResultConsistencyException",
+      "Message": "JRAページ解析に失敗しました。 Kind=RaceResult, Url=https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde0109202604090420260927/C1, Reason=ResultStatus=Finishedの馬番3にTimeが存在しません。, FieldName=Time, RawValue="
+    },
+    "limitation": "Controlled counterexample proves the current terminal error path, not the historical reason why Time was missing."
+  },
+  "horseProfile": {
+    "url": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002002100816/4A",
+    "capturedAt": "2026-09-27T02:50:28.9188999+00:00",
+    "currentParserName": "マルイチ ディープインパクト",
+    "dom": [
+      {
+        "html": "<span class=\"opt\">競走馬情報</span><span class=\"horse_icon\"><img src=\"/JRADB/img/kigo/w_maru-ichi.png\" alt=\"マルイチ\"></span>ディープインパクト<span class=\"name_en\">Deep Impact（JPN）</span>",
+        "directText": "ディープインパクト"
+      }
+    ]
+  },
+  "directoryLinks": [
+    {
+      "url": "https://www.jra.go.jp/datafile/meikan/jockey.html",
+      "capturedAt": "2026-09-27T02:50:29.4976719+00:00",
+      "retiredLinks": [
+        {
+          "text": "引退騎手",
+          "url": "https://www.jra.go.jp/datafile/meikan/jretirement.html"
+        }
+      ]
+    },
+    {
+      "url": "https://www.jra.go.jp/datafile/meikan/trainer.html",
+      "capturedAt": "2026-09-27T02:50:29.8000891+00:00",
+      "retiredLinks": [
+        {
+          "text": "引退調教師",
+          "url": "https://www.jra.go.jp/datafile/meikan/retirement.html"
+        }
+      ]
+    }
+  ],
+  "parentOwnerRecovery": {
+    "readAt": "2026-09-27T11:50:00+09:00",
+    "count": 46,
+    "ready": 46,
+    "attempts": 0,
+    "resources": [
+      {
+        "id": "owner-74ff355a-d012-573c-8f22-f2bcfd342d09",
+        "tasks": [
+          {
+            "taskId": "12f63f5b-d1d5-4215-ad0d-cbeb1169b418",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-e14fdb3e-8b94-55bc-952c-b93e7275d9ba",
+        "tasks": [
+          {
+            "taskId": "3784c6ab-07d6-4a27-b681-5f7c5e33e9b8",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-eb051b65-6fff-5b16-9c74-9c4f3ccbadd3",
+        "tasks": [
+          {
+            "taskId": "52a7dd19-a97b-4236-952c-40906e956d84",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-9cbdda6c-21bf-5aa4-a0cd-e0878bf8d3eb",
+        "tasks": [
+          {
+            "taskId": "cc122541-94e3-43b1-8d4b-1c51970c8722",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-4cbadc7d-02b6-5ca1-a2fc-c29da8fc7f25",
+        "tasks": [
+          {
+            "taskId": "e775a43f-0c67-45c2-820b-b0ac288c2b8a",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-323db7f6-f654-5f47-a86c-c8e9498a6d53",
+        "tasks": [
+          {
+            "taskId": "39292594-48d0-46a5-afe2-a2914d1ea9e5",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-340c0568-d934-5b61-9cb8-0c3de9808ede",
+        "tasks": [
+          {
+            "taskId": "ccab4fe4-c119-451a-86e3-9dae46f25787",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-2a9b576b-8725-52b5-941b-a4c305038e33",
+        "tasks": [
+          {
+            "taskId": "21cd5ac6-2b5b-49c4-a87e-b59f73c21c92",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-646e70da-63f9-50d1-82fd-1c3ec0ab6b84",
+        "tasks": [
+          {
+            "taskId": "723c2ad3-16d2-4e24-a9c1-db7491409942",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-799574b4-fee9-532c-a73e-302eb5c144fe",
+        "tasks": [
+          {
+            "taskId": "d2232627-7443-41fb-8e59-e2ac345d481b",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-1b5fe1e9-033c-5cce-b82f-11460b2fabb6",
+        "tasks": [
+          {
+            "taskId": "deb59c9f-4783-416f-a291-8aaac5c1ac32",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-75fb0f89-98c2-5d86-9765-81cdbe41d864",
+        "tasks": [
+          {
+            "taskId": "56f498dc-b9b2-444a-9b63-bc117894d2cf",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-d1d53467-d0de-598b-a528-67d962e530ba",
+        "tasks": [
+          {
+            "taskId": "fa70f285-a160-4b40-8852-a4436087748a",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-bdb70704-608f-510d-944e-b339814086e5",
+        "tasks": [
+          {
+            "taskId": "6418d2e9-68a7-46a4-ad9f-fa4d1190d98e",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-a6e9528b-8833-57e2-b6bd-86a11cd2328c",
+        "tasks": [
+          {
+            "taskId": "ac46bf69-b044-4145-a8b1-5cc3206de058",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-e7367194-e4a5-53b0-9d50-49630a540a64",
+        "tasks": [
+          {
+            "taskId": "1f84b851-7a44-49ef-9ebf-10db66ff102c",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-b9179a6c-9be3-5215-9ab4-f2d37c3da5a8",
+        "tasks": [
+          {
+            "taskId": "a48a8bf3-f274-4d8f-82aa-4908d1383d75",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-5379ba52-2c84-5a84-964f-ce08631a2033",
+        "tasks": [
+          {
+            "taskId": "d931842e-d6d5-43c6-b790-c5d518174d3c",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-8371cd84-713e-5e6b-86dc-5af02536ed92",
+        "tasks": [
+          {
+            "taskId": "c367e161-e7af-4267-8638-adfb7b112d0a",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-6ea2bb5b-dee8-5b44-8e08-e4ba0d5800d1",
+        "tasks": [
+          {
+            "taskId": "2e3e9cbd-5d19-4891-82b4-f9b74809a61f",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-0cced1fb-8eab-59fa-9635-b3ea089ae76a",
+        "tasks": [
+          {
+            "taskId": "77306a6c-56fe-476b-b7ea-7b098708753e",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-e4297a55-7353-58cc-aee4-b16bdde2868a",
+        "tasks": [
+          {
+            "taskId": "c12d8ff4-72f7-4092-bbdf-f5d94a348d9c",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-c10cb8b6-5d2d-52e5-aaf3-6f8d1eecda8b",
+        "tasks": [
+          {
+            "taskId": "c90dd0da-731f-4c5c-b09b-999c552777aa",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-759908ac-3f72-5964-aad4-7d6e4f574b6e",
+        "tasks": [
+          {
+            "taskId": "6b31beab-776d-4b68-adff-6dd4768ecb8f",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-74858667-0db1-5f4b-94a1-d38162169aff",
+        "tasks": [
+          {
+            "taskId": "0891b7ba-1240-4835-a3e8-776dc80a2953",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-d60e5608-f416-5b6d-8532-d7a2ab5aaf13",
+        "tasks": [
+          {
+            "taskId": "079cb520-efd9-4674-9c7f-fda4d330b549",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-250d8395-cf8b-5fba-8e1a-ad1c9c58359b",
+        "tasks": [
+          {
+            "taskId": "c00796e2-16d7-41b1-b97d-6a6ebf9638e3",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-f91f90a8-cc0b-53a8-8dca-177ec0e756e3",
+        "tasks": [
+          {
+            "taskId": "18eabf66-da59-4967-9204-be695507921d",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-a9627336-4b79-5522-9c4b-019bad07c5f2",
+        "tasks": [
+          {
+            "taskId": "ff40355e-f466-4a85-b255-9df096631ba2",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-c236c049-8c98-5b8b-9d0d-401eeaa80239",
+        "tasks": [
+          {
+            "taskId": "4f44c8c5-9427-48fd-aa30-5a65968ac913",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-82cce28f-068b-525b-8b60-ff1c235f864e",
+        "tasks": [
+          {
+            "taskId": "1c84559b-0b31-4882-9483-b269e7cdfcf3",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-58575864-a920-5dfb-8ac9-834961c1637e",
+        "tasks": [
+          {
+            "taskId": "b0a1ea9a-fe92-4a13-9841-9b78ae2638ff",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-485c3edf-b08a-59da-8a17-ba2d2fd41a9e",
+        "tasks": [
+          {
+            "taskId": "01a47148-7d14-4ec0-9c93-7b9db19cd644",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-9254c65d-5f19-56b0-b5dc-5af6bd261db5",
+        "tasks": [
+          {
+            "taskId": "bcc36911-c733-4942-8392-b45eb2fe8bf0",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-ee7a76c5-26c5-5614-a81a-6751ca82615b",
+        "tasks": [
+          {
+            "taskId": "dae2fc69-5bdc-4306-be26-672f4334aaa5",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-448c7bba-eb3a-56a4-acf3-ed147a7a3980",
+        "tasks": [
+          {
+            "taskId": "0bf12c31-ecec-4c34-b477-7da9683074ac",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-a751276f-6925-55f4-b9be-8b6120ab6b34",
+        "tasks": [
+          {
+            "taskId": "2f7b9575-0b9e-40e1-8e60-2a9c8a3aa8f6",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-9b3e3f5e-255f-5e53-aea2-a774b25848eb",
+        "tasks": [
+          {
+            "taskId": "899621fb-3588-468b-a84b-1497fa66bb3d",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-caa82e37-43bb-5a93-a5d5-ee273b3f910a",
+        "tasks": [
+          {
+            "taskId": "01f79b86-a92f-4df5-9464-6e533c7a8eba",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-87af3772-81c8-5984-af06-733ef4e23f8b",
+        "tasks": [
+          {
+            "taskId": "55371e37-163c-409b-85d1-997075c86993",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-619fde5b-3cfe-5fcf-a7ed-ec9ae2149351",
+        "tasks": [
+          {
+            "taskId": "6f0da131-906e-48df-9955-8b5e58a53732",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-ce65e130-6218-5141-a994-c0a3d97fd872",
+        "tasks": [
+          {
+            "taskId": "ca53933f-4f44-47b7-9c22-7ae6a1e49054",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-fab4f576-c015-5d32-ad26-4e69da36530d",
+        "tasks": [
+          {
+            "taskId": "a069358e-698a-44c6-8a39-0e3a7da56b3e",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-6f46fbfd-146f-50bc-b7e8-83d1e2ca7c03",
+        "tasks": [
+          {
+            "taskId": "4f723c87-6b5c-4c36-a84c-0f81a49b0cb8",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-72f5936e-1caa-51ab-acf3-21aa4252a8bd",
+        "tasks": [
+          {
+            "taskId": "dc7b1d5c-88cb-4725-8663-cd4ccc89d8da",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      },
+      {
+        "id": "owner-4889ffa3-20ea-5e61-9950-a374c3d0b827",
+        "tasks": [
+          {
+            "taskId": "5c1f2a56-f136-44ed-ad67-9aa24d8ce88e",
+            "status": 1,
+            "attemptCount": 0
+          }
+        ]
+      }
+    ]
+  }
+}

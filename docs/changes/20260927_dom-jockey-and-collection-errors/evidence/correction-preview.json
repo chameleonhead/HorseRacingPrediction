@@ -1,0 +1,895 @@
+{
+  "capturedAt": "2026-09-27T03:57:18.7136519+00:00",
+  "mode": "GET only",
+  "raceId": "race-65ab3995-5853-5270-aa59-ac6b9b83d15d",
+  "raceResource": {
+    "state": {
+      "resource": {
+        "type": 0,
+        "provider": "JRA",
+        "id": "20260927:Nakayama:11"
+      },
+      "definition": {
+        "value": "race-detail"
+      },
+      "appliedRevision": 0,
+      "requiredRevision": 4,
+      "lastCollectedAt": null,
+      "nextCollectionAt": "2026-09-27T15:45:00+09:00",
+      "status": 1,
+      "raceArtifacts": null
+    },
+    "locations": [
+      {
+        "locationId": 405,
+        "url": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604091120260927/5A",
+        "source": 0,
+        "status": 0,
+        "lastVerifiedAt": null,
+        "artifact": 0
+      }
+    ],
+    "requests": [
+      {
+        "requestId": "d2d2d3b4-9d01-4992-80c7-60880a532920",
+        "requestedRevision": 4,
+        "reason": 2,
+        "requestedAt": "2026-09-27T00:53:00.3855325+09:00",
+        "explicitUrl": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604091120260927/5A",
+        "batchId": null
+      }
+    ],
+    "tasks": [
+      {
+        "taskId": "7fdb6122-58a7-46e6-b327-f55360855a7b",
+        "resource": {
+          "type": 0,
+          "provider": "JRA",
+          "id": "20260927:Nakayama:11"
+        },
+        "definition": {
+          "value": "race-detail"
+        },
+        "status": 1,
+        "lane": 0,
+        "priority": 100,
+        "requestedRevision": 4,
+        "availableAt": "2026-09-27T15:45:00+09:00",
+        "attemptCount": 1,
+        "metadata": {
+          "course": "中山",
+          "number": "11"
+        }
+      }
+    ],
+    "attempts": [
+      {
+        "attemptId": "9ba84fa0-6555-4845-a665-e047a6a3ec63",
+        "taskId": "7fdb6122-58a7-46e6-b327-f55360855a7b",
+        "attemptNumber": 1,
+        "startedAt": "2026-09-27T02:22:33.1523054+09:00",
+        "finishedAt": "2026-09-27T02:22:37.3361284+09:00",
+        "result": 5,
+        "errorCode": "RaceNotStarted",
+        "errorMessage": "Race result is not available before the first result check.",
+        "requestedUrl": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604091120260927/5A",
+        "finalUrl": null,
+        "httpStatusCode": null,
+        "pageIdentification": "Definition=race-detail; Resource=Race:JRA:20260927:Nakayama:11",
+        "executionBatchId": "2ed67a71-b129-4a19-a3a0-07ae063f42f7",
+        "dispatchEnvelopeId": "ce27f250-9868-4d0a-87e8-5252f8d17e9e",
+        "queueMessageId": "21d4258b-af0e-458a-ab03-33fffa9b2678",
+        "lambdaRequestId": "6198b991-00c2-517e-9653-daa301a93270",
+        "batchTaskOrdinal": 10,
+        "batchTaskCount": 24
+      }
+    ],
+    "requestTotal": 1,
+    "taskTotal": 1,
+    "attemptTotal": 1,
+    "historyPage": 1,
+    "historyPageSize": 100,
+    "latestTask": {
+      "taskId": "7fdb6122-58a7-46e6-b327-f55360855a7b",
+      "resource": {
+        "type": 0,
+        "provider": "JRA",
+        "id": "20260927:Nakayama:11"
+      },
+      "definition": {
+        "value": "race-detail"
+      },
+      "status": 1,
+      "lane": 0,
+      "priority": 100,
+      "requestedRevision": 4,
+      "availableAt": "2026-09-27T15:45:00+09:00",
+      "attemptCount": 1,
+      "metadata": {
+        "course": "中山",
+        "number": "11"
+      }
+    },
+    "taskHistoryPage": 1,
+    "attemptHistoryPage": 1,
+    "failures": [],
+    "raceArtifacts": [
+      {
+        "artifact": 0,
+        "status": 4,
+        "appliedRevision": 4,
+        "requiredRevision": 4,
+        "lastObservedAt": "2026-09-27T02:22:37.3361284+09:00",
+        "lastPersistedAt": "2026-09-27T02:22:37.3361284+09:00",
+        "nextDueAt": null,
+        "errorCode": null,
+        "errorMessage": null
+      },
+      {
+        "artifact": 1,
+        "status": 1,
+        "appliedRevision": 0,
+        "requiredRevision": 4,
+        "lastObservedAt": "2026-09-27T02:22:37.3361284+09:00",
+        "lastPersistedAt": null,
+        "nextDueAt": "2026-09-27T15:45:00+09:00",
+        "errorCode": "RaceNotStarted",
+        "errorMessage": "Race result is not available before the first result check."
+      }
+    ],
+    "raceEvidence": {
+      "officialStartAt": "2026-09-27T15:40:00+09:00",
+      "provenance": "JRA-RaceCard",
+      "verifiedAt": "2026-09-27T02:22:35.5784854+09:00"
+    },
+    "stageOutcomes": [
+      {
+        "stageOutcomeId": "eae79630-40b9-4c06-93cc-e5530a04c7d9",
+        "attemptId": "9ba84fa0-6555-4845-a665-e047a6a3ec63",
+        "stage": "ValidateCardOwners",
+        "artifact": 0,
+        "result": 1,
+        "errorCode": null,
+        "errorMessage": "OwnerCount=16/16",
+        "requestedUrl": null,
+        "finalUrl": null,
+        "persisted": true
+      },
+      {
+        "stageOutcomeId": "7bb19cd5-04fc-4cf5-b38a-c0e7024853b6",
+        "attemptId": "9ba84fa0-6555-4845-a665-e047a6a3ec63",
+        "stage": "AwaitOfficialStart",
+        "artifact": 1,
+        "result": 5,
+        "errorCode": "RaceNotStarted",
+        "errorMessage": "Race result is not available before the first result check.",
+        "requestedUrl": null,
+        "finalUrl": null,
+        "persisted": false
+      },
+      {
+        "stageOutcomeId": "3688a4c1-bbb1-4771-9f2e-3f9b672337c9",
+        "attemptId": "9ba84fa0-6555-4845-a665-e047a6a3ec63",
+        "stage": "PersistCard",
+        "artifact": 0,
+        "result": 1,
+        "errorCode": null,
+        "errorMessage": null,
+        "requestedUrl": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604091120260927/5A",
+        "finalUrl": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604091120260927/5A",
+        "persisted": true
+      }
+    ],
+    "requestHistoryPage": 1,
+    "effectiveTaskHistoryPage": 1,
+    "effectiveAttemptHistoryPage": 1
+  },
+  "raceUnchanged": true,
+  "globalScan": false,
+  "rows": [
+    {
+      "entryId": "race-65ab3995-5853-5270-aa59-ac6b9b83d15d-entry-horse-5909a812-dbc9-5b81-aef5-64244ccc8ded",
+      "horseId": "horse-5909a812-dbc9-5b81-aef5-64244ccc8ded",
+      "horseName": "レッドモンレーヴ",
+      "officialSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002019105496/F0",
+      "sourceVerified": true,
+      "oldJockeyId": "jockey-be1c6299-5619-52bd-9535-6e6e9856345e",
+      "oldJockeyName": "酒井 学 114 S",
+      "newJockeyId": "jockey-9a1f5d58-1950-5f62-a3a3-03315a50e1dd",
+      "newJockeyName": "酒井 学",
+      "changes": true,
+      "oldTasks": [
+        {
+          "taskId": "1dd13924-d683-44e1-8718-8252e2574ab2",
+          "status": 1,
+          "requestedRevision": 3
+        }
+      ],
+      "newTasks": [
+        {
+          "taskId": "c5d64d08-0a0e-4fc0-bfe5-4a7b844dfcae",
+          "status": 1,
+          "requestedRevision": 3
+        }
+      ],
+      "oldRequests": [
+        {
+          "requestId": "9f0e0d18-45cf-4fd2-b02b-198f3d17d6dd",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "newRequests": [
+        {
+          "requestId": "0bf26e6b-5413-4a2f-9189-20145d3af096",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "horseEvidenceTaskIds": [
+        "024eb2d2-ffc2-43ff-94bb-06242f2f88e0"
+      ],
+      "exclusion": null
+    },
+    {
+      "entryId": "race-65ab3995-5853-5270-aa59-ac6b9b83d15d-entry-horse-4d5c7651-a434-5c45-8e95-d47cb60e684c",
+      "horseId": "horse-4d5c7651-a434-5c45-8e95-d47cb60e684c",
+      "horseName": "アイサンサン",
+      "officialSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002022103875/DA",
+      "sourceVerified": true,
+      "oldJockeyId": "jockey-41a4f9cf-57d1-5ab0-b32e-58be0ecc50d6",
+      "oldJockeyName": "幸 英明 106 M",
+      "newJockeyId": "jockey-887d509e-84ff-5cd3-a113-ef6cfedad819",
+      "newJockeyName": "幸 英明",
+      "changes": true,
+      "oldTasks": [
+        {
+          "taskId": "0192ee02-384f-49c0-9a67-c8b510832154",
+          "status": 6,
+          "requestedRevision": 3
+        }
+      ],
+      "newTasks": [
+        {
+          "taskId": "6e36e3df-c497-4a3f-a2b1-6021964a5b73",
+          "status": 5,
+          "requestedRevision": 3
+        }
+      ],
+      "oldRequests": [
+        {
+          "requestId": "0a1a6157-045f-471c-b73c-aff4c4e1d2eb",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "newRequests": [
+        {
+          "requestId": "ea9c7c09-d31e-4ccb-8436-fa28cae0a406",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "horseEvidenceTaskIds": [
+        "67c9d289-0546-4f0d-a410-4ff039e1ab91"
+      ],
+      "exclusion": null
+    },
+    {
+      "entryId": "race-65ab3995-5853-5270-aa59-ac6b9b83d15d-entry-horse-84e03a60-3247-5207-980b-5ecadc8a18ed",
+      "horseId": "horse-84e03a60-3247-5207-980b-5ecadc8a18ed",
+      "horseName": "ママコチャ",
+      "officialSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002019105394/D9",
+      "sourceVerified": true,
+      "oldJockeyId": "jockey-fefd2c6d-0a5a-524f-a7be-40f78e263f1d",
+      "oldJockeyName": "武 豊 108 S",
+      "newJockeyId": "jockey-372ea4d6-88aa-5e5d-a9c2-d0875edf2870",
+      "newJockeyName": "武 豊",
+      "changes": true,
+      "oldTasks": [
+        {
+          "taskId": "2efe26f4-7363-406c-a152-13487cd821af",
+          "status": 1,
+          "requestedRevision": 3
+        }
+      ],
+      "newTasks": [
+        {
+          "taskId": "ddc72d0a-1a99-4c6a-ab11-b4d8596b8c59",
+          "status": 5,
+          "requestedRevision": 3
+        }
+      ],
+      "oldRequests": [
+        {
+          "requestId": "37512300-5c8d-4869-9d2b-bcea45a178f7",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "newRequests": [
+        {
+          "requestId": "7287dea5-5bc0-4593-a679-ca4d97dd8fd6",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "horseEvidenceTaskIds": [
+        "7d6b0bc8-ac32-4d97-a946-43d94ab221a4"
+      ],
+      "exclusion": null
+    },
+    {
+      "entryId": "race-65ab3995-5853-5270-aa59-ac6b9b83d15d-entry-horse-322be648-b773-56df-a2a1-c0bec3481211",
+      "horseId": "horse-322be648-b773-56df-a2a1-c0bec3481211",
+      "horseName": "ジューンブレア",
+      "officialSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002021110099/B3",
+      "sourceVerified": true,
+      "oldJockeyId": "jockey-018fed07-2feb-54cb-8712-92fe3c68a568",
+      "oldJockeyName": "坂井 瑠星",
+      "newJockeyId": "jockey-018fed07-2feb-54cb-8712-92fe3c68a568",
+      "newJockeyName": "坂井 瑠星",
+      "changes": false,
+      "oldTasks": [
+        {
+          "taskId": "4ae6156e-536d-4025-b213-b7d59733da50",
+          "status": 5,
+          "requestedRevision": 3
+        }
+      ],
+      "newTasks": [
+        {
+          "taskId": "4ae6156e-536d-4025-b213-b7d59733da50",
+          "status": 5,
+          "requestedRevision": 3
+        }
+      ],
+      "oldRequests": [
+        {
+          "requestId": "d105de2c-c88e-4de0-86ee-40000aef1a7c",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "newRequests": [
+        {
+          "requestId": "d105de2c-c88e-4de0-86ee-40000aef1a7c",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "horseEvidenceTaskIds": [
+        "a8071cb0-da9e-4917-a192-99c6400271eb"
+      ],
+      "exclusion": null
+    },
+    {
+      "entryId": "race-65ab3995-5853-5270-aa59-ac6b9b83d15d-entry-horse-169b94fa-4b6a-58d8-97f1-3f98f6a67de9",
+      "horseId": "horse-169b94fa-4b6a-58d8-97f1-3f98f6a67de9",
+      "horseName": "サウンドモリアーナ",
+      "officialSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002022102057/29",
+      "sourceVerified": true,
+      "oldJockeyId": "jockey-bb28835c-6c58-51c6-a49d-e371b8a8a3ac",
+      "oldJockeyName": "吉田 隼人 110 S",
+      "newJockeyId": "jockey-36f7350c-f29b-591e-a96e-76dc3a760a11",
+      "newJockeyName": "吉田 隼人",
+      "changes": true,
+      "oldTasks": [
+        {
+          "taskId": "6e1c0a5f-a959-407f-b778-dcd75e1b2700",
+          "status": 1,
+          "requestedRevision": 3
+        }
+      ],
+      "newTasks": [
+        {
+          "taskId": "40daaf67-4f1a-4087-bbd0-0c6cbef40266",
+          "status": 1,
+          "requestedRevision": 3
+        }
+      ],
+      "oldRequests": [
+        {
+          "requestId": "2cd4b15c-9f5d-46c1-b16f-c83ed820c590",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "newRequests": [
+        {
+          "requestId": "7f6f3197-ee14-4430-a1fa-804a1b11a7c1",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "horseEvidenceTaskIds": [
+        "f1a24006-5f3e-4a3d-ad5f-be8154bd2edc"
+      ],
+      "exclusion": null
+    },
+    {
+      "entryId": "race-65ab3995-5853-5270-aa59-ac6b9b83d15d-entry-horse-a3808415-2209-5e90-8684-35fe84c8a9f9",
+      "horseId": "horse-a3808415-2209-5e90-8684-35fe84c8a9f9",
+      "horseName": "ワールズエンド",
+      "officialSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002021105864/A9",
+      "sourceVerified": true,
+      "oldJockeyId": "jockey-4e069d29-80af-5cca-bd70-491a1a8dab9b",
+      "oldJockeyName": "津村 明秀 117 M",
+      "newJockeyId": "jockey-e425896b-216a-59eb-9f1c-795b13da1b59",
+      "newJockeyName": "津村 明秀",
+      "changes": true,
+      "oldTasks": [
+        {
+          "taskId": "f6ffa94d-bad9-4f7b-99be-2677f14cb445",
+          "status": 1,
+          "requestedRevision": 3
+        }
+      ],
+      "newTasks": [
+        {
+          "taskId": "a71ae3bb-3f6c-4ba9-a574-0dc5facde995",
+          "status": 5,
+          "requestedRevision": 3
+        }
+      ],
+      "oldRequests": [
+        {
+          "requestId": "d2bb2a5d-4617-4896-92be-7c7b6804fc46",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "newRequests": [
+        {
+          "requestId": "3db016ed-6f6c-45df-b59e-0b8296f96cad",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "horseEvidenceTaskIds": [
+        "d373db18-0886-4d8a-a14a-c7218bcb0f2d"
+      ],
+      "exclusion": null
+    },
+    {
+      "entryId": "race-65ab3995-5853-5270-aa59-ac6b9b83d15d-entry-horse-25acb6c2-d151-5711-a072-542559a2f41d",
+      "horseId": "horse-25acb6c2-d151-5711-a072-542559a2f41d",
+      "horseName": "ペアポルックス",
+      "officialSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002021102320/DB",
+      "sourceVerified": true,
+      "oldJockeyId": "jockey-1d830ef6-ad7b-5bee-9dbf-e06f53b50608",
+      "oldJockeyName": "岩田 康誠 112 S",
+      "newJockeyId": "jockey-69fedac2-a00b-58d7-8c86-cba44c9fa839",
+      "newJockeyName": "岩田 康誠",
+      "changes": true,
+      "oldTasks": [
+        {
+          "taskId": "f1c3d76e-bc03-46b4-8a8e-3c94957fcebe",
+          "status": 1,
+          "requestedRevision": 3
+        }
+      ],
+      "newTasks": [
+        {
+          "taskId": "49922e77-50e1-4b91-98a0-8a4f32e0f1b1",
+          "status": 5,
+          "requestedRevision": 3
+        }
+      ],
+      "oldRequests": [
+        {
+          "requestId": "125cfedd-d067-4d47-a656-4afee3942e91",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "newRequests": [
+        {
+          "requestId": "1f7e50cb-fa47-4607-bd06-90f57248168a",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "horseEvidenceTaskIds": [
+        "4e7b8aa9-3843-4e39-8017-cdd422e65c87"
+      ],
+      "exclusion": null
+    },
+    {
+      "entryId": "race-65ab3995-5853-5270-aa59-ac6b9b83d15d-entry-horse-bba29932-2b4c-56f2-9110-c3a557d2c676",
+      "horseId": "horse-bba29932-2b4c-56f2-9110-c3a557d2c676",
+      "horseName": "エーティーマクフィ",
+      "officialSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002019105859/CD",
+      "sourceVerified": true,
+      "oldJockeyId": "jockey-a81afaad-fbca-5a1b-9b71-5ffbf46f81ba",
+      "oldJockeyName": "富田 暁 109 S",
+      "newJockeyId": "jockey-7ba4e439-e8ab-557c-9fe4-c44633e4bc8d",
+      "newJockeyName": "富田 暁",
+      "changes": true,
+      "oldTasks": [
+        {
+          "taskId": "85c26fe0-7779-4429-ada2-cf2c8abb1460",
+          "status": 1,
+          "requestedRevision": 3
+        }
+      ],
+      "newTasks": [
+        {
+          "taskId": "2499423c-d46d-406e-bd64-f50ff3551c1e",
+          "status": 5,
+          "requestedRevision": 3
+        }
+      ],
+      "oldRequests": [
+        {
+          "requestId": "9eafacf2-a5a0-4a0d-a212-3a3281ce3fd7",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "newRequests": [
+        {
+          "requestId": "8070d49f-4adc-47d6-b8ae-c30167082472",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "horseEvidenceTaskIds": [
+        "70dc1fd8-0379-4c01-b284-9af70a04806d"
+      ],
+      "exclusion": null
+    },
+    {
+      "entryId": "race-65ab3995-5853-5270-aa59-ac6b9b83d15d-entry-horse-9ad256cf-afbd-521d-8c77-7314df314c38",
+      "horseId": "horse-9ad256cf-afbd-521d-8c77-7314df314c38",
+      "horseName": "スターアニス",
+      "officialSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002023106920/D5",
+      "sourceVerified": true,
+      "oldJockeyId": "jockey-69682a61-c1d6-5a09-a47b-f0e659b84522",
+      "oldJockeyName": "C.ルメール 116 M",
+      "newJockeyId": "jockey-bfc3a5c6-446d-55b7-b7f5-3f1f9c857d9d",
+      "newJockeyName": "C.ルメール",
+      "changes": true,
+      "oldTasks": [
+        {
+          "taskId": "d2434b26-ef6e-4746-b664-3f46380a8e94",
+          "status": 1,
+          "requestedRevision": 3
+        }
+      ],
+      "newTasks": [
+        {
+          "taskId": "b87ce166-5a1a-42ee-a552-3deafc000337",
+          "status": 5,
+          "requestedRevision": 3
+        }
+      ],
+      "oldRequests": [
+        {
+          "requestId": "53c30555-3990-43bc-afa3-e5b9876cc2fe",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "newRequests": [
+        {
+          "requestId": "326a7ea0-81c8-4684-9e2a-f579eaa9f564",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "horseEvidenceTaskIds": [
+        "ba043ed7-1403-45ae-91a6-7768e21ffed4"
+      ],
+      "exclusion": null
+    },
+    {
+      "entryId": "race-65ab3995-5853-5270-aa59-ac6b9b83d15d-entry-horse-3f2d164c-4adf-5724-99c7-7d6ad557cd89",
+      "horseId": "horse-3f2d164c-4adf-5724-99c7-7d6ad557cd89",
+      "horseName": "レイピア",
+      "officialSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002022103066/B5",
+      "sourceVerified": true,
+      "oldJockeyId": "jockey-37639f47-1924-5a2a-829b-e8de266f001d",
+      "oldJockeyName": "横山 武史 111 S",
+      "newJockeyId": "jockey-4032a1b7-a3b3-5578-8e70-f2137510a64f",
+      "newJockeyName": "横山 武史",
+      "changes": true,
+      "oldTasks": [
+        {
+          "taskId": "2e8d260d-c5e5-4774-95fa-dcc3d252b9b3",
+          "status": 1,
+          "requestedRevision": 3
+        }
+      ],
+      "newTasks": [
+        {
+          "taskId": "8f8c583b-6c4e-40eb-a9a6-2661e07d2bb7",
+          "status": 5,
+          "requestedRevision": 3
+        }
+      ],
+      "oldRequests": [
+        {
+          "requestId": "3bc83d66-2785-47a1-97aa-6b07a479b7da",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "newRequests": [
+        {
+          "requestId": "6c64fabd-0f19-41bf-ab6e-079f07f94340",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "horseEvidenceTaskIds": [
+        "e4fa04a9-306c-4a7b-b09c-c2777d476d1f"
+      ],
+      "exclusion": null
+    },
+    {
+      "entryId": "race-65ab3995-5853-5270-aa59-ac6b9b83d15d-entry-horse-4e8c30c9-7a7a-5015-a472-0ce3432f4454",
+      "horseId": "horse-4e8c30c9-7a7a-5015-a472-0ce3432f4454",
+      "horseName": "ルガル",
+      "officialSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002020106851/A3",
+      "sourceVerified": true,
+      "oldJockeyId": "jockey-9536ac6d-db45-5c86-93c5-213d7315569b",
+      "oldJockeyName": "鮫島 克駿 114 S",
+      "newJockeyId": "jockey-1cb0740b-243d-5d6c-a08f-54539066097a",
+      "newJockeyName": "鮫島 克駿",
+      "changes": true,
+      "oldTasks": [
+        {
+          "taskId": "2ff6b60b-f493-45e0-891b-21cc0e18c60b",
+          "status": 1,
+          "requestedRevision": 3
+        }
+      ],
+      "newTasks": [
+        {
+          "taskId": "457b2b86-1e4b-4141-a573-ef6807592520",
+          "status": 5,
+          "requestedRevision": 3
+        }
+      ],
+      "oldRequests": [
+        {
+          "requestId": "52d2b847-b145-4462-b8e2-32b3123b1ccc",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "newRequests": [
+        {
+          "requestId": "d28b52e3-3e2c-4c11-b894-545c66be2b37",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "horseEvidenceTaskIds": [
+        "11278443-8865-4ed6-a270-74cf547988e5"
+      ],
+      "exclusion": null
+    },
+    {
+      "entryId": "race-65ab3995-5853-5270-aa59-ac6b9b83d15d-entry-horse-489827db-e312-5244-8b24-5172b0d0314c",
+      "horseId": "horse-489827db-e312-5244-8b24-5172b0d0314c",
+      "horseName": "ブラックチャリス",
+      "officialSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002023107008/83",
+      "sourceVerified": true,
+      "oldJockeyId": "jockey-a16d8f5d-1c93-5dd9-b247-6febb777c2e6",
+      "oldJockeyName": "浜中 俊 105 S,M",
+      "newJockeyId": "jockey-3280e796-3fae-5ecb-b6f8-cd72187ab7a9",
+      "newJockeyName": "浜中 俊",
+      "changes": true,
+      "oldTasks": [
+        {
+          "taskId": "706aba3f-dc8e-4296-97e4-3a73367f09f8",
+          "status": 1,
+          "requestedRevision": 3
+        }
+      ],
+      "newTasks": [
+        {
+          "taskId": "b44c6a38-4a5a-4a11-a246-cc8ec2247e2d",
+          "status": 5,
+          "requestedRevision": 3
+        }
+      ],
+      "oldRequests": [
+        {
+          "requestId": "5f8b2eb3-e5de-40d7-a0e2-a98d9e36a99d",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "newRequests": [
+        {
+          "requestId": "2d620026-7b96-4a2e-a9a7-33ea49b3aebe",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "horseEvidenceTaskIds": [
+        "57d29182-3e3b-4168-8ef7-8106cc0f0eb7"
+      ],
+      "exclusion": null
+    },
+    {
+      "entryId": "race-65ab3995-5853-5270-aa59-ac6b9b83d15d-entry-horse-f327c333-40cb-529a-b628-14b1dceb63f2",
+      "horseId": "horse-f327c333-40cb-529a-b628-14b1dceb63f2",
+      "horseName": "パンジャタワー",
+      "officialSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002022101732/32",
+      "sourceVerified": true,
+      "oldJockeyId": "jockey-b4cff9c5-7821-566f-82f4-dee039cd3863",
+      "oldJockeyName": "松山 弘平 116 M",
+      "newJockeyId": "jockey-b615716e-a6ac-5547-96ce-1f87d91f3ecb",
+      "newJockeyName": "松山 弘平",
+      "changes": true,
+      "oldTasks": [
+        {
+          "taskId": "7e5c65ed-9a18-46ea-80ad-ac3f456bbb05",
+          "status": 1,
+          "requestedRevision": 3
+        }
+      ],
+      "newTasks": [
+        {
+          "taskId": "ca405abe-ea5e-4292-8544-45731e493a0a",
+          "status": 5,
+          "requestedRevision": 3
+        }
+      ],
+      "oldRequests": [
+        {
+          "requestId": "11697180-f1c7-475c-85e2-6ada11fc677b",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "newRequests": [
+        {
+          "requestId": "3217bbc0-1b1e-4a9e-9cd5-9032cce6a639",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "horseEvidenceTaskIds": [
+        "d3b98236-ddfb-42be-b126-4f064173d81c"
+      ],
+      "exclusion": null
+    },
+    {
+      "entryId": "race-65ab3995-5853-5270-aa59-ac6b9b83d15d-entry-horse-d32b73e7-b8e5-53a0-9997-a8b6f197f05b",
+      "horseId": "horse-d32b73e7-b8e5-53a0-9997-a8b6f197f05b",
+      "horseName": "ウインカーネリアン",
+      "officialSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002017101429/05",
+      "sourceVerified": true,
+      "oldJockeyId": "jockey-6304eec5-eb36-5921-bb87-ec04dce08740",
+      "oldJockeyName": "三浦 皇成 113 S",
+      "newJockeyId": "jockey-02c9ad15-1755-5027-a2f3-b44ec4c9824e",
+      "newJockeyName": "三浦 皇成",
+      "changes": true,
+      "oldTasks": [
+        {
+          "taskId": "85856261-f71d-4310-81e3-b6c3258d9355",
+          "status": 1,
+          "requestedRevision": 3
+        }
+      ],
+      "newTasks": [
+        {
+          "taskId": "2311f9fc-ade8-4c9d-ac67-c392b06eaf32",
+          "status": 5,
+          "requestedRevision": 3
+        }
+      ],
+      "oldRequests": [
+        {
+          "requestId": "32d6aed1-0f42-4d51-a2c5-b390d243d8d9",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "newRequests": [
+        {
+          "requestId": "1e7c288e-2ea0-4b98-9689-9a4b11c38956",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "horseEvidenceTaskIds": [
+        "7e70824a-5323-4e6c-b8c3-3b52fa9143ee"
+      ],
+      "exclusion": null
+    },
+    {
+      "entryId": "race-65ab3995-5853-5270-aa59-ac6b9b83d15d-entry-horse-16203451-c4fb-5b6a-86d1-0385590cfbff",
+      "horseId": "horse-16203451-c4fb-5b6a-86d1-0385590cfbff",
+      "horseName": "フリッカージャブ",
+      "officialSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002022102020/D4",
+      "sourceVerified": true,
+      "oldJockeyId": "jockey-f1fb7281-65e6-52c5-b901-6d4cb029d95c",
+      "oldJockeyName": "西村 淳也 114 S",
+      "newJockeyId": "jockey-abb504d6-4706-5af5-913d-1588a3ae7638",
+      "newJockeyName": "西村 淳也",
+      "changes": true,
+      "oldTasks": [
+        {
+          "taskId": "f24a7ef9-80f7-47b1-8670-c1a866983534",
+          "status": 1,
+          "requestedRevision": 3
+        }
+      ],
+      "newTasks": [
+        {
+          "taskId": "b906aa4c-a334-4d18-b7a0-6730315bc61b",
+          "status": 5,
+          "requestedRevision": 3
+        }
+      ],
+      "oldRequests": [
+        {
+          "requestId": "41c3bd47-0b21-4b23-b5a3-7b1b903fa880",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "newRequests": [
+        {
+          "requestId": "f5b182e3-08c9-411d-9627-84e60ca54585",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "horseEvidenceTaskIds": [
+        "9e8bbaa4-8efb-4858-9250-9a12c76d09e6"
+      ],
+      "exclusion": null
+    },
+    {
+      "entryId": "race-65ab3995-5853-5270-aa59-ac6b9b83d15d-entry-horse-00206716-e878-5742-b5e0-ca859a5d2cbc",
+      "horseId": "horse-00206716-e878-5742-b5e0-ca859a5d2cbc",
+      "horseName": "ピューロマジック",
+      "officialSourceIdentity": "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002021107058/BB",
+      "sourceVerified": true,
+      "oldJockeyId": "jockey-e00c0055-ff7c-582b-a3c1-812dab1e7f5b",
+      "oldJockeyName": "岩田 望来 109 S",
+      "newJockeyId": "jockey-675ed89f-cd2a-56cc-a05e-9ee67527e75f",
+      "newJockeyName": "岩田 望来",
+      "changes": true,
+      "oldTasks": [
+        {
+          "taskId": "cde92846-435f-44e0-86ae-0da05180c7a0",
+          "status": 1,
+          "requestedRevision": 3
+        }
+      ],
+      "newTasks": [
+        {
+          "taskId": "47cdd476-9835-44ec-9574-14a5101762ad",
+          "status": 5,
+          "requestedRevision": 3
+        }
+      ],
+      "oldRequests": [
+        {
+          "requestId": "2a5db261-bc96-47e7-b7e3-04337e80923f",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "newRequests": [
+        {
+          "requestId": "58d4a0a4-441f-47f5-a54c-216b873bc5af",
+          "requestedRevision": 3,
+          "reason": 2
+        }
+      ],
+      "horseEvidenceTaskIds": [
+        "c0313edc-2cd0-49a2-b656-7a3ed1e7b8df"
+      ],
+      "exclusion": null
+    }
+  ]
+}

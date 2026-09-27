@@ -160,6 +160,13 @@ Checkpoint review: MainがAC1–4のHTTP/DB・worker・parser経路とAC5棚卸�
 
 ## Final review / acceptance blocker
 
+### 2026-09-27 11:50 JST read-only follow-up
+
+利用者が現在のエラー対応を依頼したため、[DOM名取得と現行障害対応](../20260927_dom-jockey-and-collection-errors/README.md)で原因別の修正提案を作成中。
+最新pipelineの停止理由は11:28 JSTの阪神4R・馬番3のTime欠損へ変わっており、03:08の騎手エラーが現在の停止理由という以下の記述は過去時点の記録である。
+対象Owner46 resourceを再度GETし、46件すべてReady、attempt0を確認した。本recordのAC6/T6は引き続き未達で、Status Approved、AC6 Connected、T6 Externally blockedを維持する。
+Mainが復旧後の成功/後続進捗と元recordの整合更新を所有する。新record作成によってAC6を除外しない。本番retry/resume/applyは今回行っていない。
+
 MainはAC1–5の実経路、非回帰、Linux CIと独立reviewのclosureを確認しVerified。T1D/T3のworker成果は独立反証と全体回帰を含め受入済み。observed model/usage/costは非公開で未確認、比較根拠のないrouting改善は行わない。今回のfixture・性能・証拠不足は局所closureと反例で修正し、元gateを再実行した。恒久的skill変更が必要な反復プロセス欠陥は本実装からは確認していない。
 
 T6は配備と安全な限定復旧の準備を終えたが、03:08 JSTからの未知jockey障害でworker実行が停止している。停止解除は「未知障害がない場合だけ」という承認済み条件と両立しないため行わない。Mainがblockerを保持し、追加調査/対応設計の合意を求める。AC6をVerified、recordをImplementedにはしない。残課題を別recordへ移して完了扱いもしない。
