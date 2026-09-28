@@ -287,6 +287,153 @@ public sealed class CollectionDispatchStarvationReproductionTests
     }
 
     [TestMethod]
+    public void UnclassifiedOrAcquiredResultsAreNeverSafeToRelease()
+    {
+        Assert.IsFalse(new CollectionExecutionAcquireResult(CollectionExecutionAcquireStatus.NoWork)
+            .SafeToReleaseReservation, "A missing reason must fail closed.");
+        Assert.IsFalse(new CollectionExecutionAcquireResult(CollectionExecutionAcquireStatus.Acquired)
+            .SafeToReleaseReservation, "Acquired results are not NoWork release decisions.");
+    }
+
+    [TestMethod]
+    [DataRow("invalid-request", CollectionExecutionNoWorkReason.InvalidRequest, false)]
+    [DataRow("pipeline-paused", CollectionExecutionNoWorkReason.PipelinePaused, true)]
+    [DataRow("active-task-lease", CollectionExecutionNoWorkReason.LeaseConflict, false)]
+    [DataRow("active-execution-lease", CollectionExecutionNoWorkReason.LeaseConflict, false)]
+    [DataRow("reservation-unavailable", CollectionExecutionNoWorkReason.ReservationUnavailable, false)]
+    [DataRow("extra-envelope-row", CollectionExecutionNoWorkReason.ReservationInconsistent, false)]
+    [DataRow("duplicate-outbox", CollectionExecutionNoWorkReason.ReservationInconsistent, false)]
+    [DataRow("terminal-task", CollectionExecutionNoWorkReason.TaskIneligible, true)]
+    [DataRow("repair-hold", CollectionExecutionNoWorkReason.RepairHold, true)]
+    [DataRow("resource-unavailable", CollectionExecutionNoWorkReason.ResourceUnavailable, true)]
+    [DataRow("invalid-built-envelope", CollectionExecutionNoWorkReason.EnvelopeInvalid, false)]
+    public async Task AcquireNoWorkReasonsAreTypedAndReleaseSafetyIsStoreOwned(string scenario,
+        CollectionExecutionNoWorkReason expectedReason, bool expectedSafeToRelease)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "collection-no-work-reason", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
+            { StateDirectory = directory }));
+            var now = DateTimeOffset.UtcNow.AddMinutes(-5);
+            var definition = new CollectionDefinitionId("race-detail");
+            var resource = new ResourceKey(CollectionResourceType.Race, "JRA", "20260926:Nakayama:5");
+            await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race,
+                1, "initial", false);
+            var receipt = await store.RequestAsync(resource, definition, 1, CollectionReason.Initial, now,
+                CollectionLane.Background, 10);
+            var candidate = (await store.GetPendingDispatchesAsync(now.AddSeconds(1), 10)).Single();
+            var wakeId = Guid.NewGuid();
+            var envelopeId = Guid.NewGuid();
+            const string token = "typed-no-work-reservation";
+            Assert.IsTrue(await store.TryReserveDispatchesWithinCapacityAsync([candidate.OutboxId], token,
+                envelopeId, wakeId, now, TimeSpan.FromMinutes(1), 1));
+            var wake = new CollectionWakeSignal(wakeId, envelopeId, token);
+            var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                .UseSqlite($"Data Source={Path.Combine(directory, "collection-platform.db")};Pooling=False;Default Timeout=30")
+                .Options;
+
+            if (scenario == "pipeline-paused")
+                await store.SetPausedAsync(true, "typed NoWork test", now.AddSeconds(1));
+            else if (scenario is "active-task-lease" or "active-execution-lease" or "terminal-task" or "repair-hold"
+                     or "resource-unavailable" or "extra-envelope-row" or "duplicate-outbox")
+            {
+                await using var db = new CollectionPlatformDbContext(dbOptions);
+                var task = await db.Tasks.SingleAsync(x => x.TaskId == receipt.TaskId);
+                var outbox = await db.DispatchOutbox.SingleAsync(x => x.TaskId == receipt.TaskId);
+                switch (scenario)
+                {
+                    case "active-task-lease":
+                        task.LeaseExpiresAt = now.AddSeconds(30);
+                        break;
+                    case "active-execution-lease":
+                        db.ExecutionLeases.Add(new CollectionExecutionLeaseEntity
+                        {
+                            ExecutionBatchId = Guid.NewGuid(),
+                            DispatchEnvelopeId = envelopeId,
+                            WakeId = Guid.NewGuid(),
+                            ReservationToken = "different-token",
+                            LeaseToken = Guid.NewGuid().ToString("N"),
+                            Status = "Running",
+                            LeaseExpiresAt = now.AddSeconds(30),
+                            CreatedAt = now,
+                            QueueMessageId = "active-lease-conflict"
+                        });
+                        break;
+                    case "terminal-task":
+                        task.Status = CollectionTaskStatus.DeadLetter;
+                        break;
+                    case "repair-hold":
+                        db.RaceRepairHolds.Add(new RaceRepairHoldEntity
+                        {
+                            RaceId = DeterministicIdGenerator.TryBuildRaceIdFromResource(resource.Id)!,
+                            Generation = 1,
+                            OperationId = Guid.NewGuid().ToString("N"),
+                            Reason = "typed NoWork test",
+                            CreatedAt = now.AddSeconds(1)
+                        });
+                        break;
+                    case "resource-unavailable":
+                        task.ResourcePk = long.MaxValue;
+                        break;
+                    case "extra-envelope-row":
+                        db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+                        {
+                            OutboxId = Guid.NewGuid(),
+                            TaskId = outbox.TaskId,
+                            DispatchGeneration = outbox.DispatchGeneration,
+                            AvailableAt = outbox.AvailableAt,
+                            CreatedAt = outbox.CreatedAt,
+                            ReservationToken = "conflicting-token",
+                            ReservedUntilUnixMilliseconds = outbox.ReservedUntilUnixMilliseconds,
+                            EnvelopeId = envelopeId,
+                            WakeId = wakeId
+                        });
+                        break;
+                    case "duplicate-outbox":
+                        db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+                        {
+                            OutboxId = Guid.NewGuid(),
+                            TaskId = outbox.TaskId,
+                            DispatchGeneration = outbox.DispatchGeneration,
+                            AvailableAt = outbox.AvailableAt,
+                            CreatedAt = outbox.CreatedAt
+                        });
+                        break;
+                }
+                await db.SaveChangesAsync();
+            }
+            else if (scenario == "invalid-built-envelope")
+            {
+                var acquired = await store.AcquireNextExecutionAsync(wake, "first-attempt", now.AddSeconds(1),
+                    TimeSpan.FromSeconds(45));
+                Assert.AreEqual(CollectionExecutionAcquireStatus.Acquired, acquired.Status);
+                await using var db = new CollectionPlatformDbContext(dbOptions);
+                var task = await db.Tasks.SingleAsync(x => x.TaskId == receipt.TaskId);
+                task.DispatchGeneration++;
+                await db.SaveChangesAsync();
+            }
+
+            var requestedWake = scenario == "invalid-request" ? wake with { WakeId = Guid.Empty } : wake;
+            var requestedTokenWake = scenario == "reservation-unavailable"
+                ? requestedWake with { ReservationToken = "wrong-token" }
+                : requestedWake;
+            var result = await store.AcquireNextExecutionAsync(requestedTokenWake, "typed-no-work-message",
+                now.AddSeconds(2), TimeSpan.FromSeconds(45));
+
+            Assert.AreEqual(CollectionExecutionAcquireStatus.NoWork, result.Status);
+            Assert.AreEqual(expectedReason, result.NoWorkReason, $"Unexpected reason for {scenario}.");
+            Assert.AreEqual(expectedSafeToRelease, result.SafeToReleaseReservation,
+                $"Release disposition must be derived from the reason for {scenario}.");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public async Task PendingSelection_LeavesMissingAndDuplicateOutboxAnomaliesUntouched()
     {
         var directory = Path.Combine(Path.GetTempPath(), "collection-outbox-anomalies", Guid.NewGuid().ToString("N"));
