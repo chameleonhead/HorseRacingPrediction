@@ -442,13 +442,26 @@ public sealed class CollectionPlatformStoreTests
 
         var created = first.Status == "Created" ? first : second;
         await CompleteAsync(store, created.Receipt!, now.AddSeconds(2));
+        await using var db = new CollectionPlatformDbContext(new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False").Options);
+        var retryTask = await db.Tasks.SingleAsync(x => x.TaskId == created.Receipt!.TaskId);
+        var retryOutbox = await db.DispatchOutbox.SingleAsync(x => x.TaskId == retryTask.TaskId
+            && x.DispatchGeneration == retryTask.DispatchGeneration && x.DispatchedAt == null);
+        var retryDueAt = (retryTask.AvailableAt > retryOutbox.AvailableAt
+            ? retryTask.AvailableAt : retryOutbox.AvailableAt).AddSeconds(1);
         var third = (await store.RequestManyAsync("horse-history:horse-c:p0:c0", [Item("horse-c")],
-            now.AddMinutes(2))).Single();
+            retryDueAt)).Single();
 
         Assert.AreEqual("Reused", third.Status);
         Assert.AreEqual(first.Receipt.TaskId, third.Receipt!.TaskId);
         Assert.HasCount(1, await store.GetTasksAsync());
-        Assert.HasCount(1, await store.GetPendingDispatchesAsync(now.AddMinutes(2), 10));
+        var pendingAfterRetry = await store.GetPendingDispatchesAsync(retryDueAt, 10);
+        var currentRows = await db.DispatchOutbox.Where(x => x.TaskId == retryTask.TaskId
+            && x.DispatchGeneration == retryTask.DispatchGeneration && x.DispatchedAt == null).ToListAsync();
+        Assert.IsEmpty(pendingAfterRetry,
+            "A reused task that already succeeded must not be dispatched again, even when its outbox remains.");
+        Assert.AreEqual(CollectionTaskStatus.Succeeded, retryTask.Status);
+        Assert.HasCount(1, currentRows, "The terminal task's outbox remains available for later diagnosis.");
     }
 
     [TestMethod]
@@ -1578,7 +1591,7 @@ public sealed class CollectionPlatformStoreTests
         await connection.OpenAsync();
         await using var history = connection.CreateCommand();
         history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
-        Assert.AreEqual(18L, (long)(await history.ExecuteScalarAsync())!);
+        Assert.AreEqual(19L, (long)(await history.ExecuteScalarAsync())!);
         await using var existing = connection.CreateCommand();
         existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
         Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
@@ -1888,7 +1901,7 @@ public sealed class CollectionPlatformStoreTests
             $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 18;";
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 19;";
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 
