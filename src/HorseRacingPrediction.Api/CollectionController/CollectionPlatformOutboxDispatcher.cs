@@ -92,6 +92,7 @@ public sealed class CollectionPlatformOutboxDispatcher(
                         Math.Max(1, _options.MaxInFlightEnvelopes), _options.AggregationDelayMilliseconds,
                         cancellationToken).ConfigureAwait(false))
                     continue;
+                dispatchState = await store.GetLaneDispatchStateAsync(cancellationToken).ConfigureAwait(false);
                 var wake = new CollectionWakeSignal(wakeId, envelopeId, reservationToken);
                 CollectionQueueSendReceipt receipt;
                 var legacyAdapter = false;
@@ -109,7 +110,6 @@ public sealed class CollectionPlatformOutboxDispatcher(
                         envelopeId, receipt.MessageId, HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken)
                         .ConfigureAwait(false))
                         continue;
-                    dispatchState = await store.GetLaneDispatchStateAsync(cancellationToken).ConfigureAwait(false);
                 }
                 else
                     await store.MarkWakeSentAsync(envelopeId, reservationToken, receipt.MessageId, cancellationToken)
