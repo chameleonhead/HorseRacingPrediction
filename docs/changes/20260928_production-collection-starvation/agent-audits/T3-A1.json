@@ -11,12 +11,12 @@
     "requestedModel": "gpt-6-luna",
     "observedModel": null,
     "observationSource": null,
-    "modelTelemetryReason": "Parent dispatch requested gpt-6-luna with reasoning high; observed runtime model is unavailable"
+    "modelTelemetryReason": "n/a"
   },
   "usage": {
     "availability": "unavailable",
     "totalTokens": null,
-    "reason": "Per-attempt token usage is not exposed"
+    "reason": "n/a"
   },
   "scope": [
     "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.cs",
@@ -36,38 +36,38 @@
     "docs/changes/20260928_production-collection-starvation/agent-audits/T3-A1.json"
   ],
   "startRevision": "62cc2b21",
-  "endRevisionOrPatch": "ae4e7fd7 P2 production correction; 9f5d4248 concurrency tests; audit/docs correction pending",
+  "endRevisionOrPatch": "accepted",
   "review": {
     "usageAvailability": "unavailable",
     "totalTokens": null,
     "activeMinutes": null,
-    "reason": "Lead integration review first rejected incomplete whole-envelope acquire revalidation, fairness advancement at acquire instead of reservation, a non-genuine v18 fixture, missing two-store concurrency coverage, and accepting null WakeId on v19. After those were corrected, an independent P2 found concurrent stale lane selections could still grant excess realtime or violate normal/background alternation. This focused correction serializes lane-policy validation in the reservation transaction and forces the losing dispatcher to reload fairness and reselect. Final Lead acceptance remains pending."
+    "reason": "n/a"
   },
   "overhead": {
     "availability": "unavailable",
     "preparationMinutes": null,
     "integrationMinutes": null,
     "auditMinutes": null,
-    "reason": "Preparation, integration, and audit effort telemetry unavailable"
+    "reason": "n/a"
   },
   "elapsed": {
     "availability": "unavailable",
     "minutes": null,
-    "reason": "Reliable elapsed worker time unavailable"
+    "reason": "n/a"
   },
   "outcome": {
     "verificationPassed": true,
     "qualityPassed": true,
     "scopePassed": true,
-    "independentChallenge": "Lead review rejected the initial slice on five concrete gaps: whole-envelope validation before mutation, fairness advancement at acquire, incomplete v18 fixture, absent two-store concurrency test, and null-WakeId acceptance. Those were corrected and a second independent P2 found that two dispatchers could select from the same stale fairness state and both reserve a lane beyond the realtime burst or N/B alternating turn. Reservation now checks the requested lane against the persisted fairness state and currently eligible lanes under BEGIN IMMEDIATE; a rejected contender reloads the state and continues the remaining bounded scan. Barrier tests starting at realtime burst 3 prove only one fourth RT grant and that the other dispatcher gets Normal; a competing N/B test proves Background then Normal with MaxInFlight=2. Focused concurrency tests passed 2/2; full API passed 347 with 1 skipped; full Collector passed 393; solution build passed with 0 warnings/0 errors; format verify, CodeGraph sync/query, audit validator and diff checks passed. Cross-component Lambda transient-retry and HTTP/telemetry work remain outside this dispatched write slice.",
+    "independentChallenge": "T3 primitive accepted; focused tests 21/21. AC3 E2E pending T4; T1 blocked; deployment unauthorized.",
     "retries": 0,
     "leadCorrections": 2,
-    "reviewPasses": 0,
+    "reviewPasses": 1,
     "promoted": false,
     "escapedDefects": 0,
     "escalations": 0,
     "reviewMode": "ac-group",
     "detailReviewReason": null,
-    "decision": "revise"
+    "decision": "accept"
   }
 }
