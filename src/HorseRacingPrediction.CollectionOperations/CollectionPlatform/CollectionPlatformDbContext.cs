@@ -1,10 +1,15 @@
 using Microsoft.EntityFrameworkCore;
 using HorseRacingPrediction.CollectionOperations.Persistence;
+using HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatformDbContext> options) : DbContext(options)
 {
+    public static bool TelemetryResourceMatchesRepairHold(string resourceId, string attributesJson,
+        CollectionResourceType resourceType, string raceId)
+        => throw new InvalidOperationException("This function is only available in telemetry SQL.");
+
     public DbSet<CollectionResourceEntity> Resources => Set<CollectionResourceEntity>();
     public DbSet<CollectionResourceSuppressionEntity> ResourceSuppressions => Set<CollectionResourceSuppressionEntity>();
     public DbSet<CollectionDefinitionEntity> Definitions => Set<CollectionDefinitionEntity>();
@@ -36,6 +41,9 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasDbFunction(typeof(CollectionPlatformDbContext).GetMethod(
+                nameof(TelemetryResourceMatchesRepairHold))!)
+            .HasName("collection_telemetry_resource_matches_repair_hold");
         modelBuilder.Entity<RaceRepairHoldEntity>(e =>
         {
             e.ToTable("race_repair_holds"); e.HasKey(x => new { x.RaceId, x.Generation });

@@ -1997,80 +1997,110 @@ public sealed partial class CollectionPlatformStore
         int aggregationDelayMilliseconds = 0,
         CancellationToken cancellationToken = default)
     {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            await using var db = CreateDbContext();
-            await using var transaction = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable,
-                cancellationToken).ConfigureAwait(false);
-            var readyTasks = db.Tasks.AsNoTracking().Where(task => task.Status == CollectionTaskStatus.Ready);
-            var readyMissingCurrentOutbox = await readyTasks.CountAsync(task => !db.DispatchOutbox.AsNoTracking()
-                .Any(outbox => outbox.TaskId == task.TaskId && outbox.DispatchGeneration == task.DispatchGeneration
-                    && outbox.DispatchedAt == null), cancellationToken).ConfigureAwait(false);
-            var cardinalityAnomalyTasks = await readyTasks.CountAsync(task => db.DispatchOutbox.AsNoTracking()
-                .Count(outbox => outbox.TaskId == task.TaskId && outbox.DispatchGeneration == task.DispatchGeneration
-                    && outbox.DispatchedAt == null) > 1, cancellationToken).ConfigureAwait(false);
-            var activeLeases = await db.ExecutionLeases.AsNoTracking().CountAsync(lease =>
-                (lease.Status == "StartPending" || lease.Status == "Running") && lease.LeaseExpiresAt > now,
-                cancellationToken).ConfigureAwait(false);
-            var executionEnvelopeIds = db.ExecutionLeases.AsNoTracking().Select(lease => lease.DispatchEnvelopeId);
-            var heldTaskIds = await HeldTaskIdsAsync(db, cancellationToken).ConfigureAwait(false);
-            var heldIds = await ActiveHoldIdsAsync(db, cancellationToken).ConfigureAwait(false);
-            var aggregationCutoff = now.AddMilliseconds(-Math.Max(0, aggregationDelayMilliseconds));
-            var legacyInFlight = await (from outbox in db.DispatchOutbox.AsNoTracking()
-                                        join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
-                                        where outbox.EnvelopeId != null && outbox.DispatchedAt != null
-                                            && !heldTaskIds.Contains(task.TaskId)
-                                            && outbox.DispatchGeneration == task.DispatchGeneration
-                                            && (task.Status == CollectionTaskStatus.Ready || task.Status == CollectionTaskStatus.Running)
-                                            && !executionEnvelopeIds.Contains(outbox.EnvelopeId.Value)
-                                        select outbox.EnvelopeId).Distinct().CountAsync(cancellationToken)
-                .ConfigureAwait(false);
-            var boundedDefinitionLabels = definitionLabels.Where(CollectionDispatchTelemetryLabelIsSafe)
-                .Take(16).ToArray();
-            var nowMilliseconds = now.ToUnixTimeMilliseconds();
-            var eligibleRows = await (from outbox in db.DispatchOutbox.AsNoTracking()
-                                      join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
-                                      join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
-                                      where outbox.DispatchedAt == null && task.Status == CollectionTaskStatus.Ready
-                                          && task.DispatchGeneration == outbox.DispatchGeneration
-                                          && task.AvailableAt <= now && outbox.AvailableAt <= now
-                                          && (task.DefinitionId == "race-odds" || outbox.CreatedAt <= aggregationCutoff)
-                                          && db.DispatchOutbox.Count(other => other.TaskId == task.TaskId
-                                              && other.DispatchGeneration == task.DispatchGeneration && other.DispatchedAt == null) == 1
-                                      select new
-                                      {
-                                          outbox.EnvelopeId,
-                                          outbox.ReservedUntilUnixMilliseconds,
-                                          outbox.AvailableAt,
-                                          outbox.CreatedAt,
-                                          task.TaskId,
-                                          task.Lane,
-                                          resource,
-                                          DefinitionId = boundedDefinitionLabels.Contains(task.DefinitionId) ? task.DefinitionId : "OTHER",
-                                      }).ToListAsync(cancellationToken).ConfigureAwait(false);
-            var eligible = eligibleRows.Where(row => !heldTaskIds.Contains(row.TaskId)
-                && !MatchesHold(row.resource, heldIds)).ToArray();
-            var lanes = eligible.GroupBy(row => new { row.Lane, row.DefinitionId })
-                .OrderBy(group => group.Key.DefinitionId).ThenBy(group => group.Key.Lane).Take(51)
-                .Select(group => new CollectionDispatchLaneSnapshot(group.Key.Lane, group.Key.DefinitionId,
-                    group.Count(), Math.Max(0, (now - group.Min(row => row.AvailableAt)).TotalSeconds),
-                    group.Where(row => row.ReservedUntilUnixMilliseconds > nowMilliseconds)
-                        .Select(row => row.EnvelopeId).Where(id => id.HasValue).Distinct().Count(),
-                    group.Where(row => row.ReservedUntilUnixMilliseconds.HasValue
-                        && row.ReservedUntilUnixMilliseconds <= nowMilliseconds)
-                        .Select(row => row.EnvelopeId).Where(id => id.HasValue).Distinct().Count())).ToArray();
-            var activeReservations = eligible.Where(row => row.ReservedUntilUnixMilliseconds > nowMilliseconds)
-                .Select(row => row.EnvelopeId).Where(id => id.HasValue).Distinct().Count();
-            var expiredReservations = eligible.Where(row => row.ReservedUntilUnixMilliseconds.HasValue
-                    && row.ReservedUntilUnixMilliseconds <= nowMilliseconds)
-                .Select(row => row.EnvelopeId).Where(id => id.HasValue).Distinct().Count();
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            var capacity = activeLeases + legacyInFlight + activeReservations;
-            return new(readyMissingCurrentOutbox, cardinalityAnomalyTasks, activeReservations,
-                expiredReservations, activeLeases, Math.Max(1, maxInFlightEnvelopes), capacity, lanes);
-        }
-        finally { _gate.Release(); }
+        // Telemetry uses its own context and read transaction: it never waits on or holds the
+        // business-operation semaphore. Aggregation and bounded label folding happen in SQLite.
+        await using var db = CreateDbContext();
+        await db.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var connection = (SqliteConnection)db.Database.GetDbConnection();
+        var holdMatchCache = new Dictionary<(string ResourceId, string Attributes, string Type, string RaceId), bool>();
+        connection.CreateFunction<string, string, string, string, bool>(
+            "collection_telemetry_resource_matches_repair_hold", (resourceId, attributesJson, type, raceId) =>
+            {
+                var key = (resourceId, attributesJson, type, raceId);
+                if (holdMatchCache.TryGetValue(key, out var cached)) return cached;
+                var matches = Enum.TryParse<CollectionResourceType>(type, out var resourceType)
+                    && MatchesHold(new CollectionResourceEntity
+                    {
+                        ResourceId = resourceId,
+                        AttributesJson = attributesJson,
+                        Type = resourceType,
+                    }, [raceId]);
+                if (holdMatchCache.Count < 512) holdMatchCache.TryAdd(key, matches);
+                return matches;
+            });
+        // Deferred BEGIN gives SQLite a stable read snapshot without taking an eager writer lock.
+        await using var transaction = connection.BeginTransaction(deferred: true);
+        db.Database.UseTransaction(transaction);
+
+        var readyTasks = db.Tasks.AsNoTracking().Where(task => task.Status == CollectionTaskStatus.Ready);
+        var readyMissingCurrentOutbox = await readyTasks.CountAsync(task => !db.DispatchOutbox.AsNoTracking()
+            .Any(outbox => outbox.TaskId == task.TaskId && outbox.DispatchGeneration == task.DispatchGeneration
+                && outbox.DispatchedAt == null), cancellationToken).ConfigureAwait(false);
+        var cardinalityAnomalyTasks = await readyTasks.CountAsync(task => db.DispatchOutbox.AsNoTracking()
+            .Count(outbox => outbox.TaskId == task.TaskId && outbox.DispatchGeneration == task.DispatchGeneration
+                && outbox.DispatchedAt == null) > 1, cancellationToken).ConfigureAwait(false);
+        var activeLeases = await db.ExecutionLeases.AsNoTracking().CountAsync(lease =>
+            (lease.Status == "StartPending" || lease.Status == "Running") && lease.LeaseExpiresAt > now,
+            cancellationToken).ConfigureAwait(false);
+        var executionEnvelopeIds = db.ExecutionLeases.AsNoTracking().Select(lease => lease.DispatchEnvelopeId);
+        var legacyInFlight = await (from outbox in db.DispatchOutbox.AsNoTracking()
+                                    join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
+                                    join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+                                    where outbox.EnvelopeId != null && outbox.DispatchedAt != null
+                                        && outbox.DispatchGeneration == task.DispatchGeneration
+                                        && (task.Status == CollectionTaskStatus.Ready || task.Status == CollectionTaskStatus.Running)
+                                        && !executionEnvelopeIds.Contains(outbox.EnvelopeId.Value)
+                                        && !db.RaceRepairHolds.Any(hold => hold.ReleasedAt == null
+                                            && CollectionPlatformDbContext.TelemetryResourceMatchesRepairHold(
+                                                resource.ResourceId, resource.AttributesJson, resource.Type, hold.RaceId))
+                                    select outbox.EnvelopeId).Distinct().CountAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var boundedDefinitionLabels = definitionLabels.Where(CollectionDispatchTelemetryLabelIsSafe)
+            .Take(16).ToArray();
+        var aggregationCutoff = now.AddMilliseconds(-Math.Max(0, aggregationDelayMilliseconds));
+        var nowMilliseconds = now.ToUnixTimeMilliseconds();
+        var eligibleRows = from outbox in db.DispatchOutbox.AsNoTracking()
+                           join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
+                           join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+                           where outbox.DispatchedAt == null && task.Status == CollectionTaskStatus.Ready
+                               && task.DispatchGeneration == outbox.DispatchGeneration
+                               && task.AvailableAt <= now && outbox.AvailableAt <= now
+                               && (task.DefinitionId == "race-odds" || outbox.CreatedAt <= aggregationCutoff)
+                               && !db.DispatchOutbox.Any(other => other.TaskId == task.TaskId
+                                   && other.DispatchGeneration == task.DispatchGeneration && other.DispatchedAt == null
+                                   && other.OutboxId != outbox.OutboxId)
+                               && !db.RaceRepairHolds.Any(hold => hold.ReleasedAt == null
+                                   && CollectionPlatformDbContext.TelemetryResourceMatchesRepairHold(
+                                       resource.ResourceId, resource.AttributesJson, resource.Type, hold.RaceId))
+                           select new
+                           {
+                               outbox.EnvelopeId,
+                               outbox.ReservedUntilUnixMilliseconds,
+                               outbox.AvailableAt,
+                               task.Lane,
+                               DefinitionId = boundedDefinitionLabels.Contains(task.DefinitionId)
+                                   ? task.DefinitionId : "OTHER",
+                           };
+        var aggregateRows = await (from row in eligibleRows
+                                   group row by new { row.Lane, row.DefinitionId } into grouped
+                                   orderby grouped.Key.DefinitionId, grouped.Key.Lane
+                                   select new
+                                   {
+                                       grouped.Key.Lane,
+                                       grouped.Key.DefinitionId,
+                                       EligibleReadyRows = grouped.Count(),
+                                       OldestAvailableAt = grouped.Min(row => row.AvailableAt),
+                                       ActiveReservations = grouped.Where(row => row.ReservedUntilUnixMilliseconds > nowMilliseconds)
+                                           .Select(row => row.EnvelopeId).Where(id => id.HasValue).Distinct().Count(),
+                                       ExpiredReservations = grouped.Where(row => row.ReservedUntilUnixMilliseconds.HasValue
+                                               && row.ReservedUntilUnixMilliseconds <= nowMilliseconds)
+                                           .Select(row => row.EnvelopeId).Where(id => id.HasValue).Distinct().Count(),
+                                   }).Take(51).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var lanes = aggregateRows.Select(row => new CollectionDispatchLaneSnapshot(row.Lane, row.DefinitionId,
+            row.EligibleReadyRows, Math.Max(0, (now - row.OldestAvailableAt).TotalSeconds),
+            row.ActiveReservations, row.ExpiredReservations)).ToArray();
+        var activeReservations = await eligibleRows.Where(row => row.ReservedUntilUnixMilliseconds > nowMilliseconds)
+            .Select(row => row.EnvelopeId).Where(id => id.HasValue).Distinct().CountAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var expiredReservations = await eligibleRows.Where(row => row.ReservedUntilUnixMilliseconds.HasValue
+                && row.ReservedUntilUnixMilliseconds <= nowMilliseconds)
+            .Select(row => row.EnvelopeId).Where(id => id.HasValue).Distinct().CountAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        var capacity = activeLeases + legacyInFlight + activeReservations;
+        return new(readyMissingCurrentOutbox, cardinalityAnomalyTasks, activeReservations,
+            expiredReservations, activeLeases, Math.Max(1, maxInFlightEnvelopes), capacity, lanes);
     }
 
     private static bool CollectionDispatchTelemetryLabelIsSafe(string value)

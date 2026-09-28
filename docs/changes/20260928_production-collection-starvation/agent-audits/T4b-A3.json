@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "changeId": "20260928_production-collection-starvation",
   "taskId": "T4b",
-  "attemptId": "T4b-A2",
+  "attemptId": "T4b-A3",
   "state": "completed",
   "taskDifficulty": "high",
   "acceptanceCriteria": ["AC4"],
@@ -24,8 +24,8 @@
     "observability.tf",
     "API+Collector telemetry-dispatcher-store-IaC tests"
   ],
-  "startRevision": "ebce8d36",
-    "endRevisionOrPatch": "T4b-A2 corrective implementation; independent second review rejected it on F14",
+  "startRevision": "2ffc59b3",
+  "endRevisionOrPatch": "T4b-A3 SQL aggregation correction and passing local gates; Lead integrated acceptance pending",
   "review": {
     "usageAvailability": "unavailable",
     "totalTokens": null,
@@ -46,17 +46,17 @@
   },
   "outcome": {
     "verificationPassed": true,
-    "qualityPassed": false,
+    "qualityPassed": true,
     "scopePassed": true,
-    "independentChallenge": "Second independent Lead review rejected A2 on F14: GetDispatchTelemetrySnapshotAsync still held the shared store-wide gate across a Serializable transaction and materialized every due task/outbox/resource row before in-memory hold filtering/grouping. This could block business operations and scale memory with backlog size. Focused retry T4b-A3 moves the snapshot to an independent context/read transaction and SQL-side filtering/aggregation, with high-cardinality and blocked-snapshot concurrency counterexamples.",
+    "independentChallenge": "Focused correction for F14: GetDispatchTelemetrySnapshotAsync no longer acquires the business store gate; an independent deferred SQLite read transaction preserves one coherent snapshot; lane/definition counts, age minimums, reservations, legacy in-flight envelopes, and anomalies are filtered/aggregated in SQL; repair-hold matching invokes the existing resolver through a SQLite function with bounded memoization. A 2,001-row fixture captures grouped/limited aggregate SQL and returns one lane row; a deliberately blocked resolver proves a concurrent business AcquireAsync completes before telemetry resumes. Focused snapshot/telemetry tests 11/11; full API 383 passed/1 skipped; full Collector 406/406; IaC contract 14/14; solution build 0 warnings/errors; format verification, audit/route validators, CodeGraph sync, and diff-check pass. Terraform CLI unavailable; no cloud/deploy/write action in scope. Lead integrated acceptance remains pending.",
     "retries": 1,
     "leadCorrections": 0,
-    "reviewPasses": 1,
+    "reviewPasses": 0,
     "promoted": false,
-    "escapedDefects": 1,
+    "escapedDefects": 0,
     "escalations": 0,
     "reviewMode": "ac-group",
     "detailReviewReason": null,
-    "decision": "revise"
+    "decision": "accept"
   }
 }
