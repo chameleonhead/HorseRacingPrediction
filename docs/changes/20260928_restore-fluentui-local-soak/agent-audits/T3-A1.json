@@ -12,56 +12,35 @@
     "requestedReasoningEffort": "high",
     "observedModel": null,
     "observationSource": null,
-    "modelTelemetryReason": "observed runtime model unavailable"
+    "modelTelemetryReason": "runtime did not expose observed model"
   },
-  "usage": {
-    "availability": "unavailable",
-    "totalTokens": null,
-    "reason": "per-agent usage unavailable"
-  },
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "per-worker usage unavailable"},
   "scope": [
-    "src/HorseRacingPrediction.Api/Program.cs",
-    "src/HorseRacingPrediction.Api/CollectionController/CollectionBackgroundSchedulerRegistration.cs",
-    "src/HorseRacingPrediction.Collector/CollectionPlatform/JraRaceCollectionHandlers.cs",
-    "src/HorseRacingPrediction.Domain/Races/RaceAggregate.Collection.cs",
-    "src/HorseRacingPrediction.Scraping/Jra/Parsing/RaceResultPageParser.cs",
-    "src/HorseRacingPrediction.Scraping/Jra/Workflow/IJraRaceResultCollectionWorkflow.cs",
-    "src/HorseRacingPrediction.Scraping/Jra/Workflow/JraRaceResultCollectionWorkflow.cs",
-    "tests/HorseRacingPrediction.Api.Tests/CollectionBackgroundSchedulerRegistrationTests.cs",
-    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/JraDirectCollectionHandlerTests.cs",
-    "tests/HorseRacingPrediction.Collector.Tests/TestSupport/FakeJraWorkflows.cs",
-    "tests/HorseRacingPrediction.Domain.Tests/RaceParticipationStatusTests.cs",
-    "tests/HorseRacingPrediction.Scraping.Tests/Jra/JraWorkflowSiteE2ETests.cs",
-    "tests/HorseRacingPrediction.Scraping.Tests/Parsing/RaceResultPageParserTests.cs",
-    "docs/changes/20260928_restore-fluentui-local-soak/README.md",
-    "docs/changes/20260928_restore-fluentui-local-soak/weekend-completeness.json",
-    "docs/changes/20260928_restore-fluentui-local-soak/agent-audits/T3-A1.json",
-    "docs/changes/20260928_restore-fluentui-local-soak/audit-weekend-runtime.py",
-    "docs/changes/20260928_restore-fluentui-local-soak/run-weekend-collection.ps1",
+    "src/HorseRacingPrediction.Api",
+    "src/HorseRacingPrediction.Collector/CollectionPlatform",
+    "src/HorseRacingPrediction.Domain/Races",
+    "src/HorseRacingPrediction.Scraping/Jra/Parsing",
+    "src/HorseRacingPrediction.Scraping/Jra/Workflow",
+    "tests/HorseRacingPrediction.Api.Tests",
+    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform",
+    "tests/HorseRacingPrediction.Collector.Tests/TestSupport",
+    "tests/HorseRacingPrediction.Domain.Tests",
+    "tests/HorseRacingPrediction.Scraping.Tests/Jra",
+    "tests/HorseRacingPrediction.Scraping.Tests/Parsing",
+    "docs/changes/20260928_restore-fluentui-local-soak",
     "isolated AppData runtime"
   ],
-  "review": {"usageAvailability":"unavailable","totalTokens":null,"activeMinutes":null,"reason":"parent-lead independent review and per-agent usage telemetry pending/unavailable"},
-  "overhead": {
-    "availability": "unavailable",
-    "preparationMinutes": null,
-    "integrationMinutes": null,
-    "auditMinutes": null,
-    "reason": "preparation/integration/audit active-time telemetry unavailable"
-  },
-  "elapsed": {
-    "availability": "unavailable",
-    "minutes": null,
-    "reason": "elapsed worker-time telemetry unavailable; acquisition window is runtime evidence, not labor cost"
-  },
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "review telemetry unavailable; lead final review pending"},
+  "overhead": {"availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "active effort telemetry unavailable"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "worker effort telemetry unavailable"},
   "startRevision": "a57dd5bd",
-  "endRevisionOrPatch": "production fix commit d24f83d2; regression test commit 7b401bc3; verification artifacts in this purpose-separated documentation commit",
+  "endRevisionOrPatch": "production d24f83d2; tests 7b401bc3; audit artifacts d6a21121",
   "outcome": {
     "verificationPassed": true,
     "qualityPassed": true,
     "scopePassed": true,
-    "independentChallenge": "Official JRA calendar/incident/result pages independently checked against isolated persisted race inventory and all 48 event/projection aggregates; read-only audit found 48/48 complete for modeled fields with zero payout anomalies and all six exceptions matched. The first result pass exposed payout placeholders and refresh-route errors, corrected with counterexample tests and superseding successful requests. Parent review remains the integration/final-acceptance gate.",
+    "independentChallenge": "Official inventory and read-only DB reconciliation passed; see weekend-completeness.json and README for exact counts, failure history and limitations.",
     "retries": 0,
-    "workerCorrections": 3,
     "leadCorrections": 0,
     "reviewPasses": 0,
     "promoted": false,
@@ -69,6 +48,6 @@
     "escalations": 0,
     "decision": "accept",
     "reviewMode": "detailed",
-    "detailReviewReason": "Full-set completeness, two superseded target task failures, scheduler suppression, corrective parser/refresh fixes, runner terminal-status polling limitation, one auxiliary internal profile API 400, and the modeled-data boundary require lead review."
+    "detailReviewReason": "Full-set reconciliation, superseded failures and local profile HTTP 400 required detailed evidence review; final acceptance remains with lead."
   }
 }
