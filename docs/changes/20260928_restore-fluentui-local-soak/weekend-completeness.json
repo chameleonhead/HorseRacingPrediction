@@ -1,0 +1,665 @@
+{
+  "schemaVersion": 1,
+  "changeId": "20260928_restore-fluentui-local-soak",
+  "scope": {
+    "from": "2026-09-26",
+    "to": "2026-09-27",
+    "timezone": "Asia/Tokyo",
+    "expectedRaceCount": 48,
+    "expectedRaces": [
+      {
+        "raceId": "20260926:Nakayama:1",
+        "date": "2026-09-26",
+        "venue": "Nakayama",
+        "meeting": "4回中山8日",
+        "raceNumber": 1,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Nakayama:2",
+        "date": "2026-09-26",
+        "venue": "Nakayama",
+        "meeting": "4回中山8日",
+        "raceNumber": 2,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Nakayama:3",
+        "date": "2026-09-26",
+        "venue": "Nakayama",
+        "meeting": "4回中山8日",
+        "raceNumber": 3,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Nakayama:4",
+        "date": "2026-09-26",
+        "venue": "Nakayama",
+        "meeting": "4回中山8日",
+        "raceNumber": 4,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Nakayama:5",
+        "date": "2026-09-26",
+        "venue": "Nakayama",
+        "meeting": "4回中山8日",
+        "raceNumber": 5,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Nakayama:6",
+        "date": "2026-09-26",
+        "venue": "Nakayama",
+        "meeting": "4回中山8日",
+        "raceNumber": 6,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Nakayama:7",
+        "date": "2026-09-26",
+        "venue": "Nakayama",
+        "meeting": "4回中山8日",
+        "raceNumber": 7,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Nakayama:8",
+        "date": "2026-09-26",
+        "venue": "Nakayama",
+        "meeting": "4回中山8日",
+        "raceNumber": 8,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Nakayama:9",
+        "date": "2026-09-26",
+        "venue": "Nakayama",
+        "meeting": "4回中山8日",
+        "raceNumber": 9,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Nakayama:10",
+        "date": "2026-09-26",
+        "venue": "Nakayama",
+        "meeting": "4回中山8日",
+        "raceNumber": 10,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Nakayama:11",
+        "date": "2026-09-26",
+        "venue": "Nakayama",
+        "meeting": "4回中山8日",
+        "raceNumber": 11,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Nakayama:12",
+        "date": "2026-09-26",
+        "venue": "Nakayama",
+        "meeting": "4回中山8日",
+        "raceNumber": 12,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Hanshin:1",
+        "date": "2026-09-26",
+        "venue": "Hanshin",
+        "meeting": "4回阪神8日",
+        "raceNumber": 1,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Hanshin:2",
+        "date": "2026-09-26",
+        "venue": "Hanshin",
+        "meeting": "4回阪神8日",
+        "raceNumber": 2,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Hanshin:3",
+        "date": "2026-09-26",
+        "venue": "Hanshin",
+        "meeting": "4回阪神8日",
+        "raceNumber": 3,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Hanshin:4",
+        "date": "2026-09-26",
+        "venue": "Hanshin",
+        "meeting": "4回阪神8日",
+        "raceNumber": 4,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Hanshin:5",
+        "date": "2026-09-26",
+        "venue": "Hanshin",
+        "meeting": "4回阪神8日",
+        "raceNumber": 5,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Hanshin:6",
+        "date": "2026-09-26",
+        "venue": "Hanshin",
+        "meeting": "4回阪神8日",
+        "raceNumber": 6,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Hanshin:7",
+        "date": "2026-09-26",
+        "venue": "Hanshin",
+        "meeting": "4回阪神8日",
+        "raceNumber": 7,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Hanshin:8",
+        "date": "2026-09-26",
+        "venue": "Hanshin",
+        "meeting": "4回阪神8日",
+        "raceNumber": 8,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Hanshin:9",
+        "date": "2026-09-26",
+        "venue": "Hanshin",
+        "meeting": "4回阪神8日",
+        "raceNumber": 9,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Hanshin:10",
+        "date": "2026-09-26",
+        "venue": "Hanshin",
+        "meeting": "4回阪神8日",
+        "raceNumber": 10,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Hanshin:11",
+        "date": "2026-09-26",
+        "venue": "Hanshin",
+        "meeting": "4回阪神8日",
+        "raceNumber": 11,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260926:Hanshin:12",
+        "date": "2026-09-26",
+        "venue": "Hanshin",
+        "meeting": "4回阪神8日",
+        "raceNumber": 12,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Nakayama:1",
+        "date": "2026-09-27",
+        "venue": "Nakayama",
+        "meeting": "4回中山9日",
+        "raceNumber": 1,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Nakayama:2",
+        "date": "2026-09-27",
+        "venue": "Nakayama",
+        "meeting": "4回中山9日",
+        "raceNumber": 2,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Nakayama:3",
+        "date": "2026-09-27",
+        "venue": "Nakayama",
+        "meeting": "4回中山9日",
+        "raceNumber": 3,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Nakayama:4",
+        "date": "2026-09-27",
+        "venue": "Nakayama",
+        "meeting": "4回中山9日",
+        "raceNumber": 4,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Nakayama:5",
+        "date": "2026-09-27",
+        "venue": "Nakayama",
+        "meeting": "4回中山9日",
+        "raceNumber": 5,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Nakayama:6",
+        "date": "2026-09-27",
+        "venue": "Nakayama",
+        "meeting": "4回中山9日",
+        "raceNumber": 6,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Nakayama:7",
+        "date": "2026-09-27",
+        "venue": "Nakayama",
+        "meeting": "4回中山9日",
+        "raceNumber": 7,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Nakayama:8",
+        "date": "2026-09-27",
+        "venue": "Nakayama",
+        "meeting": "4回中山9日",
+        "raceNumber": 8,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Nakayama:9",
+        "date": "2026-09-27",
+        "venue": "Nakayama",
+        "meeting": "4回中山9日",
+        "raceNumber": 9,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Nakayama:10",
+        "date": "2026-09-27",
+        "venue": "Nakayama",
+        "meeting": "4回中山9日",
+        "raceNumber": 10,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Nakayama:11",
+        "date": "2026-09-27",
+        "venue": "Nakayama",
+        "meeting": "4回中山9日",
+        "raceNumber": 11,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Nakayama:12",
+        "date": "2026-09-27",
+        "venue": "Nakayama",
+        "meeting": "4回中山9日",
+        "raceNumber": 12,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Hanshin:1",
+        "date": "2026-09-27",
+        "venue": "Hanshin",
+        "meeting": "4回阪神9日",
+        "raceNumber": 1,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Hanshin:2",
+        "date": "2026-09-27",
+        "venue": "Hanshin",
+        "meeting": "4回阪神9日",
+        "raceNumber": 2,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Hanshin:3",
+        "date": "2026-09-27",
+        "venue": "Hanshin",
+        "meeting": "4回阪神9日",
+        "raceNumber": 3,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Hanshin:4",
+        "date": "2026-09-27",
+        "venue": "Hanshin",
+        "meeting": "4回阪神9日",
+        "raceNumber": 4,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Hanshin:5",
+        "date": "2026-09-27",
+        "venue": "Hanshin",
+        "meeting": "4回阪神9日",
+        "raceNumber": 5,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Hanshin:6",
+        "date": "2026-09-27",
+        "venue": "Hanshin",
+        "meeting": "4回阪神9日",
+        "raceNumber": 6,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Hanshin:7",
+        "date": "2026-09-27",
+        "venue": "Hanshin",
+        "meeting": "4回阪神9日",
+        "raceNumber": 7,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Hanshin:8",
+        "date": "2026-09-27",
+        "venue": "Hanshin",
+        "meeting": "4回阪神9日",
+        "raceNumber": 8,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Hanshin:9",
+        "date": "2026-09-27",
+        "venue": "Hanshin",
+        "meeting": "4回阪神9日",
+        "raceNumber": 9,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Hanshin:10",
+        "date": "2026-09-27",
+        "venue": "Hanshin",
+        "meeting": "4回阪神9日",
+        "raceNumber": 10,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Hanshin:11",
+        "date": "2026-09-27",
+        "venue": "Hanshin",
+        "meeting": "4回阪神9日",
+        "raceNumber": 11,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      },
+      {
+        "raceId": "20260927:Hanshin:12",
+        "date": "2026-09-27",
+        "venue": "Hanshin",
+        "meeting": "4回阪神9日",
+        "raceNumber": 12,
+        "scheduled": "held",
+        "expectedDomainResult": true,
+        "acquired": true
+      }
+    ]
+  },
+  "officialSources": [
+    {
+      "url": "https://jra.jp/keiba/calendar2026/2026/9/0926.html",
+      "purpose": "2026-09-26 scheduled venues, meetings and race numbers"
+    },
+    {
+      "url": "https://jra.jp/keiba/calendar2026/2026/9/0927.html",
+      "purpose": "2026-09-27 scheduled venues, meetings and race numbers"
+    },
+    {
+      "url": "https://jra.jp/news/202609/092604.html",
+      "purpose": "2026-09-26 held-meeting information and 9/27 change notice"
+    },
+    {
+      "url": "https://jra.jp/news/202609/092704.html",
+      "purpose": "2026-09-27 meeting notes and horse-level incidents"
+    },
+    {
+      "url": "https://sp.jra.jp/JRADB/accessS.html?CNAME=sw01sde1006202604091120260927%2F82",
+      "purpose": "2026-09-27 Nakayama 11R result, 8th-place dead heat and official modeled payouts"
+    },
+    {
+      "url": "https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1006202604091020260927%2F40",
+      "purpose": "2026-09-27 Nakayama 10R result and #9's official 13th-place finish during in-race illness"
+    }
+  ],
+  "officialExceptions": [
+    {
+      "date": "2026-09-26",
+      "venue": "Hanshin",
+      "raceNumber": 5,
+      "horseNumber": 7,
+      "status": "excluded",
+      "effect": "race remains expected; audit entry status"
+    },
+    {
+      "date": "2026-09-27",
+      "venue": "Nakayama",
+      "raceNumber": 1,
+      "horseNumber": 6,
+      "status": "scratched",
+      "effect": "race remains expected; audit entry status"
+    },
+    {
+      "date": "2026-09-27",
+      "venue": "Nakayama",
+      "raceNumber": 8,
+      "horseNumber": 12,
+      "status": "did not finish",
+      "effect": "race remains expected; audit result status"
+    },
+    {
+      "date": "2026-09-27",
+      "venue": "Nakayama",
+      "raceNumber": 10,
+      "horseNumber": 9,
+      "status": "in-race illness reported",
+      "expectedFinishPosition": 13,
+      "effect": "race remains expected; verify normal finish and official finishing position"
+    },
+    {
+      "date": "2026-09-27",
+      "venue": "Nakayama",
+      "raceNumber": 11,
+      "horseNumber": 4,
+      "status": "in-race illness reported",
+      "expectedFinishPosition": 8,
+      "effect": "race remains expected; verify normal finish, tie marker and official finishing position"
+    },
+    {
+      "date": "2026-09-27",
+      "venue": "Hanshin",
+      "raceNumber": 6,
+      "horseNumber": 13,
+      "status": "did not finish",
+      "effect": "race remains expected; audit result status"
+    }
+  ],
+  "acquisition": {
+    "isolatedRuntime": "%LOCALAPPDATA%/HorseRacingPrediction/weekend-results-20260928/run-20260928-131955",
+    "startedAt": "2026-09-28T13:20:32.842+09:00",
+    "endedAt": "2026-09-28T14:20:36.319+09:00",
+    "expected": 48,
+    "requested": 77,
+    "dispatched": 77,
+    "executions": 73,
+    "attempts": 73,
+    "succeeded": 71,
+    "failed": 2,
+    "canceled": 4,
+    "pending": 0,
+    "domainRaceSummaries": 48,
+    "domainResults": 48,
+    "persistedEntries": 620,
+    "uniqueHorses": 620,
+    "missingRaceSummaries": 0,
+    "missingResults": 0,
+    "missingEntries": 0,
+    "queueRows": 0,
+    "outboxUndispatched": 0,
+    "integrity": "ok",
+    "queueIntegrity": "ok",
+    "eventStoreIntegrity": "ok",
+    "localQueueMessageRows": 0,
+    "attemptWindow": {
+      "firstStartedAt": "2026-09-28T13:20:36.243+09:00",
+      "lastFinishedAt": "2026-09-28T14:20:36.319+09:00",
+      "successfulAttempts": 71,
+      "supersededFailures": {"permanent": 1, "validation": 1},
+      "targetTerminalSucceeded": 48,
+      "targetTerminalFailed": 0
+    },
+    "requestWindow": {
+      "targetManualRefreshRequests": 77,
+      "firstRequestedAt": "2026-09-28T13:20:32.842+09:00",
+      "lastRequestedAt": "2026-09-28T14:20:17.638+09:00"
+    },
+    "nonTargetWork": {
+      "activeTasksCanceledInIsolatedCopy": 1237,
+      "auxiliaryHorseProfileAcquired": 1,
+      "auxiliaryOwnerResourcesAcquiredBeforeQuiescence": 12,
+      "targetNonResultResourcesAcquiredAfterQuiescence": 0,
+      "planningSchedulerToggleAvailable": true,
+      "finalActiveTasks": 0
+    }
+  },
+  "perRaceAudit": {
+    "acquiredRaceCount": 48,
+    "missingRaceCount": 0,
+    "summaryAndResultRows": "48/48",
+    "entryCountAndIndexCountMatch": "48/48",
+    "summaryEntryCountMatchesResultEntryCount": "48/48",
+    "entryHorseIdentityCompleteAndUnique": "48/48",
+    "entryHorseNumberUnique": "48/48",
+    "finishStatusConsistent": "48/48",
+    "deadHeatMarkersConsistentWithTiedPositions": "48/48",
+    "officialScratchesExclusionsAndDidNotFinishCases": "6/6; race inventory unchanged",
+    "finishPositionAndTieAudit": "48/48; official Nakayama 11R dead heat at 8th independently verified",
+    "modeledPayoutCategoriesPresent": {
+      "win": "48/48",
+      "place": "48/48",
+      "quinella": "48/48",
+      "exacta": "48/48",
+      "trifecta": "48/48"
+    },
+    "payoutAnomalyCountAfterRefresh": 0,
+    "payoutPlaceholderFixes": "three official trifecta payouts refreshed; zero-yen 00 placeholders excluded",
+    "officialHorseExceptionChecks": "6/6, including JRA-confirmed 13th/8th-place finishes for the two illness cases",
+    "duplicateRaceNaturalKeys": 0,
+    "orphanRaceResults": 0,
+    "orphanHorseIdentities": 0,
+    "resultAggregateEvents": "48/48",
+    "staleTargetTasks": 0
+  },
+  "dataModelLimitations": [
+    "Persisted RaceResult projection models win, place, quinella, exacta, and trifecta payouts only; bracket quinella, wide, and trio payout categories are not represented in this projection.",
+    "Refund/return payout data are not modeled in the persisted RaceResult projection.",
+    "Odds are acquired/stored in a separate odds workflow and are not part of the RaceResult projection contract.",
+    "The persisted entry projection stores the dead-heat flag, but does not retain the raw margin text; the official JRA result was used to independently verify the 2026-09-27 Nakayama 11R 8th-place tie.",
+    "The run-local collection attempt record does not retain the request/final endpoint for the internal subject-profile HTTP 400; raw response content and exception details were intentionally not inspected."
+  ],
+  "runObservations": [
+    "The previous 25 successful jobs and 75 stages were partial end-to-end evidence only, not proof of full-weekend completeness.",
+    "A clean pre-collection baseline database was unavailable. The isolated copy began with 25 previously successful race tasks and 23 active/pending target race tasks. Forty-eight fresh ManualRefresh receipts covered 48 unique expected races; all 48 target resources were executed successfully in this run, including retries where needed.",
+    "The initial 48 fresh ManualRefresh requests were partial-run evidence, not by themselves clean-baseline acceptance. After identifying stale payout placeholders and refresh-route defects, 29 additional scoped refresh requests were submitted. Across 77 requests for 48 resources, the latest attempt for every target race succeeded; task history retains two failed tasks and four canceled tasks superseded by later successful revisions.",
+    "Historical target failures: one PermanentFailure/ArgumentException on revision 7 because refresh used English course attributes instead of canonical Japanese; one ValidationFailure/RaceResultWriteFailed on revision 10 after the refresh route supplied an empty sourceHorseId. Revision 12 canonicalized course attributes, passed the persisted domainRaceId and null sourceHorseId; all three affected races then persisted successfully. The revision-10 write returned HTTP 500 after payout events were partially committed; explicit refresh now replaces/clears payout snapshots safely.",
+    "Process-local CollectionOrchestration:BackgroundSchedulersEnabled=false disabled planning schedulers in the isolated API only; repository default remains enabled. Non-target active tasks were canceled through the supported API in the isolated copy (1,237 canceled rows in the run window); 12 auxiliary Owner tasks and one Horse profile task were acquired before quiescence. Closure verified zero active target/non-target tasks, zero local queue rows and zero undispatched outbox rows.",
+    "The collection runner did not report clean completion because its terminal-result polling failed to converge after all target tasks had succeeded. The persisted task/API/domain evidence was checked independently and the isolated services were safely paused/stopped. This is a harness status-polling limitation, not a result-data failure.",
+    "One non-target Horse-profile task reached PermanentFailure with HTTP 400 from the Collector-to-local-v2-API subject profile PUT path, not JRA navigation. Static call-path evidence leads from the profile collector to local API contract validation; API tests reproduce HTTP 400 for invalid request identity/name or official-source URL contract violations, while persisted-subject conflicts return 409. The isolated attempt did not retain a safe field-level validation result, so which input triggered this 400 remains unknown and the original payload was not replayed. It was auxiliary to race-detail acquisition and did not affect the 48 results.",
+    "The live JRA page E2E regression passed for Nakayama 3R trifecta 3-5-9 at ¥3,870. The final audit found all five modeled payout categories in all 48 races and zero malformed, placeholder or nonpositive modeled payout entries.",
+    "The runtime remained local-only: isolated AppData databases and SQLite queue; no AWS or production access."
+  ],
+  "completion": "Verified"
+}
