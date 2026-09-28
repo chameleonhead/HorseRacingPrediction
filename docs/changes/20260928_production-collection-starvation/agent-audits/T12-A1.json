@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260928_production-collection-starvation",
+  "taskId": "T12",
+  "attemptId": "T12-A1",
+  "state": "completed",
+  "taskDifficulty": "low",
+  "acceptanceCriteria": ["AC3"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "Lead dispatch route remains gpt-6-luna/high; runtime observed model is unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "Per-attempt token telemetry unavailable"
+  },
+  "scope": [
+    "docs/changes/20260928_production-collection-starvation/README.md",
+    "docs/changes/20260928_production-collection-starvation/agent-audits/T3-A1.json",
+    "docs/changes/20260928_production-collection-starvation/agent-audits/T4-A1.json",
+    "docs/changes/20260928_production-collection-starvation/agent-audits/T12-A1.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "Review token and active-time telemetry unavailable"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "Active effort telemetry unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "Reliable agent elapsed-time telemetry unavailable"
+  },
+  "startRevision": "7107a86b",
+  "endRevisionOrPatch": "T12 docs-only historical AC3 status reconciliation",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "T3 and T4 retain their checkpoint-accurate statements that AC3 integrated E2E was then pending, with explicit cross-references to T11 commit 3f7642b2 and Lead acceptance 19f5f125. T3/T4 acceptance outcomes and retry/correction counts are unchanged. AC3 remains Verified for local implementation/regression only; T1's external block, T5 dependency, and Terraform/OpenTofu format/provider-validation gap are preserved. Audit and route-ledger validators plus git diff --check pass.",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 0,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

@@ -51,7 +51,7 @@
     "verificationPassed": true,
     "qualityPassed": true,
     "scopePassed": true,
-    "independentChallenge": "Lead accepted T4 after closing P2. API 363/1 skipped; Collector 403; focused endpoint 4; Lambda 24. Delayed old wake cannot mutate replacement; unknown JSON status retries. AC3 E2E and workflow/verify follow-ups remain open.",
+    "independentChallenge": "Lead accepted T4 after closing P2. API 363/1 skipped; Collector 403; focused endpoint 4; Lambda 24. Delayed old wake cannot mutate replacement; unknown JSON status retries. At the T4 checkpoint the integrated AC3 E2E and workflow/verify follow-ups remained open; the integrated AC3 E2E was later completed in T11 commit 3f7642b2 and accepted by Lead in 19f5f125 as Verified for local implementation/regression only. This later AC3 closure does not alter T4 retry history or authorize deployment.",
     "retries": 3,
     "leadCorrections": 3,
     "reviewPasses": 1,
