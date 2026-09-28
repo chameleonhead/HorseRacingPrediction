@@ -44,7 +44,7 @@
     "reason": "Reliable agent elapsed-time telemetry unavailable"
   },
   "startRevision": "099a6992ca90a795969e92987f02ffb456952b06",
-  "endRevisionOrPatch": "T10-A1 owned working-tree patch; coherent commit recorded after verification",
+  "endRevisionOrPatch": "15dded0ad633d89cbb58f7be929e2d23e381c480",
   "outcome": {
     "verificationPassed": true,
     "qualityPassed": true,
