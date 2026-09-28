@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260928_production-collection-starvation",
+  "taskId": "T6",
+  "attemptId": "T6-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC0"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "unavailable at dispatch",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "corrective task dispatch metadata did not expose a requested model or worker identity"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "per-attempt usage telemetry was not exposed"
+  },
+  "scope": ["docs/changes/20260928_production-collection-starvation/README.md", "docs/changes/20260928_production-collection-starvation/agent-audits/T6-A1.json"],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review usage and active time were not exposed"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "preparation, integration, and audit effort telemetry were not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable per-attempt elapsed effort was not exposed"
+  },
+  "startRevision": "294866d8231a3699fe63e4ff55ff004e6e690e89",
+  "endRevisionOrPatch": "pending-commit",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Reviewer correction verified against the non-nullable store return and endpoint source; false NoWork-204 claim removed, workflow route risk kept separate, and no production or CI causality inferred.",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}
