@@ -21,6 +21,7 @@
   "scope": [
     "docs/changes/20260928_production-collection-starvation/README.md",
     "docs/changes/20260928_production-collection-starvation/read-only-db-diagnostic.md",
+    "docs/changes/20260928_production-collection-starvation/reproduction-test-plan.md",
     "docs/changes/20260928_production-collection-starvation/agent-audits/T8-A1.json"
   ],
   "review": {
@@ -47,9 +48,9 @@
     "verificationPassed": true,
     "qualityPassed": true,
     "scopePassed": true,
-    "independentChallenge": "Source review confirmed the intended retry/ack boundary and race-odds delay exception; the read-only diagnostic now counts canonical active-hold relations and bounds snapshot/query/hash time with an outer margin. C4 remains open. Parent review remains separate from user design approval; no implementation or production operation occurred.",
+    "independentChallenge": "Source review confirmed the intended retry/ack boundary and race-odds delay exception; the read-only diagnostic now counts canonical active-hold relations and bounds snapshot/query/hash time with an outer margin. Final review required a mandatory pre-fix red/post-fix green reproduction and production-shaped local E2E; the new artifact binds this gate to AC3/AC4/T9 and preserves the deployed ab1cda45 semantics. C4 remains open. Parent review remains separate from user design approval; no test implementation or production operation occurred.",
     "retries": 0,
-    "leadCorrections": 1,
+    "leadCorrections": 2,
     "reviewPasses": 1,
     "promoted": false,
     "escapedDefects": 0,
