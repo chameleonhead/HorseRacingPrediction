@@ -162,9 +162,9 @@ Source comparison:
 - Production observations in Context — operator supplied; not independently fetched in this documentation-only task.
 - No production operation, administration API call, AWS mutation, SSH session, restart, retry, or deployment was performed.
 - `python scripts/audit_agent_execution.py docs/changes/20260928_production-collection-starvation` — passed (`README.md: valid`).
-- `git diff --check` — passed before staging; staged diff check remains the commit gate.
+- `git diff --check` and `git diff --cached --check` — passed before the documentation commit.
 - `python scripts/validate_change_records.py ...` — attempted per DDD's repeated-audit note, but this repository does not contain `scripts/validate_change_records.py`; `rg --files` confirmed it is absent. The required agent-audit validator is present and passed.
-- Final tracked/untracked scope review — pending staging review; only this change-record directory is in scope.
+- Final tracked/untracked scope review — only this change-record directory was staged; post-commit `git status --short` was clean.
 
 ## Deviations and follow-up
 

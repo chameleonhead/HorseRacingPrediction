@@ -38,7 +38,7 @@
     "reason": "reliable per-attempt elapsed effort was not exposed"
   },
   "startRevision": "195cdb09cb481aa76314b1760611aac40805817c",
-  "endRevisionOrPatch": "working-tree-proposed-change-record",
+  "endRevisionOrPatch": "e38f9801f3a40ea7766e10f29d28101bd847f449",
   "outcome": {
     "verificationPassed": true,
     "qualityPassed": true,
