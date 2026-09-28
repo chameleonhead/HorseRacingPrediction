@@ -3,7 +3,7 @@
   "changeId": "20260928_production-collection-starvation",
   "taskId": "T3",
   "attemptId": "T3-A1",
-  "state": "active",
+  "state": "completed",
   "taskDifficulty": "high",
   "acceptanceCriteria": ["AC3", "AC4"],
   "route": {
@@ -20,51 +20,52 @@
   },
   "scope": [
     "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.cs",
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionExecutionContracts.cs",
     "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionModels.cs",
     "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionEntities.cs",
     "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformDbContext.cs",
     "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformSchemaMigrator.cs",
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.RaceRepairHolds.cs",
     "src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformOutboxDispatcher.cs",
-    "src/HorseRacingPrediction.Collector/CollectionPlatform/CollectionLambdaInvocation.cs",
+    "tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs",
     "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionPlatformStoreTests.cs",
-    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionDispatchReservationTests.cs",
-    "tests/HorseRacingPrediction.Api.Tests/CollectionPlatformOutboxDispatcherTests.cs",
-    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionLambdaInvocationTests.cs",
+    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/RaceRepairHoldTests.cs",
+    "docs/changes/20260928_production-collection-starvation/README.md",
     "docs/changes/20260928_production-collection-starvation/agent-audits/T3-A1.json"
   ],
   "startRevision": "62cc2b21",
-  "endRevisionOrPatch": null,
+  "endRevisionOrPatch": "f7a4ca3e production implementation; 31ee5c80 tests; change-record/audit update pending final commit",
   "review": {
-    "usageAvailability": null,
+    "usageAvailability": "unavailable",
     "totalTokens": null,
     "activeMinutes": null,
-    "reason": null
+    "reason": "Independent Lead integration review has not yet been recorded"
   },
   "overhead": {
-    "availability": null,
+    "availability": "unavailable",
     "preparationMinutes": null,
     "integrationMinutes": null,
     "auditMinutes": null,
-    "reason": null
+    "reason": "Preparation, integration, and audit effort telemetry unavailable"
   },
   "elapsed": {
-    "availability": null,
+    "availability": "unavailable",
     "minutes": null,
-    "reason": null
+    "reason": "Reliable elapsed worker time unavailable"
   },
   "outcome": {
-    "verificationPassed": null,
-    "qualityPassed": null,
-    "scopePassed": null,
-    "independentChallenge": null,
-    "retries": null,
-    "leadCorrections": null,
-    "reviewPasses": null,
-    "promoted": null,
-    "escapedDefects": null,
-    "escalations": null,
-    "reviewMode": null,
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "The fixed real-dispatch starvation fixtures, transactional mutation/race cases, schema migration, token-safe release, active hold, lane fairness/restart, and race-odds delay-bypass cases passed; cross-component Lambda transient-retry and HTTP/telemetry work was not in this dispatched write slice and remains follow-up.",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 0,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
     "detailReviewReason": null,
-    "decision": null
+    "decision": "revise"
   }
 }
