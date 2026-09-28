@@ -4,7 +4,7 @@ Status: Proposed for independent review. This is a prepared procedure only. It h
 
 ## Purpose and output boundary
 
-Determine whether Ready work is missing a current-generation undispatched outbox row, whether task/outbox cardinality or generation anomalies exist, and how rows are distributed across task status, lane, definition, reservation, and dispatch state. Return counts only. No task, race, resource, request, outbox, envelope, lease, hold, queue, host, or credential identifiers; no raw rows, JSON, URLs, failure text, environment, configuration, or logs.
+Determine whether Ready work is missing a current-generation undispatched outbox row, whether task/outbox cardinality or generation anomalies exist, and how rows are distributed across task status, lane, definition, reservation, dispatch, and active race-repair hold state. Return counts only. No task, race, resource, request, outbox, envelope, lease, hold, queue, host, or credential identifiers; no raw rows, JSON, URLs, failure text, environment, configuration, or logs.
 
 The capture timestamp is UTC and is produced by SQLite. The observation window is the single consistent online-backup snapshot; this query does not infer historical rates. It is a point-in-time count, not proof by itself that an anomaly caused starvation.
 
@@ -13,7 +13,7 @@ The capture timestamp is UTC and is produced by SQLite. The observation window i
 - Repository deployment layout maps the API container's `/data` to the application directory's `data` directory, with database filename `collection-platform.db`.
 - Fixed host-side source path: `/opt/horse-racing-prediction/app/data/collection-platform.db`.
 - Fixed SQLite URI: `file:/opt/horse-racing-prediction/app/data/collection-platform.db?mode=ro`.
-- Open with the SQLite CLI's `-readonly` option and URI `mode=ro`; use a 5-second SQLite busy timeout and a 30-second process timeout. Do not use `immutable=1`: the API is live and the database may be in WAL mode.
+- Open with the SQLite CLI's `-readonly` option and URI `mode=ro`; use a 5-second SQLite busy timeout. The remote outer timeout is 120 seconds. Subcommand budgets are 25 seconds for online backup, 5 seconds for the `query_only` check, 25 seconds for aggregate SQL, and 10 seconds for each of the two source-main hash computations. Those bounded steps total at most 75 seconds, leaving up to 45 seconds for SQLite/SSH setup, metadata checks, output, traps, and cleanup; reaching the outer timeout aborts the procedure. Do not use `immutable=1`: the API is live and the database may be in WAL mode.
 - Snapshot with SQLite's online `.backup` from that read-only source connection to a newly created mode-700 temporary directory, then run the aggregate against the snapshot using a second `-readonly`/`mode=ro`/`PRAGMA query_only=ON` connection. This uses SQLite's backup API to obtain a transactionally consistent database image including committed WAL state; do not `cp` or `rsync` only the main database file, stop the service, checkpoint WAL, or change journal mode.
 - Read-only access to WAL databases may require readable existing `-wal` and `-shm` sidecars. The application is expected to have them open, but their presence and permissions are a preflight gate. If the installed CLI cannot open the source as read-only or perform `.backup` without source mutation, abort. Do not install tools or switch to a live query / alternate method without a separately reviewed revision of this artifact.
 
@@ -25,8 +25,8 @@ Abort before querying if any condition holds:
 
 1. The approved SSH identity/host is unclear, host-key verification fails, or the operator has not authorized this exact diagnostic.
 2. The fixed source path is missing, is not a regular file, is not readable, resolves outside the expected application data directory, or either existing WAL sidecar is unreadable.
-3. `sqlite3` is missing, does not support `-readonly`, URI `mode=ro`, `.backup`, `.timeout`, or the query's SQLite syntax. Do not install or upgrade it during the incident.
-4. The online backup or SQL exceeds its hard timeout, reports `SQLITE_BUSY`, malformed schema, missing expected tables/columns, or any error. Do not fall back to a partial/main-file copy.
+3. `sqlite3` is missing, does not support `-readonly`, URI `mode=ro`, `.backup`, `.timeout`, JSON functions, or the query's SQLite syntax; or any required bounded/system utility (`timeout`, `realpath`, `stat`, `sha256sum`, `mktemp`, `date`) is missing. Do not install or upgrade tools during the incident.
+4. The online backup, query-only check, aggregate SQL, or either hash computation exceeds its own hard timeout; the total procedure reaches the 120-second outer timeout; or any step reports `SQLITE_BUSY`, malformed schema, missing expected tables/columns, hold-resolver mismatch, or another error. Do not fall back to a partial/main-file copy or extend a timed-out run in place; stop, clean only the exact private snapshot, and request independent review of a revised budget/procedure.
 5. Any proposed command would print database contents, identifiers, configuration, process environment, service logs, secrets, or unrestricted filesystem listings.
 6. A pre/post check suggests this procedure modified a source database file or source sidecar. Preserve only the local diagnostic metadata, stop, and ask for independent review; do not attempt a repair.
 
@@ -39,7 +39,7 @@ The following is the complete command allowlist after explicit authorization. `A
 On the approved Lightsail host, run this single bounded script. `stat` and `sha256sum` results are local no-write evidence and must not be included in the shared aggregate report. The SQL result is the only database-derived output allowed to leave the host/session.
 
 ```sh
-ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes "$APPROVED_LIGHTSAIL_ALIAS" 'timeout 30s sh -s' <<'REMOTE'
+ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes "$APPROVED_LIGHTSAIL_ALIAS" 'timeout 120s sh -s' <<'REMOTE'
 set -eu
   src=/opt/horse-racing-prediction/app/data/collection-platform.db
   test -f "$src" && test -r "$src"
@@ -50,29 +50,31 @@ set -eu
   chmod 700 "$work"
   trap 'rm -f "$work/snapshot.db" "$work/snapshot.db-wal" "$work/snapshot.db-shm" "$work/snapshot.db-journal"; rmdir "$work" 2>/dev/null || true' EXIT HUP INT TERM
   before=$(stat -c "%s %Y" "$src")
-  before_hash=$(sha256sum "$src" | cut -d " " -f1)
+  before_hash_output=$(timeout 10s sha256sum "$src")
+  before_hash=${before_hash_output%% *}
   before_wal=$(stat -c "%s %Y" "$src-wal")
   before_shm=$(stat -c "%s %Y" "$src-shm")
   backup_started_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  timeout 20s sqlite3 -readonly -batch -bail "file:$src?mode=ro" ".timeout 5000" ".backup $work/snapshot.db"
+  timeout 25s sqlite3 -readonly -batch -bail "file:$src?mode=ro" ".timeout 5000" ".backup $work/snapshot.db"
   backup_completed_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  timeout 10s sqlite3 -readonly -batch -bail "file:$work/snapshot.db?mode=ro" ".timeout 5000" "PRAGMA query_only=ON; PRAGMA query_only;"
-  timeout 10s sqlite3 -readonly -batch -bail -header -column "file:$work/snapshot.db?mode=ro" ".timeout 5000" "PRAGMA query_only=ON; <PASTE THE REVIEWED SQL FROM THE NEXT SECTION VERBATIM>"
+  timeout 5s sqlite3 -readonly -batch -bail "file:$work/snapshot.db?mode=ro" ".timeout 5000" "PRAGMA query_only=ON; PRAGMA query_only;"
+  timeout 25s sqlite3 -readonly -batch -bail -header -column "file:$work/snapshot.db?mode=ro" ".timeout 5000" "PRAGMA query_only=ON; <PASTE THE REVIEWED SQL FROM THE NEXT SECTION VERBATIM>"
   after=$(stat -c "%s %Y" "$src")
-  after_hash=$(sha256sum "$src" | cut -d " " -f1)
+  after_hash_output=$(timeout 10s sha256sum "$src")
+  after_hash=${after_hash_output%% *}
   after_wal=$(stat -c "%s %Y" "$src-wal")
   after_shm=$(stat -c "%s %Y" "$src-shm")
   printf "backup-started-utc=%s backup-completed-utc=%s source-main-before=%s source-main-after=%s source-hash-before=%s source-hash-after=%s wal-before=%s wal-after=%s shm-before=%s shm-after=%s\n" "$backup_started_utc" "$backup_completed_utc" "$before" "$after" "$before_hash" "$after_hash" "$before_wal" "$after_wal" "$before_shm" "$after_shm"
 REMOTE
 ```
 
-Before execution, replace only the SQL placeholder with the exact reviewed SQL below; do not alter the fixed URI, timeout, flags, output columns, or other commands. This artifact intentionally does not contain an SSH alias or secret. The script prints SQLite version and `PRAGMA query_only` (`1` expected), the count-only query, and source-file metadata/hash comparison. A missing sidecar is an abort rather than permission to create/change it.
+Before execution, replace only the SQL placeholder with the exact reviewed SQL below; do not alter the fixed URI, timeout, flags, output columns, or other commands. This artifact intentionally does not contain an SSH alias or secret. The script prints SQLite version and `PRAGMA query_only` (`1` expected), the count-only query, and source-file metadata/hash comparison. A missing sidecar is an abort rather than permission to create/change it. The 120-second outer budget exceeds the 75-second sum of the bounded snapshot, verification, query, and hash steps by 45 seconds for setup and cleanup; a timeout at any layer aborts rather than allowing an unbounded retry.
 
-Allowed output for the review packet: observation UTC, backup start/completion UTC window, metric label, task status, lane, pseudonymous definition, generation match, dispatch state, reservation state, and integer count; plus SQLite version, query-only value, timeout/exit status, and a statement that source metadata checks were equal or changed/inconclusive. Keep exact hashes and file metadata in restricted local operator notes only. Never attach the SSH transcript if it contains anything outside this allowlist.
+Allowed output for the review packet: observation UTC, backup start/completion UTC window, metric label, task status, lane, pseudonymous definition, generation match, dispatch state, reservation state, hold-match state, and integer count; plus SQLite version, query-only value, timeout/exit status, and a statement that source metadata checks were equal or changed/inconclusive. Keep exact hashes and file metadata in restricted local operator notes only. Never attach the SSH transcript if it contains anything outside this allowlist.
 
 ## Exact count-only SQL (for the snapshot only)
 
-The query intentionally never selects an identifier, row payload, or timestamp from a table. Internal task IDs and raw definition IDs are used only for joins/grouping; they are not projected. Definitions are mapped to snapshot-local pseudonyms (`definition-001`, etc.), so the result counts each definition separately without revealing definition IDs. Dimensions are limited to task status, lane, pseudonymous definition, generation relation, dispatch state, and reservation state. No dynamic values are interpolated.
+The query intentionally never selects an identifier, row payload, or timestamp from a table. Internal task/resource/hold IDs and raw definition IDs are used only for joins/grouping; they are not projected. Definitions are mapped to snapshot-local pseudonyms (`definition-001`, etc.), so the result counts each definition separately without revealing definition IDs. Dimensions are limited to task status, lane, pseudonymous definition, generation relation, dispatch state, reservation state, and canonical active-hold match state. No dynamic values are interpolated.
 
 ```sql
 WITH
@@ -84,6 +86,57 @@ definition_map AS (
     DefinitionId,
     'definition-' || printf('%03d', ROW_NUMBER() OVER (ORDER BY DefinitionId)) AS definition_label
   FROM (SELECT DISTINCT DefinitionId FROM collection_tasks)
+),
+active_holds AS (
+  SELECT RaceId FROM race_repair_holds WHERE ReleasedAt IS NULL
+),
+resource_canonical AS (
+  SELECT
+    r.ResourcePk,
+    r.Type,
+    r.ResourceId,
+    CASE
+      WHEN json_valid(r.AttributesJson)
+       AND substr(json_extract(r.AttributesJson, '$.domainRaceId'), 1, 5) = 'race-'
+       AND lower(json_extract(r.AttributesJson, '$.domainRaceId')) GLOB 'race-????????-????-????-????-????????????'
+       AND lower(substr(json_extract(r.AttributesJson, '$.domainRaceId'), 6)) NOT GLOB '*[^0-9a-f-]*'
+       AND length(json_extract(r.AttributesJson, '$.domainRaceId')) = 41
+       AND r.ResourceId GLOB 'race-????????-????-????-????-????????????'
+       AND substr(r.ResourceId, 6) NOT GLOB '*[^0-9a-f-]*'
+       AND length(r.ResourceId) = 41
+       AND json_extract(r.AttributesJson, '$.domainRaceId') <> r.ResourceId
+        THEN NULL
+      WHEN json_valid(r.AttributesJson)
+       AND substr(json_extract(r.AttributesJson, '$.domainRaceId'), 1, 5) = 'race-'
+       AND lower(json_extract(r.AttributesJson, '$.domainRaceId')) GLOB 'race-????????-????-????-????-????????????'
+       AND lower(substr(json_extract(r.AttributesJson, '$.domainRaceId'), 6)) NOT GLOB '*[^0-9a-f-]*'
+       AND length(json_extract(r.AttributesJson, '$.domainRaceId')) = 41
+        THEN json_extract(r.AttributesJson, '$.domainRaceId')
+      WHEN r.ResourceId GLOB 'race-????????-????-????-????-????????????'
+       AND substr(r.ResourceId, 6) NOT GLOB '*[^0-9a-f-]*'
+       AND length(r.ResourceId) = 41
+        THEN r.ResourceId
+      ELSE NULL
+    END AS canonical_race_id
+  FROM collection_resources AS r
+),
+resource_hold_state AS (
+  SELECT
+    rc.ResourcePk,
+    CASE
+      WHEN rc.Type NOT IN ('Race','RaceCard','RaceResult','RaceOdds')
+        OR rc.ResourceId GLOB 'backfill:[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+        OR rc.ResourceId GLOB 'recollection:[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+        OR rc.ResourceId GLOB 'discovery:[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+        THEN 'not-applicable'
+      WHEN rc.canonical_race_id IS NOT NULL
+       AND EXISTS (SELECT 1 FROM active_holds h WHERE h.RaceId = rc.canonical_race_id)
+        THEN 'held'
+      WHEN rc.canonical_race_id IS NOT NULL THEN 'not-held'
+      WHEN EXISTS (SELECT 1 FROM active_holds) THEN 'unresolved-active-hold-present'
+      ELSE 'unresolved-no-active-hold'
+    END AS hold_match_state
+  FROM resource_canonical AS rc
 ),
 task_outbox_counts AS (
   SELECT
@@ -121,9 +174,11 @@ outbox_dimensions AS (
       WHEN o.ReservedUntilUnixMilliseconds IS NULL THEN 'inconsistent-expiry-missing'
       WHEN o.ReservedUntilUnixMilliseconds > (SELECT now_ms FROM clock) THEN 'active'
       ELSE 'expired'
-    END AS reservation_state
+    END AS reservation_state,
+    COALESCE(rhs.hold_match_state, 'unknown-resource') AS hold_match_state
   FROM collection_task_outbox AS o
   LEFT JOIN collection_tasks AS t ON t.TaskId = o.TaskId
+  LEFT JOIN resource_hold_state AS rhs ON rhs.ResourcePk = t.ResourcePk
   LEFT JOIN definition_map AS dm ON dm.DefinitionId = t.DefinitionId
 ),
 aggregate_rows AS (
@@ -135,16 +190,17 @@ aggregate_rows AS (
     generation_match,
     dispatch_state,
     reservation_state,
+    hold_match_state,
     COUNT(*) AS count
   FROM outbox_dimensions
-  GROUP BY task_status, lane, definition_label, generation_match, dispatch_state, reservation_state
+  GROUP BY task_status, lane, definition_label, generation_match, dispatch_state, reservation_state, hold_match_state
 
   UNION ALL
 
   SELECT
     'ready_without_current_generation_undispatched_outbox',
     task_status, lane, definition_label,
-    'missing-current-undispatched', '', '', COUNT(*)
+    'missing-current-undispatched', '', '', '', COUNT(*)
   FROM task_outbox_counts
   WHERE task_status = 'Ready' AND current_undispatched_count = 0
   GROUP BY task_status, lane, definition_label
@@ -154,7 +210,7 @@ aggregate_rows AS (
   SELECT
     'tasks_without_any_outbox',
     task_status, lane, definition_label,
-    'no-outbox', '', '', COUNT(*)
+    'no-outbox', '', '', '', COUNT(*)
   FROM task_outbox_counts
   WHERE total_outbox_count = 0
   GROUP BY task_status, lane, definition_label
@@ -164,7 +220,7 @@ aggregate_rows AS (
   SELECT
     'multiple_current_generation_undispatched_outboxes',
     task_status, lane, definition_label,
-    'duplicate-current-undispatched', '', '', COUNT(*)
+    'duplicate-current-undispatched', '', '', '', COUNT(*)
   FROM task_outbox_counts
   WHERE current_undispatched_count > 1
   GROUP BY task_status, lane, definition_label
@@ -173,7 +229,7 @@ aggregate_rows AS (
 
   SELECT
     'execution_lease',
-    CASE WHEN Status IN ('StartPending','Running') THEN Status ELSE 'terminal-or-other' END, '', '', '', '', '', COUNT(*)
+    CASE WHEN Status IN ('StartPending','Running') THEN Status ELSE 'terminal-or-other' END, '', '', '', '', '', '', COUNT(*)
   FROM collection_execution_leases
   GROUP BY CASE WHEN Status IN ('StartPending','Running') THEN Status ELSE 'terminal-or-other' END
 
@@ -182,7 +238,7 @@ aggregate_rows AS (
   SELECT
     'race_repair_hold',
     CASE WHEN ReleasedAt IS NULL THEN 'active' ELSE 'released' END,
-    '', '', '', '', '', COUNT(*)
+    '', '', '', '', '', '', COUNT(*)
   FROM race_repair_holds
   GROUP BY CASE WHEN ReleasedAt IS NULL THEN 'active' ELSE 'released' END
 
@@ -191,7 +247,7 @@ aggregate_rows AS (
   SELECT
     'pipeline_control',
     CASE WHEN IsPaused = 1 THEN 'paused' ELSE 'unpaused' END,
-    '', '', '', '', '', COUNT(*)
+    '', '', '', '', '', '', COUNT(*)
   FROM collection_platform_controls
   GROUP BY CASE WHEN IsPaused = 1 THEN 'paused' ELSE 'unpaused' END
 )
@@ -204,12 +260,13 @@ SELECT
   generation_match,
   dispatch_state,
   reservation_state,
+  hold_match_state,
   count
 FROM aggregate_rows
-ORDER BY metric, task_status, lane, definition_label, generation_match, dispatch_state, reservation_state;
+ORDER BY metric, task_status, lane, definition_label, generation_match, dispatch_state, reservation_state, hold_match_state;
 ```
 
-Expected output is zero or more aggregate rows, including a row for every observed outbox category, active execution-lease state (other states combined), repair-hold active/released state, control pause state, Ready task with no current-generation undispatched outbox, task with no outbox, and task with duplicate current-generation undispatched outboxes. Absence of an anomaly group means its count is zero, not that the query failed. Task status and lane are allowlisted enums; unexpected values are mapped to `OTHER`. Definition IDs are always replaced by snapshot-local pseudonyms before output.
+Expected output is zero or more aggregate rows, including a row for every observed outbox category by `hold_match_state` (`held`, `not-held`, not-applicable, or unresolved with/without any active hold), active execution-lease state (other states combined), repair-hold active/released state, control pause state, Ready task with no current-generation undispatched outbox, task with no outbox, and task with duplicate current-generation undispatched outboxes. Absence of an anomaly group means its count is zero, not that the query failed. Task status and lane are allowlisted enums; unexpected values are mapped to `OTHER`. Definition IDs are always replaced by snapshot-local pseudonyms before output. The hold dimension joins the canonical race resource identity to active `race_repair_holds`, never projecting either identifier. Unresolved rows are explicitly reported, not counted as definitely held/not-held. Before execution, independent source review must confirm production uses the fallback canonicalization represented above and that all resource-ID canonicalization cases are represented; if an injected race identity resolver, an unrepresented deterministic mapping, or a conflicting domainRaceId/resource ID is active, abort and revise the SQL to match that resolver rather than claiming the hold counts are exact.
 
 ## No-write evidence, cleanup, and independent review
 
@@ -217,5 +274,5 @@ Expected output is zero or more aggregate rows, including a row for every observ
 - Capture source main-file size/mtime/hash and WAL/SHM size/mtime immediately before and after the backup/query. Equal observations strengthen the no-write record. If values differ, the live application may have written concurrently; mark the comparison inconclusive and do not attribute that difference to this query. Read-only settings and the exact command/exit status remain required evidence.
 - The only intended write is the temporary SQLite backup under a newly created private `/tmp/hrp-collection-readonly.*` directory. The shell trap removes that exact snapshot and its journal/WAL/SHM sidecars plus directory on normal exit or handled signal. If timeout/host interruption prevents cleanup, remove only the exact recorded temporary directory after verifying it is under `/tmp` and begins with `hrp-collection-readonly.`; never use a wildcard deletion.
 - Rollback: not applicable to source because no source write or service mutation is part of this procedure. Temporary snapshot cleanup is the only cleanup action. If source modification is suspected, stop and escalate; do not restore, checkpoint, or otherwise modify production data.
-- Independent reviewer must check: authorization scope; source path matches deployment mapping; SQLite CLI version/readonly URI and WAL sidecars; exact SQL against current EF schema; no identifiers in projections; aggregate-only output; timeout and abort rules; no secret/config/log command; source pre/post evidence; temp-path cleanup; and final output redaction. Record reviewer and result outside production output before SSH execution.
+- Independent reviewer must check: authorization scope; source path matches deployment mapping; SQLite CLI version/readonly URI and WAL sidecars; exact SQL against current EF schema; canonical race-resource resolver equivalence with active-hold matching; no identifiers in projections; aggregate-only output; outer budget greater than the bounded backup/query/hash steps with margin; timeout and abort rules; no secret/config/log command; source pre/post evidence; temp-path cleanup; and final output redaction. Record reviewer and result outside production output before SSH execution.
 - At completion, retain only the reviewed count-only result, UTC observation timestamp, timeout/exit status, and no-write evidence classification in the incident record. Do not retain the database snapshot or raw SSH transcript.

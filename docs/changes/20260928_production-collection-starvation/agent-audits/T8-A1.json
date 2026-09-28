@@ -20,6 +20,7 @@
   },
   "scope": [
     "docs/changes/20260928_production-collection-starvation/README.md",
+    "docs/changes/20260928_production-collection-starvation/read-only-db-diagnostic.md",
     "docs/changes/20260928_production-collection-starvation/agent-audits/T8-A1.json"
   ],
   "review": {
@@ -41,14 +42,14 @@
     "reason": "reliable per-attempt elapsed effort was not exposed"
   },
   "startRevision": "21cb7a970b272aa34a8e8455509e169daf31f914",
-  "endRevisionOrPatch": "docs-only T8 patch based on 21cb7a970b272aa34a8e8455509e169daf31f914",
+  "endRevisionOrPatch": "docs-only T8 final-review correction after 930e915, based on 21cb7a970b272aa34a8e8455509e169daf31f914",
   "outcome": {
     "verificationPassed": true,
     "qualityPassed": true,
     "scopePassed": true,
-    "independentChallenge": "Source and CodeGraph evidence support the frozen state machine and test/deployment boundaries; parent review remains separate from user design approval. No implementation or production operation occurred.",
+    "independentChallenge": "Source review confirmed the intended retry/ack boundary and race-odds delay exception; the read-only diagnostic now counts canonical active-hold relations and bounds snapshot/query/hash time with an outer margin. C4 remains open. Parent review remains separate from user design approval; no implementation or production operation occurred.",
     "retries": 0,
-    "leadCorrections": 0,
+    "leadCorrections": 1,
     "reviewPasses": 1,
     "promoted": false,
     "escapedDefects": 0,
