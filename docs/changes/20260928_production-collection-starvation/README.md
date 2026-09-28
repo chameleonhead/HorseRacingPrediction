@@ -10,8 +10,8 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | In progress | T3 store/dispatcher, T4 HTTP/Lambda contracts, and AC3 local implementation/regression are verified. T4b is reopened for material AC4 closure findings F8–F13; T1 production-prevalence evidence remains open. |
-| Verification | In progress | The prior T4b test/build/format evidence is retained, but the independent review found unverified failure-isolation, capacity, metric-schema, anomaly-count, and snapshot-consistency gaps. Corrective tests and all requested gates are pending under T4b-A2. Terraform CLI remains unavailable locally. |
+| Code | In progress | T3 store/dispatcher, T4 HTTP/Lambda contracts, AC3 local implementation/regression, and T4b/AC4 local implementation with static IaC contract are verified. T4b-A1/A2 review findings F8–F14 were corrected in A2/A3 and accepted by independent review pass 3. T1 production-prevalence evidence remains open. |
+| Verification | In progress | T4b-A3 and review pass 3 closed F8–F14; focused telemetry/queue/snapshot tests passed 16/16, snapshot tests passed three consecutive runs, and IaC contract tests passed 14/14. Full API passed 383/1 skipped; Collector passed 406/406; build, format, audit/route validators, CodeGraph, and diff checks passed. Terraform/OpenTofu CLI remains unavailable, so fmt and provider-backed validate are explicitly unverified. |
 | Deployment/operation | Not started | Deployment remains unauthorized and dependent on the production-prevalence, integration, and release gates. No restart, pause/resume, retry, queue mutation, database repair, or deployment was performed. |
 
 ## Context
