@@ -1,6 +1,6 @@
 # Restore Fluent UI Compatibility and Verify Local Runtime
 
-- Status: Approved
+- Status: Implemented
 - Change record schema: 2
 - Owner: User / Codex
 - Created: 2026-09-28
@@ -11,7 +11,7 @@
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
 | Code | Verified | API now uses Fluent UI/Icons 4.14.4; Web uses its pre-upgrade Fluent UI/Icons `5.0.0-rc.5-26219.1` references. |
-| Verification | Verified | The native gates and prior 10,808.4-second runtime window remain verified. A separate isolated full-weekend run traversed all 48 expected race resources to success; the report records complete entry/result/payout projection checks, one recovered transient lease failure, one unrelated auxiliary profile HTTP 400, and model limitations. |
+| Verification | Verified | Native gates and the prior 10,808.4-second runtime window passed. The isolated full-weekend run's latest attempt succeeded for all 48 expected races; the report records full entry/result/payout reconciliation, two superseded target failures, four canceled historical tasks, one unrelated auxiliary profile HTTP 400, and model limitations. |
 | Deployment/operation | Verified | The new isolated run ended quiescent with zero active tasks, queue rows or undispatched outbox rows; local SQLite integrity passed. The earlier runtime's 854 ready tasks remain outside this run and untouched; no push occurred. |
 
 ## Context
@@ -90,7 +90,7 @@ The prior REST implementation was validated with an isolated API 4.14.4 package 
 - Checkpoint review: Parent lead, 2026-09-28. Exact historical package split restores the baseline; the initial blanket downgrade was rejected by a full-solution build and corrected to preserve Web RC5. Native build/test/format/route/audit gates and API-only smoke checks pass. The parent clarified that no real collection had run; the API-only monitoring interval is therefore not soak acceptance. API process and monitor were stopped. AC1–AC5 remain Verified; AC6–AC7 are Connected.
 - Reopen checkpoint: Parent lead, 2026-09-28. The user clarified the intended target is production-like collection of the complete weekend results and a missing-data audit. Previous records overgeneralized 25 successful jobs; that count is explicitly reclassified as partial end-to-end evidence. AC6 and AC9 are reopened and T3 is In progress. Parent authorized the bounded weekend extension. The already completed three-hour runtime soak remains separate stability evidence; repeat only after material runtime changes or a failure/retry loop.
 - Historical final review: Parent lead and independent `/root/soak_final_audit`, 2026-09-28, accepted AC1–AC8 for the then-documented bounded validation. The user's clarification supersedes that scope for full-weekend completeness: AC6/AC9 and T3 are reopened below. The historical review remains evidence for the package baseline, partial real-task chain, prior runtime window, controlled cleanup and SQLite integrity only; it is not acceptance of weekend completeness. Final review must be repeated after T3 evidence is integrated.
-- T3 integration review: Worker audit and official JRA source checks completed 2026-09-28; 48/48 race results, entries, modeled payouts, horse identities, event/projection rows and incident checks reconciled. After compacting T3-A1 to the audit schema and matching its declared scope to the task plan, `python scripts/audit_agent_execution.py docs/changes/20260928_restore-fluentui-local-soak` passes. The local runtime is stopped/quiescent; AC6/AC9 are ready for final lead review with runner/profile failure limitations disclosed.
+- Final review and acceptance: Parent lead, 2026-09-28 14:54 JST. Independent review accepted AC6, AC9, and T3 based on the official inventory, persisted-data audit, local end-to-end execution evidence, and regression results. All acceptance criteria and tasks are Verified; record status is Implemented. Residual limitations are accepted and do not block race-result completeness: the projection does not model bracket quinella, wide, trio, refunds, odds, or raw margin text; the auxiliary subject-profile HTTP 400's exact rejected field was not retained; two target failures and four cancellations remain as superseded history; the runner's terminal-status poll did not converge and independent persisted-state evidence was used; and a generic `validate_change_records.py` was unavailable/not run. The focused agent-audit and route validators did pass.
 
 ## Verification record
 
@@ -153,3 +153,4 @@ The prior REST implementation was validated with an isolated API 4.14.4 package 
 - This is a bounded local Windows run, not production/AWS/deployment validation. The earlier 25 tasks are partial end-to-end evidence only. The prior runtime's 854 ready tasks remain pending in that preserved, paused store and are not part of the new weekend scope.
 - Runtime continuity covers 3h00m08.4s, with one explicitly disclosed 4m18s monitoring interruption. The API/Collector themselves did not restart. The API-only preliminary interval is excluded.
 - Persistent local credential rotation was not performed for the tracked default; the isolated services are stopped and no generated secret was added to repository settings or commits. The earlier diagnostic-output incident is documented without values and the corrected output boundary passed canary and real HTTP failure challenges.
+- Accepted non-blocking validation limitation: no generic `validate_change_records.py` was present, so it was not run. The repository agent-execution audit validator, route-ledger validator, JSON parsing, native build/test/format gates, and isolated runtime audit passed.
