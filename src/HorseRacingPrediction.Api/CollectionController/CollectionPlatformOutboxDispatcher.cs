@@ -86,12 +86,18 @@ public sealed class CollectionPlatformOutboxDispatcher(
             {
                 if (BeforeReservationAsync is not null)
                     await BeforeReservationAsync(group, cancellationToken).ConfigureAwait(false);
-                if (!await store.TryReserveDispatchesWithinCapacityAsync(group.Select(x => x.OutboxId).ToArray(),
+                var reserved = await store.TryReserveDispatchesWithinCapacityAsync(group.Select(x => x.OutboxId).ToArray(),
                         reservationToken, envelopeId, wakeId, now,
                         TimeSpan.FromSeconds(Math.Max(10, _options.OutboxReservationSeconds)),
                         Math.Max(1, _options.MaxInFlightEnvelopes), _options.AggregationDelayMilliseconds,
-                        cancellationToken).ConfigureAwait(false))
+                        cancellationToken).ConfigureAwait(false);
+                if (!reserved)
+                {
+                    // Another dispatcher may have consumed a lane grant while this instance was selecting.
+                    // Reload persistent fairness before selecting from the remaining bounded scan page.
+                    dispatchState = await store.GetLaneDispatchStateAsync(cancellationToken).ConfigureAwait(false);
                     continue;
+                }
                 dispatchState = await store.GetLaneDispatchStateAsync(cancellationToken).ConfigureAwait(false);
                 var wake = new CollectionWakeSignal(wakeId, envelopeId, reservationToken);
                 CollectionQueueSendReceipt receipt;

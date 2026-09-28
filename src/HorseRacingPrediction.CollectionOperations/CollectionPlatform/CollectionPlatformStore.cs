@@ -1707,6 +1707,32 @@ public sealed partial class CollectionPlatformStore
                     || MatchesHold(x.resource, heldIds)))
                 return false;
             if (rows.Select(x => x.task.Lane).Distinct().Count() != 1) return false;
+
+            var eligibleRows = await (from outbox in db.DispatchOutbox
+                                      join task in db.Tasks on outbox.TaskId equals task.TaskId
+                                      join resource in db.Resources on task.ResourcePk equals resource.ResourcePk
+                                      where outbox.DispatchedAt == null
+                                            && (outbox.ReservedUntilUnixMilliseconds == null
+                                                || outbox.ReservedUntilUnixMilliseconds <= now.ToUnixTimeMilliseconds())
+                                            && task.Status == CollectionTaskStatus.Ready
+                                            && task.DispatchGeneration == outbox.DispatchGeneration
+                                            && task.AvailableAt <= now && outbox.AvailableAt <= now
+                                            && (!task.LeaseExpiresAt.HasValue || task.LeaseExpiresAt <= now)
+                                            && (task.DefinitionId == "race-odds" || outbox.CreatedAt <= aggregationCutoff)
+                                            && db.DispatchOutbox.Count(other => other.TaskId == task.TaskId
+                                                && other.DispatchGeneration == task.DispatchGeneration
+                                                && other.DispatchedAt == null) == 1
+                                      select new { task.Lane, task.TaskId, resource }).ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            var eligibleLanes = eligibleRows.Where(x => !heldTaskIds.Contains(x.TaskId)
+                    && !MatchesHold(x.resource, heldIds))
+                .Select(x => x.Lane).Distinct().ToArray();
+            var fairness = await db.DispatcherFairnessStates.SingleAsync(x => x.StateId == 1, cancellationToken)
+                .ConfigureAwait(false);
+            var currentFairness = new CollectionLaneDispatchState(fairness.ConsecutiveRealtime,
+                ParseLane(fairness.LastNonRealtimeLane), fairness.ScanAvailableAt, fairness.ScanOutboxId);
+            if (new CollectionLaneAllocator().SelectLane(eligibleLanes, currentFairness) != rows[0].task.Lane)
+                return false;
             await AdvanceDispatcherFairnessAsync(db, rows.Select(x => x.outbox).ToArray(), rows[0].task.Lane, now,
                 cancellationToken).ConfigureAwait(false);
             foreach (var row in rows)

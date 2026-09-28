@@ -77,6 +77,13 @@ public sealed class CollectionLaneAllocator
             .First();
     }
 
+    internal CollectionLane? SelectLane(IEnumerable<CollectionLane> eligibleLanes,
+        CollectionLaneDispatchState? dispatchState = null)
+    {
+        var lanes = eligibleLanes.Distinct().ToArray();
+        return lanes.Length == 0 ? null : SelectLane(lanes, dispatchState ?? CollectionLaneDispatchState.Empty);
+    }
+
     private static bool IsAfterCursor(FairCollectionCandidate candidate, CollectionLaneDispatchState state)
     {
         if (state.ScanAvailableAt is null || state.ScanOutboxId is null) return true;
@@ -87,10 +94,13 @@ public sealed class CollectionLaneAllocator
 
     private CollectionLane SelectLane(IReadOnlyCollection<FairCollectionCandidate> due,
         CollectionLaneDispatchState state)
+        => SelectLane(due.Select(x => x.Lane).Distinct().ToArray(), state);
+
+    private CollectionLane SelectLane(IReadOnlyCollection<CollectionLane> due, CollectionLaneDispatchState state)
     {
-        var hasRealtime = due.Any(x => x.Lane == CollectionLane.Realtime);
-        var hasNormal = due.Any(x => x.Lane == CollectionLane.Normal);
-        var hasBackground = due.Any(x => x.Lane == CollectionLane.Background);
+        var hasRealtime = due.Contains(CollectionLane.Realtime);
+        var hasNormal = due.Contains(CollectionLane.Normal);
+        var hasBackground = due.Contains(CollectionLane.Background);
         if (hasRealtime && (state.ConsecutiveRealtime < _maxConsecutiveRealtime
                             || (!hasNormal && !hasBackground)))
             return CollectionLane.Realtime;
