@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260928_production-collection-starvation",
+  "taskId": "T3",
+  "attemptId": "T3-A1",
+  "state": "active",
+  "taskDifficulty": "high",
+  "acceptanceCriteria": ["AC3", "AC4"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "Parent dispatch requested gpt-6-luna with reasoning high; observed runtime model is unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "Per-attempt token usage is not exposed"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.cs",
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionModels.cs",
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionEntities.cs",
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformDbContext.cs",
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformSchemaMigrator.cs",
+    "src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformOutboxDispatcher.cs",
+    "src/HorseRacingPrediction.Collector/CollectionPlatform/CollectionLambdaInvocation.cs",
+    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionPlatformStoreTests.cs",
+    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionDispatchReservationTests.cs",
+    "tests/HorseRacingPrediction.Api.Tests/CollectionPlatformOutboxDispatcherTests.cs",
+    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionLambdaInvocationTests.cs",
+    "docs/changes/20260928_production-collection-starvation/agent-audits/T3-A1.json"
+  ],
+  "startRevision": "62cc2b21",
+  "endRevisionOrPatch": null,
+  "review": {
+    "usageAvailability": null,
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": null
+  },
+  "overhead": {
+    "availability": null,
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": null
+  },
+  "elapsed": {
+    "availability": null,
+    "minutes": null,
+    "reason": null
+  },
+  "outcome": {
+    "verificationPassed": null,
+    "qualityPassed": null,
+    "scopePassed": null,
+    "independentChallenge": null,
+    "retries": null,
+    "leadCorrections": null,
+    "reviewPasses": null,
+    "promoted": null,
+    "escapedDefects": null,
+    "escalations": null,
+    "reviewMode": null,
+    "detailReviewReason": null,
+    "decision": null
+  }
+}
