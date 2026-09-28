@@ -67,15 +67,68 @@ public sealed class CollectionQueueCutoverContractTests
     [TestMethod]
     public void DeployWorkflow_RestoresPipelineAfterHealthCheckWithoutLegacyMigration()
     {
-        var restore = DeployWorkflow.IndexOf("- name: Restore collection pipeline state after deployment", StringComparison.Ordinal);
-        Assert.IsGreaterThanOrEqualTo(0, restore);
-        var healthCheck = DeployWorkflow.LastIndexOf("- name: Verify deployment health", restore,
+        var lambdaJobStart = DeployWorkflow.IndexOf("  deploy-collector-lambda:", StringComparison.Ordinal);
+        var migrationJobStart = DeployWorkflow.IndexOf("  migrate-race-entry-owners:", lambdaJobStart,
+            StringComparison.Ordinal);
+        var lambdaJob = Slice(DeployWorkflow, lambdaJobStart, migrationJobStart);
+        var guardStart = lambdaJob.IndexOf("      - id: collection-guard", StringComparison.Ordinal);
+        var infrastructureStart = lambdaJob.IndexOf("      - name: Initialize collector infrastructure",
+            guardStart, StringComparison.Ordinal);
+        var guard = Slice(lambdaJob, guardStart, infrastructureStart);
+        var preDeployPipelineRead = guard.IndexOf("\"$base/pipeline\"", StringComparison.Ordinal);
+        var preDeployPause = guard.IndexOf("\"$base/pipeline/pause\"", StringComparison.Ordinal);
+        var drainLoop = guard.IndexOf("for attempt in $(seq 1 60)", StringComparison.Ordinal);
+
+        Assert.IsGreaterThanOrEqualTo(0, lambdaJobStart);
+        Assert.IsGreaterThan(lambdaJobStart, migrationJobStart);
+        StringAssert.Contains(lambdaJob, "name: Pause and drain collection before changing deployed versions");
+        StringAssert.Contains(guard, "base=\"$API_BASE_URL/api/admin/collection\"");
+        StringAssert.Contains(guard, "\"$base/pipeline\"");
+        StringAssert.Contains(guard, "\"$base/pipeline/pause\"");
+        StringAssert.Contains(guard, "\"$base/tasks?status=Running&limit=1\"");
+        StringAssert.Contains(guard, "for attempt in $(seq 1 60)");
+        StringAssert.Contains(guard, "Collection drain timed out; pipeline remains paused");
+        Assert.IsGreaterThan(preDeployPipelineRead, preDeployPause);
+        Assert.IsGreaterThan(preDeployPause, drainLoop);
+        Assert.IsGreaterThan(guardStart,
+            lambdaJob.IndexOf("      - name: Apply collector Lambda infrastructure", StringComparison.Ordinal),
+            "The deployed-v1 pipeline pause and drain must precede the Lambda version change.");
+
+        var apiDeployStart = DeployWorkflow.IndexOf("  deploy:", StringComparison.Ordinal);
+        var apiDeployEnd = DeployWorkflow.IndexOf("  deploy-collector-lambda:", apiDeployStart,
+            StringComparison.Ordinal);
+        var apiDeploy = Slice(DeployWorkflow, apiDeployStart, apiDeployEnd);
+        var restart = apiDeploy.IndexOf("      - name: Restart remote stack", StringComparison.Ordinal);
+        var healthCheck = apiDeploy.IndexOf("      - name: Verify deployment health", restart,
+            StringComparison.Ordinal);
+        var restore = apiDeploy.IndexOf("      - name: Restore collection pipeline state after deployment",
+            healthCheck, StringComparison.Ordinal);
+        var restoreStep = apiDeploy[restore..];
+        var pipelineStateRead = restoreStep.IndexOf("\"$base/pipeline-state\"", StringComparison.Ordinal);
+        var postDeployDrainCheck = restoreStep.IndexOf("\"$base/tasks?status=Running&limit=1\"",
+            StringComparison.Ordinal);
+        var actionableFailureCheck = restoreStep.IndexOf("\"$base/failure-notifications?view=Actionable&limit=1\"",
+            StringComparison.Ordinal);
+        var pipelineResume = restoreStep.IndexOf("--data '{\"paused\":false}' \"$base/pipeline\"",
             StringComparison.Ordinal);
 
-        Assert.IsGreaterThanOrEqualTo(0, healthCheck);
+        Assert.IsGreaterThanOrEqualTo(0, apiDeployStart);
+        StringAssert.Contains(apiDeploy, "needs: [build-and-push, deploy-collector-lambda]");
+        Assert.IsGreaterThanOrEqualTo(0, restart);
+        Assert.IsGreaterThan(restart, healthCheck);
         Assert.IsGreaterThan(healthCheck, restore);
-        StringAssert.Contains(DeployWorkflow, "$base/pipeline/pause");
-        StringAssert.Contains(DeployWorkflow, "$base/pipeline/resume");
+        StringAssert.Contains(restoreStep,
+            "base=\"https://${DOMAIN_NAME:-$(echo \"$LIGHTSAIL_HOST\" | tr '.' '-').sslip.io}/api/v2/admin/collection\"");
+        StringAssert.Contains(restoreStep, "\"$base/pipeline-state\"");
+        StringAssert.Contains(restoreStep, "\"$base/tasks?status=Running&limit=1\"");
+        StringAssert.Contains(restoreStep, "\"$base/failure-notifications?view=Actionable&limit=1\"");
+        StringAssert.Contains(restoreStep, "-X PUT");
+        StringAssert.Contains(restoreStep, "--data '{\"paused\":false}' \"$base/pipeline\"");
+        StringAssert.Contains(restoreStep, "Collection remains paused; recovery requires an explicit operator decision.");
+        StringAssert.Contains(restoreStep, "Actionable failures remain; pipeline stays paused for explicit recovery");
+        Assert.IsGreaterThan(pipelineStateRead, postDeployDrainCheck);
+        Assert.IsGreaterThan(postDeployDrainCheck, actionableFailureCheck);
+        Assert.IsGreaterThan(actionableFailureCheck, pipelineResume);
         Assert.IsFalse(DeployWorkflow.Contains("Migrate legacy race collection jobs", StringComparison.Ordinal));
         Assert.IsFalse(DeployWorkflow.Contains("/migrations/race-detail/", StringComparison.Ordinal));
     }
@@ -83,15 +136,25 @@ public sealed class CollectionQueueCutoverContractTests
     [TestMethod]
     public void DeployWorkflow_PreviewsOwnerMigrationWithoutPausingOrApplying()
     {
-        var migration = DeployWorkflow.IndexOf("migrate-race-entry-owners:", StringComparison.Ordinal);
-        var preview = DeployWorkflow.IndexOf("race-entry-owners/preview", migration, StringComparison.Ordinal);
+        var migration = DeployWorkflow.IndexOf("  migrate-race-entry-owners:", StringComparison.Ordinal);
         var section = DeployWorkflow[migration..];
+        var previewStepStart = section.IndexOf("      - name: Queue race entry owner data migration",
+            StringComparison.Ordinal);
+        var previewStep = section[previewStepStart..];
+        var previewPath = previewStep.IndexOf("$base/migration-previews/race-entry-owner-repair",
+            StringComparison.Ordinal);
 
         Assert.IsGreaterThanOrEqualTo(0, migration);
-        Assert.IsGreaterThan(migration, preview);
-        StringAssert.Contains(section, "preview-only");
-        Assert.IsFalse(section.Contains("$base/pipeline/pause", StringComparison.Ordinal));
-        Assert.IsFalse(section.Contains("race-entry-owners/apply", StringComparison.Ordinal));
+        StringAssert.Contains(section, "needs: [deploy, deploy-collector-lambda]");
+        Assert.IsGreaterThanOrEqualTo(0, previewStepStart);
+        Assert.IsGreaterThan(previewStepStart, previewPath);
+        StringAssert.Contains(previewStep,
+            "base=\"https://${DOMAIN_NAME:-$(echo \"$LIGHTSAIL_HOST\" | tr '.' '-').sslip.io}/api/v2/admin/collection\"");
+        StringAssert.Contains(previewStep,
+            "curl --fail --silent --show-error -X POST -H \"X-Api-Key: $API_KEY\"");
+        StringAssert.Contains(previewStep, "preview-only until its target-selection change record is approved");
+        Assert.IsFalse(previewStep.Contains("$base/pipeline/pause", StringComparison.Ordinal));
+        Assert.IsFalse(previewStep.Contains("$base/migrations/race-entry-owner-repair", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -150,6 +213,13 @@ public sealed class CollectionQueueCutoverContractTests
 
     private static string ResourceBlock(string text, string name, string type = "aws_sqs_queue")
         => NamedBlock(text, "resource", type, name);
+
+    private static string Slice(string text, int start, int end)
+    {
+        Assert.IsGreaterThanOrEqualTo(0, start, "Section start marker was not found.");
+        Assert.IsGreaterThan(start, end, "Section end marker must follow its start marker.");
+        return text[start..end];
+    }
 
     private static string NamedBlock(string text, string keyword, params string[] names)
     {
