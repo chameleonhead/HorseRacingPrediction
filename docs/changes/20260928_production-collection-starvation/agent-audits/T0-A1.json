@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260928_production-collection-starvation",
+  "taskId": "T0",
+  "attemptId": "T0-A1",
+  "state": "completed",
+  "taskDifficulty": "low",
+  "acceptanceCriteria": ["AC0"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "unavailable at dispatch",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "dispatch metadata did not expose a requested model or worker identity"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "per-attempt usage telemetry was not exposed"
+  },
+  "scope": ["docs/changes/20260928_production-collection-starvation/README.md", "docs/changes/20260928_production-collection-starvation/agent-audits/T0-A1.json"],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review usage and active time were not exposed"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "preparation, integration, and audit effort telemetry were not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable per-attempt elapsed effort was not exposed"
+  },
+  "startRevision": "195cdb09cb481aa76314b1760611aac40805817c",
+  "endRevisionOrPatch": "working-tree-proposed-change-record",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Lead source comparison confirmed the deployed v1 and current-main v2 contract boundaries; production prevalence remains explicitly unverified.",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}
