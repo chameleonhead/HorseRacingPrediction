@@ -22,6 +22,7 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
     public DbSet<ResourceLocationEntity> Locations => Set<ResourceLocationEntity>();
     public DbSet<CollectionDispatchOutboxEntity> DispatchOutbox => Set<CollectionDispatchOutboxEntity>();
     public DbSet<CollectionExecutionLeaseEntity> ExecutionLeases => Set<CollectionExecutionLeaseEntity>();
+    public DbSet<CollectionDispatcherFairnessStateEntity> DispatcherFairnessStates => Set<CollectionDispatcherFairnessStateEntity>();
     public DbSet<CollectionPlatformControlEntity> Controls => Set<CollectionPlatformControlEntity>();
     public DbSet<RaceRepairHoldEntity> RaceRepairHolds => Set<RaceRepairHoldEntity>();
     public DbSet<CollectionFailureNotificationEntity> FailureNotifications => Set<CollectionFailureNotificationEntity>();
@@ -141,6 +142,10 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
             e.ToTable("collection_execution_leases"); e.HasKey(x => x.ExecutionBatchId);
             e.HasIndex(x => x.DispatchEnvelopeId).IsUnique();
             e.HasIndex(x => new { x.Status, x.LeaseExpiresAt });
+        });
+        modelBuilder.Entity<CollectionDispatcherFairnessStateEntity>(e =>
+        {
+            e.ToTable("collection_dispatcher_fairness_state"); e.HasKey(x => x.StateId);
         });
         modelBuilder.Entity<CollectionPlatformControlEntity>(e =>
         {

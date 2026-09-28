@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 internal static class CollectionPlatformSchemaMigrator
 {
-    internal const int CurrentVersion = 18;
+    internal const int CurrentVersion = 19;
     private const string HistoryTable = "collection_schema_history";
 
     private static readonly string[] ModelTables =
@@ -210,7 +210,7 @@ internal static class CollectionPlatformSchemaMigrator
                 ["collection_tasks"] = ["AvailableAt", "CreatedAt", "UpdatedAt", "StartedAt", "FinishedAt", "LeaseExpiresAt", "CancellationRequestedAt"],
                 ["collection_attempts"] = ["StartedAt", "FinishedAt"],
                 ["resource_locations"] = ["DiscoveredAt", "LastVerifiedAt", "LastFailedAt"],
-                ["collection_task_outbox"] = ["AvailableAt", "DispatchedAt", "CreatedAt"],
+                ["collection_task_outbox"] = ["AvailableAt", "DispatchedAt", "CreatedAt", "WakeId"],
                 ["collection_platform_controls"] = ["UpdatedAt"],
                 ["collection_failure_notifications"] = ["FailedAt", "AvailableAt", "PublishedAt", "RecoveryStartedAt", "ResolvedAt"],
                 ["collection_backfill_batches"] = ["CreatedAt", "ExpansionCompletedAt"]
@@ -476,6 +476,45 @@ internal static class CollectionPlatformSchemaMigrator
                 """, cancellationToken, transaction,
                 ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())));
         }
+
+        if (version < 19)
+        {
+            if (!await HasColumnAsync(connection, transaction, "collection_task_outbox", "WakeId", cancellationToken)
+                    .ConfigureAwait(false))
+                await ExecuteAsync(connection,
+                    "ALTER TABLE collection_task_outbox ADD COLUMN WakeId TEXT NULL;",
+                    cancellationToken, transaction).ConfigureAwait(false);
+            await ExecuteAsync(connection, """
+                CREATE TABLE IF NOT EXISTS collection_dispatcher_fairness_state (
+                    StateId INTEGER NOT NULL PRIMARY KEY CHECK (StateId = 1),
+                    ConsecutiveRealtime INTEGER NOT NULL DEFAULT 0,
+                    LastGrantedLane TEXT NULL,
+                    LastNonRealtimeLane TEXT NULL,
+                    ReservationSequence INTEGER NOT NULL DEFAULT 0,
+                    ScanAvailableAt TEXT NULL,
+                    ScanOutboxId TEXT NULL,
+                    UpdatedAt TEXT NOT NULL
+                );
+                INSERT OR IGNORE INTO collection_dispatcher_fairness_state
+                    (StateId, ConsecutiveRealtime, ReservationSequence, UpdatedAt)
+                VALUES (1, 0, 0, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(
+                    HorseRacingPrediction.Contracts.Time.JstTime.Now()))).ConfigureAwait(false);
+            await ExecuteAsync(connection, """
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (19, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(
+                    HorseRacingPrediction.Contracts.Time.JstTime.Now()))).ConfigureAwait(false);
+        }
+
+        await ExecuteAsync(connection, """
+            INSERT OR IGNORE INTO collection_dispatcher_fairness_state
+                (StateId, ConsecutiveRealtime, ReservationSequence, UpdatedAt)
+            VALUES (1, 0, 0, $appliedAt);
+            """, cancellationToken, transaction,
+            ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(
+                HorseRacingPrediction.Contracts.Time.JstTime.Now()))).ConfigureAwait(false);
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         db.Database.UseTransaction(null);

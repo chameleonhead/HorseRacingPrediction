@@ -33,15 +33,22 @@ public sealed class CollectionDefinitionHandlerRegistry
 }
 
 public sealed record FairCollectionCandidate(Guid TaskId, CollectionLane Lane, int Priority,
-    DateTimeOffset AvailableAt, DateTimeOffset CreatedAt);
+    DateTimeOffset AvailableAt, DateTimeOffset CreatedAt, Guid OutboxId = default);
 
-public sealed record CollectionLaneDispatchState(int ConsecutiveRealtime, CollectionLane? LastNonRealtimeLane)
+public sealed record CollectionLaneDispatchState(int ConsecutiveRealtime, CollectionLane? LastNonRealtimeLane,
+    DateTimeOffset? ScanAvailableAt = null, Guid? ScanOutboxId = null)
 {
     public static CollectionLaneDispatchState Empty { get; } = new(0, null);
 
     public CollectionLaneDispatchState Advance(CollectionLane lane) => lane == CollectionLane.Realtime
-        ? this with { ConsecutiveRealtime = ConsecutiveRealtime + 1 }
-        : new(0, lane);
+        ? this with { ConsecutiveRealtime = ConsecutiveRealtime + 1, ScanAvailableAt = null, ScanOutboxId = null }
+        : this with { ConsecutiveRealtime = 0, LastNonRealtimeLane = lane, ScanAvailableAt = null, ScanOutboxId = null };
+
+    public CollectionLaneDispatchState Advance(CollectionLane lane, DateTimeOffset scanAvailableAt, Guid scanOutboxId)
+    {
+        var advanced = Advance(lane);
+        return advanced with { ScanAvailableAt = scanAvailableAt, ScanOutboxId = scanOutboxId };
+    }
 }
 
 public sealed class CollectionLaneAllocator
@@ -62,11 +69,20 @@ public sealed class CollectionLaneAllocator
         if (due.Count == 0) return null;
         var selectedLane = SelectLane(due, state);
         return due.Where(x => x.Lane == selectedLane)
-            .OrderByDescending(x => EffectivePriority(x, now))
+            .OrderByDescending(x => IsAfterCursor(x, state))
+            .ThenByDescending(x => EffectivePriority(x, now))
             .ThenBy(x => x.AvailableAt)
             .ThenBy(x => x.CreatedAt)
             .ThenBy(x => x.TaskId)
             .First();
+    }
+
+    private static bool IsAfterCursor(FairCollectionCandidate candidate, CollectionLaneDispatchState state)
+    {
+        if (state.ScanAvailableAt is null || state.ScanOutboxId is null) return true;
+        var timeCompare = candidate.AvailableAt.CompareTo(state.ScanAvailableAt.Value);
+        return timeCompare > 0 || (timeCompare == 0
+            && string.CompareOrdinal(candidate.OutboxId.ToString("N"), state.ScanOutboxId.Value.ToString("N")) > 0);
     }
 
     private CollectionLane SelectLane(IReadOnlyCollection<FairCollectionCandidate> due,

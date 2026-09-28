@@ -256,8 +256,21 @@ public sealed class CollectionDispatchOutboxEntity
     public string? ReservationToken { get; set; }
     public long? ReservedUntilUnixMilliseconds { get; set; }
     public Guid? EnvelopeId { get; set; }
+    public Guid? WakeId { get; set; }
     public string? QueueMessageId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+}
+
+public sealed class CollectionDispatcherFairnessStateEntity
+{
+    public int StateId { get; set; } = 1;
+    public int ConsecutiveRealtime { get; set; }
+    public string? LastGrantedLane { get; set; }
+    public string? LastNonRealtimeLane { get; set; }
+    public long ReservationSequence { get; set; }
+    public DateTimeOffset? ScanAvailableAt { get; set; }
+    public Guid? ScanOutboxId { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
 }
 
 public sealed class CollectionExecutionLeaseEntity

@@ -27,6 +27,8 @@ public sealed class CollectionPlatformOutboxDispatcher(
     private readonly CollectionQueueOptions _options = options.Value;
     private readonly CollectionLaneAllocator _allocator = new();
 
+    internal Func<IReadOnlyList<PendingCollectionDispatch>, CancellationToken, Task>? BeforeReservationAsync { get; set; }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!_options.Enabled) return;
@@ -42,16 +44,20 @@ public sealed class CollectionPlatformOutboxDispatcher(
     {
         var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
         await store.ReclaimExpiredExecutionLeasesAsync(now, cancellationToken).ConfigureAwait(false);
-        // DB outbox is the priority queue. Consider every due row so a recently-created
-        // Realtime task cannot be hidden behind an older Background page.
-        var remaining = (await store.GetPendingDispatchesAsync(now, int.MaxValue, cancellationToken).ConfigureAwait(false))
-            .Where(x => x.Definition.Value == "race-odds" || _options.AggregationDelayMilliseconds <= 0
-                || x.CreatedAt <= now.AddMilliseconds(-_options.AggregationDelayMilliseconds)).ToList();
         var dispatchState = await store.GetLaneDispatchStateAsync(cancellationToken).ConfigureAwait(false);
-        for (var sent = 0; sent < Math.Max(1, _options.DispatchBatchSize) && remaining.Count > 0; sent++)
+        var maxDispatches = Math.Clamp(_options.DispatchBatchSize, 1, 256);
+        var scanBudget = Math.Min(4096, Math.Max(64, maxDispatches * 8));
+        // Scan a bounded keyset page and resume after the last successfully acquired wake.
+        // When the cursor reaches the end, the store wraps to the first due page.
+        var remaining = (await store.GetPendingDispatchesAsync(now, scanBudget, cancellationToken,
+            _options.AggregationDelayMilliseconds, dispatchState.ScanAvailableAt, dispatchState.ScanOutboxId)
+            .ConfigureAwait(false)).ToList();
+        var sent = 0;
+        var scanned = 0;
+        while (sent < maxDispatches && scanned < scanBudget && remaining.Count > 0)
         {
             var selected = _allocator.Select(remaining.Select(x => new FairCollectionCandidate(
-                    x.Notification.TaskId, x.Lane, x.Priority, x.AvailableAt, x.CreatedAt)), now, dispatchState);
+                    x.Notification.TaskId, x.Lane, x.Priority, x.AvailableAt, x.CreatedAt, x.OutboxId)), now, dispatchState);
             if (selected is null) break;
             var item = remaining.Single(x => x.Notification.TaskId == selected.TaskId);
             var compatibility = CreateCompatibility(item);
@@ -64,7 +70,9 @@ public sealed class CollectionPlatformOutboxDispatcher(
                 .OrderBy(x => RouteCourse(x)).ThenBy(x => RouteRaceNumber(x)).ThenBy(x => RouteType(x))
                 .ThenByDescending(x => x.Priority).ThenBy(x => x.CreatedAt).ThenBy(x => x.Notification.TaskId)
                 .ToList();
+            scanned++;
             var envelopeId = Guid.NewGuid();
+            var wakeId = Guid.NewGuid();
             var envelope = CreateEnvelope(envelopeId, compatibility, group);
             while (group.Count > 1 && JsonSerializer.SerializeToUtf8Bytes(envelope).Length
                    > Math.Clamp(_options.EnvelopeMaxPayloadBytes, 1, 256_000))
@@ -76,12 +84,15 @@ public sealed class CollectionPlatformOutboxDispatcher(
             var reservationToken = Guid.NewGuid().ToString("N");
             try
             {
-                if (!await store.TryReserveDispatchesWithinCapacityAsync(group.Select(x => x.OutboxId).ToArray(), reservationToken,
-                        envelopeId, now, TimeSpan.FromSeconds(Math.Max(10, _options.OutboxReservationSeconds)),
-                        Math.Max(1, _options.MaxInFlightEnvelopes),
+                if (BeforeReservationAsync is not null)
+                    await BeforeReservationAsync(group, cancellationToken).ConfigureAwait(false);
+                if (!await store.TryReserveDispatchesWithinCapacityAsync(group.Select(x => x.OutboxId).ToArray(),
+                        reservationToken, envelopeId, wakeId, now,
+                        TimeSpan.FromSeconds(Math.Max(10, _options.OutboxReservationSeconds)),
+                        Math.Max(1, _options.MaxInFlightEnvelopes), _options.AggregationDelayMilliseconds,
                         cancellationToken).ConfigureAwait(false))
                     continue;
-                var wake = new CollectionWakeSignal(Guid.NewGuid(), envelopeId, reservationToken);
+                var wake = new CollectionWakeSignal(wakeId, envelopeId, reservationToken);
                 CollectionQueueSendReceipt receipt;
                 var legacyAdapter = false;
                 try { receipt = await queue.SendWakeAsync(wake, cancellationToken).ConfigureAwait(false); }
@@ -93,13 +104,17 @@ public sealed class CollectionPlatformOutboxDispatcher(
                     receipt = await queue.SendAsync(envelope, cancellationToken).ConfigureAwait(false);
                 }
                 if (legacyAdapter)
-                    await store.MarkDispatchedAsync(group.Select(x => x.OutboxId).ToArray(), reservationToken,
+                {
+                    if (!await store.MarkDispatchedAsync(group.Select(x => x.OutboxId).ToArray(), reservationToken,
                         envelopeId, receipt.MessageId, HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken)
-                        .ConfigureAwait(false);
+                        .ConfigureAwait(false))
+                        continue;
+                    dispatchState = await store.GetLaneDispatchStateAsync(cancellationToken).ConfigureAwait(false);
+                }
                 else
                     await store.MarkWakeSentAsync(envelopeId, reservationToken, receipt.MessageId, cancellationToken)
                         .ConfigureAwait(false);
-                dispatchState = dispatchState.Advance(selected.Lane);
+                sent++;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex)

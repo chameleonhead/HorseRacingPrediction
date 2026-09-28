@@ -146,6 +146,15 @@ public sealed record CollectionTaskAcquireResult(CollectionTaskAcquireStatus Sta
 public sealed record CollectionWakeSignal(Guid WakeId, Guid DispatchEnvelopeId, string ReservationToken,
     int ContractVersion = 1);
 public enum CollectionExecutionAcquireStatus { Acquired, NoWork }
+public enum CollectionReservationReleaseOutcome
+{
+    NotAttempted,
+    Released,
+    AlreadyReleasedOrChanged,
+    SkippedStaleGeneration,
+    SkippedActiveLease,
+    SkippedAmbiguousRows,
+}
 public sealed record CollectionExecutionAcquireResult(CollectionExecutionAcquireStatus Status,
     Guid? ExecutionBatchId = null, string? LeaseToken = null,
     CollectionDispatchEnvelope? Envelope = null, DateTimeOffset? StartBefore = null);

@@ -157,7 +157,7 @@ public sealed partial class CollectionPlatformStore
             var outboxes = await db.DispatchOutbox.Where(x => heldIds.Contains(x.TaskId)).ToListAsync(token);
             foreach (var row in outboxes)
             {
-                row.ReservationToken = null; row.ReservedUntilUnixMilliseconds = null;
+                row.ReservationToken = null; row.ReservedUntilUnixMilliseconds = null; row.WakeId = null;
                 row.DispatchedAt = now;
             }
             await ReclaimExpiredAsync(db, now, token, heldIds);
