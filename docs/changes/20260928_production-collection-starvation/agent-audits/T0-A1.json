@@ -8,10 +8,10 @@
   "acceptanceCriteria": ["AC0"],
   "route": {
     "tier": "worker",
-    "requestedModel": "unavailable at dispatch",
+    "requestedModel": "gpt-6-luna",
     "observedModel": null,
     "observationSource": null,
-    "modelTelemetryReason": "dispatch metadata did not expose a requested model or worker identity"
+    "modelTelemetryReason": "parent collaboration dispatch metadata confirms requested gpt-6-luna with high reasoning; runtime observed model and worker identity were not exposed"
   },
   "usage": {
     "availability": "unavailable",
