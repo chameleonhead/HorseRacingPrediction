@@ -63,6 +63,7 @@ internal static class TestApplicationFactory
         builder.Services.Configure<CollectionQueueOptions>(options =>
             options.AggregationDelayMilliseconds = aggregationDelayMilliseconds);
         builder.Services.AddSingleton<IRaceResourceIdentityResolver, DomainRaceResourceIdentityResolver>();
+        builder.Services.AddSingleton<ICollectionDispatchTelemetry, NullCollectionDispatchTelemetry>();
         builder.Services.AddSingleton<CollectionPlatformStore>();
         builder.Services.Configure<CollectionMonitoringOptions>(_ => { });
         builder.Services.AddSingleton<CollectionMonitoringService>();

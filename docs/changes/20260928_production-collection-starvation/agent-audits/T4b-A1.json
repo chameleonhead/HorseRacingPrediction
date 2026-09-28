@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260928_production-collection-starvation",
+  "taskId": "T4b",
+  "attemptId": "T4b-A1",
+  "state": "completed",
+  "taskDifficulty": "high",
+  "acceptanceCriteria": ["AC4"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "Runtime model telemetry unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "Token telemetry unavailable"
+  },
+  "scope": [
+    "Telemetry publisher",
+    "dispatcher/acquire/store/model emission",
+    "observability.tf",
+    "API+Collector telemetry-dispatcher-store-IaC tests"
+  ],
+  "startRevision": "19f5f125",
+  "endRevisionOrPatch": "T4b-A1 implementation; local changes not yet committed",
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "Lead integration review pending; usage and active-time telemetry unavailable"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "Effort telemetry unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "Elapsed telemetry unavailable"
+  },
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "API 370/1 skipped; Collector 406; focused tests 5/4/14; solution build and format pass; route and audit validators pass. Terraform CLI unavailable; no AWS action.",
+    "retries": 0,
+    "leadCorrections": 3,
+    "reviewPasses": 0,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

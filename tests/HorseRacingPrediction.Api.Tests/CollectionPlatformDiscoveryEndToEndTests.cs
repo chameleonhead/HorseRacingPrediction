@@ -44,6 +44,7 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             var builder = WebApplication.CreateBuilder();
             builder.WebHost.UseTestServer();
             builder.Services.AddSingleton(store);
+            builder.Services.AddSingleton<ICollectionDispatchTelemetry, NullCollectionDispatchTelemetry>();
             using var domain = new SqliteDbContextProvider();
             builder.Services.AddSingleton<IDbContextProvider<EventStoreDbContext>>(domain);
             var app = builder.Build();
@@ -159,6 +160,7 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             var builder = WebApplication.CreateBuilder();
             builder.WebHost.UseTestServer();
             builder.Services.AddSingleton(store);
+            builder.Services.AddSingleton<ICollectionDispatchTelemetry, NullCollectionDispatchTelemetry>();
             var app = builder.Build();
             app.MapCollectionApiV2Endpoints();
             await app.StartAsync();

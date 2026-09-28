@@ -29,7 +29,8 @@ public sealed partial class CollectionPlatformStore
     private readonly SemaphoreSlim _gate;
     private readonly IRaceResourceIdentityResolver? _raceIdentityResolver;
 
-    public CollectionPlatformStore(IOptions<CollectionPlatformOptions> options, IRaceResourceIdentityResolver? raceIdentityResolver = null)
+    public CollectionPlatformStore(IOptions<CollectionPlatformOptions> options,
+        IRaceResourceIdentityResolver? raceIdentityResolver = null)
     {
         _raceIdentityResolver = raceIdentityResolver;
         var value = options.Value;
@@ -1060,6 +1061,15 @@ public sealed partial class CollectionPlatformStore
         finally { _gate.Release(); }
     }
 
+    public async Task<CollectionDispatchTaskTelemetryState?> GetTaskTelemetryStateAsync(Guid taskId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        return await db.Tasks.AsNoTracking().Where(task => task.TaskId == taskId)
+            .Select(task => new CollectionDispatchTaskTelemetryState(task.Lane, task.DefinitionId, task.Status))
+            .SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private static async Task<IReadOnlyList<ResourceLocationOutcome>?> ValidateLocationOutcomesAsync(
         CollectionPlatformDbContext db, CollectionTaskEntity task,
         IReadOnlyList<ResourceLocationOutcome>? outcomes, CancellationToken cancellationToken)
@@ -1629,19 +1639,29 @@ public sealed partial class CollectionPlatformStore
                 state.ScanAvailableAt, state.ScanOutboxId);
     }
 
-    public Task<bool> TryReserveDispatchesWithinCapacityAsync(IReadOnlyCollection<Guid> outboxIds,
+    public async Task<bool> TryReserveDispatchesWithinCapacityAsync(IReadOnlyCollection<Guid> outboxIds,
         string reservationToken, Guid envelopeId, DateTimeOffset now, TimeSpan duration, int maxInFlightEnvelopes,
         CancellationToken cancellationToken = default)
-        => TryReserveDispatchesWithinCapacityAsync(outboxIds, reservationToken, envelopeId, Guid.Empty, now,
-            duration, maxInFlightEnvelopes, 0, cancellationToken);
+        => await ReserveDispatchesWithinCapacityAsync(outboxIds, reservationToken, envelopeId, Guid.Empty, now,
+            duration, maxInFlightEnvelopes, 0, cancellationToken).ConfigureAwait(false)
+            == CollectionDispatchCycleOutcome.Reserved;
 
     public async Task<bool> TryReserveDispatchesWithinCapacityAsync(IReadOnlyCollection<Guid> outboxIds,
         string reservationToken, Guid envelopeId, Guid wakeId, DateTimeOffset now, TimeSpan duration,
         int maxInFlightEnvelopes, int aggregationDelayMilliseconds = 0,
         CancellationToken cancellationToken = default)
+        => await ReserveDispatchesWithinCapacityAsync(outboxIds, reservationToken, envelopeId, wakeId, now,
+            duration, maxInFlightEnvelopes, aggregationDelayMilliseconds, cancellationToken).ConfigureAwait(false)
+            == CollectionDispatchCycleOutcome.Reserved;
+
+    public async Task<CollectionDispatchCycleOutcome> ReserveDispatchesWithinCapacityAsync(
+        IReadOnlyCollection<Guid> outboxIds, string reservationToken, Guid envelopeId, Guid wakeId,
+        DateTimeOffset now, TimeSpan duration, int maxInFlightEnvelopes, int aggregationDelayMilliseconds = 0,
+        CancellationToken cancellationToken = default)
     {
         var ids = outboxIds.Distinct().ToArray();
-        if (ids.Length == 0 || string.IsNullOrWhiteSpace(reservationToken) || envelopeId == Guid.Empty) return false;
+        if (ids.Length == 0 || string.IsNullOrWhiteSpace(reservationToken) || envelopeId == Guid.Empty)
+            return CollectionDispatchCycleOutcome.CandidateRejected;
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -1650,7 +1670,7 @@ public sealed partial class CollectionPlatformStore
             await using var tx = ((SqliteConnection)db.Database.GetDbConnection()).BeginTransaction(deferred: false);
             db.Database.UseTransaction(tx);
             if (await db.Controls.AnyAsync(x => x.ControlId == "pipeline" && x.IsPaused, cancellationToken))
-                return false;
+                return CollectionDispatchCycleOutcome.CandidateRejected;
 
             var inFlight = await db.ExecutionLeases.CountAsync(x =>
                 (x.Status == "StartPending" || x.Status == "Running") && x.LeaseExpiresAt > now,
@@ -1686,7 +1706,8 @@ public sealed partial class CollectionPlatformStore
             var reserved = reservedRows.Where(x => !heldTaskIds.Contains(x.TaskId)
                     && !MatchesHold(x.resource, heldIds))
                 .Select(x => x.EnvelopeId).Distinct().Count();
-            if (inFlight + legacyInFlight + reserved >= Math.Max(1, maxInFlightEnvelopes)) return false;
+            if (inFlight + legacyInFlight + reserved >= Math.Max(1, maxInFlightEnvelopes))
+                return CollectionDispatchCycleOutcome.CapacityFull;
 
             var rows = await (from outbox in db.DispatchOutbox
                               join task in db.Tasks on outbox.TaskId equals task.TaskId
@@ -1705,8 +1726,9 @@ public sealed partial class CollectionPlatformStore
                 .ConfigureAwait(false);
             if (rows.Count != ids.Length || rows.Any(x => heldTaskIds.Contains(x.task.TaskId)
                     || MatchesHold(x.resource, heldIds)))
-                return false;
-            if (rows.Select(x => x.task.Lane).Distinct().Count() != 1) return false;
+                return CollectionDispatchCycleOutcome.CandidateRejected;
+            if (rows.Select(x => x.task.Lane).Distinct().Count() != 1)
+                return CollectionDispatchCycleOutcome.CandidateRejected;
 
             var eligibleRows = await (from outbox in db.DispatchOutbox
                                       join task in db.Tasks on outbox.TaskId equals task.TaskId
@@ -1732,7 +1754,7 @@ public sealed partial class CollectionPlatformStore
             var currentFairness = new CollectionLaneDispatchState(fairness.ConsecutiveRealtime,
                 ParseLane(fairness.LastNonRealtimeLane), fairness.ScanAvailableAt, fairness.ScanOutboxId);
             if (new CollectionLaneAllocator().SelectLane(eligibleLanes, currentFairness) != rows[0].task.Lane)
-                return false;
+                return CollectionDispatchCycleOutcome.ReserveConflict;
             await AdvanceDispatcherFairnessAsync(db, rows.Select(x => x.outbox).ToArray(), rows[0].task.Lane, now,
                 cancellationToken).ConfigureAwait(false);
             foreach (var row in rows)
@@ -1744,7 +1766,7 @@ public sealed partial class CollectionPlatformStore
             }
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
-            return true;
+            return CollectionDispatchCycleOutcome.Reserved;
         }
         finally { _gate.Release(); }
     }
@@ -1866,8 +1888,10 @@ public sealed partial class CollectionPlatformStore
                     ? await BuildExecutionEnvelopeAsync(db, wake.DispatchEnvelopeId, cancellationToken).ConfigureAwait(false)
                     : null;
                 await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
-                if (!matchingLease) return NoWork(CollectionExecutionNoWorkReason.LeaseConflict);
-                if (priorEnvelope is null) return NoWork(CollectionExecutionNoWorkReason.EnvelopeInvalid);
+                if (!matchingLease)
+                    return NoWork(CollectionExecutionNoWorkReason.LeaseConflict);
+                if (priorEnvelope is null)
+                    return NoWork(CollectionExecutionNoWorkReason.EnvelopeInvalid);
                 return new(CollectionExecutionAcquireStatus.Acquired, existing.ExecutionBatchId,
                     existing.LeaseToken, priorEnvelope, existing.LeaseExpiresAt);
             }
@@ -1877,7 +1901,8 @@ public sealed partial class CollectionPlatformStore
                     && x.WakeId == wake.WakeId
                     && x.ReservedUntilUnixMilliseconds > now.ToUnixTimeMilliseconds())
                 .ToListAsync(cancellationToken).ConfigureAwait(false);
-            if (rows.Count == 0) return NoWork(CollectionExecutionNoWorkReason.ReservationUnavailable);
+            if (rows.Count == 0)
+                return NoWork(CollectionExecutionNoWorkReason.ReservationUnavailable);
             var envelopeRows = await db.DispatchOutbox.Where(x => x.EnvelopeId == wake.DispatchEnvelopeId)
                 .ToListAsync(cancellationToken).ConfigureAwait(false);
             if (envelopeRows.Count != rows.Count || envelopeRows.Any(row => row.DispatchedAt is not null
@@ -1885,10 +1910,12 @@ public sealed partial class CollectionPlatformStore
                     || row.ReservedUntilUnixMilliseconds <= now.ToUnixTimeMilliseconds()))
                 return NoWork(CollectionExecutionNoWorkReason.ReservationInconsistent);
             var taskIds = rows.Select(x => x.TaskId).Distinct().ToArray();
-            if (taskIds.Length != rows.Count) return NoWork(CollectionExecutionNoWorkReason.ReservationInconsistent);
+            if (taskIds.Length != rows.Count)
+                return NoWork(CollectionExecutionNoWorkReason.ReservationInconsistent);
             var tasks = await db.Tasks.Where(x => taskIds.Contains(x.TaskId)).ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
-            if (tasks.Count != rows.Count) return NoWork(CollectionExecutionNoWorkReason.ReservationInconsistent);
+            if (tasks.Count != rows.Count)
+                return NoWork(CollectionExecutionNoWorkReason.ReservationInconsistent);
             if (tasks.Any(task => task.LeaseExpiresAt.HasValue && task.LeaseExpiresAt.Value > now))
                 return NoWork(CollectionExecutionNoWorkReason.LeaseConflict);
             if (rows.Any(row =>
@@ -1964,6 +1991,76 @@ public sealed partial class CollectionPlatformStore
 
     private static CollectionExecutionAcquireResult NoWork(CollectionExecutionNoWorkReason reason)
         => new(CollectionExecutionAcquireStatus.NoWork, NoWorkReason: reason);
+
+    public async Task<CollectionDispatchTelemetrySnapshot> GetDispatchTelemetrySnapshotAsync(DateTimeOffset now,
+        int maxInFlightEnvelopes, IReadOnlyCollection<string> definitionLabels,
+        int aggregationDelayMilliseconds = 0,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var paused = await db.Controls.AsNoTracking().AnyAsync(x => x.ControlId == "pipeline" && x.IsPaused,
+            cancellationToken).ConfigureAwait(false);
+        var dueReadyTasks = db.Tasks.AsNoTracking().Where(task => task.Status == CollectionTaskStatus.Ready
+            && task.AvailableAt <= now);
+        var readyMissingCurrentOutbox = await dueReadyTasks.CountAsync(task => !db.DispatchOutbox.AsNoTracking()
+            .Any(outbox => outbox.TaskId == task.TaskId && outbox.DispatchGeneration == task.DispatchGeneration
+                && outbox.DispatchedAt == null), cancellationToken).ConfigureAwait(false);
+        var cardinalityAnomalyTasks = await dueReadyTasks.CountAsync(task => db.DispatchOutbox.AsNoTracking()
+            .Count(outbox => outbox.TaskId == task.TaskId && outbox.DispatchGeneration == task.DispatchGeneration
+                && outbox.DispatchedAt == null) > 1, cancellationToken).ConfigureAwait(false);
+        var activeLeases = await db.ExecutionLeases.AsNoTracking().CountAsync(lease =>
+            (lease.Status == "StartPending" || lease.Status == "Running") && lease.LeaseExpiresAt > now,
+            cancellationToken).ConfigureAwait(false);
+
+        if (paused)
+            return new(readyMissingCurrentOutbox, cardinalityAnomalyTasks, 0, 0, activeLeases,
+                Math.Max(1, maxInFlightEnvelopes), []);
+
+        var heldTaskIds = await HeldTaskIdsAsync(db, cancellationToken).ConfigureAwait(false);
+        var aggregationCutoff = now.AddMilliseconds(-Math.Max(0, aggregationDelayMilliseconds));
+        var boundedDefinitionLabels = definitionLabels.Where(CollectionDispatchTelemetryLabelIsSafe)
+            .Take(16).ToArray();
+        var eligible = from outbox in db.DispatchOutbox.AsNoTracking()
+                       join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
+                       where outbox.DispatchedAt == null
+                           && task.Status == CollectionTaskStatus.Ready
+                           && task.DispatchGeneration == outbox.DispatchGeneration
+                           && task.AvailableAt <= now && outbox.AvailableAt <= now
+                           && (task.DefinitionId == "race-odds" || outbox.CreatedAt <= aggregationCutoff)
+                           && !heldTaskIds.Contains(task.TaskId)
+                           && db.DispatchOutbox.Count(other => other.TaskId == task.TaskId
+                               && other.DispatchGeneration == task.DispatchGeneration && other.DispatchedAt == null) == 1
+                       select new
+                       {
+                           outbox,
+                           task.Lane,
+                           DefinitionId = boundedDefinitionLabels.Contains(task.DefinitionId)
+                               ? task.DefinitionId : "OTHER",
+                       };
+        var nowMilliseconds = now.ToUnixTimeMilliseconds();
+        var lanes = (await eligible.GroupBy(row => new { row.Lane, row.DefinitionId })
+            .Select(group => new
+            {
+                group.Key.Lane,
+                group.Key.DefinitionId,
+                Eligible = group.Count(),
+                OldestAvailableAt = group.Min(row => row.outbox.AvailableAt),
+                ActiveReservations = group.Count(row => row.outbox.ReservedUntilUnixMilliseconds > nowMilliseconds),
+                ExpiredReservations = group.Count(row => row.outbox.ReservedUntilUnixMilliseconds.HasValue
+                    && row.outbox.ReservedUntilUnixMilliseconds <= nowMilliseconds),
+            }).OrderBy(row => row.DefinitionId).ThenBy(row => row.Lane).Take(51).ToListAsync(cancellationToken)
+            .ConfigureAwait(false)).Select(row => new CollectionDispatchLaneSnapshot(row.Lane, row.DefinitionId,
+                row.Eligible, Math.Max(0, (now - row.OldestAvailableAt).TotalSeconds),
+                row.ActiveReservations, row.ExpiredReservations)).ToArray();
+        return new(readyMissingCurrentOutbox, cardinalityAnomalyTasks,
+            lanes.Sum(lane => lane.ActiveEligibleReservations), lanes.Sum(lane => lane.ExpiredEligibleReservations),
+            activeLeases, Math.Max(1, maxInFlightEnvelopes), lanes);
+    }
+
+    private static bool CollectionDispatchTelemetryLabelIsSafe(string value)
+        => value.Length is > 0 and <= 64
+            && value.All(character => character is >= 'a' and <= 'z' or >= 'A' and <= 'Z'
+                or >= '0' and <= '9' or '-');
 
     private static CollectionLane? ParseLane(string? value)
         => Enum.TryParse<CollectionLane>(value, out var lane) ? lane : null;

@@ -1,3 +1,4 @@
+using Amazon.CloudWatch;
 using Amazon.SimpleNotificationService;
 using Amazon.SQS;
 using EventFlow.EntityFramework.Extensions;
@@ -130,6 +131,11 @@ builder.Services.PostConfigure<CollectionPlatformOptions>(options =>
     if (!Path.IsPathRooted(configured)) options.StateDirectory = Path.GetFullPath(configured, builder.Environment.ContentRootPath);
 });
 builder.Services.AddSingleton<IRaceResourceIdentityResolver, HorseRacingPrediction.Api.DomainRaceResourceIdentityResolver>();
+builder.Services.AddSingleton<IAmazonCloudWatch>(_ => new AmazonCloudWatchClient());
+builder.Services.AddSingleton<ICollectionDispatchMetricPublisher, CloudWatchCollectionDispatchMetricPublisher>();
+builder.Services.AddSingleton<CollectionDispatchTelemetry>();
+builder.Services.AddSingleton<ICollectionDispatchTelemetry>(services =>
+    services.GetRequiredService<CollectionDispatchTelemetry>());
 builder.Services.AddSingleton<CollectionPlatformStore>();
 builder.Services.Configure<CollectionMonitoringOptions>(
     builder.Configuration.GetSection(CollectionMonitoringOptions.SectionName));

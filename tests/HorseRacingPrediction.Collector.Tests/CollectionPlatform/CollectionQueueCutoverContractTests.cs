@@ -7,6 +7,7 @@ public sealed class CollectionQueueCutoverContractTests
 {
     private static readonly string Root = FindRepositoryRoot();
     private static string Main => File.ReadAllText(Path.Combine(Root, "infra", "collector-lambda", "main.tf"));
+    private static string Observability => File.ReadAllText(Path.Combine(Root, "infra", "collector-lambda", "observability.tf"));
     private static string Outputs => File.ReadAllText(Path.Combine(Root, "infra", "collector-lambda", "outputs.tf"));
     private static string DeployWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "app-deploy.yml"));
     private static string LocalMonitoringRunner => File.ReadAllText(Path.Combine(Root, "tools", "collection_monitoring", "invoke_local_monitor.ps1"));
@@ -219,6 +220,72 @@ public sealed class CollectionQueueCutoverContractTests
         Assert.IsGreaterThanOrEqualTo(0, start, "Section start marker was not found.");
         Assert.IsGreaterThan(start, end, "Section end marker must follow its start marker.");
         return text[start..end];
+    }
+
+    [TestMethod]
+    public void Terraform_RestrictsCollectionMetricPermissionToTheApiUserAndNamespace()
+    {
+        var policy = NamedBlock(Observability, "resource", "aws_iam_user_policy",
+            "lightsail_api_collection_dispatch_metrics");
+
+        StringAssert.Contains(policy, "user = aws_iam_user.lightsail_api.name");
+        StringAssert.Contains(policy, "Action   = [\"cloudwatch:PutMetricData\"]");
+        StringAssert.Contains(policy, "Resource = \"*\"");
+        StringAssert.Contains(policy, "\"cloudwatch:namespace\" = local.collection_dispatch_namespace");
+        StringAssert.Contains(Observability, "collection_dispatch_namespace = \"HorseRacingPrediction/CollectionDispatch\"");
+        Assert.IsFalse(policy.Contains("sqs:", StringComparison.OrdinalIgnoreCase));
+        Assert.IsFalse(policy.Contains("sns:", StringComparison.OrdinalIgnoreCase));
+        Assert.IsFalse(policy.Contains("iam:PassRole", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [TestMethod]
+    public void Terraform_UsesApprovedStarvationWindowsMissingDataAndCombinedFailurePredicates()
+    {
+        Assert.IsTrue(Observability.Contains(
+            "ceil(max(300, 3 * var.collection_dispatch_interval_seconds) / 60)", StringComparison.Ordinal));
+        foreach (var alarmName in new[] { "collection_ready_missing_outbox", "collection_outbox_cardinality_anomaly",
+                     "collection_lane_starvation" })
+        {
+            var alarm = NamedBlock(Observability, "resource", "aws_cloudwatch_metric_alarm", alarmName);
+            Assert.IsTrue(alarm.Contains("period              = 60", StringComparison.Ordinal)
+                || alarm.Contains("period      = 60", StringComparison.Ordinal));
+            StringAssert.Contains(alarm, "evaluation_periods  = local.collection_dispatch_starvation_periods");
+            StringAssert.Contains(alarm, "datapoints_to_alarm = local.collection_dispatch_starvation_periods");
+            StringAssert.Contains(alarm, "treat_missing_data  = \"notBreaching\"");
+        }
+
+        var nowork = NamedBlock(Observability, "resource", "aws_cloudwatch_metric_alarm",
+            "collection_nowork_at_capacity");
+        StringAssert.Contains(nowork, "metric_name = \"acquire_nowork_total\"");
+        StringAssert.Contains(nowork, "period      = 300");
+        StringAssert.Contains(nowork, "nowork >= 5");
+        StringAssert.Contains(nowork, "capacity >= maximum");
+        StringAssert.Contains(nowork, "FILL(success, 0) == 0");
+        StringAssert.Contains(nowork, "treat_missing_data  = \"notBreaching\"");
+
+        var failures = NamedBlock(Observability, "resource", "aws_cloudwatch_metric_alarm",
+            "collection_dispatch_failures");
+        StringAssert.Contains(failures, "metric_name = \"reservation_release_failure_total\"");
+        StringAssert.Contains(failures, "metric_name = \"queue_send_failure_total\"");
+        StringAssert.Contains(failures, "period      = 300");
+        StringAssert.Contains(failures, "threshold           = 5");
+        StringAssert.Contains(failures, "comparison_operator = \"GreaterThanThreshold\"");
+    }
+
+    [TestMethod]
+    public void Terraform_DashboardAndAlarmsUseTheEmittedMetricContract()
+    {
+        foreach (var metricName in new[]
+                 {
+                     "dispatch_cycle_total", "wake_sent_total", "acquire_success_total",
+                     "terminal_task_completion_total", "reservation_release_total", "ready_missing_current_outbox",
+                     "outbox_cardinality_anomaly_tasks", "eligible_ready_rows", "oldest_eligible_age_seconds",
+                     "active_eligible_reservations", "expired_eligible_reservations",
+                 })
+            StringAssert.Contains(Observability, $"\"{metricName}\"");
+        Assert.IsTrue(Observability.Contains("setproduct(local.collection_dispatch_lanes, local.collection_dispatch_definitions)",
+            StringComparison.Ordinal));
+        StringAssert.Contains(Observability, "\"OTHER\"");
     }
 
     private static string NamedBlock(string text, string keyword, params string[] names)

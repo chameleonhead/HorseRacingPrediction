@@ -20,5 +20,6 @@ public sealed class CollectionQueueOptions
     public int EnvelopeMaxPayloadBytes { get; set; } = 250_000;
     public int OutboxReservationSeconds { get; set; } = 45;
     public int AggregationDelayMilliseconds { get; set; } = 2_000;
+    public List<string> TelemetryDefinitionLabels { get; set; } = ["race-discovery", "race-detail", "race-odds"];
     public Dictionary<string, int> DefinitionMaxTasks { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }

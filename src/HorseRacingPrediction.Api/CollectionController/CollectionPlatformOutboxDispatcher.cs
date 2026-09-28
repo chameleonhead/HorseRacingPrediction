@@ -1,6 +1,7 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.Options;
+using Amazon.Runtime;
 using System.Text.Json;
 
 namespace HorseRacingPrediction.Api.CollectionController;
@@ -22,10 +23,12 @@ public sealed class CollectionPlatformOutboxDispatcher(
     CollectionPlatformStore store,
     ICollectionPlatformTaskQueue queue,
     IOptions<CollectionQueueOptions> options,
-    ILogger<CollectionPlatformOutboxDispatcher> logger) : BackgroundService
+    ILogger<CollectionPlatformOutboxDispatcher> logger,
+    ICollectionDispatchTelemetry? telemetry = null) : BackgroundService
 {
     private readonly CollectionQueueOptions _options = options.Value;
     private readonly CollectionLaneAllocator _allocator = new();
+    private long _lastTelemetrySnapshotUtcTicks;
 
     internal Func<IReadOnlyList<PendingCollectionDispatch>, CancellationToken, Task>? BeforeReservationAsync { get; set; }
 
@@ -43,7 +46,17 @@ public sealed class CollectionPlatformOutboxDispatcher(
     internal async Task DispatchOnceAsync(CancellationToken cancellationToken)
     {
         var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
-        await store.ReclaimExpiredExecutionLeasesAsync(now, cancellationToken).ConfigureAwait(false);
+        var reclaimed = await store.ReclaimExpiredExecutionLeasesAsync(now, cancellationToken).ConfigureAwait(false);
+        if (telemetry is not null)
+            for (var index = 0; index < reclaimed; index++)
+                await telemetry.RecordLeaseReclaimedAsync(cancellationToken).ConfigureAwait(false);
+        if (telemetry is not null && TryBeginTelemetrySnapshot(now))
+        {
+            var snapshot = await store.GetDispatchTelemetrySnapshotAsync(now, _options.MaxInFlightEnvelopes,
+                _options.TelemetryDefinitionLabels, _options.AggregationDelayMilliseconds, cancellationToken)
+                .ConfigureAwait(false);
+            await telemetry.RecordSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+        }
         var dispatchState = await store.GetLaneDispatchStateAsync(cancellationToken).ConfigureAwait(false);
         var maxDispatches = Math.Clamp(_options.DispatchBatchSize, 1, 256);
         var scanBudget = Math.Min(4096, Math.Max(64, maxDispatches * 8));
@@ -52,6 +65,9 @@ public sealed class CollectionPlatformOutboxDispatcher(
         var remaining = (await store.GetPendingDispatchesAsync(now, scanBudget, cancellationToken,
             _options.AggregationDelayMilliseconds, dispatchState.ScanAvailableAt, dispatchState.ScanOutboxId)
             .ConfigureAwait(false)).ToList();
+        if (remaining.Count == 0 && telemetry is not null)
+            await telemetry.RecordDispatchCycleAsync(CollectionDispatchCycleOutcome.NoCandidates,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         var sent = 0;
         var scanned = 0;
         while (sent < maxDispatches && scanned < scanBudget && remaining.Count > 0)
@@ -82,22 +98,30 @@ public sealed class CollectionPlatformOutboxDispatcher(
             }
             foreach (var grouped in group) remaining.Remove(grouped);
             var reservationToken = Guid.NewGuid().ToString("N");
+            var sendAccepted = false;
+            var receiptPersisting = false;
             try
             {
                 if (BeforeReservationAsync is not null)
                     await BeforeReservationAsync(group, cancellationToken).ConfigureAwait(false);
-                var reserved = await store.TryReserveDispatchesWithinCapacityAsync(group.Select(x => x.OutboxId).ToArray(),
+                var reserveOutcome = await store.ReserveDispatchesWithinCapacityAsync(group.Select(x => x.OutboxId).ToArray(),
                         reservationToken, envelopeId, wakeId, now,
                         TimeSpan.FromSeconds(Math.Max(10, _options.OutboxReservationSeconds)),
                         Math.Max(1, _options.MaxInFlightEnvelopes), _options.AggregationDelayMilliseconds,
                         cancellationToken).ConfigureAwait(false);
-                if (!reserved)
+                if (reserveOutcome != CollectionDispatchCycleOutcome.Reserved)
                 {
+                    if (telemetry is not null)
+                        await telemetry.RecordDispatchCycleAsync(reserveOutcome, item.Lane,
+                            item.Definition.Value, cancellationToken).ConfigureAwait(false);
                     // Another dispatcher may have consumed a lane grant while this instance was selecting.
                     // Reload persistent fairness before selecting from the remaining bounded scan page.
                     dispatchState = await store.GetLaneDispatchStateAsync(cancellationToken).ConfigureAwait(false);
                     continue;
                 }
+                if (telemetry is not null)
+                    await telemetry.RecordDispatchCycleAsync(CollectionDispatchCycleOutcome.Reserved,
+                        item.Lane, item.Definition.Value, cancellationToken).ConfigureAwait(false);
                 dispatchState = await store.GetLaneDispatchStateAsync(cancellationToken).ConfigureAwait(false);
                 var wake = new CollectionWakeSignal(wakeId, envelopeId, reservationToken);
                 CollectionQueueSendReceipt receipt;
@@ -110,25 +134,73 @@ public sealed class CollectionPlatformOutboxDispatcher(
                     legacyAdapter = true;
                     receipt = await queue.SendAsync(envelope, cancellationToken).ConfigureAwait(false);
                 }
+                sendAccepted = true;
                 if (legacyAdapter)
                 {
+                    receiptPersisting = true;
                     if (!await store.MarkDispatchedAsync(group.Select(x => x.OutboxId).ToArray(), reservationToken,
                         envelopeId, receipt.MessageId, HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken)
                         .ConfigureAwait(false))
+                    {
+                        if (telemetry is not null)
+                        {
+                            await telemetry.RecordDispatchCycleAsync(CollectionDispatchCycleOutcome.WakeSent,
+                                item.Lane, item.Definition.Value, cancellationToken).ConfigureAwait(false);
+                            await telemetry.RecordDispatchCycleAsync(
+                                CollectionDispatchCycleOutcome.WakeReceiptPersistFailure, item.Lane,
+                                item.Definition.Value, cancellationToken).ConfigureAwait(false);
+                        }
                         continue;
+                    }
                 }
                 else
+                {
+                    receiptPersisting = true;
                     await store.MarkWakeSentAsync(envelopeId, reservationToken, receipt.MessageId, cancellationToken)
                         .ConfigureAwait(false);
+                }
                 sent++;
+                if (telemetry is not null)
+                    await telemetry.RecordDispatchCycleAsync(CollectionDispatchCycleOutcome.WakeSent,
+                        item.Lane, item.Definition.Value, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Resource collection envelope dispatch failed. EnvelopeId={EnvelopeId}", envelopeId);
+                if (sendAccepted && telemetry is not null)
+                    await telemetry.RecordDispatchCycleAsync(CollectionDispatchCycleOutcome.WakeSent,
+                        item.Lane, item.Definition.Value, cancellationToken).ConfigureAwait(false);
+                var outcome = receiptPersisting
+                    ? CollectionDispatchCycleOutcome.WakeReceiptPersistFailure
+                    : sendAccepted
+                        ? CollectionDispatchCycleOutcome.WakeReceiptPersistFailure
+                        : IsDefiniteQueueRejection(ex)
+                            ? CollectionDispatchCycleOutcome.WakeSendDefiniteFailure
+                            : CollectionDispatchCycleOutcome.WakeSendAmbiguousFailure;
+                if (telemetry is not null)
+                    await telemetry.RecordDispatchCycleAsync(outcome, item.Lane, item.Definition.Value,
+                        cancellationToken).ConfigureAwait(false);
+                logger.LogWarning("Resource collection envelope dispatch failed {Outcome}.", outcome);
             }
         }
     }
+
+    private bool TryBeginTelemetrySnapshot(DateTimeOffset now)
+    {
+        var currentTicks = now.UtcTicks;
+        while (true)
+        {
+            var previousTicks = Interlocked.Read(ref _lastTelemetrySnapshotUtcTicks);
+            if (previousTicks != 0 && currentTicks - previousTicks < TimeSpan.FromMinutes(1).Ticks)
+                return false;
+            if (Interlocked.CompareExchange(ref _lastTelemetrySnapshotUtcTicks, currentTicks, previousTicks) == previousTicks)
+                return true;
+        }
+    }
+
+    private static bool IsDefiniteQueueRejection(Exception exception)
+        => exception is AmazonServiceException serviceException
+           && (int)serviceException.StatusCode is >= 400 and < 500;
 
     private static bool IsCompatible(PendingCollectionDispatch first, PendingCollectionDispatch candidate)
         => CreateCompatibility(first) is var key

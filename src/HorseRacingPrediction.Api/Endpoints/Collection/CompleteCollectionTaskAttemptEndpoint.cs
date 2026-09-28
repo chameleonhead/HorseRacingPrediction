@@ -1,13 +1,15 @@
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Contracts.Time;
+using Microsoft.AspNetCore.Mvc;
 namespace HorseRacingPrediction.Api.Endpoints.Collection;
 
 internal static class CompleteCollectionTaskAttemptEndpoint
 {
     internal static void Map(IEndpointRouteBuilder endpoints) => endpoints.MapPost(
         "/api/v2/internal/collection/tasks/{id:guid}/attempts", async (Guid id, CompleteCollectionAttemptRequest request,
-            CollectionPlatformStore store, CancellationToken token) =>
+            CollectionPlatformStore store, [FromServices] ICollectionDispatchTelemetry telemetry,
+            CancellationToken token) =>
         {
             Uri.TryCreate(request.RequestedUrl, UriKind.Absolute, out var requestedUrl);
             Uri.TryCreate(request.FinalUrl, UriKind.Absolute, out var finalUrl);
@@ -15,6 +17,13 @@ internal static class CompleteCollectionTaskAttemptEndpoint
                 request.ErrorCode, request.ErrorMessage, requestedUrl, finalUrl, request.HttpStatusCode,
                 request.PageIdentification, request.RetryAt, request.NextCollectionAt, request.LocationOutcomes,
                 request.FailureImpact, request.StageOutcomes, request.RaceEvidence), token);
+            if (accepted)
+            {
+                var state = await store.GetTaskTelemetryStateAsync(id, token).ConfigureAwait(false);
+                if (state is not null)
+                    await telemetry.RecordTerminalCompletionAsync(state.Lane, state.DefinitionId, state.Status, token)
+                        .ConfigureAwait(false);
+            }
             return accepted ? Results.NoContent() : Results.Conflict();
         });
 }

@@ -29,6 +29,7 @@ public sealed class CollectionRevisionEndpointTests
             var builder = WebApplication.CreateBuilder();
             builder.WebHost.UseTestServer();
             builder.Services.AddSingleton(store);
+            builder.Services.AddSingleton<ICollectionDispatchTelemetry, NullCollectionDispatchTelemetry>();
             var app = builder.Build();
             app.MapCollectionApiV2Endpoints();
             await app.StartAsync();

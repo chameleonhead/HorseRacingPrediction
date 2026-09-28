@@ -107,6 +107,7 @@ public sealed class CollectionCompletionTransportTests
             var builder = WebApplication.CreateBuilder();
             builder.WebHost.UseTestServer();
             builder.Services.AddSingleton(store);
+            builder.Services.AddSingleton<ICollectionDispatchTelemetry, NullCollectionDispatchTelemetry>();
             await using var app = builder.Build();
             app.MapCollectionApiV2Endpoints();
             await app.StartAsync();

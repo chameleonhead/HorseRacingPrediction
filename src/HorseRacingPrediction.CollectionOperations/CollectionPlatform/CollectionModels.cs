@@ -167,6 +167,54 @@ public enum CollectionReservationReleaseOutcome
     SkippedActiveLease,
     SkippedAmbiguousRows,
 }
+public enum CollectionDispatchCycleOutcome
+{
+    NoCandidates,
+    Reserved,
+    CapacityFull,
+    CandidateRejected,
+    ReserveConflict,
+    WakeSent,
+    WakeSendDefiniteFailure,
+    WakeSendAmbiguousFailure,
+    WakeReceiptPersistFailure,
+}
+
+public interface ICollectionDispatchTelemetry
+{
+    Task RecordDispatchCycleAsync(CollectionDispatchCycleOutcome outcome, CollectionLane? lane = null,
+        string? definitionId = null, CancellationToken cancellationToken = default);
+    Task RecordAcquireAsync(CollectionExecutionAcquireStatus status, CollectionExecutionNoWorkReason? reason,
+        CollectionLane? lane = null, string? definitionId = null, CancellationToken cancellationToken = default);
+    Task RecordReservationReleaseAsync(CollectionReservationReleaseOutcome outcome,
+        CancellationToken cancellationToken = default);
+    Task RecordLeaseReclaimedAsync(CancellationToken cancellationToken = default);
+    Task RecordTerminalCompletionAsync(CollectionLane lane, string definitionId, CollectionTaskStatus status,
+        CancellationToken cancellationToken = default);
+    Task RecordSnapshotAsync(CollectionDispatchTelemetrySnapshot snapshot,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed record CollectionDispatchTelemetrySnapshot(
+    int ReadyMissingCurrentOutbox,
+    int CardinalityAnomalyTasks,
+    int ActiveEligibleReservations,
+    int ExpiredEligibleReservations,
+    int InFlightExecutionLeases,
+    int MaxInFlightEnvelopes,
+    IReadOnlyList<CollectionDispatchLaneSnapshot> Lanes);
+
+public sealed record CollectionDispatchLaneSnapshot(
+    CollectionLane Lane,
+    string DefinitionId,
+    int EligibleReadyRows,
+    double OldestEligibleAgeSeconds,
+    int ActiveEligibleReservations,
+    int ExpiredEligibleReservations);
+
+public sealed record CollectionDispatchTaskTelemetryState(
+    CollectionLane Lane, string DefinitionId, CollectionTaskStatus Status);
+
 public sealed record CollectionExecutionAcquireResult(CollectionExecutionAcquireStatus Status,
     Guid? ExecutionBatchId = null, string? LeaseToken = null,
     CollectionDispatchEnvelope? Envelope = null, DateTimeOffset? StartBefore = null,

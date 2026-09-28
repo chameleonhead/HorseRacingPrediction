@@ -38,6 +38,7 @@ public sealed class CollectionBulkEndpointTests
             var builder = WebApplication.CreateBuilder();
             builder.WebHost.UseTestServer();
             builder.Services.AddSingleton(collection);
+            builder.Services.AddSingleton<ICollectionDispatchTelemetry, NullCollectionDispatchTelemetry>();
             builder.Services.AddSingleton<IDbContextProvider<EventStoreDbContext>>(domain);
             var app = builder.Build();
             app.MapCollectionApiV2Endpoints();
