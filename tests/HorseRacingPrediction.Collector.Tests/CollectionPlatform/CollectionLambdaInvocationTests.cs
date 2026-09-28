@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
@@ -11,6 +12,10 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class CollectionLambdaInvocationTests
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions AcquireResponseJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false) },
+    };
 
     [TestMethod]
     public async Task Envelope_ProcessesEveryTaskAndReturnsEmptyPartialFailureResponse()
@@ -188,12 +193,16 @@ public sealed class CollectionLambdaInvocationTests
     }
 
     [TestMethod]
-    public async Task Wake_NoWorkIsAcknowledged()
+    public async Task Wake_TypedSafeNoWorkIsAcknowledged()
     {
         var wake = new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "reservation");
         var worker = Worker(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = JsonContent.Create(new CollectionExecutionAcquireResult(CollectionExecutionAcquireStatus.NoWork))
+            Content = JsonContent.Create(new CollectionExecutionAcquireResult(
+                CollectionExecutionAcquireStatus.NoWork,
+                NoWorkReason: CollectionExecutionNoWorkReason.PipelinePaused,
+                ReservationReleaseOutcome: CollectionReservationReleaseOutcome.Released),
+                options: AcquireResponseJsonOptions)
         });
 
         var response = await CollectionLambdaInvocation.ExecuteWakeAsync(WakeEvent("wake", wake), worker);
@@ -202,12 +211,103 @@ public sealed class CollectionLambdaInvocationTests
     }
 
     [TestMethod]
-    public async Task Wake_AcquireBadGatewayIsAcknowledgedForScannerRecovery()
+    public async Task Wake_AcquireBadGatewayIsRetriedBySqs()
     {
         var wake = new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "reservation");
         var worker = Worker(_ => new HttpResponseMessage(HttpStatusCode.BadGateway));
 
         var response = await CollectionLambdaInvocation.ExecuteWakeAsync(WakeEvent("wake-502", wake), worker);
+
+        Assert.AreEqual("wake-502", response.BatchItemFailures.Single().ItemIdentifier);
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task Wake_AcquireTransportOrTimeoutFailureIsRetriedBySqs(bool timeout)
+    {
+        var wake = new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "reservation");
+        Exception exception = timeout
+            ? new TaskCanceledException("API acquire timed out.")
+            : new HttpRequestException("API transport failed.");
+        var worker = Worker(_ => throw exception);
+
+        var response = await CollectionLambdaInvocation.ExecuteWakeAsync(WakeEvent("wake-transport", wake), worker);
+
+        Assert.AreEqual("wake-transport", response.BatchItemFailures.Single().ItemIdentifier);
+    }
+
+    [TestMethod]
+    [DataRow(502)]
+    [DataRow(503)]
+    public async Task Wake_AcquireServerFailureIsRetriedBySqs(int statusCode)
+    {
+        var wake = new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "reservation");
+        var worker = Worker(_ => new HttpResponseMessage((HttpStatusCode)statusCode));
+
+        var response = await CollectionLambdaInvocation.ExecuteWakeAsync(WakeEvent("wake-server-error", wake), worker);
+
+        Assert.AreEqual("wake-server-error", response.BatchItemFailures.Single().ItemIdentifier);
+    }
+
+    [TestMethod]
+    [DataRow("not-json", 200)]
+    [DataRow("{\"status\":\"noWork\",\"noWorkReason\":\"futureReason\"}", 200)]
+    [DataRow("{\"status\":\"noWork\",\"noWorkReason\":\"reservationUnavailable\"}", 201)]
+    public async Task Wake_MalformedOrAmbiguousAcquireResponseIsRetriedBySqs(string body, int statusCode)
+    {
+        var wake = new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "reservation");
+        var worker = Worker(_ => new HttpResponseMessage((HttpStatusCode)statusCode)
+        { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") });
+
+        var response = await CollectionLambdaInvocation.ExecuteWakeAsync(WakeEvent("wake-malformed-response", wake), worker);
+
+        Assert.AreEqual("wake-malformed-response", response.BatchItemFailures.Single().ItemIdentifier);
+    }
+
+    [TestMethod]
+    public async Task Wake_AcquiredResponseWithUnsupportedEnvelopeIsRetriedBySqs()
+    {
+        var envelope = Envelope(1) with
+        {
+            Compatibility = new CollectionDispatchCompatibilityKey("", new("definition"), null,
+                CollectionLane.Normal),
+        };
+        var wake = new CollectionWakeSignal(Guid.NewGuid(), envelope.EnvelopeId, "reservation");
+        var worker = Worker(_ => JsonContentResponse(HttpStatusCode.Created,
+            new CollectionExecutionAcquireResult(CollectionExecutionAcquireStatus.Acquired,
+                Guid.NewGuid(), "lease-token", envelope)));
+
+        var response = await CollectionLambdaInvocation.ExecuteWakeAsync(WakeEvent("wake-invalid-envelope", wake), worker);
+
+        Assert.AreEqual("wake-invalid-envelope", response.BatchItemFailures.Single().ItemIdentifier);
+    }
+
+    [TestMethod]
+    public async Task Wake_StaleAndDuplicateNoWorkAreAcknowledged()
+    {
+        var stale = new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "expired-token");
+        var duplicate = new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "old-token");
+        var worker = Worker(request =>
+        {
+            var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            var wakeId = body.RootElement.GetProperty("wake").GetProperty("wakeId").GetGuid();
+            var result = new CollectionExecutionAcquireResult(CollectionExecutionAcquireStatus.NoWork,
+                NoWorkReason: wakeId == stale.WakeId
+                    ? CollectionExecutionNoWorkReason.ReservationUnavailable
+                    : CollectionExecutionNoWorkReason.LeaseConflict);
+            return JsonContentResponse(HttpStatusCode.OK, result);
+        });
+        var eventJson = JsonSerializer.Serialize(new
+        {
+            Records = new[]
+            {
+                new { messageId = "stale-wake", body = JsonSerializer.Serialize(stale, JsonOptions) },
+                new { messageId = "duplicate-wake", body = JsonSerializer.Serialize(duplicate, JsonOptions) },
+            },
+        });
+
+        var response = await CollectionLambdaInvocation.ExecuteWakeAsync(eventJson, worker);
 
         Assert.IsEmpty(response.BatchItemFailures);
     }
@@ -224,7 +324,7 @@ public sealed class CollectionLambdaInvocationTests
         {
             var path = request.RequestUri!.AbsolutePath;
             if (path.EndsWith("/execution-leases", StringComparison.Ordinal))
-                return JsonResponse(new CollectionExecutionAcquireResult(
+                return JsonContentResponse(HttpStatusCode.Created, new CollectionExecutionAcquireResult(
                     CollectionExecutionAcquireStatus.Acquired, executionBatchId, "lease-token", envelope));
             if (path.EndsWith("/execution-batches/" + executionBatchId, StringComparison.Ordinal))
             {
@@ -294,6 +394,11 @@ public sealed class CollectionLambdaInvocationTests
     private static HttpResponseMessage JsonResponse<T>(T value) => new(HttpStatusCode.OK)
     {
         Content = JsonContent.Create(value),
+    };
+
+    private static HttpResponseMessage JsonContentResponse<T>(HttpStatusCode status, T value) => new(status)
+    {
+        Content = JsonContent.Create(value, options: AcquireResponseJsonOptions),
     };
 
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> response) : HttpMessageHandler

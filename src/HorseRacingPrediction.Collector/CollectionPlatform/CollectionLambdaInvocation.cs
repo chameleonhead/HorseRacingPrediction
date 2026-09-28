@@ -37,31 +37,50 @@ public static class CollectionLambdaInvocation
                 if (!TryReadEnvelope(record, out _)) failures.Add(new(messageId));
                 continue;
             }
-            if (cancellationToken.IsCancellationRequested || canStartTask?.Invoke() == false) continue;
+            if (cancellationToken.IsCancellationRequested || canStartTask?.Invoke() == false)
+            {
+                failures.Add(new(messageId));
+                continue;
+            }
 
             CollectionExecutionAcquireResult acquired;
             try
             {
                 acquired = await worker.AcquireNextAsync(wake!, messageId, cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
             {
-                // A wake is a hint, not the durable work item. The DB scanner emits another after
-                // the short reservation expires, so transport failures must not hold SQS visibility.
+                // Acquire may have committed before the response was lost. Retrying this wake is safe:
+                // the API's lease fence recognizes a duplicate acquire, and SQS preserves the item.
+                failures.Add(new(messageId));
                 continue;
             }
-            if (acquired.Status == CollectionExecutionAcquireStatus.NoWork || acquired.Envelope is null
-                || acquired.ExecutionBatchId is null || string.IsNullOrWhiteSpace(acquired.LeaseToken)) continue;
+            catch (Exception ex) when (ex is JsonException or InvalidDataException or NotSupportedException)
+            {
+                failures.Add(new(messageId));
+                continue;
+            }
+            if (acquired.Status == CollectionExecutionAcquireStatus.NoWork) continue;
+            if (acquired.Status != CollectionExecutionAcquireStatus.Acquired || acquired.Envelope is null
+                || acquired.ExecutionBatchId is null || string.IsNullOrWhiteSpace(acquired.LeaseToken))
+            {
+                failures.Add(new(messageId));
+                continue;
+            }
+            var envelope = acquired.Envelope;
+            var executionBatchId = acquired.ExecutionBatchId.Value;
+            var leaseToken = acquired.LeaseToken;
 
             try
             {
-                await worker.StartExecutionAsync(acquired.ExecutionBatchId.Value, acquired.LeaseToken,
+                await worker.StartExecutionAsync(executionBatchId, leaseToken,
                     lambdaRequestId, cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
             {
                 // The start response can be ambiguous. Do not run Playwright and do not complete the
                 // batch; the short StartPending lease is the fencing/recovery mechanism.
+                failures.Add(new(messageId));
                 continue;
             }
 
@@ -69,13 +88,13 @@ public static class CollectionLambdaInvocation
             {
                 async Task ProcessAsync(CancellationToken token)
                 {
-                    for (var index = 0; index < acquired.Envelope.Tasks.Count; index++)
+                    for (var index = 0; index < envelope.Tasks.Count; index++)
                     {
                         if (token.IsCancellationRequested || canStartTask?.Invoke() == false) break;
-                        var task = acquired.Envelope.Tasks[index];
+                        var task = envelope.Tasks[index];
                         using var correlation = CollectionAttemptCorrelationScope.Push(new(
-                            acquired.ExecutionBatchId.Value, acquired.Envelope.EnvelopeId, messageId,
-                            lambdaRequestId, index + 1, acquired.Envelope.Tasks.Count));
+                            executionBatchId, envelope.EnvelopeId, messageId,
+                            lambdaRequestId, index + 1, envelope.Tasks.Count));
                         try
                         {
                             await worker.ExecuteAsync(new(task.TaskId, task.DispatchGeneration), token).ConfigureAwait(false);
@@ -91,12 +110,12 @@ public static class CollectionLambdaInvocation
                     }
                 }
                 if (executeGroup is null) await ProcessAsync(cancellationToken).ConfigureAwait(false);
-                else await executeGroup(acquired.Envelope, ProcessAsync, cancellationToken).ConfigureAwait(false);
+                else await executeGroup(envelope, ProcessAsync, cancellationToken).ConfigureAwait(false);
             }
             finally
             {
                 using var finalize = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-                await worker.CompleteExecutionAsync(acquired.ExecutionBatchId.Value, acquired.LeaseToken,
+                await worker.CompleteExecutionAsync(executionBatchId, leaseToken,
                     finalize.Token).ConfigureAwait(false);
             }
         }

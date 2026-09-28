@@ -916,8 +916,13 @@ public sealed class CollectionDispatchStarvationReproductionTests
             await using var verify = new CollectionPlatformDbContext(dbOptions);
             var preservedDelayed = await verify.DispatchOutbox.SingleAsync(x => x.OutboxId == normalOutbox.OutboxId);
             Assert.IsNull(preservedDelayed.DispatchedAt);
-            Assert.AreEqual(normalWake.ReservationToken, preservedDelayed.ReservationToken,
-                "A delay-ineligible wake must leave its reservation for safe expiry/re-dispatch.");
+            Assert.IsNull(preservedDelayed.ReservationToken,
+                "A safe typed NoWork result releases only its exact delay-ineligible reservation.");
+            Assert.IsNull(preservedDelayed.WakeId);
+            Assert.IsNull(preservedDelayed.EnvelopeId);
+            Assert.AreEqual(CollectionTaskStatus.Ready,
+                (await verify.Tasks.SingleAsync(x => x.TaskId == normal.TaskId)).Status,
+                "Reservation release must preserve the task for later eligible dispatch.");
         }
         finally
         {

@@ -3,12 +3,20 @@ using HorseRacingPrediction.Collector.Http;
 using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
 public sealed class CollectionPlatformWorkerClient
 {
+    private static readonly JsonSerializerOptions AcquireResponseJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false) },
+    };
+
     private readonly HttpClient _client;
     private readonly CollectionDefinitionHandlerRegistry _handlers;
     private readonly ILogger<CollectionPlatformWorkerClient> _logger;
@@ -34,9 +42,36 @@ public sealed class CollectionPlatformWorkerClient
     {
         using var response = await _client.PostAsJsonAsync("api/v2/internal/collection/execution-leases",
             new CollectionExecutionAcquireRequest(wake, queueMessageId), cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<CollectionExecutionAcquireResult>(cancellationToken)
-            .ConfigureAwait(false) ?? throw new InvalidOperationException("Collection execution acquire response was empty.");
+        var expectedStatus = response.StatusCode;
+        if (expectedStatus is not (HttpStatusCode.Created or HttpStatusCode.OK))
+        {
+            response.EnsureSuccessStatusCode();
+            throw new InvalidDataException($"Unexpected collection execution acquire status {(int)expectedStatus}.");
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<CollectionExecutionAcquireResult>(AcquireResponseJsonOptions,
+            cancellationToken)
+            .ConfigureAwait(false) ?? throw new InvalidDataException("Collection execution acquire response was empty.");
+        if (expectedStatus == HttpStatusCode.Created)
+        {
+            if (result.Status != CollectionExecutionAcquireStatus.Acquired
+                || result.ExecutionBatchId is not Guid executionBatchId || executionBatchId == Guid.Empty
+                || string.IsNullOrWhiteSpace(result.LeaseToken) || result.Envelope is null
+                || result.Envelope.EnvelopeId != wake.DispatchEnvelopeId || result.Envelope.Tasks is null
+                || !result.Envelope.IsSupported()
+                || result.NoWorkReason is not null || result.ReservationReleaseOutcome is not null)
+                throw new InvalidDataException("Collection execution acquire response did not contain a valid acquired lease.");
+        }
+        else if (result.Status != CollectionExecutionAcquireStatus.NoWork
+            || result.NoWorkReason is null || !Enum.IsDefined(result.NoWorkReason.Value)
+            || result.ExecutionBatchId is not null || result.LeaseToken is not null || result.Envelope is not null
+            || result.StartBefore is not null
+            || (result.SafeToReleaseReservation && result.ReservationReleaseOutcome is null or CollectionReservationReleaseOutcome.NotAttempted)
+            || (!result.SafeToReleaseReservation && result.ReservationReleaseOutcome is not null))
+        {
+            throw new InvalidDataException("Collection execution acquire response did not contain a valid typed NoWork result.");
+        }
+        return result;
     }
 
     public async Task StartExecutionAsync(Guid executionBatchId, string leaseToken, string? lambdaRequestId,

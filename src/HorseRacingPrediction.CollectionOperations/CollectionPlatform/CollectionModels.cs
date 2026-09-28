@@ -170,7 +170,8 @@ public enum CollectionReservationReleaseOutcome
 public sealed record CollectionExecutionAcquireResult(CollectionExecutionAcquireStatus Status,
     Guid? ExecutionBatchId = null, string? LeaseToken = null,
     CollectionDispatchEnvelope? Envelope = null, DateTimeOffset? StartBefore = null,
-    CollectionExecutionNoWorkReason? NoWorkReason = null)
+    CollectionExecutionNoWorkReason? NoWorkReason = null,
+    CollectionReservationReleaseOutcome? ReservationReleaseOutcome = null)
 {
     public bool SafeToReleaseReservation => Status == CollectionExecutionAcquireStatus.NoWork
         && NoWorkReason is (CollectionExecutionNoWorkReason.PipelinePaused
