@@ -36,12 +36,12 @@
     "docs/changes/20260928_production-collection-starvation/agent-audits/T3-A1.json"
   ],
   "startRevision": "62cc2b21",
-  "endRevisionOrPatch": "f3c0e52c corrective production; 3b6bad55 corrective tests; audit/docs corrective commit pending",
+  "endRevisionOrPatch": "ae4e7fd7 P2 production correction; 9f5d4248 concurrency tests; audit/docs correction pending",
   "review": {
     "usageAvailability": "unavailable",
     "totalTokens": null,
     "activeMinutes": null,
-    "reason": "Lead integration review rejected the first implementation for incomplete whole-envelope acquire revalidation, fairness advancement at acquire instead of reservation, a non-genuine v18 fixture, missing two-store concurrency coverage, and accepting null WakeId on v19. These findings were corrected in the focused follow-up; final Lead acceptance remains pending."
+    "reason": "Lead integration review first rejected incomplete whole-envelope acquire revalidation, fairness advancement at acquire instead of reservation, a non-genuine v18 fixture, missing two-store concurrency coverage, and accepting null WakeId on v19. After those were corrected, an independent P2 found concurrent stale lane selections could still grant excess realtime or violate normal/background alternation. This focused correction serializes lane-policy validation in the reservation transaction and forces the losing dispatcher to reload fairness and reselect. Final Lead acceptance remains pending."
   },
   "overhead": {
     "availability": "unavailable",
@@ -59,9 +59,9 @@
     "verificationPassed": true,
     "qualityPassed": true,
     "scopePassed": true,
-    "independentChallenge": "Lead review rejected the initial slice on five concrete gaps: whole-envelope validation after mutation/filtering, fairness advancement at acquire, incomplete v18 fixture, absent two-store concurrency test, and null-WakeId acceptance. The correction validates every envelope row before mutation; persists grant/cursor in the reservation transaction; tests hold/duplicate/AvailableAt races, v18 migration, concurrent dispatchers, configured delay and race-odds endpoint bypass, send-failure/restart, exact wake identity, and task-lease-safe release. Full API passed 345 with 1 skipped; full Collector passed 393; solution build passed with 0 warnings/0 errors; format verify, CodeGraph sync/query, audit validator and diff checks passed. Cross-component Lambda transient-retry and HTTP/telemetry work remain outside this dispatched write slice.",
+    "independentChallenge": "Lead review rejected the initial slice on five concrete gaps: whole-envelope validation before mutation, fairness advancement at acquire, incomplete v18 fixture, absent two-store concurrency test, and null-WakeId acceptance. Those were corrected and a second independent P2 found that two dispatchers could select from the same stale fairness state and both reserve a lane beyond the realtime burst or N/B alternating turn. Reservation now checks the requested lane against the persisted fairness state and currently eligible lanes under BEGIN IMMEDIATE; a rejected contender reloads the state and continues the remaining bounded scan. Barrier tests starting at realtime burst 3 prove only one fourth RT grant and that the other dispatcher gets Normal; a competing N/B test proves Background then Normal with MaxInFlight=2. Focused concurrency tests passed 2/2; full API passed 347 with 1 skipped; full Collector passed 393; solution build passed with 0 warnings/0 errors; format verify, CodeGraph sync/query, audit validator and diff checks passed. Cross-component Lambda transient-retry and HTTP/telemetry work remain outside this dispatched write slice.",
     "retries": 0,
-    "leadCorrections": 1,
+    "leadCorrections": 2,
     "reviewPasses": 0,
     "promoted": false,
     "escapedDefects": 0,
