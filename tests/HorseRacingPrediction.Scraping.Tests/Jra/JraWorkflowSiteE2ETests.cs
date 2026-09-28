@@ -121,6 +121,26 @@ public sealed class JraWorkflowSiteE2ETests
         }
     }
 
+    [TestMethod]
+    public async Task RaceResultWorkflow_週末開催の払戻金を実ページから収集する()
+    {
+        using var cts = new CancellationTokenSource(TestTimeout);
+        var raceId = new RaceId(new DateOnly(2026, 9, 26), RaceCourse.Nakayama, 3);
+
+        var resultWorkflow = new JraRaceResultCollectionWorkflow(_session, _writeService);
+        var result = await resultWorkflow.CollectAsync(raceId, cts.Token);
+
+        Assert.AreEqual(raceId, result.RaceId);
+        var payout = _writeService.DeclareRaceResultBulkCalls.Single().Payouts;
+        Assert.IsNotNull(payout, "JRA公式結果ページに払戻があるレースの払戻が抽出されませんでした。");
+        var actual = payout!;
+        var trifectas = actual.TrifectaPayouts;
+        Assert.IsNotNull(trifectas, "JRA公式結果ページから三連単払戻が抽出されませんでした。");
+        Assert.AreEqual("3-5-9", trifectas!.Single().Combination);
+        Assert.AreEqual(3870m, trifectas.Single().Amount);
+        Assert.IsFalse(trifectas.Any(entry => entry.Combination == "00" && entry.Amount == 0m));
+    }
+
     private async Task<(DateOnly Date, RaceCourse Course)> FindUpcomingOrTodayRaceDateAsync(
         CancellationToken cancellationToken)
     {

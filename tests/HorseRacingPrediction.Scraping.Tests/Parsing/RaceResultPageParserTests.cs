@@ -696,6 +696,34 @@ public sealed class RaceResultPageParserTests
     }
 
     [TestMethod]
+    public void Parse_払戻の三連単ゼロ円組合せプレースホルダーを除外する()
+    {
+        var page = ParseWithMainText(
+            "天候 晴 芝 良 1,800メートル（芝・右） 払戻金 三連単 3-5-9 3,870円 1番人気 00 0円");
+
+        Assert.IsNotNull(page.Payouts);
+        Assert.AreEqual(1, page.Payouts!.TrifectaPayouts.Count);
+        Assert.AreEqual("3-5-9", page.Payouts.TrifectaPayouts[0].Combination);
+        Assert.AreEqual(3870m, page.Payouts.TrifectaPayouts[0].Amount);
+    }
+
+    [TestMethod]
+    public void Parse_OfficialResultTextLayout_CapturesPayoutsWhenNumbersAreSeparatedByAccessibilityNodes()
+    {
+        var page = ParseWithMainText(
+            "天候 曇 ダート 重 1,800メートル（ダート・右） " +
+            "払戻金 単勝 3 260円 1番人気 複勝 3 120円 1番人気 5 140円 2番人気 " +
+            "枠連 2-3 490円 1番人気 ワイド 3-5 230円 1番人気 3-9 480円 3番人気 5-9 610円 5番人気 " +
+            "馬連 3-5 510円 1番人気 馬単 3-5 930円 1番人気 " +
+            "3連複 3-5-9 1,470円 1番人気 3連単 3-5-9 3,870円 1番人気");
+
+        Assert.IsNotNull(page.Payouts);
+        Assert.AreEqual(260m, page.Payouts!.WinPayouts.Single().Amount);
+        Assert.AreEqual(3870m, page.Payouts.TrifectaPayouts.Single().Amount);
+        Assert.AreEqual("3-5-9", page.Payouts.TrifectaPayouts.Single().Combination);
+    }
+
+    [TestMethod]
     public void Parse_降着を検出しFinishPositionとOriginalFinishPositionを分離できる()
     {
         var table = new TestPageTable(

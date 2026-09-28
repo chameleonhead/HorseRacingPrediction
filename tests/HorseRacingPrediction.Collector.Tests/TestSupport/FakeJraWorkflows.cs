@@ -68,11 +68,13 @@ internal sealed class FakeJraRaceResultCollectionWorkflow : IJraRaceResultCollec
 {
     public List<string?> RefreshTargets { get; } = [];
     public List<(RaceId Race, string? Target)> RefreshPageRequests { get; } = [];
+    public List<string?> RefreshPageSourceHorseIds { get; } = [];
     public Task<RaceResultCollectionResult> RefreshPageAsync(
         HorseRacingPrediction.Scraping.Jra.Pages.JraRaceResultPage page, string? targetRaceId,
-        string sourceHorseId, CancellationToken cancellationToken = default)
+        string? sourceHorseId, CancellationToken cancellationToken = default)
     {
         RefreshPageRequests.Add((page.RaceId, targetRaceId));
+        RefreshPageSourceHorseIds.Add(sourceHorseId);
         return Task.FromResult(ResultFactory?.Invoke(page.RaceId)
             ?? new RaceResultCollectionResult(page.RaceId, targetRaceId ?? "created-race", [1], [], page.Url, true));
     }

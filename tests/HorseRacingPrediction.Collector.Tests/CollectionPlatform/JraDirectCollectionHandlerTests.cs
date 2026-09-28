@@ -352,6 +352,39 @@ public sealed class JraDirectCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task RaceDetail_ResultDue_UnknownCardNavigationFailure_ContinuesWithResultCollection()
+    {
+        var date = new DateOnly(2026, 9, 27);
+        var race = new RaceId(date, RaceCourse.Nakayama, 2);
+        var card = new FakeJraRaceCardCollectionWorkflow
+        {
+            ThrowOnCollect = new JraNavigationException("unclassified card navigation failure"),
+        };
+        var results = new FakeJraRaceResultCollectionWorkflow
+        {
+            ResultFactory = id => new RaceResultCollectionResult(id, "domain-race", [1], [],
+                "https://example.test/result/2", true),
+        };
+        var handler = new JraRaceDetailCollectionHandler(new FakeJraSessionFactory(),
+            _ => card, _ => results,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 28, 8, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(CollectionResourceType.Race, "JRA", "20260927:Nakayama:2"), new("race-detail"), 2,
+            CollectionReason.ManualRefresh, CollectionLane.Realtime, 100, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), date,
+            new Dictionary<string, string> { ["course"] = "中山", ["number"] = "2" }),
+            CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.HasCount(1, results.Requests);
+        Assert.AreEqual(race, results.Requests.Single());
+        Assert.IsTrue(completion.StageOutcomes!.Any(x => x.Stage == "ResolveCard"
+            && x.ErrorCode == "OfficialRaceCardUnavailable"
+            && x.Result == CollectionAttemptResult.NotApplicable));
+    }
+
+    [TestMethod]
     public async Task RaceDetail_ResultNotDue_CardUnavailable_WaitsWithoutNavigatingToResult()
     {
         var date = new DateOnly(2026, 9, 21);
@@ -627,7 +660,12 @@ public sealed class JraDirectCollectionHandlerTests
             new(CollectionResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
             CollectionReason.ManualRefresh, CollectionLane.Normal, 50, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date,
-            new Dictionary<string, string> { ["course"] = "東京", ["number"] = "1" },
+            new Dictionary<string, string>
+            {
+                ["course"] = "東京",
+                ["number"] = "1",
+                ["domainRaceId"] = "domain-race",
+            },
             [new(1, url, ResourceLocationSource.Discovered, ResourceLocationStatus.Unknown, null)]),
             CancellationToken.None);
 
@@ -730,7 +768,12 @@ public sealed class JraDirectCollectionHandlerTests
             new(CollectionResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
             CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date,
-            new Dictionary<string, string> { ["course"] = "東京", ["number"] = "1" },
+            new Dictionary<string, string>
+            {
+                ["course"] = "東京",
+                ["number"] = "1",
+                ["domainRaceId"] = "domain-race",
+            },
             [
                 new(1, cardUrl, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null,
                     RaceArtifactKind.Card),
@@ -741,6 +784,8 @@ public sealed class JraDirectCollectionHandlerTests
         Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
         CollectionAssert.AreEqual(new[] { cardUrl, resultUrl }, sessions.LastNavigator!.DirectUrlRequests);
         Assert.HasCount(1, results.RefreshPageRequests);
+        Assert.AreEqual("domain-race", results.RefreshPageRequests[0].Target);
+        Assert.IsNull(results.RefreshPageSourceHorseIds.Single());
         Assert.IsEmpty(results.Requests);
     }
 

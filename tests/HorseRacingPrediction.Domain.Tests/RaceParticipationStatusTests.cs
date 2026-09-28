@@ -82,6 +82,53 @@ public sealed class RaceParticipationStatusTests
     }
 
     [TestMethod]
+    public void RefreshCollectedData_ReplacesPayoutSnapshotAndCanClearStaleCategory()
+    {
+        var aggregate = CreatePublishedRace();
+        var observedAt = DateTimeOffset.UtcNow;
+        var payout = new PayoutResultDetails(observedAt,
+            [new("1", 200m)], [new("1", 110m)], [new("1-2", 400m)],
+            [new("1-2", 700m)], [new("1-2-3", 1200m), new("00", 0m)]);
+
+        aggregate.RefreshCollectedData(new CollectedRaceData(
+            "Test Race", null, null, null, null, 2, [], null,
+            WinningHorseName: "Horse A", Payouts: payout));
+
+        Assert.AreEqual("1-2-3", aggregate.GetDetails().PayoutResult!.TrifectaPayouts.Single().Combination);
+
+        aggregate.RefreshCollectedData(new CollectedRaceData(
+            "Test Race", null, null, null, null, 2, [], null,
+            WinningHorseName: "Horse A",
+            Payouts: payout with { DeclaredAt = observedAt.AddMinutes(1), TrifectaPayouts = [] }));
+
+        var refreshed = aggregate.GetDetails().PayoutResult!;
+        Assert.IsEmpty(refreshed.TrifectaPayouts);
+        Assert.AreEqual("1-2", refreshed.QuinellaPayouts.Single().Combination);
+    }
+
+    [TestMethod]
+    public void RefreshCollectedData_RemovesOnlyImpossiblePlaceholderWhenCurrentPayoutsAreUnavailable()
+    {
+        var aggregate = CreatePublishedRace();
+        var observedAt = DateTimeOffset.UtcNow;
+        var payout = new PayoutResultDetails(observedAt,
+            [new("1", 200m)], [new("1", 110m)], [new("1-2", 400m)],
+            [new("1-2", 700m)], [new("1-2-3", 1200m), new("00", 0m)]);
+        aggregate.RefreshCollectedData(new CollectedRaceData(
+            "Test Race", null, null, null, null, 2, [], null,
+            WinningHorseName: "Horse A", Payouts: payout));
+
+        aggregate.RefreshCollectedData(new CollectedRaceData(
+            "Test Race", null, null, null, null, 2, [], null,
+            WinningHorseName: "Horse A", Payouts: null));
+
+        var refreshed = aggregate.GetDetails().PayoutResult!;
+        Assert.AreEqual("1-2-3", refreshed.TrifectaPayouts.Single().Combination);
+        Assert.AreEqual(1200m, refreshed.TrifectaPayouts.Single().Amount);
+        Assert.AreEqual("1-2", refreshed.QuinellaPayouts.Single().Combination);
+    }
+
+    [TestMethod]
     public void ApplyBulkRaceResult_NullStatusAndNumberPreserveCancelledEntryState()
     {
         var aggregate = new RaceAggregate(RaceId.New);
