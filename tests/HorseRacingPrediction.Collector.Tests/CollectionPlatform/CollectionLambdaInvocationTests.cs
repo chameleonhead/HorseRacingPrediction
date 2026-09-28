@@ -252,6 +252,7 @@ public sealed class CollectionLambdaInvocationTests
 
     [TestMethod]
     [DataRow("not-json", 200)]
+    [DataRow("{\"status\":\"unknownAcquireStatus\"}", 200)]
     [DataRow("{\"status\":\"noWork\",\"noWorkReason\":\"futureReason\"}", 200)]
     [DataRow("{\"status\":\"noWork\",\"noWorkReason\":\"reservationUnavailable\"}", 201)]
     public async Task Wake_MalformedOrAmbiguousAcquireResponseIsRetriedBySqs(string body, int statusCode)

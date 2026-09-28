@@ -28,12 +28,12 @@
     "T4-A1 audit. Workflow route repair and reported verify-step investigation are outside this delegated write slice."
   ],
   "startRevision": "ae406bfe",
-  "endRevisionOrPatch": "2afeffb4",
+  "endRevisionOrPatch": "T4 delayed-old-wake and unknown-status P2 closure after 2afeffb4",
   "review": {
     "usageAvailability": "unavailable",
     "totalTokens": null,
     "activeMinutes": null,
-    "reason": "Lead review pending"
+    "reason": "Lead/Astra accepted review; usage and active-time telemetry unavailable"
   },
   "overhead": {
     "availability": "unavailable",
@@ -51,7 +51,7 @@
     "verificationPassed": true,
     "qualityPassed": true,
     "scopePassed": true,
-    "independentChallenge": "API 362/1 skipped; Collector 402; build 0 warnings/errors; format, route/audit, CodeGraph and diff pass. Cases cover 201/200, release fences, expiry/re-wake, ack and retry; AC3 E2E/Lead review and workflow/verify follow-ups remain open.",
+    "independentChallenge": "Lead accepted T4 after closing P2. API 363/1 skipped; Collector 403; focused endpoint 4; Lambda 24. Delayed old wake cannot mutate replacement; unknown JSON status retries. AC3 E2E and workflow/verify follow-ups remain open.",
     "retries": 3,
     "leadCorrections": 3,
     "reviewPasses": 1,

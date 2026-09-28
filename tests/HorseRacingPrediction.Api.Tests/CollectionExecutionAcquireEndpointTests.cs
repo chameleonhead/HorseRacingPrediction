@@ -168,6 +168,71 @@ public sealed class CollectionExecutionAcquireEndpointTests
         Assert.IsTrue(await verify.ExecutionLeases.AnyAsync(x => x.DispatchEnvelopeId == freshWake.DispatchEnvelopeId));
     }
 
+    [TestMethod]
+    public async Task DelayedOldWakeCannotReleaseReplacementReservationOrPreventItsAcquire()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync(aggregationDelayMilliseconds: 0);
+        await using var application = app;
+        using var http = client;
+        http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var store = app.Services.GetRequiredService<CollectionPlatformStore>();
+        var collectionOptions = app.Services.GetRequiredService<IOptions<CollectionPlatformOptions>>();
+        var (oldWake, candidate, dbOptions) = await CreateReservedWakeAsync(store, collectionOptions,
+            "delayed-old-wake");
+
+        await using (var expire = new CollectionPlatformDbContext(dbOptions))
+        {
+            var oldReservation = await expire.DispatchOutbox.SingleAsync(x => x.OutboxId == candidate.OutboxId);
+            oldReservation.ReservedUntilUnixMilliseconds = DateTimeOffset.UtcNow.AddSeconds(-1).ToUnixTimeMilliseconds();
+            await expire.SaveChangesAsync();
+        }
+
+        var queue = new CapturingQueue();
+        var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
+            Options.Create(new CollectionQueueOptions
+            {
+                Enabled = true,
+                DispatchBatchSize = 1,
+                EnvelopeMaxTasks = 1,
+                MaxInFlightEnvelopes = 1,
+                AggregationDelayMilliseconds = 0,
+                OutboxReservationSeconds = 60
+            }), NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
+        await dispatcher.DispatchOnceAsync(CancellationToken.None);
+        var replacementWake = queue.Wakes.Single();
+        Assert.AreNotEqual(oldWake.WakeId, replacementWake.WakeId);
+        Assert.AreNotEqual(oldWake.DispatchEnvelopeId, replacementWake.DispatchEnvelopeId);
+        Assert.AreNotEqual(oldWake.ReservationToken, replacementWake.ReservationToken);
+
+        using (var delayedResponse = await http.PostAsJsonAsync(AcquirePath,
+                   new CollectionExecutionAcquireRequest(oldWake, "delayed-old-message")))
+        {
+            Assert.AreEqual(HttpStatusCode.OK, delayedResponse.StatusCode);
+            using var delayedJson = JsonDocument.Parse(await delayedResponse.Content.ReadAsStringAsync());
+            Assert.AreEqual("noWork", delayedJson.RootElement.GetProperty("status").GetString());
+            Assert.AreEqual("reservationUnavailable", delayedJson.RootElement.GetProperty("noWorkReason").GetString());
+            Assert.IsFalse(delayedJson.RootElement.GetProperty("safeToReleaseReservation").GetBoolean());
+            Assert.IsFalse(delayedJson.RootElement.TryGetProperty("reservationReleaseOutcome", out _));
+        }
+
+        await using (var verifyReplacement = new CollectionPlatformDbContext(dbOptions))
+        {
+            var replacement = await verifyReplacement.DispatchOutbox.SingleAsync(x => x.OutboxId == candidate.OutboxId);
+            Assert.AreEqual(replacementWake.WakeId, replacement.WakeId);
+            Assert.AreEqual(replacementWake.DispatchEnvelopeId, replacement.EnvelopeId);
+            Assert.AreEqual(replacementWake.ReservationToken, replacement.ReservationToken);
+            Assert.IsNull(replacement.DispatchedAt);
+        }
+
+        using var replacementResponse = await http.PostAsJsonAsync(AcquirePath,
+            new CollectionExecutionAcquireRequest(replacementWake, "replacement-message"));
+        Assert.AreEqual(HttpStatusCode.Created, replacementResponse.StatusCode);
+        using var replacementJson = JsonDocument.Parse(await replacementResponse.Content.ReadAsStringAsync());
+        Assert.AreEqual("acquired", replacementJson.RootElement.GetProperty("status").GetString());
+        await using var verifyLease = new CollectionPlatformDbContext(dbOptions);
+        Assert.IsTrue(await verifyLease.ExecutionLeases.AnyAsync(x => x.DispatchEnvelopeId == replacementWake.DispatchEnvelopeId));
+    }
+
     private static async Task<(CollectionWakeSignal Wake, PendingCollectionDispatch Candidate,
         DbContextOptions<CollectionPlatformDbContext> DbOptions)> CreateReservedWakeAsync(
         CollectionPlatformStore store, IOptions<CollectionPlatformOptions> collectionOptions, string id,
