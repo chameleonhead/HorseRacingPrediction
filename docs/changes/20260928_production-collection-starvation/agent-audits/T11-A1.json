@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260928_production-collection-starvation",
+  "taskId": "T11",
+  "attemptId": "T11-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC3"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "Runtime model telemetry unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "Per-attempt token telemetry unavailable"
+  },
+  "scope": [
+    "tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs",
+    "docs/changes/20260928_production-collection-starvation/README.md",
+    "docs/changes/20260928_production-collection-starvation/reproduction-test-plan.md",
+    "docs/changes/20260928_production-collection-starvation/agent-audits/T11-A1.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "Review token and active-time telemetry unavailable"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "Active effort telemetry unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "Reliable agent elapsed-time telemetry unavailable"
+  },
+  "startRevision": "b38c7f1170b4ae262fdfd52d00302ff5a871ebaa",
+  "endRevisionOrPatch": "T11 integrated starvation E2E patch",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "The preserved-seed integrated E2E passed three consecutive runs; focused API starvation/regression passed 35/35, focused Collector Lambda invocation passed 24/24, full API passed 365 with 1 skipped, and the independent full Collector rerun after clean T10 checkpoint 9eac33d8 passed 403/403. Solution build passed with 0 warnings/errors; format verification, CodeGraph sync/status/explore, audit/route-ledger validators, and git diff --check passed. Scope stayed within the T11 test/harness and AC3/T11 documentation/audit; no production code changed. Lead integrated AC3 review remains pending and is not inferred from these worker verification results.",
+    "retries": 2,
+    "leadCorrections": 0,
+    "reviewPasses": 0,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "revise"
+  }
+}

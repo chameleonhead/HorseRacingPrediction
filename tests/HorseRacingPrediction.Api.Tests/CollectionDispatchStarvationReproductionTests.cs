@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Net;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Api.Tests;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
@@ -8,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.TestHost;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -116,6 +118,275 @@ public sealed class CollectionDispatchStarvationReproductionTests
         finally
         {
             http.Dispose();
+            await app.DisposeAsync();
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task PreservedStarvationSeed_CompletesBackgroundThroughLambdaUnderMixedLoadAndAcquireRetries()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "collection-starvation-integrated", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var eventDatabase = Path.Combine(root, "events.db");
+        var (app, http) = await TestApplicationFactory.CreateAsync($"Data Source={eventDatabase}");
+        var completionHandler = new SuccessfulCollectionHandler();
+        var now = DateTimeOffset.UtcNow.AddMinutes(-5);
+        var definition = new CollectionDefinitionId("race-detail");
+        var queue = new LocalWakeQueue();
+        var queueOptions = Options.Create(new CollectionQueueOptions
+        {
+            Enabled = true,
+            DispatchBatchSize = 1,
+            EnvelopeMaxTasks = 1,
+            MaxInFlightEnvelopes = 1,
+            OutboxReservationSeconds = 45,
+            AggregationDelayMilliseconds = 0
+        });
+
+        try
+        {
+            http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+            var store = app.Services.GetRequiredService<CollectionPlatformStore>();
+            await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race,
+                1, "initial", false);
+
+            // Keep sustained Realtime and Normal work active while preserving the T9 starvation resource keys.
+            // Create the mixed-lane backlog first so keyset continuation cannot place older same-lane work
+            // ahead of the preserved Background row after the cursor has advanced.
+            for (var index = 0; index < 16; index++)
+            {
+                await store.RequestAsync(new(CollectionResourceType.Race, "JRA", $"LOAD-REALTIME-{index:D2}"),
+                    definition, 1, CollectionReason.Initial, now, CollectionLane.Realtime, 80);
+                await store.RequestAsync(new(CollectionResourceType.Race, "JRA", $"LOAD-NORMAL-{index:D2}"),
+                    definition, 1, CollectionReason.Initial, now, CollectionLane.Normal, 50);
+            }
+
+            var invalid = await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "INVALID-stale-generation"),
+                definition, 1, CollectionReason.Initial, now, CollectionLane.Background, 110);
+            var background = await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "VALID-BACKGROUND"),
+                definition, 1, CollectionReason.Backfill, now, CollectionLane.Background, 10);
+
+            var databasePath = Path.Combine(Path.GetFullPath(eventDatabase) + ".collection", "collection-platform.db");
+            var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                .UseSqlite($"Data Source={databasePath};Pooling=False;Default Timeout=30").Options;
+            await using (var db = new CollectionPlatformDbContext(dbOptions))
+            {
+                var invalidTask = await db.Tasks.SingleAsync(x => x.TaskId == invalid.TaskId);
+                var invalidOutbox = await db.DispatchOutbox.SingleAsync(x => x.TaskId == invalid.TaskId);
+                invalidOutbox.DispatchGeneration = invalidTask.DispatchGeneration + 1;
+                await db.SaveChangesAsync();
+            }
+
+            CollectionPlatformOutboxDispatcher CreateDispatcher(CollectionPlatformStore dispatcherStore)
+                => new(dispatcherStore, queue, queueOptions,
+                    NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
+
+            var dispatcher = CreateDispatcher(store);
+            var completedByLane = new List<CollectionLane>();
+            var retryCases = new[]
+            {
+                AcquireFault.BadGatewayAfterCommit,
+                AcquireFault.TimeoutAfterCommit,
+                AcquireFault.ConnectionLossAfterCommit,
+                AcquireFault.MalformedJsonAfterCommit,
+                AcquireFault.UnknownStatusAfterCommit
+            };
+
+            for (var cycle = 0; cycle < 12; cycle++)
+            {
+                await dispatcher.DispatchOnceAsync(CancellationToken.None);
+                Assert.IsTrue(queue.VisibleCount > 0,
+                    $"The dispatcher must continue granting work under mixed lane load at cycle {cycle}.");
+                var delivery = queue.ReceiveNext();
+                var taskForWake = await LoadOutboxForWakeAsync(dbOptions, queue.Wakes[^1].DispatchEnvelopeId);
+                var eventJson = CreateSqsWakeEvent(delivery);
+
+                if (cycle < retryCases.Length)
+                {
+                    using (var faultClient = CreateFaultingClient(app, http.BaseAddress!, retryCases[cycle]))
+                    {
+                        var faultWorker = new CollectionPlatformWorkerClient(faultClient,
+                            new CollectionDefinitionHandlerRegistry([completionHandler]));
+                        var failed = await CollectionLambdaInvocation.ExecuteWakeAsync(eventJson, faultWorker,
+                            cancellationToken: CancellationToken.None, lambdaRequestId: $"fault-{cycle}");
+                        Assert.AreEqual(1, failed.BatchItemFailures.Count,
+                            $"{retryCases[cycle]} must return the SQS record for retry.");
+                        Assert.AreEqual(delivery.MessageId, failed.BatchItemFailures[0].ItemIdentifier);
+                        queue.ApplyBatchResponse(failed);
+                        Assert.AreEqual(1, queue.VisibleCount, "A batch failure must preserve the local queue record.");
+                    }
+
+                    await using (var db = new CollectionPlatformDbContext(dbOptions))
+                        Assert.AreEqual(1, await db.ExecutionLeases.CountAsync(x =>
+                            x.DispatchEnvelopeId == taskForWake.EnvelopeId),
+                            "Each injected response fault follows the real endpoint's committed acquire.");
+
+                    // Losing an acquire response after its SQLite commit must survive an API process restart.
+                    if (retryCases[cycle] == AcquireFault.ConnectionLossAfterCommit)
+                    {
+                        http.Dispose();
+                        await app.StopAsync();
+                        await app.DisposeAsync();
+                        (app, http) = await TestApplicationFactory.CreateAsync($"Data Source={eventDatabase}");
+                        http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+                        store = app.Services.GetRequiredService<CollectionPlatformStore>();
+                        dispatcher = CreateDispatcher(store);
+                    }
+                }
+
+                var worker = new CollectionPlatformWorkerClient(http,
+                    new CollectionDefinitionHandlerRegistry([completionHandler]));
+                var response = await CollectionLambdaInvocation.ExecuteWakeAsync(eventJson, worker,
+                    cancellationToken: CancellationToken.None, lambdaRequestId: $"success-{cycle}");
+                Assert.AreEqual(0, response.BatchItemFailures.Count,
+                    "The real API/client/Lambda path must retry or acquire the wake successfully.");
+                queue.ApplyBatchResponse(response);
+                Assert.AreEqual(0, queue.VisibleCount, "A successful Lambda result acknowledges the wake.");
+
+                await using (var db = new CollectionPlatformDbContext(dbOptions))
+                {
+                    var completedTask = await db.Tasks.SingleAsync(x => x.TaskId == taskForWake.TaskId);
+                    Assert.AreEqual(CollectionTaskStatus.Succeeded, completedTask.Status,
+                        "Lambda must start, execute, and complete the real task lease.");
+                    completedByLane.Add(completedTask.Lane);
+                    Assert.AreEqual(1, await db.ExecutionLeases.CountAsync(x =>
+                            x.DispatchEnvelopeId == taskForWake.EnvelopeId),
+                        "Retry or redelivery must never create a second execution lease for an envelope.");
+
+                    if (completedTask.TaskId == background.TaskId)
+                    {
+                        Assert.IsTrue(await db.Tasks.AnyAsync(x => x.Lane == CollectionLane.Realtime
+                            && x.Status == CollectionTaskStatus.Ready),
+                            "Realtime work must remain present when the preserved Background seed completes.");
+                        Assert.IsTrue(await db.Tasks.AnyAsync(x => x.Lane == CollectionLane.Normal
+                            && x.Status == CollectionTaskStatus.Ready),
+                            "Normal work must remain present when the preserved Background seed completes.");
+                    }
+                }
+
+                // Replay the same successful SQS wake after completion: the server's typed NoWork is acked.
+                var duplicate = await CollectionLambdaInvocation.ExecuteWakeAsync(eventJson, worker,
+                    cancellationToken: CancellationToken.None, lambdaRequestId: $"duplicate-{cycle}");
+                Assert.AreEqual(0, duplicate.BatchItemFailures.Count,
+                    "A duplicate completed wake must decode as safe typed NoWork and be acknowledged.");
+                Assert.AreEqual(1, completionHandler.CompletedTaskIds.Count(x => x == taskForWake.TaskId),
+                    "Duplicate delivery must not execute the handler twice.");
+
+                if (completedByLane.Contains(CollectionLane.Background)
+                    && await IsSucceededAsync(dbOptions, background.TaskId!.Value)) break;
+            }
+
+            Assert.IsTrue(completedByLane.Contains(CollectionLane.Realtime),
+                "Realtime load must have made real terminal progress during the integrated run.");
+            Assert.IsTrue(completedByLane.Contains(CollectionLane.Normal),
+                "Normal load must have made real terminal progress during the integrated run.");
+            Assert.IsTrue(await IsSucceededAsync(dbOptions, background.TaskId!.Value),
+                "The unchanged T9 Background resource must be acquired and completed within the bounded run.");
+            await using (var db = new CollectionPlatformDbContext(dbOptions))
+            {
+                var invalidTask = await db.Tasks.SingleAsync(x => x.TaskId == invalid.TaskId);
+                var invalidOutbox = await db.DispatchOutbox.SingleAsync(x => x.TaskId == invalid.TaskId);
+                Assert.AreEqual(CollectionTaskStatus.Ready, invalidTask.Status);
+                Assert.IsNull(invalidOutbox.ReservationToken,
+                    "The stale-generation seed must stay capacity-neutral while Background completes.");
+            }
+        }
+        finally
+        {
+            http.Dispose();
+            await app.StopAsync();
+            await app.DisposeAsync();
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task DelayedOldWakeAndCompletedDuplicate_CannotClearReplacementReservation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "collection-starvation-delayed-wake", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var eventDatabase = Path.Combine(root, "events.db");
+        var (app, http) = await TestApplicationFactory.CreateAsync($"Data Source={eventDatabase}");
+        var completionHandler = new SuccessfulCollectionHandler();
+        var queue = new LocalWakeQueue();
+        try
+        {
+            http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+            var store = app.Services.GetRequiredService<CollectionPlatformStore>();
+            var definition = new CollectionDefinitionId("race-detail");
+            var now = DateTimeOffset.UtcNow.AddMinutes(-5);
+            await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race,
+                1, "initial", false);
+            var task = await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "DELAYED-REPLACEMENT"),
+                definition, 1, CollectionReason.Initial, now, CollectionLane.Background, 10);
+            var dbPath = Path.Combine(Path.GetFullPath(eventDatabase) + ".collection", "collection-platform.db");
+            var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                .UseSqlite($"Data Source={dbPath};Pooling=False;Default Timeout=30").Options;
+            var options = Options.Create(new CollectionQueueOptions
+            {
+                Enabled = true,
+                DispatchBatchSize = 1,
+                EnvelopeMaxTasks = 1,
+                MaxInFlightEnvelopes = 1,
+                OutboxReservationSeconds = 45,
+                AggregationDelayMilliseconds = 0
+            });
+            var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue, options,
+                NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
+            await dispatcher.DispatchOnceAsync(CancellationToken.None);
+            var oldMessage = queue.ReceiveNext();
+            var oldWake = queue.Wakes.Single();
+            var oldOutbox = await LoadOutboxForWakeAsync(dbOptions, oldWake.DispatchEnvelopeId);
+            await using (var db = new CollectionPlatformDbContext(dbOptions))
+            {
+                var row = await db.DispatchOutbox.SingleAsync(x => x.OutboxId == oldOutbox.OutboxId);
+                row.ReservedUntilUnixMilliseconds = now.ToUnixTimeMilliseconds();
+                await db.SaveChangesAsync();
+            }
+
+            await dispatcher.DispatchOnceAsync(CancellationToken.None);
+            Assert.AreEqual(2, queue.Wakes.Count, "Expired reservation must produce a replacement wake.");
+            var replacementMessage = queue.ReceiveAt(1);
+            var replacementWake = queue.Wakes[1];
+            Assert.AreNotEqual(oldWake.ReservationToken, replacementWake.ReservationToken);
+            Assert.AreNotEqual(oldWake.WakeId, replacementWake.WakeId);
+
+            var worker = new CollectionPlatformWorkerClient(http,
+                new CollectionDefinitionHandlerRegistry([completionHandler]));
+            var oldResponse = await CollectionLambdaInvocation.ExecuteWakeAsync(CreateSqsWakeEvent(oldMessage), worker,
+                cancellationToken: CancellationToken.None, lambdaRequestId: "delayed-old-wake");
+            Assert.AreEqual(0, oldResponse.BatchItemFailures.Count,
+                "A decoded old wake with a replaced token must be acknowledged as NoWork.");
+            queue.ApplyBatchResponse(oldResponse);
+            await using (var verify = new CollectionPlatformDbContext(dbOptions))
+            {
+                var replacement = await verify.DispatchOutbox.SingleAsync(x => x.TaskId == task.TaskId);
+                Assert.AreEqual(replacementWake.ReservationToken, replacement.ReservationToken,
+                    "The delayed old wake must not release the replacement reservation.");
+                Assert.AreEqual(replacementWake.WakeId, replacement.WakeId);
+            }
+
+            var acquired = await CollectionLambdaInvocation.ExecuteWakeAsync(
+                CreateSqsWakeEvent(replacementMessage), worker,
+                cancellationToken: CancellationToken.None, lambdaRequestId: "replacement-wake");
+            Assert.AreEqual(0, acquired.BatchItemFailures.Count);
+            queue.ApplyBatchResponse(acquired);
+            Assert.IsTrue(await IsSucceededAsync(dbOptions, task.TaskId!.Value),
+                "The replacement wake must complete the task through the real API and Lambda path.");
+            var duplicate = await CollectionLambdaInvocation.ExecuteWakeAsync(
+                CreateSqsWakeEvent(replacementMessage), worker,
+                cancellationToken: CancellationToken.None, lambdaRequestId: "replacement-duplicate");
+            Assert.AreEqual(0, duplicate.BatchItemFailures.Count);
+            Assert.AreEqual(1, completionHandler.CompletedTaskIds.Count(x => x == task.TaskId));
+            await using var finalDb = new CollectionPlatformDbContext(dbOptions);
+            Assert.AreEqual(1, await finalDb.ExecutionLeases.CountAsync(x =>
+                x.DispatchEnvelopeId == replacementWake.DispatchEnvelopeId));
+        }
+        finally
+        {
+            http.Dispose();
+            await app.StopAsync();
             await app.DisposeAsync();
             Directory.Delete(root, recursive: true);
         }
@@ -1326,6 +1597,24 @@ public sealed class CollectionDispatchStarvationReproductionTests
         }
     }
 
+    private static async Task<bool> IsSucceededAsync(
+        DbContextOptions<CollectionPlatformDbContext> dbOptions, Guid taskId)
+    {
+        await using var db = new CollectionPlatformDbContext(dbOptions);
+        return await db.Tasks.Where(x => x.TaskId == taskId)
+            .Select(x => x.Status == CollectionTaskStatus.Succeeded).SingleAsync();
+    }
+
+    private static HttpClient CreateFaultingClient(WebApplication app, Uri baseAddress, AcquireFault fault)
+    {
+        var client = new HttpClient(new AcquireFaultHandler(app.GetTestServer().CreateHandler(), fault))
+        {
+            BaseAddress = baseAddress
+        };
+        client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        return client;
+    }
+
     private static async Task<CollectionDispatchOutboxEntity> LoadOutboxForWakeAsync(
         DbContextOptions<CollectionPlatformDbContext> dbOptions, Guid envelopeId)
     {
@@ -1364,10 +1653,69 @@ public sealed class CollectionDispatchStarvationReproductionTests
 
         public LocalMessage ReceiveNext() => _messages.Single();
 
+        public LocalMessage ReceiveAt(int index) => _messages[index];
+
         public void ApplyBatchResponse(CollectionLambdaBatchResponse response)
         {
             var failedIds = response.BatchItemFailures.Select(x => x.ItemIdentifier).ToHashSet(StringComparer.Ordinal);
             _messages.RemoveAll(x => !failedIds.Contains(x.MessageId));
+        }
+    }
+
+    private enum AcquireFault
+    {
+        BadGatewayAfterCommit,
+        TimeoutAfterCommit,
+        ConnectionLossAfterCommit,
+        MalformedJsonAfterCommit,
+        UnknownStatusAfterCommit
+    }
+
+    private sealed class AcquireFaultHandler(HttpMessageHandler innerHandler, AcquireFault fault)
+        : DelegatingHandler(innerHandler)
+    {
+        private bool _injected;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (_injected || !request.RequestUri!.AbsolutePath.EndsWith(
+                    "/api/v2/internal/collection/execution-leases", StringComparison.Ordinal))
+                return response;
+
+            _injected = true;
+            response.Dispose();
+            return fault switch
+            {
+                AcquireFault.BadGatewayAfterCommit => new(HttpStatusCode.BadGateway),
+                AcquireFault.TimeoutAfterCommit => throw new TaskCanceledException("simulated response timeout"),
+                AcquireFault.ConnectionLossAfterCommit => throw new HttpRequestException("simulated connection loss"),
+                AcquireFault.MalformedJsonAfterCommit => new(HttpStatusCode.Created)
+                {
+                    Content = new StringContent("{", System.Text.Encoding.UTF8, "application/json")
+                },
+                AcquireFault.UnknownStatusAfterCommit => new(HttpStatusCode.Created)
+                {
+                    Content = new StringContent("{\"status\":99}", System.Text.Encoding.UTF8, "application/json")
+                },
+                _ => throw new ArgumentOutOfRangeException(nameof(fault), fault, "Unknown acquire fault.")
+            };
+        }
+    }
+
+    private sealed class SuccessfulCollectionHandler : ICollectionDefinitionHandler
+    {
+        public CollectionDefinitionId DefinitionId { get; } = new("race-detail");
+        public CollectionResourceType ResourceType => CollectionResourceType.Race;
+        public List<Guid> CompletedTaskIds { get; } = [];
+
+        public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CompletedTaskIds.Add(task.TaskId);
+            return Task.FromResult(new CollectionAttemptCompletion(CollectionAttemptResult.Succeeded));
         }
     }
 
