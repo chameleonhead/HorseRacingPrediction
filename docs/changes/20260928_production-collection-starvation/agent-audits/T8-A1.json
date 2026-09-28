@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260928_production-collection-starvation",
+  "taskId": "T8",
+  "attemptId": "T8-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC6"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "parent collaboration task dispatch metadata explicitly requested gpt-6-luna with high reasoning; observed runtime model was not exposed"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "per-attempt token usage was not exposed"
+  },
+  "scope": [
+    "docs/changes/20260928_production-collection-starvation/README.md",
+    "docs/changes/20260928_production-collection-starvation/agent-audits/T8-A1.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review usage and active time were not exposed"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "preparation, integration, and audit effort telemetry were not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable per-attempt elapsed effort was not exposed"
+  },
+  "startRevision": "21cb7a970b272aa34a8e8455509e169daf31f914",
+  "endRevisionOrPatch": "docs-only T8 patch based on 21cb7a970b272aa34a8e8455509e169daf31f914",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Source and CodeGraph evidence support the frozen state machine and test/deployment boundaries; parent review remains separate from user design approval. No implementation or production operation occurred.",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}
