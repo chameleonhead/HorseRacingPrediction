@@ -1004,6 +1004,118 @@ public sealed class CollectionDispatchStarvationReproductionTests
     }
 
     [TestMethod]
+    public async Task ConcurrentRealtimeBurstGrantAllowsOnlyOneFourthRealtimeReservation()
+    {
+        var outcome = await DispatchConcurrentLaneConflictAsync("collection-concurrent-rt-grant",
+            consecutiveRealtime: 3, lastNonRealtimeLane: CollectionLane.Background,
+            realtimeCount: 2, normalCount: 1, backgroundCount: 1);
+
+        CollectionAssert.AreEquivalent(new[] { CollectionLane.Realtime, CollectionLane.Normal }, outcome.Lanes.ToArray(),
+            "With three prior realtime grants, one contender may grant the fourth RT slot; the other must reload and take Normal.");
+        Assert.AreEqual(2, outcome.WakeCount);
+        Assert.AreEqual(2, outcome.ReservedEnvelopeCount, "The concurrent pair must remain within MaxInFlight=2.");
+    }
+
+    [TestMethod]
+    public async Task ConcurrentNonRealtimeConflictReloadsAndAlternatesNormalBackground()
+    {
+        var outcome = await DispatchConcurrentLaneConflictAsync("collection-concurrent-nonrt-turn",
+            consecutiveRealtime: 4, lastNonRealtimeLane: CollectionLane.Normal,
+            realtimeCount: 0, normalCount: 2, backgroundCount: 2);
+
+        CollectionAssert.AreEquivalent(new[] { CollectionLane.Background, CollectionLane.Normal }, outcome.Lanes.ToArray(),
+            "Two stale Background selections must serialize into Background then Normal.");
+        Assert.AreEqual(2, outcome.WakeCount);
+        Assert.AreEqual(2, outcome.ReservedEnvelopeCount, "Alternating lane grants must respect MaxInFlight=2.");
+    }
+
+    private static async Task<(IReadOnlyList<CollectionLane> Lanes, int WakeCount, int ReservedEnvelopeCount)>
+        DispatchConcurrentLaneConflictAsync(string directoryName, int consecutiveRealtime,
+            CollectionLane lastNonRealtimeLane, int realtimeCount, int normalCount, int backgroundCount)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), directoryName, Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var options = Options.Create(new CollectionPlatformOptions { StateDirectory = directory });
+            var storeA = new CollectionPlatformStore(options);
+            var storeB = new CollectionPlatformStore(options);
+            var requestedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+            var definition = new CollectionDefinitionId("race-detail");
+            await storeA.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race,
+                1, "initial", false);
+            var index = 0;
+            foreach (var (lane, count) in new[]
+                     {
+                         (CollectionLane.Realtime, realtimeCount),
+                         (CollectionLane.Normal, normalCount),
+                         (CollectionLane.Background, backgroundCount)
+                     })
+                for (var item = 0; item < count; item++)
+                    await storeA.RequestAsync(new(CollectionResourceType.Race, "JRA", $"LANE-CONFLICT-{index++}"),
+                        definition, 1, CollectionReason.Initial, requestedAt, lane, 10);
+
+            var databasePath = Path.Combine(directory, "collection-platform.db");
+            var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                .UseSqlite($"Data Source={databasePath};Pooling=False;Default Timeout=30").Options;
+            await using (var db = new CollectionPlatformDbContext(dbOptions))
+            {
+                var state = await db.DispatcherFairnessStates.SingleAsync(x => x.StateId == 1);
+                state.ConsecutiveRealtime = consecutiveRealtime;
+                state.LastNonRealtimeLane = lastNonRealtimeLane.ToString();
+                state.ScanAvailableAt = null;
+                state.ScanOutboxId = null;
+                await db.SaveChangesAsync();
+            }
+
+            var queueA = new WakeCaptureQueue();
+            var queueB = new WakeCaptureQueue();
+            var queueOptions = Options.Create(new CollectionQueueOptions
+            {
+                Enabled = true,
+                DispatchBatchSize = 1,
+                EnvelopeMaxTasks = 1,
+                MaxInFlightEnvelopes = 2,
+                OutboxReservationSeconds = 60,
+                AggregationDelayMilliseconds = 0
+            });
+            var dispatcherA = new CollectionPlatformOutboxDispatcher(storeA, queueA, queueOptions,
+                NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
+            var dispatcherB = new CollectionPlatformOutboxDispatcher(storeB, queueB, queueOptions,
+                NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
+            var rendezvous = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var arrivals = 0;
+            async Task Barrier(IReadOnlyList<PendingCollectionDispatch> _, CancellationToken token)
+            {
+                if (Interlocked.Increment(ref arrivals) == 2) rendezvous.TrySetResult();
+                await rendezvous.Task.WaitAsync(token);
+            }
+            dispatcherA.BeforeReservationAsync = Barrier;
+            dispatcherB.BeforeReservationAsync = Barrier;
+
+            await Task.WhenAll(dispatcherA.DispatchOnceAsync(CancellationToken.None),
+                dispatcherB.DispatchOnceAsync(CancellationToken.None));
+
+            var wakes = queueA.Wakes.Concat(queueB.Wakes).ToArray();
+            var lanes = new List<CollectionLane>();
+            foreach (var wake in wakes)
+            {
+                var outbox = await LoadOutboxForWakeAsync(dbOptions, wake.DispatchEnvelopeId);
+                await using var db = new CollectionPlatformDbContext(dbOptions);
+                lanes.Add((await db.Tasks.SingleAsync(x => x.TaskId == outbox.TaskId)).Lane);
+            }
+            await using var verify = new CollectionPlatformDbContext(dbOptions);
+            var reservedEnvelopeCount = await verify.DispatchOutbox.Where(x => x.ReservationToken != null)
+                .Select(x => x.EnvelopeId).Distinct().CountAsync();
+            return (lanes, wakes.Length, reservedEnvelopeCount);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public async Task FailedQueueSendKeepsReservationFairnessGrantAcrossRestart()
     {
         var directory = Path.Combine(Path.GetTempPath(), "collection-fairness-send-failure", Guid.NewGuid().ToString("N"));
