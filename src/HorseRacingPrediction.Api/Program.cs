@@ -133,6 +133,10 @@ builder.Services.PostConfigure<CollectionPlatformOptions>(options =>
 builder.Services.AddSingleton<IRaceResourceIdentityResolver, HorseRacingPrediction.Api.DomainRaceResourceIdentityResolver>();
 builder.Services.AddSingleton<IAmazonCloudWatch>(_ => new AmazonCloudWatchClient());
 builder.Services.AddSingleton<ICollectionDispatchMetricPublisher, CloudWatchCollectionDispatchMetricPublisher>();
+builder.Services.Configure<CollectionDispatchMetricQueueOptions>(builder.Configuration.GetSection("CollectionDispatchTelemetryQueue"));
+builder.Services.AddSingleton<CollectionDispatchMetricQueue>();
+builder.Services.AddSingleton<ICollectionDispatchMetricQueue>(services =>
+    services.GetRequiredService<CollectionDispatchMetricQueue>());
 builder.Services.AddSingleton<CollectionDispatchTelemetry>();
 builder.Services.AddSingleton<ICollectionDispatchTelemetry>(services =>
     services.GetRequiredService<CollectionDispatchTelemetry>());
@@ -166,6 +170,7 @@ if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)
     }
     else
     {
+        builder.Services.AddHostedService(services => services.GetRequiredService<CollectionDispatchMetricQueue>());
         builder.Services.AddSingleton<IAmazonSQS>(_ =>
         {
             var serviceUrl = collectionQueueSection[nameof(CollectionQueueOptions.ServiceUrl)];

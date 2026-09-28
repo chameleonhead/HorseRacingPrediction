@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using System.Net.Http.Json;
+using Amazon.CloudWatch.Model;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -97,7 +99,35 @@ public sealed class CollectionCompletionTransportTests
         });
     }
 
-    private static async Task WithApiAsync(Func<CollectionPlatformStore, HttpClient, Task> test)
+    [TestMethod]
+    public async Task CompletionEndpoint_CommitsWhenTelemetryQueueRejectsCompletionLookup()
+    {
+        var telemetry = new CollectionDispatchTelemetry(new RejectingMetricQueue(), Options.Create(new CollectionQueueOptions
+        {
+            Enabled = true,
+            Provider = "Sqs",
+            TelemetryDefinitionLabels = ["race-detail"],
+        }));
+        await WithApiAsync(async (store, client) =>
+        {
+            var resource = new ResourceKey(CollectionResourceType.Race, "JRA", "telemetry-rejected");
+            var definition = new CollectionDefinitionId("race-detail");
+            await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 1, "initial", false);
+            var receipt = await store.RequestAsync(resource, definition, 1, CollectionReason.Initial, DateTimeOffset.UtcNow);
+            var taskId = receipt.TaskId!.Value;
+            var lease = await store.AcquireAsync(taskId, 1, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(1));
+
+            using var response = await client.PostAsJsonAsync($"api/v2/internal/collection/tasks/{taskId}/attempts",
+                new { lease!.LeaseToken, Result = CollectionAttemptResult.Succeeded });
+
+            Assert.AreEqual(System.Net.HttpStatusCode.NoContent, response.StatusCode);
+            Assert.AreEqual(CollectionTaskStatus.Succeeded,
+                (await store.GetResourceDetailAsync(resource, definition))!.LatestTask!.Status);
+        }, telemetry);
+    }
+
+    private static async Task WithApiAsync(Func<CollectionPlatformStore, HttpClient, Task> test,
+        ICollectionDispatchTelemetry? telemetry = null)
     {
         var directory = Path.Combine(Path.GetTempPath(), "collection-completion-transport", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -107,7 +137,7 @@ public sealed class CollectionCompletionTransportTests
             var builder = WebApplication.CreateBuilder();
             builder.WebHost.UseTestServer();
             builder.Services.AddSingleton(store);
-            builder.Services.AddSingleton<ICollectionDispatchTelemetry, NullCollectionDispatchTelemetry>();
+            builder.Services.AddSingleton<ICollectionDispatchTelemetry>(telemetry ?? new NullCollectionDispatchTelemetry());
             await using var app = builder.Build();
             app.MapCollectionApiV2Endpoints();
             await app.StartAsync();
@@ -126,5 +156,11 @@ public sealed class CollectionCompletionTransportTests
         public CollectionResourceType ResourceType => CollectionResourceType.Race;
         public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
             => Task.FromResult(completion);
+    }
+
+    private sealed class RejectingMetricQueue : ICollectionDispatchMetricQueue
+    {
+        public bool TryEnqueueMetrics(IReadOnlyCollection<MetricDatum> metrics) => false;
+        public bool TryEnqueueSnapshot(Func<CancellationToken, Task<IReadOnlyCollection<MetricDatum>>> snapshot) => false;
     }
 }

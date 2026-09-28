@@ -277,8 +277,10 @@ public sealed class CollectionQueueCutoverContractTests
     {
         foreach (var metricName in new[]
                  {
-                     "dispatch_cycle_total", "wake_sent_total", "acquire_success_total",
-                     "terminal_task_completion_total", "reservation_release_total", "ready_missing_current_outbox",
+                     "dispatch_cycle_total", "dispatch_cycle_by_lane_definition_total", "wake_sent_total",
+                     "wake_sent_by_lane_definition_total", "acquire_success_total", "acquire_success_by_lane_definition_total",
+                     "terminal_task_completion_by_lane_definition_total", "reservation_release_total",
+                     "reservation_release_by_outcome_total", "ready_missing_current_outbox",
                      "outbox_cardinality_anomaly_tasks", "eligible_ready_rows", "oldest_eligible_age_seconds",
                      "active_eligible_reservations", "expired_eligible_reservations",
                  })

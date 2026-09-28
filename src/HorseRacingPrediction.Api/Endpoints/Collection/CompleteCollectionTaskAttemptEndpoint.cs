@@ -19,10 +19,8 @@ internal static class CompleteCollectionTaskAttemptEndpoint
                 request.FailureImpact, request.StageOutcomes, request.RaceEvidence), token);
             if (accepted)
             {
-                var state = await store.GetTaskTelemetryStateAsync(id, token).ConfigureAwait(false);
-                if (state is not null)
-                    await telemetry.RecordTerminalCompletionAsync(state.Lane, state.DefinitionId, state.Status, token)
-                        .ConfigureAwait(false);
+                await telemetry.RecordTerminalCompletionLookupAsync(ct => store.GetTaskTelemetryStateAsync(id, ct), token)
+                    .ConfigureAwait(false);
             }
             return accepted ? Results.NoContent() : Results.Conflict();
         });

@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Amazon.CloudWatch.Model;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -62,6 +63,30 @@ public sealed class CollectionExecutionAcquireEndpointTests
         Assert.AreEqual("acquired", acquiredJson.RootElement.GetProperty("status").GetString());
         Assert.IsFalse(acquiredJson.RootElement.GetProperty("safeToReleaseReservation").GetBoolean());
         Assert.IsFalse(acquiredJson.RootElement.TryGetProperty("noWorkReason", out _));
+    }
+
+    [TestMethod]
+    public async Task AcquireEndpoint_ReturnsTypedNoWorkWhenTelemetryQueueIsFull()
+    {
+        var telemetry = new CollectionDispatchTelemetry(new RejectingMetricQueue(), Options.Create(new CollectionQueueOptions
+        {
+            Enabled = true,
+            Provider = "Sqs",
+            TelemetryDefinitionLabels = ["race-detail"],
+        }));
+        var (app, client) = await TestApplicationFactory.CreateAsync(aggregationDelayMilliseconds: 0,
+            dispatchTelemetry: telemetry);
+        await using var application = app;
+        using var http = client;
+        http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+
+        using var response = await http.PostAsJsonAsync(AcquirePath,
+            new CollectionExecutionAcquireRequest(new CollectionWakeSignal(Guid.Empty, Guid.Empty, string.Empty), "opaque"));
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.AreEqual("noWork", json.RootElement.GetProperty("status").GetString());
+        Assert.AreEqual("invalidRequest", json.RootElement.GetProperty("noWorkReason").GetString());
     }
 
     [TestMethod]
@@ -271,5 +296,11 @@ public sealed class CollectionExecutionAcquireEndpointTests
             Wakes.Add(wake);
             return Task.FromResult(new CollectionQueueSendReceipt($"message-{Wakes.Count}"));
         }
+    }
+
+    private sealed class RejectingMetricQueue : ICollectionDispatchMetricQueue
+    {
+        public bool TryEnqueueMetrics(IReadOnlyCollection<MetricDatum> metrics) => false;
+        public bool TryEnqueueSnapshot(Func<CancellationToken, Task<IReadOnlyCollection<MetricDatum>>> snapshot) => false;
     }
 }

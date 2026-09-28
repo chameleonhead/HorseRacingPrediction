@@ -55,7 +55,7 @@ resource "aws_iam_user_policy" "lightsail_api_collection_dispatch_metrics" {
 
 resource "aws_cloudwatch_metric_alarm" "collection_ready_missing_outbox" {
   alarm_name          = "horse-racing-prediction-collection-ready-missing-outbox"
-  alarm_description   = "Due Ready collection tasks lack a current-generation outbox row for five minutes."
+  alarm_description   = "Ready collection tasks lack a current-generation outbox row for the configured persistence window."
   namespace           = local.collection_dispatch_namespace
   metric_name         = "ready_missing_current_outbox"
   statistic           = "Maximum"
@@ -112,7 +112,7 @@ resource "aws_cloudwatch_metric_alarm" "collection_lane_starvation" {
     return_data = false
     metric {
       namespace   = local.collection_dispatch_namespace
-      metric_name = "acquire_success_total"
+      metric_name = "acquire_success_by_lane_definition_total"
       period      = 60
       stat        = "Sum"
       dimensions  = { Lane = each.value.lane, Definition = each.value.definition }
@@ -124,7 +124,7 @@ resource "aws_cloudwatch_metric_alarm" "collection_lane_starvation" {
     return_data = false
     metric {
       namespace   = local.collection_dispatch_namespace
-      metric_name = "terminal_task_completion_total"
+      metric_name = "terminal_task_completion_by_lane_definition_total"
       period      = 60
       stat        = "Sum"
       dimensions  = { Lane = each.value.lane, Definition = each.value.definition }
@@ -266,7 +266,10 @@ resource "aws_cloudwatch_dashboard" "collection_dispatch" {
             [local.collection_dispatch_namespace, "dispatch_cycle_total", "Outcome", "WakeSendDefiniteFailure"],
             [local.collection_dispatch_namespace, "dispatch_cycle_total", "Outcome", "WakeSendAmbiguousFailure"],
             [local.collection_dispatch_namespace, "dispatch_cycle_total", "Outcome", "WakeReceiptPersistFailure"],
+            [local.collection_dispatch_namespace, "dispatch_cycle_by_lane_definition_total", "Outcome", "NoCandidates", "Lane", "Realtime", "Definition", "race-detail"],
+            [local.collection_dispatch_namespace, "dispatch_cycle_by_lane_definition_total", "Outcome", "Reserved", "Lane", "Normal", "Definition", "race-detail"],
             [local.collection_dispatch_namespace, "wake_sent_total"],
+            [local.collection_dispatch_namespace, "wake_sent_by_lane_definition_total", "Lane", "Realtime", "Definition", "race-detail"],
           ]
         }
       },
@@ -289,6 +292,7 @@ resource "aws_cloudwatch_dashboard" "collection_dispatch" {
             [local.collection_dispatch_namespace, "active_eligible_reservations"],
             [local.collection_dispatch_namespace, "expired_eligible_reservations"],
             [local.collection_dispatch_namespace, "reservation_release_total"],
+            [local.collection_dispatch_namespace, "reservation_release_by_outcome_total", "Outcome", "Released"],
             [local.collection_dispatch_namespace, "reservation_release_failure_total"],
             [local.collection_dispatch_namespace, "queue_send_failure_total"],
           ]
@@ -309,8 +313,8 @@ resource "aws_cloudwatch_dashboard" "collection_dispatch" {
             for pair in setproduct(local.collection_dispatch_lanes, local.collection_dispatch_definitions) : [
               [local.collection_dispatch_namespace, "eligible_ready_rows", "Lane", pair[0], "Definition", pair[1]],
               [local.collection_dispatch_namespace, "oldest_eligible_age_seconds", "Lane", pair[0], "Definition", pair[1]],
-              [local.collection_dispatch_namespace, "acquire_success_total", "Lane", pair[0], "Definition", pair[1]],
-              [local.collection_dispatch_namespace, "terminal_task_completion_total", "Lane", pair[0], "Definition", pair[1]],
+              [local.collection_dispatch_namespace, "acquire_success_by_lane_definition_total", "Lane", pair[0], "Definition", pair[1]],
+              [local.collection_dispatch_namespace, "terminal_task_completion_by_lane_definition_total", "Lane", pair[0], "Definition", pair[1]],
             ]
           ])
         }

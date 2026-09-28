@@ -16,14 +16,15 @@ public sealed class NullCollectionDispatchTelemetry : ICollectionDispatchTelemet
     public Task RecordDispatchCycleAsync(CollectionDispatchCycleOutcome outcome, CollectionLane? lane = null,
         string? definitionId = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task RecordAcquireAsync(CollectionExecutionAcquireStatus status, CollectionExecutionNoWorkReason? reason,
-        CollectionLane? lane = null, string? definitionId = null, CancellationToken cancellationToken = default)
-        => Task.CompletedTask;
+        CollectionLane? lane = null, string? definitionId = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task RecordReservationReleaseAsync(CollectionReservationReleaseOutcome outcome,
         CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task RecordLeaseReclaimedAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task RecordTerminalCompletionAsync(CollectionLane lane, string definitionId, CollectionTaskStatus status,
         CancellationToken cancellationToken = default) => Task.CompletedTask;
-    public Task RecordSnapshotAsync(CollectionDispatchTelemetrySnapshot snapshot,
+    public Task RecordTerminalCompletionLookupAsync(Func<CancellationToken, Task<CollectionDispatchTaskTelemetryState?>> lookup,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task QueueSnapshotAsync(Func<CancellationToken, Task<CollectionDispatchTelemetrySnapshot>> query,
         CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
@@ -42,9 +43,8 @@ public sealed class CloudWatchCollectionDispatchMetricPublisher(IAmazonCloudWatc
 }
 
 public sealed class CollectionDispatchTelemetry(
-    ICollectionDispatchMetricPublisher publisher,
-    IOptions<CollectionQueueOptions> queueOptions,
-    ILogger<CollectionDispatchTelemetry> logger) : ICollectionDispatchTelemetry
+    ICollectionDispatchMetricQueue queue,
+    IOptions<CollectionQueueOptions> queueOptions) : ICollectionDispatchTelemetry
 {
     public const string Namespace = "HorseRacingPrediction/CollectionDispatch";
     private long _lastSnapshotUtcTicks;
@@ -53,97 +53,122 @@ public sealed class CollectionDispatchTelemetry(
     private readonly HashSet<string> _definitionLabels = (queueOptions.Value.TelemetryDefinitionLabels.Count == 0
             ? (IEnumerable<string>)DefinitionAllowlist
             : queueOptions.Value.TelemetryDefinitionLabels)
-        .Where(IsSafeDefinitionLabel)
-        .Take(16)
-        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        .Where(IsSafeDefinitionLabel).Take(16).ToHashSet(StringComparer.OrdinalIgnoreCase);
     private readonly bool _enabled = queueOptions.Value.Enabled
         && string.Equals(queueOptions.Value.Provider, "Sqs", StringComparison.OrdinalIgnoreCase);
 
     public Task RecordDispatchCycleAsync(CollectionDispatchCycleOutcome outcome, CollectionLane? lane = null,
         string? definitionId = null, CancellationToken cancellationToken = default)
     {
-        var dimensions = new List<Dimension> { Dimension("Outcome", outcome.ToString()) };
-        AddLaneDefinition(dimensions, lane, definitionId);
+        var outcomeValue = Enum.IsDefined(outcome) ? outcome.ToString() : "Unknown";
+        var aggregate = CountMetric("dispatch_cycle_total", [Dimension("Outcome", outcomeValue)]);
+        var metrics = new List<MetricDatum> { aggregate };
+        var detail = LaneDefinitionDimensions(lane, definitionId);
+        if (detail.Count == 2)
+            metrics.Add(CountMetric("dispatch_cycle_by_lane_definition_total",
+                [Dimension("Outcome", outcomeValue), .. detail]));
         if (outcome == CollectionDispatchCycleOutcome.WakeSent)
         {
-            var throughputDimensions = new List<Dimension>();
-            AddLaneDefinition(throughputDimensions, lane, definitionId);
-            return PublishAsync(
-            [
-                CountMetric("dispatch_cycle_total", dimensions),
-                CountMetric("wake_sent_total", []),
-                CountMetric("wake_sent_total", throughputDimensions),
-            ], cancellationToken);
+            metrics.Add(CountMetric("wake_sent_total", []));
+            if (detail.Count == 2) metrics.Add(CountMetric("wake_sent_by_lane_definition_total", detail));
         }
         if (outcome is CollectionDispatchCycleOutcome.WakeSendDefiniteFailure
             or CollectionDispatchCycleOutcome.WakeSendAmbiguousFailure)
-            return PublishAsync(
-            [
-                CountMetric("dispatch_cycle_total", dimensions),
-                CountMetric("queue_send_failure_total", []),
-            ], cancellationToken);
-        return PublishCounterAsync("dispatch_cycle_total", dimensions, cancellationToken);
+            metrics.Add(CountMetric("queue_send_failure_total", []));
+        Enqueue(metrics);
+        return Task.CompletedTask;
     }
 
     public Task RecordAcquireAsync(CollectionExecutionAcquireStatus status, CollectionExecutionNoWorkReason? reason,
         CollectionLane? lane = null, string? definitionId = null, CancellationToken cancellationToken = default)
     {
         var boundedReason = status == CollectionExecutionAcquireStatus.Acquired
-            ? "Acquired"
-            : reason is { } value && Enum.IsDefined(value) ? value.ToString() : "Unknown";
+            ? "Acquired" : reason is { } value && Enum.IsDefined(value) ? value.ToString() : "Unknown";
+        var boundedStatus = Enum.IsDefined(status) ? status.ToString() : "Unknown";
         var metrics = new List<MetricDatum>
         {
-            CountMetric("acquire_total", [Dimension("Status", status.ToString()), Dimension("Reason", boundedReason)]),
+            CountMetric("acquire_total", [Dimension("Status", boundedStatus), Dimension("Reason", boundedReason)]),
         };
-        if (status == CollectionExecutionAcquireStatus.NoWork)
-            metrics.Add(CountMetric("acquire_nowork_total", []));
+        if (status == CollectionExecutionAcquireStatus.NoWork) metrics.Add(CountMetric("acquire_nowork_total", []));
         if (status == CollectionExecutionAcquireStatus.Acquired)
         {
-            var throughputDimensions = new List<Dimension>();
-            AddLaneDefinition(throughputDimensions, lane, definitionId);
             metrics.Add(CountMetric("acquire_success_total", []));
-            metrics.Add(CountMetric("acquire_success_total", throughputDimensions));
+            var detail = LaneDefinitionDimensions(lane, definitionId);
+            if (detail.Count == 2) metrics.Add(CountMetric("acquire_success_by_lane_definition_total", detail));
         }
-        return PublishAsync(metrics, cancellationToken);
+        Enqueue(metrics);
+        return Task.CompletedTask;
     }
 
     public Task RecordReservationReleaseAsync(CollectionReservationReleaseOutcome outcome,
         CancellationToken cancellationToken = default)
     {
+        var boundedOutcome = Enum.IsDefined(outcome) ? outcome.ToString() : "Unknown";
         var metrics = new List<MetricDatum>
         {
-            CountMetric("reservation_release_total", [Dimension("Outcome", outcome.ToString())]),
             CountMetric("reservation_release_total", []),
+            CountMetric("reservation_release_by_outcome_total", [Dimension("Outcome", boundedOutcome)]),
         };
         if (outcome != CollectionReservationReleaseOutcome.Released)
             metrics.Add(CountMetric("reservation_release_failure_total", []));
-        return PublishAsync(metrics, cancellationToken);
+        Enqueue(metrics);
+        return Task.CompletedTask;
     }
 
     public Task RecordLeaseReclaimedAsync(CancellationToken cancellationToken = default)
-        => PublishCounterAsync("execution_lease_reclaimed_total", [Dimension("Reason", "Expired")], cancellationToken);
+    {
+        Enqueue([CountMetric("execution_lease_reclaimed_total", [Dimension("Reason", "Expired")])]);
+        return Task.CompletedTask;
+    }
 
     public Task RecordTerminalCompletionAsync(CollectionLane lane, string definitionId, CollectionTaskStatus status,
         CancellationToken cancellationToken = default)
     {
-        if (status is not (CollectionTaskStatus.Succeeded or CollectionTaskStatus.Failed
-            or CollectionTaskStatus.Cancelled or CollectionTaskStatus.DeadLetter)) return Task.CompletedTask;
-        var dimensions = new List<Dimension> { Dimension("TaskStatus", status.ToString()) };
-        AddLaneDefinition(dimensions, lane, definitionId);
-        return PublishAsync(
-        [
-            CountMetric("terminal_task_completion_total", []),
-            CountMetric("terminal_task_completion_total", dimensions),
-        ], cancellationToken);
+        if (status is CollectionTaskStatus.Succeeded or CollectionTaskStatus.Failed
+            or CollectionTaskStatus.Cancelled or CollectionTaskStatus.DeadLetter)
+        {
+            Enqueue([CountMetric("terminal_task_completion_total", []),
+                CountMetric("terminal_task_completion_by_lane_definition_total",
+                    LaneDefinitionDimensions(lane, definitionId))]);
+        }
+        return Task.CompletedTask;
     }
 
-    public async Task RecordSnapshotAsync(CollectionDispatchTelemetrySnapshot snapshot,
+    public Task RecordTerminalCompletionLookupAsync(
+        Func<CancellationToken, Task<CollectionDispatchTaskTelemetryState?>> lookup,
+        CancellationToken cancellationToken = default)
+    {
+        if (_enabled) SafeEnqueueSnapshot(async token =>
+        {
+            var state = await lookup(token).ConfigureAwait(false);
+            return state is null ? [] : TerminalMetrics(state);
+        });
+        return Task.CompletedTask;
+    }
+
+    public Task QueueSnapshotAsync(Func<CancellationToken, Task<CollectionDispatchTelemetrySnapshot>> query,
         CancellationToken cancellationToken = default)
     {
         var nowTicks = DateTime.UtcNow.Ticks;
         var previous = Interlocked.Read(ref _lastSnapshotUtcTicks);
-        if (previous != 0 && nowTicks - previous < TimeSpan.TicksPerMinute) return;
-        if (Interlocked.CompareExchange(ref _lastSnapshotUtcTicks, nowTicks, previous) != previous) return;
+        if (previous != 0 && nowTicks - previous < TimeSpan.TicksPerMinute) return Task.CompletedTask;
+        if (Interlocked.CompareExchange(ref _lastSnapshotUtcTicks, nowTicks, previous) != previous)
+            return Task.CompletedTask;
+        if (_enabled) SafeEnqueueSnapshot(async token => SnapshotMetrics(await query(token).ConfigureAwait(false)));
+        return Task.CompletedTask;
+    }
+
+    private IReadOnlyCollection<MetricDatum> TerminalMetrics(CollectionDispatchTaskTelemetryState state)
+    {
+        if (state.Status is not (CollectionTaskStatus.Succeeded or CollectionTaskStatus.Failed
+            or CollectionTaskStatus.Cancelled or CollectionTaskStatus.DeadLetter)) return [];
+        return [CountMetric("terminal_task_completion_total", []),
+            CountMetric("terminal_task_completion_by_lane_definition_total",
+                LaneDefinitionDimensions(state.Lane, state.DefinitionId))];
+    }
+
+    private IReadOnlyCollection<MetricDatum> SnapshotMetrics(CollectionDispatchTelemetrySnapshot snapshot)
+    {
         var metrics = new List<MetricDatum>
         {
             Gauge("ready_missing_current_outbox", snapshot.ReadyMissingCurrentOutbox),
@@ -152,58 +177,49 @@ public sealed class CollectionDispatchTelemetry(
             Gauge("expired_eligible_reservations", snapshot.ExpiredEligibleReservations),
             Gauge("in_flight_execution_leases", snapshot.InFlightExecutionLeases),
             Gauge("max_in_flight_envelopes", Math.Max(1, snapshot.MaxInFlightEnvelopes)),
-            Gauge("eligible_in_flight_count", snapshot.ActiveEligibleReservations + snapshot.InFlightExecutionLeases),
+            Gauge("eligible_in_flight_count", snapshot.EligibleInFlightCount),
         };
         foreach (var lane in snapshot.Lanes)
         {
-            var dimensions = new List<Dimension>();
-            AddLaneDefinition(dimensions, lane.Lane, lane.DefinitionId);
+            var dimensions = LaneDefinitionDimensions(lane.Lane, lane.DefinitionId);
             metrics.Add(Gauge("eligible_ready_rows", lane.EligibleReadyRows, dimensions));
-            metrics.Add(Gauge("oldest_eligible_age_seconds", lane.OldestEligibleAgeSeconds, dimensions,
-                StandardUnit.Seconds));
+            metrics.Add(Gauge("oldest_eligible_age_seconds", lane.OldestEligibleAgeSeconds, dimensions, StandardUnit.Seconds));
             metrics.Add(Gauge("active_eligible_reservations_by_lane", lane.ActiveEligibleReservations, dimensions));
             metrics.Add(Gauge("expired_eligible_reservations_by_lane", lane.ExpiredEligibleReservations, dimensions));
         }
-        await PublishAsync(metrics, cancellationToken).ConfigureAwait(false);
+        return metrics;
     }
 
-    internal async Task PublishAsync(IReadOnlyCollection<MetricDatum> metrics, CancellationToken cancellationToken)
+    private void Enqueue(IReadOnlyCollection<MetricDatum> metrics)
     {
         if (!_enabled) return;
-        try
-        {
-            await publisher.PublishAsync(metrics, cancellationToken).ConfigureAwait(false);
-            foreach (var metric in metrics)
-                logger.LogInformation("Collection dispatch metric emitted {MetricName} {MetricValue} {Dimensions}",
-                    metric.MetricName, metric.Value, string.Join(',', metric.Dimensions.Select(x => $"{x.Name}={x.Value}")));
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch
-        {
-            logger.LogWarning("Collection dispatch metric publish failed.");
-        }
+        try { _ = queue.TryEnqueueMetrics(metrics); }
+        catch { }
     }
 
-    private Task PublishCounterAsync(string name, IReadOnlyCollection<Dimension> dimensions,
-        CancellationToken cancellationToken)
-        => PublishAsync([CountMetric(name, dimensions)], cancellationToken);
+    private void SafeEnqueueSnapshot(Func<CancellationToken, Task<IReadOnlyCollection<MetricDatum>>> snapshot)
+    {
+        try { _ = queue.TryEnqueueSnapshot(snapshot); }
+        catch { }
+    }
 
-    private static MetricDatum CountMetric(string name, IReadOnlyCollection<Dimension> dimensions)
-        => new()
-        {
-            MetricName = name,
-            Dimensions = dimensions.ToList(),
-            Timestamp = DateTime.UtcNow,
-            Unit = StandardUnit.Count,
-            Value = 1,
-        };
+    private List<Dimension> LaneDefinitionDimensions(CollectionLane? lane, string? definitionId)
+    {
+        if (lane is null || !Enum.IsDefined(lane.Value) || definitionId is null) return [];
+        return [Dimension("Lane", lane.Value.ToString()), Dimension("Definition", BoundedDefinition(definitionId))];
+    }
+
+    private MetricDatum CountMetric(string name, IReadOnlyCollection<Dimension> dimensions) => new()
+    {
+        MetricName = name,
+        Dimensions = dimensions.ToList(),
+        Timestamp = DateTime.UtcNow,
+        Unit = StandardUnit.Count,
+        Value = 1,
+    };
 
     private MetricDatum Gauge(string name, double value, IReadOnlyCollection<Dimension>? dimensions = null,
-        StandardUnit? unit = null)
-        => new()
+        StandardUnit? unit = null) => new()
         {
             MetricName = name,
             Dimensions = dimensions?.ToList() ?? [],
@@ -212,19 +228,10 @@ public sealed class CollectionDispatchTelemetry(
             Value = value,
         };
 
-    private void AddLaneDefinition(List<Dimension> dimensions, CollectionLane? lane, string? definitionId)
-    {
-        if (lane.HasValue && Enum.IsDefined(lane.Value)) dimensions.Add(Dimension("Lane", lane.Value.ToString()));
-        if (definitionId is not null) dimensions.Add(Dimension("Definition", BoundedDefinition(definitionId)));
-    }
-
     internal string BoundedDefinition(string definitionId)
         => _definitionLabels.Contains(definitionId) ? definitionId.ToLowerInvariant() : "OTHER";
-
     internal static bool IsSafeDefinitionLabel(string value)
-        => value.Length is > 0 and <= 64
-            && value.All(character => character is >= 'a' and <= 'z' or >= 'A' and <= 'Z'
-                or >= '0' and <= '9' or '-');
-
+        => value.Length is > 0 and <= 64 && value.All(character => character is >= 'a' and <= 'z'
+            or >= 'A' and <= 'Z' or >= '0' and <= '9' or '-');
     private static Dimension Dimension(string name, string value) => new() { Name = name, Value = value };
 }

@@ -30,7 +30,7 @@ internal static class TestApplicationFactory
 
     public static async Task<(WebApplication App, HttpClient Client)> CreateAsync(
         string connectionString = "DataSource=:memory:", IEnumerable<IInterceptor>? interceptors = null,
-        int aggregationDelayMilliseconds = 2_000)
+        int aggregationDelayMilliseconds = 2_000, ICollectionDispatchTelemetry? dispatchTelemetry = null)
     {
         var builder = WebApplication.CreateBuilder(Array.Empty<string>());
         builder.WebHost.UseTestServer();
@@ -63,7 +63,7 @@ internal static class TestApplicationFactory
         builder.Services.Configure<CollectionQueueOptions>(options =>
             options.AggregationDelayMilliseconds = aggregationDelayMilliseconds);
         builder.Services.AddSingleton<IRaceResourceIdentityResolver, DomainRaceResourceIdentityResolver>();
-        builder.Services.AddSingleton<ICollectionDispatchTelemetry, NullCollectionDispatchTelemetry>();
+        builder.Services.AddSingleton<ICollectionDispatchTelemetry>(dispatchTelemetry ?? new NullCollectionDispatchTelemetry());
         builder.Services.AddSingleton<CollectionPlatformStore>();
         builder.Services.Configure<CollectionMonitoringOptions>(_ => { });
         builder.Services.AddSingleton<CollectionMonitoringService>();

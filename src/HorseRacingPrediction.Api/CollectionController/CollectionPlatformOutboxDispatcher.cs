@@ -52,10 +52,10 @@ public sealed class CollectionPlatformOutboxDispatcher(
                 await telemetry.RecordLeaseReclaimedAsync(cancellationToken).ConfigureAwait(false);
         if (telemetry is not null && TryBeginTelemetrySnapshot(now))
         {
-            var snapshot = await store.GetDispatchTelemetrySnapshotAsync(now, _options.MaxInFlightEnvelopes,
-                _options.TelemetryDefinitionLabels, _options.AggregationDelayMilliseconds, cancellationToken)
-                .ConfigureAwait(false);
-            await telemetry.RecordSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+            var snapshotTime = now;
+            await telemetry.QueueSnapshotAsync(token => store.GetDispatchTelemetrySnapshotAsync(snapshotTime,
+                _options.MaxInFlightEnvelopes, _options.TelemetryDefinitionLabels,
+                _options.AggregationDelayMilliseconds, token), cancellationToken).ConfigureAwait(false);
         }
         var dispatchState = await store.GetLaneDispatchStateAsync(cancellationToken).ConfigureAwait(false);
         var maxDispatches = Math.Clamp(_options.DispatchBatchSize, 1, 256);

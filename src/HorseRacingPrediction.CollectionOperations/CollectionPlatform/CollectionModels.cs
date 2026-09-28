@@ -191,7 +191,9 @@ public interface ICollectionDispatchTelemetry
     Task RecordLeaseReclaimedAsync(CancellationToken cancellationToken = default);
     Task RecordTerminalCompletionAsync(CollectionLane lane, string definitionId, CollectionTaskStatus status,
         CancellationToken cancellationToken = default);
-    Task RecordSnapshotAsync(CollectionDispatchTelemetrySnapshot snapshot,
+    Task RecordTerminalCompletionLookupAsync(Func<CancellationToken, Task<CollectionDispatchTaskTelemetryState?>> lookup,
+        CancellationToken cancellationToken = default);
+    Task QueueSnapshotAsync(Func<CancellationToken, Task<CollectionDispatchTelemetrySnapshot>> query,
         CancellationToken cancellationToken = default);
 }
 
@@ -202,6 +204,7 @@ public sealed record CollectionDispatchTelemetrySnapshot(
     int ExpiredEligibleReservations,
     int InFlightExecutionLeases,
     int MaxInFlightEnvelopes,
+    int EligibleInFlightCount,
     IReadOnlyList<CollectionDispatchLaneSnapshot> Lanes);
 
 public sealed record CollectionDispatchLaneSnapshot(
