@@ -23,6 +23,7 @@
     "tests/scripts/test-deploy-pipeline-state.ps1",
     "tests/scripts/test-entry-repair-local.ps1",
     "docs/changes/20260928_production-collection-starvation/README.md",
+    "docs/changes/20260928_production-collection-starvation/agent-audits/T4-A1.json",
     "docs/changes/20260928_production-collection-starvation/agent-audits/T10-A1.json"
   ],
   "review": {
@@ -49,7 +50,7 @@
     "verificationPassed": true,
     "qualityPassed": true,
     "scopePassed": true,
-    "independentChallenge": "Exact deployment smoke command first reproduced the stale flat request and then a stale top-level receipt lookup; after correction, the same two-process localhost command passed including lock/fence assertions.",
+    "independentChallenge": "Exact deployment smoke command first reproduced the stale flat request and then a stale top-level receipt lookup; after correction, the same two-process localhost command passed including lock/fence assertions. Independent review accepted subject to explicitly including the T4-A1 audit file in both T10 task and attempt write scopes; this correction is now recorded.",
     "retries": 5,
     "leadCorrections": 0,
     "reviewPasses": 1,
