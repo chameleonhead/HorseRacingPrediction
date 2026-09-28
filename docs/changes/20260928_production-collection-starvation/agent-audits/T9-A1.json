@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260928_production-collection-starvation",
+  "taskId": "T9",
+  "attemptId": "T9-A1",
+  "state": "completed",
+  "taskDifficulty": "high",
+  "acceptanceCriteria": ["AC3", "AC4"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "Parent dispatch requested gpt-6-luna/high; runtime model telemetry unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "Per-attempt token usage not exposed"
+  },
+  "scope": [
+    "tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs",
+    "docs/changes/20260928_production-collection-starvation/README.md",
+    "docs/changes/20260928_production-collection-starvation/reproduction-test-plan.md",
+    "docs/changes/20260928_production-collection-starvation/agent-audits/T9-A1.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "Independent Lead review and active time not yet available"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "Effort telemetry not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "Runtime did not expose reliable worker elapsed effort"
+  },
+  "startRevision": "f6ca4985e0bd7a8a29bbea1dabe7ffd7e68ff0c6",
+  "endRevisionOrPatch": "T9 reproduction slice; uncommitted test and change-record updates",
+  "outcome": {
+    "verificationPassed": false,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Normal characterization passed 2/2; opt-in expected-fixed run failed both cases at the final bounded Background acquisition assertion; independent Lead review pending",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 0,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "revise"
+  }
+}
