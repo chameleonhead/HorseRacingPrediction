@@ -116,9 +116,10 @@ public sealed class RaceRepairHoldTests
         var other = await store.RequestAsync(Target with { Id = "20260926:Nakayama:6" }, Detail, 4, CollectionReason.Initial, now);
         var rows = await store.GetPendingDispatchesAsync(now, 100);
         var envelopeId = Guid.NewGuid();
+        var wakeId = Guid.NewGuid();
         Assert.IsTrue(await store.TryReserveDispatchesWithinCapacityAsync(rows.Select(x => x.OutboxId).ToArray(), "reserved",
-            envelopeId, now, TimeSpan.FromMinutes(1), 2));
-        var wake = new CollectionWakeSignal(Guid.NewGuid(), envelopeId, "reserved");
+            envelopeId, wakeId, now, TimeSpan.FromMinutes(1), 2));
+        var wake = new CollectionWakeSignal(wakeId, envelopeId, "reserved");
         var execution = await store.AcquireNextExecutionAsync(wake, "message", now, TimeSpan.FromSeconds(45));
         Assert.AreEqual(CollectionExecutionAcquireStatus.Acquired, execution.Status);
         var hold = await store.HoldRaceForRepairAsync(RaceId, Guid.NewGuid().ToString(), 0, "drain execution", now);

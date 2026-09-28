@@ -513,9 +513,10 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual("2026-09-27", pending.Attributes!["weekendPriorityUntil"]);
         var envelopeId = Guid.NewGuid();
         var reservation = Guid.NewGuid().ToString("N");
+        var wakeId = Guid.NewGuid();
         Assert.IsTrue(await store.TryReserveDispatchesWithinCapacityAsync([pending.OutboxId], reservation,
-            envelopeId, now, TimeSpan.FromSeconds(45), 1));
-        var wake = new CollectionWakeSignal(Guid.NewGuid(), envelopeId, reservation);
+            envelopeId, wakeId, now, TimeSpan.FromSeconds(45), 1));
+        var wake = new CollectionWakeSignal(wakeId, envelopeId, reservation);
         var acquiredExecution = await store.AcquireNextExecutionAsync(wake, "message-1", now.AddSeconds(1),
             TimeSpan.FromSeconds(45));
         var rebuiltExecution = await store.AcquireNextExecutionAsync(wake, "message-1", now.AddSeconds(2),
@@ -545,11 +546,12 @@ public sealed class CollectionPlatformStoreTests
         var pending = (await store.GetPendingDispatchesAsync(now.AddSeconds(1), 10)).Single();
         Assert.AreEqual("2026-10-04", pending.Attributes!["weekendPriorityUntil"]);
         var envelopeId = Guid.NewGuid();
+        var wakeId = Guid.NewGuid();
         var reservation = Guid.NewGuid().ToString("N");
         Assert.IsTrue(await store.TryReserveDispatchesWithinCapacityAsync([pending.OutboxId], reservation,
-            envelopeId, now, TimeSpan.FromSeconds(45), 1));
+            envelopeId, wakeId, now, TimeSpan.FromSeconds(45), 1));
         var acquiredExecution = await store.AcquireNextExecutionAsync(
-            new(Guid.NewGuid(), envelopeId, reservation), "message-legacy", now.AddSeconds(1),
+            new(wakeId, envelopeId, reservation), "message-legacy", now.AddSeconds(1),
             TimeSpan.FromSeconds(45));
         var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
 
@@ -2936,9 +2938,10 @@ public sealed class CollectionPlatformStoreTests
         var pending = await store.GetPendingDispatchesAsync(now.AddSeconds(1), 10);
         var firstEnvelope = Guid.NewGuid();
         var firstToken = Guid.NewGuid().ToString("N");
+        var firstWakeId = Guid.NewGuid();
         Assert.IsTrue(await store.TryReserveDispatchesWithinCapacityAsync([pending[0].OutboxId], firstToken,
-            firstEnvelope, now, TimeSpan.FromSeconds(45), 1));
-        var wake = new CollectionWakeSignal(Guid.NewGuid(), firstEnvelope, firstToken);
+            firstEnvelope, firstWakeId, now, TimeSpan.FromSeconds(45), 1));
+        var wake = new CollectionWakeSignal(firstWakeId, firstEnvelope, firstToken);
         var acquired = await store.AcquireNextExecutionAsync(wake, "message-1", now.AddSeconds(1),
             TimeSpan.FromSeconds(45));
         var repeated = await store.AcquireNextExecutionAsync(wake, "message-1", now.AddSeconds(2),
@@ -2965,10 +2968,11 @@ public sealed class CollectionPlatformStoreTests
         var pending = (await store.GetPendingDispatchesAsync(now.AddSeconds(1), 10)).Single();
         var envelopeId = Guid.NewGuid();
         var reservation = Guid.NewGuid().ToString("N");
+        var wakeId = Guid.NewGuid();
         Assert.IsTrue(await store.TryReserveDispatchesWithinCapacityAsync([pending.OutboxId], reservation,
-            envelopeId, now, TimeSpan.FromSeconds(45), 1));
+            envelopeId, wakeId, now, TimeSpan.FromSeconds(45), 1));
         var acquired = await store.AcquireNextExecutionAsync(
-            new(Guid.NewGuid(), envelopeId, reservation), "message-1", now.AddSeconds(1), TimeSpan.FromSeconds(45));
+            new(wakeId, envelopeId, reservation), "message-1", now.AddSeconds(1), TimeSpan.FromSeconds(45));
         Assert.IsTrue(await store.StartExecutionAsync(acquired.ExecutionBatchId!.Value,
             new(acquired.LeaseToken!, 960, "lambda-1"), now.AddSeconds(2)));
         Assert.IsTrue(await store.CompleteExecutionAsync(acquired.ExecutionBatchId.Value,

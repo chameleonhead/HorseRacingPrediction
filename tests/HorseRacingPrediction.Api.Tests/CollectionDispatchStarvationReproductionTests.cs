@@ -186,6 +186,107 @@ public sealed class CollectionDispatchStarvationReproductionTests
     }
 
     [TestMethod]
+    [DataRow("hold")]
+    [DataRow("duplicate-outbox")]
+    [DataRow("available-at")]
+    public async Task AcquireRevalidatesWholeReservedEnvelopeBeforeAnyMutation(string mutation)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "collection-acquire-envelope-recheck", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var options = Options.Create(new CollectionPlatformOptions { StateDirectory = directory });
+            var store = new CollectionPlatformStore(options);
+            var now = DateTimeOffset.UtcNow.AddMinutes(-5);
+            var definition = new CollectionDefinitionId("race-detail");
+            await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race,
+                1, "initial", false);
+            var firstResource = new ResourceKey(CollectionResourceType.Race, "JRA", "20260926:Nakayama:5");
+            var secondResource = new ResourceKey(CollectionResourceType.Race, "JRA", "20260926:Nakayama:6");
+            var first = await store.RequestAsync(firstResource, definition, 1, CollectionReason.Initial,
+                now, CollectionLane.Background, 10);
+            var second = await store.RequestAsync(secondResource, definition, 1, CollectionReason.Initial,
+                now, CollectionLane.Background, 9);
+            var later = await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "20260926:Nakayama:7"),
+                definition, 1, CollectionReason.Backfill, now, CollectionLane.Background, 1);
+            var databasePath = Path.Combine(directory, "collection-platform.db");
+            var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                .UseSqlite($"Data Source={databasePath};Pooling=False;Default Timeout=30").Options;
+            var pending = await store.GetPendingDispatchesAsync(now.AddSeconds(1), 10);
+            var reservedIds = pending.Where(x => x.Notification.TaskId == first.TaskId
+                || x.Notification.TaskId == second.TaskId).Select(x => x.OutboxId).ToArray();
+            var wakeId = Guid.NewGuid();
+            var envelopeId = Guid.NewGuid();
+            const string token = "whole-envelope-reservation";
+            Assert.AreEqual(2, reservedIds.Length);
+            Assert.IsTrue(await store.TryReserveDispatchesWithinCapacityAsync(reservedIds, token, envelopeId,
+                wakeId, now, TimeSpan.FromMinutes(1), 1));
+
+            await using (var db = new CollectionPlatformDbContext(dbOptions))
+            {
+                var firstTask = await db.Tasks.SingleAsync(x => x.TaskId == first.TaskId);
+                var firstOutbox = await db.DispatchOutbox.SingleAsync(x => x.TaskId == first.TaskId);
+                if (mutation == "hold")
+                {
+                    db.RaceRepairHolds.Add(new RaceRepairHoldEntity
+                    {
+                        RaceId = DeterministicIdGenerator.TryBuildRaceIdFromResource(firstResource.Id)!,
+                        Generation = 1,
+                        OperationId = Guid.NewGuid().ToString(),
+                        Reason = "recheck reserved envelope",
+                        CreatedAt = now.AddSeconds(2)
+                    });
+                    await db.SaveChangesAsync();
+                }
+                else if (mutation == "duplicate-outbox")
+                {
+                    db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+                    {
+                        OutboxId = Guid.NewGuid(),
+                        TaskId = firstOutbox.TaskId,
+                        DispatchGeneration = firstOutbox.DispatchGeneration,
+                        AvailableAt = firstOutbox.AvailableAt,
+                        CreatedAt = firstOutbox.CreatedAt,
+                        ReservationToken = token,
+                        ReservedUntilUnixMilliseconds = firstOutbox.ReservedUntilUnixMilliseconds,
+                        EnvelopeId = envelopeId,
+                        WakeId = wakeId
+                    });
+                    await db.SaveChangesAsync();
+                }
+                else
+                {
+                    firstTask.AvailableAt = now.AddMinutes(1);
+                    firstOutbox.AvailableAt = now.AddMinutes(1);
+                    await db.SaveChangesAsync();
+                }
+            }
+
+            var result = await store.AcquireNextExecutionAsync(new(wakeId, envelopeId, token), "recheck-message",
+                now.AddSeconds(3), TimeSpan.FromSeconds(45));
+
+            Assert.AreEqual(CollectionExecutionAcquireStatus.NoWork, result.Status,
+                "An invalid row must reject the complete envelope before any dispatch mutation.");
+            await using (var verify = new CollectionPlatformDbContext(dbOptions))
+            {
+                Assert.AreEqual(0, await verify.ExecutionLeases.CountAsync(x => x.DispatchEnvelopeId == envelopeId));
+                Assert.IsTrue(await verify.DispatchOutbox.Where(x => x.TaskId == first.TaskId || x.TaskId == second.TaskId)
+                    .AllAsync(x => x.DispatchedAt == null), "No member of a rejected envelope may be marked dispatched.");
+                Assert.IsTrue(await verify.DispatchOutbox.Where(x => x.TaskId == first.TaskId || x.TaskId == second.TaskId)
+                    .Where(x => reservedIds.Contains(x.OutboxId)).AllAsync(x => x.ReservationToken == token),
+                    "A failed acquire retains exact reservations for expiry/re-dispatch; it does not partially clear rows.");
+            }
+            var laterPending = await store.GetPendingDispatchesAsync(now.AddSeconds(3), 10);
+            Assert.IsTrue(laterPending.Any(x => x.Notification.TaskId == later.TaskId),
+                "A later eligible task remains pending after the whole-envelope rejection.");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public async Task PendingSelection_LeavesMissingAndDuplicateOutboxAnomaliesUntouched()
     {
         var directory = Path.Combine(Path.GetTempPath(), "collection-outbox-anomalies", Guid.NewGuid().ToString("N"));
@@ -443,19 +544,37 @@ public sealed class CollectionDispatchStarvationReproductionTests
             Assert.IsTrue(await store.TryReserveDispatchesWithinCapacityAsync([pending.OutboxId], token,
                 envelopeId, wakeId, now, TimeSpan.FromMinutes(1), 1));
 
+            var databasePath = Path.Combine(directory, "collection-platform.db");
+            var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                .UseSqlite($"Data Source={databasePath};Pooling=False;Default Timeout=30").Options;
+            await using (var db = new CollectionPlatformDbContext(dbOptions))
+            {
+                var task = await db.Tasks.SingleAsync(x => x.TaskId == receipt.TaskId);
+                task.LeaseToken = "other-worker-task-lease";
+                task.LeaseExpiresAt = now.AddMinutes(1);
+                await db.SaveChangesAsync();
+            }
+            Assert.AreEqual(CollectionReservationReleaseOutcome.SkippedActiveLease,
+                await store.ReleaseDispatchReservationAsync(wakeId, envelopeId, token, now.AddSeconds(1)),
+                "A task lease also protects the reservation from a stale NoWork release.");
+            await using (var db = new CollectionPlatformDbContext(dbOptions))
+            {
+                var task = await db.Tasks.SingleAsync(x => x.TaskId == receipt.TaskId);
+                task.LeaseToken = null;
+                task.LeaseExpiresAt = null;
+                await db.SaveChangesAsync();
+            }
             Assert.AreEqual(CollectionReservationReleaseOutcome.Released,
                 await store.ReleaseDispatchReservationAsync(wakeId, envelopeId, token, now.AddSeconds(1)));
-            var databasePath = Path.Combine(directory, "collection-platform.db");
-            await using var db = new CollectionPlatformDbContext(new DbContextOptionsBuilder<CollectionPlatformDbContext>()
-                .UseSqlite($"Data Source={databasePath};Pooling=False").Options);
-            var row = await db.DispatchOutbox.SingleAsync(x => x.OutboxId == pending.OutboxId);
+            await using var verifyRelease = new CollectionPlatformDbContext(dbOptions);
+            var row = await verifyRelease.DispatchOutbox.SingleAsync(x => x.OutboxId == pending.OutboxId);
             Assert.IsNull(row.ReservationToken);
             Assert.IsNull(row.ReservedUntilUnixMilliseconds);
             Assert.IsNull(row.EnvelopeId);
             Assert.IsNull(row.WakeId);
             Assert.IsNull(row.QueueMessageId);
             Assert.AreEqual(CollectionTaskStatus.Ready,
-                (await db.Tasks.SingleAsync(x => x.TaskId == receipt.TaskId)).Status,
+                (await verifyRelease.Tasks.SingleAsync(x => x.TaskId == receipt.TaskId)).Status,
                 "A safe reservation release must not mutate task state.");
         }
         finally
@@ -489,8 +608,22 @@ public sealed class CollectionDispatchStarvationReproductionTests
             var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
                 .UseSqlite($"Data Source={databasePath};Pooling=False;Default Timeout=30").Options;
             await using (var db = new CollectionPlatformDbContext(dbOptions))
+            {
                 await db.Database.ExecuteSqlRawAsync("ALTER TABLE collection_task_outbox DROP COLUMN WakeId; " +
-                    "DELETE FROM collection_schema_history WHERE version = 19;");
+                    "DROP TABLE collection_dispatcher_fairness_state; " +
+                    "DELETE FROM collection_schema_history WHERE version = 19; " +
+                    "INSERT OR IGNORE INTO collection_schema_history (version, applied_at) VALUES (18, 'v18-fixture');");
+                Assert.AreEqual(0, await db.Database.SqlQueryRaw<int>(
+                    "SELECT COUNT(*) AS Value FROM pragma_table_info('collection_task_outbox') WHERE name = 'WakeId'")
+                    .SingleAsync());
+                Assert.AreEqual(0, await db.Database.SqlQueryRaw<int>(
+                    "SELECT COUNT(*) AS Value FROM sqlite_master WHERE type = 'table' AND name = 'collection_dispatcher_fairness_state'")
+                    .SingleAsync());
+                Assert.AreEqual(0, await db.Database.SqlQueryRaw<int>(
+                    "SELECT COUNT(*) AS Value FROM collection_schema_history WHERE version = 19").SingleAsync());
+                Assert.AreEqual(18, await db.Database.SqlQueryRaw<int>(
+                    "SELECT COALESCE(MAX(version), 0) AS Value FROM collection_schema_history").SingleAsync());
+            }
 
             var migrated = new CollectionPlatformStore(options);
             await migrated.GetPendingDispatchesAsync(now.AddSeconds(1), 10);
@@ -506,9 +639,18 @@ public sealed class CollectionDispatchStarvationReproductionTests
             Assert.AreEqual(envelopeId, preserved.EnvelopeId);
             Assert.IsNull(preserved.WakeId,
                 "A pre-v19 reservation has no verifiable wake identity and must not be assigned one during migration.");
+            var legacyWakeAcquire = await migrated.AcquireNextExecutionAsync(
+                new(wakeId, envelopeId, token), "legacy-wake", now.AddSeconds(2), TimeSpan.FromSeconds(45));
+            Assert.AreEqual(CollectionExecutionAcquireStatus.NoWork, legacyWakeAcquire.Status,
+                "A legacy reservation without WakeId may only expire/re-dispatch; a new wake cannot claim it.");
+            Assert.IsNull(preserved.DispatchedAt,
+                "Rejecting an unverifiable legacy wake must not consume or clear its reservation.");
             Assert.AreEqual(1, await verify.Database.SqlQueryRaw<int>(
                 "SELECT COUNT(*) AS Value FROM collection_dispatcher_fairness_state WHERE StateId = 1")
                 .SingleAsync(), "Schema migration initializes exactly one dispatcher fairness record.");
+            Assert.AreEqual(19, await verify.Database.SqlQueryRaw<int>(
+                "SELECT version AS Value FROM collection_schema_history ORDER BY version DESC LIMIT 1")
+                .SingleAsync(), "The genuine v18 fixture must migrate and record schema version 19.");
         }
         finally
         {
@@ -554,6 +696,10 @@ public sealed class CollectionDispatchStarvationReproductionTests
             var dispatched = await LoadOutboxForWakeAsync(dbOptions, wake.DispatchEnvelopeId);
             Assert.AreEqual(odds.TaskId, dispatched.TaskId,
                 "race-odds must dispatch immediately despite the configured aggregation delay.");
+            var acquired = await store.AcquireNextExecutionAsync(wake, "race-odds-message", requestedAt.AddSeconds(1),
+                TimeSpan.FromSeconds(45), aggregationDelayMilliseconds: 60_000);
+            Assert.AreEqual(CollectionExecutionAcquireStatus.Acquired, acquired.Status,
+                "Acquire revalidation retains the race-odds aggregation-delay bypass.");
             await using var db = new CollectionPlatformDbContext(dbOptions);
             var delayed = await db.DispatchOutbox.SingleAsync(x => x.TaskId == result.TaskId);
             Assert.IsNull(delayed.ReservationToken,
@@ -562,6 +708,75 @@ public sealed class CollectionDispatchStarvationReproductionTests
         finally
         {
             Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task AcquireEndpointRechecksConfiguredAggregationDelayAndRaceOddsBypass()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "collection-acquire-aggregation", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var eventDatabase = Path.Combine(root, "events.db");
+        var (app, http) = await TestApplicationFactory.CreateAsync($"Data Source={eventDatabase}",
+            aggregationDelayMilliseconds: 60_000);
+        try
+        {
+            http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+            var store = app.Services.GetRequiredService<CollectionPlatformStore>();
+            var old = DateTimeOffset.UtcNow.AddMinutes(-2);
+            var now = DateTimeOffset.UtcNow;
+            var normalDefinition = new CollectionDefinitionId("race-detail");
+            var oddsDefinition = new CollectionDefinitionId("race-odds");
+            await store.RegisterDefinitionAsync(normalDefinition, "Race detail", CollectionResourceType.Race,
+                1, "initial", false);
+            await store.RegisterDefinitionAsync(oddsDefinition, "Race odds", CollectionResourceType.RaceOdds,
+                1, "initial", false);
+            var normal = await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "AGG-DELAY"),
+                normalDefinition, 1, CollectionReason.Initial, old);
+            var odds = await store.RequestAsync(new(CollectionResourceType.RaceOdds, "JRA", "ODDS-DELAY"),
+                oddsDefinition, 1, CollectionReason.Initial, now);
+            var pending = await store.GetPendingDispatchesAsync(now, 10, aggregationDelayMilliseconds: 60_000);
+            var normalOutbox = pending.Single(x => x.Notification.TaskId == normal.TaskId);
+            var oddsOutbox = pending.Single(x => x.Notification.TaskId == odds.TaskId);
+            var normalWake = new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "normal-delay-token");
+            var oddsWake = new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "odds-delay-token");
+            Assert.IsTrue(await store.TryReserveDispatchesWithinCapacityAsync([normalOutbox.OutboxId],
+                normalWake.ReservationToken, normalWake.DispatchEnvelopeId, normalWake.WakeId, now,
+                TimeSpan.FromMinutes(1), 2, 60_000));
+            Assert.IsTrue(await store.TryReserveDispatchesWithinCapacityAsync([oddsOutbox.OutboxId],
+                oddsWake.ReservationToken, oddsWake.DispatchEnvelopeId, oddsWake.WakeId, now,
+                TimeSpan.FromMinutes(1), 2, 60_000));
+
+            var databasePath = Path.Combine(Path.GetFullPath(eventDatabase) + ".collection", "collection-platform.db");
+            var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                .UseSqlite($"Data Source={databasePath};Pooling=False;Default Timeout=30").Options;
+            await using (var db = new CollectionPlatformDbContext(dbOptions))
+            {
+                var row = await db.DispatchOutbox.SingleAsync(x => x.OutboxId == normalOutbox.OutboxId);
+                row.CreatedAt = now;
+                await db.SaveChangesAsync();
+            }
+
+            var worker = new CollectionPlatformWorkerClient(http,
+                new CollectionDefinitionHandlerRegistry(Array.Empty<ICollectionDefinitionHandler>()));
+            var delayed = await worker.AcquireNextAsync(normalWake, "normal-delay-message", CancellationToken.None);
+            var bypassed = await worker.AcquireNextAsync(oddsWake, "odds-delay-message", CancellationToken.None);
+
+            Assert.AreEqual(CollectionExecutionAcquireStatus.NoWork, delayed.Status,
+                "The endpoint must pass its configured delay to reservation revalidation.");
+            Assert.AreEqual(CollectionExecutionAcquireStatus.Acquired, bypassed.Status,
+                "The same endpoint configuration must not delay race-odds acquisition.");
+            await using var verify = new CollectionPlatformDbContext(dbOptions);
+            var preservedDelayed = await verify.DispatchOutbox.SingleAsync(x => x.OutboxId == normalOutbox.OutboxId);
+            Assert.IsNull(preservedDelayed.DispatchedAt);
+            Assert.AreEqual(normalWake.ReservationToken, preservedDelayed.ReservationToken,
+                "A delay-ineligible wake must leave its reservation for safe expiry/re-dispatch.");
+        }
+        finally
+        {
+            http.Dispose();
+            await app.DisposeAsync();
+            Directory.Delete(root, recursive: true);
         }
     }
 
@@ -622,18 +837,18 @@ public sealed class CollectionDispatchStarvationReproductionTests
                 {
                     var task = await db.Tasks.SingleAsync(x => x.TaskId == outbox.TaskId);
                     dispatchedLanes.Add(task.Lane);
-                    Assert.AreEqual(index, (int)await db.Database.SqlQueryRaw<long>(
+                    Assert.AreEqual(index + 1, (int)await db.Database.SqlQueryRaw<long>(
                         "SELECT ReservationSequence AS Value FROM collection_dispatcher_fairness_state WHERE StateId = 1")
-                        .SingleAsync(), "Sending a wake alone must not advance persisted fairness or the scan cursor.");
+                        .SingleAsync(), "The committed reservation advances fairness before queue send/acquisition.");
                     var acquired = await store.AcquireNextExecutionAsync(wake, $"fair-{index}", now,
                         TimeSpan.FromSeconds(45));
                     Assert.AreEqual(CollectionExecutionAcquireStatus.Acquired, acquired.Status);
                     var stateAfterRestart = await new CollectionPlatformStore(options).GetLaneDispatchStateAsync();
                     Assert.AreEqual(index + 1, (int)await db.Database.SqlQueryRaw<long>(
                         "SELECT ReservationSequence AS Value FROM collection_dispatcher_fairness_state WHERE StateId = 1")
-                        .SingleAsync());
+                        .SingleAsync(), "Acquiring a wake must not advance fairness a second time.");
                     Assert.AreEqual(outbox.OutboxId, stateAfterRestart.ScanOutboxId,
-                        "The keyset cursor must be written in the same transaction as acquisition.");
+                        "The keyset cursor must be written in the same transaction as reservation.");
                     Assert.AreEqual(task.Lane, Enum.Parse<CollectionLane>(
                         (await db.DispatcherFairnessStates.SingleAsync(x => x.StateId == 1)).LastGrantedLane!));
                     Assert.IsTrue(await store.CompleteExecutionAsync(acquired.ExecutionBatchId!.Value,
@@ -653,6 +868,193 @@ public sealed class CollectionDispatchStarvationReproductionTests
                 Assert.IsTrue(realtimeBurst <= 4,
                     $"Realtime must yield after four acquired envelopes: {string.Join(',', dispatchedLanes)}");
             }
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task LaneFairnessAdvancesAtReservationForMultipleUnacquiredWakes()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "collection-fairness-reserved-wakes", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var options = Options.Create(new CollectionPlatformOptions { StateDirectory = directory });
+            var store = new CollectionPlatformStore(options);
+            var now = DateTimeOffset.UtcNow.AddMinutes(-10);
+            var definition = new CollectionDefinitionId("race-detail");
+            await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race,
+                1, "initial", false);
+            var lanes = new[] { CollectionLane.Realtime, CollectionLane.Normal, CollectionLane.Background };
+            for (var index = 0; index < 10; index++)
+                foreach (var lane in lanes)
+                    await store.RequestAsync(new(CollectionResourceType.Race, "JRA", $"MULTI-{lane}-{index}"),
+                        definition, 1, CollectionReason.Initial, now, lane, 10);
+
+            var queue = new WakeCaptureQueue();
+            var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
+                Options.Create(new CollectionQueueOptions
+                {
+                    Enabled = true,
+                    DispatchBatchSize = 10,
+                    EnvelopeMaxTasks = 1,
+                    MaxInFlightEnvelopes = 10,
+                    OutboxReservationSeconds = 60,
+                    AggregationDelayMilliseconds = 0
+                }), NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
+            await dispatcher.DispatchOnceAsync(CancellationToken.None);
+
+            Assert.AreEqual(10, queue.Wakes.Count, "All ten available slots should become unacquired reservations.");
+            var databasePath = Path.Combine(directory, "collection-platform.db");
+            var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                .UseSqlite($"Data Source={databasePath};Pooling=False;Default Timeout=30").Options;
+            var granted = new List<CollectionLane>();
+            foreach (var wake in queue.Wakes)
+            {
+                var outbox = await LoadOutboxForWakeAsync(dbOptions, wake.DispatchEnvelopeId);
+                await using var db = new CollectionPlatformDbContext(dbOptions);
+                granted.Add((await db.Tasks.SingleAsync(x => x.TaskId == outbox.TaskId)).Lane);
+            }
+            CollectionLane[] expected = [CollectionLane.Realtime, CollectionLane.Realtime,
+                CollectionLane.Realtime, CollectionLane.Realtime, CollectionLane.Normal,
+                CollectionLane.Realtime, CollectionLane.Realtime, CollectionLane.Realtime,
+                CollectionLane.Realtime, CollectionLane.Background];
+            CollectionAssert.AreEqual(expected, granted.ToArray(),
+                "Realtime may burst four reservations, then Normal and Background alternate before acquisition.");
+            var state = await new CollectionPlatformStore(options).GetLaneDispatchStateAsync();
+            Assert.AreEqual(CollectionLane.Background, state.LastNonRealtimeLane);
+            await using var stateDb = new CollectionPlatformDbContext(dbOptions);
+            Assert.AreEqual(10L, (await stateDb.DispatcherFairnessStates.SingleAsync(x => x.StateId == 1))
+                .ReservationSequence);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task DispatcherReservationIsAtomicAcrossInstancesAndLoserContinuesToNextCandidate()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "collection-concurrent-dispatchers", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var options = Options.Create(new CollectionPlatformOptions { StateDirectory = directory });
+            var storeA = new CollectionPlatformStore(options);
+            var storeB = new CollectionPlatformStore(options);
+            var now = DateTimeOffset.UtcNow.AddMinutes(-5);
+            var definition = new CollectionDefinitionId("race-detail");
+            await storeA.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race,
+                1, "initial", false);
+            var first = await storeA.RequestAsync(new(CollectionResourceType.Race, "JRA", "CONCURRENT-1"),
+                definition, 1, CollectionReason.Initial, now, CollectionLane.Background, 100);
+            var second = await storeA.RequestAsync(new(CollectionResourceType.Race, "JRA", "CONCURRENT-2"),
+                definition, 1, CollectionReason.Initial, now, CollectionLane.Background, 10);
+            var queueA = new WakeCaptureQueue();
+            var queueB = new WakeCaptureQueue();
+            var optionsForDispatcher = Options.Create(new CollectionQueueOptions
+            {
+                Enabled = true,
+                DispatchBatchSize = 1,
+                EnvelopeMaxTasks = 1,
+                MaxInFlightEnvelopes = 2,
+                OutboxReservationSeconds = 60,
+                AggregationDelayMilliseconds = 0
+            });
+            var dispatcherA = new CollectionPlatformOutboxDispatcher(storeA, queueA, optionsForDispatcher,
+                NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
+            var dispatcherB = new CollectionPlatformOutboxDispatcher(storeB, queueB, optionsForDispatcher,
+                NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
+            var rendezvous = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var arrivals = 0;
+            async Task Barrier(IReadOnlyList<PendingCollectionDispatch> _, CancellationToken token)
+            {
+                if (Interlocked.Increment(ref arrivals) == 2) rendezvous.TrySetResult();
+                await rendezvous.Task.WaitAsync(token);
+            }
+            dispatcherA.BeforeReservationAsync = Barrier;
+            dispatcherB.BeforeReservationAsync = Barrier;
+
+            await Task.WhenAll(dispatcherA.DispatchOnceAsync(CancellationToken.None),
+                dispatcherB.DispatchOnceAsync(CancellationToken.None));
+
+            var wakes = queueA.Wakes.Concat(queueB.Wakes).ToArray();
+            Assert.AreEqual(2, wakes.Length,
+                "The contested first candidate gets one wake and the losing dispatcher continues with the next candidate.");
+            Assert.AreEqual(2, wakes.Select(x => x.DispatchEnvelopeId).Distinct().Count());
+            var databasePath = Path.Combine(directory, "collection-platform.db");
+            var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                .UseSqlite($"Data Source={databasePath};Pooling=False;Default Timeout=30").Options;
+            var reservedTasks = new List<Guid>();
+            foreach (var wake in wakes)
+                reservedTasks.Add((await LoadOutboxForWakeAsync(dbOptions, wake.DispatchEnvelopeId)).TaskId);
+            CollectionAssert.AreEquivalent(new[] { first.TaskId!.Value, second.TaskId!.Value }, reservedTasks);
+            await using var verify = new CollectionPlatformDbContext(dbOptions);
+            Assert.AreEqual(2, await verify.DispatchOutbox.Where(x => x.ReservationToken != null)
+                .Select(x => x.EnvelopeId).Distinct().CountAsync(), "Two dispatchers cannot exceed the two-slot limit.");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task FailedQueueSendKeepsReservationFairnessGrantAcrossRestart()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "collection-fairness-send-failure", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var options = Options.Create(new CollectionPlatformOptions { StateDirectory = directory });
+            var store = new CollectionPlatformStore(options);
+            var now = DateTimeOffset.UtcNow.AddMinutes(-5);
+            var definition = new CollectionDefinitionId("race-detail");
+            await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race,
+                1, "initial", false);
+            for (var index = 0; index < 4; index++)
+                await store.RequestAsync(new(CollectionResourceType.Race, "JRA", $"SEND-FAIL-{index}"),
+                    definition, 1, CollectionReason.Initial, now, CollectionLane.Realtime, 10);
+            var failedQueue = new FailingWakeQueue();
+            var settings = Options.Create(new CollectionQueueOptions
+            {
+                Enabled = true,
+                DispatchBatchSize = 1,
+                EnvelopeMaxTasks = 1,
+                MaxInFlightEnvelopes = 1,
+                OutboxReservationSeconds = 60,
+                AggregationDelayMilliseconds = 0
+            });
+            await new CollectionPlatformOutboxDispatcher(store, failedQueue, settings,
+                NullLogger<CollectionPlatformOutboxDispatcher>.Instance).DispatchOnceAsync(CancellationToken.None);
+            var afterFailure = await new CollectionPlatformStore(options).GetLaneDispatchStateAsync();
+            var databasePath = Path.Combine(directory, "collection-platform.db");
+            var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                .UseSqlite($"Data Source={databasePath};Pooling=False;Default Timeout=30").Options;
+            await using (var db = new CollectionPlatformDbContext(dbOptions))
+            {
+                var persisted = await db.DispatcherFairnessStates.SingleAsync(x => x.StateId == 1);
+                Assert.AreEqual(1L, persisted.ReservationSequence,
+                    "A committed reservation advances persistent fairness even when SQS send fails.");
+                Assert.AreEqual(CollectionLane.Realtime.ToString(), persisted.LastGrantedLane);
+            }
+
+            var restartedQueue = new WakeCaptureQueue();
+            await new CollectionPlatformOutboxDispatcher(new CollectionPlatformStore(options), restartedQueue, settings,
+                NullLogger<CollectionPlatformOutboxDispatcher>.Instance).DispatchOnceAsync(CancellationToken.None);
+            var afterRestart = await new CollectionPlatformStore(options).GetLaneDispatchStateAsync();
+            Assert.AreEqual(1, afterRestart.ConsecutiveRealtime,
+                "A restart reloads the one committed realtime grant from the failed send.");
+            await using var verify = new CollectionPlatformDbContext(dbOptions);
+            Assert.AreEqual(1L, (await verify.DispatcherFairnessStates.SingleAsync(x => x.StateId == 1)).ReservationSequence,
+                "Restart reads the committed failed-send grant, and the occupied slot prevents double reservation.");
+            Assert.AreEqual(1, await verify.DispatchOutbox.CountAsync(x => x.ReservationToken != null),
+                "The failed send retains its reservation until acquire/expiry.");
+            Assert.AreEqual(0, restartedQueue.Wakes.Count);
         }
         finally
         {
@@ -718,5 +1120,14 @@ public sealed class CollectionDispatchStarvationReproductionTests
             Wakes.Add(wake);
             return Task.FromResult(new CollectionQueueSendReceipt($"wake-{Wakes.Count}"));
         }
+    }
+
+    private sealed class FailingWakeQueue : ICollectionPlatformTaskQueue
+    {
+        public Task<CollectionQueueSendReceipt> SendAsync(CollectionDispatchEnvelope envelope,
+            CancellationToken cancellationToken) => throw new AssertFailedException("Only wake-only messages are expected.");
+
+        public Task<CollectionQueueSendReceipt> SendWakeAsync(CollectionWakeSignal wake,
+            CancellationToken cancellationToken) => throw new InvalidOperationException("simulated queue send failure");
     }
 }

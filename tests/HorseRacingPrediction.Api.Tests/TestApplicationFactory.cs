@@ -29,7 +29,8 @@ internal static class TestApplicationFactory
     public const string TestApiKey = "test-api-key-12345";
 
     public static async Task<(WebApplication App, HttpClient Client)> CreateAsync(
-        string connectionString = "DataSource=:memory:", IEnumerable<IInterceptor>? interceptors = null)
+        string connectionString = "DataSource=:memory:", IEnumerable<IInterceptor>? interceptors = null,
+        int aggregationDelayMilliseconds = 2_000)
     {
         var builder = WebApplication.CreateBuilder(Array.Empty<string>());
         builder.WebHost.UseTestServer();
@@ -59,6 +60,8 @@ internal static class TestApplicationFactory
                 : Path.GetFullPath(source) + ".collection";
             options.DatabaseFileName = "collection-platform.db";
         });
+        builder.Services.Configure<CollectionQueueOptions>(options =>
+            options.AggregationDelayMilliseconds = aggregationDelayMilliseconds);
         builder.Services.AddSingleton<IRaceResourceIdentityResolver, DomainRaceResourceIdentityResolver>();
         builder.Services.AddSingleton<CollectionPlatformStore>();
         builder.Services.Configure<CollectionMonitoringOptions>(_ => { });
