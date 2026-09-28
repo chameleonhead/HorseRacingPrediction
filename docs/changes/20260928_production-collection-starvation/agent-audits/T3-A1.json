@@ -27,19 +27,21 @@
     "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformSchemaMigrator.cs",
     "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.RaceRepairHolds.cs",
     "src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformOutboxDispatcher.cs",
+    "src/HorseRacingPrediction.Api/Endpoints/Collection/AcquireNextExecutionEndpoint.cs",
     "tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs",
+    "tests/HorseRacingPrediction.Api.Tests/TestApplicationFactory.cs",
     "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionPlatformStoreTests.cs",
     "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/RaceRepairHoldTests.cs",
     "docs/changes/20260928_production-collection-starvation/README.md",
     "docs/changes/20260928_production-collection-starvation/agent-audits/T3-A1.json"
   ],
   "startRevision": "62cc2b21",
-  "endRevisionOrPatch": "f7a4ca3e production implementation; 31ee5c80 tests; change-record/audit update pending final commit",
+  "endRevisionOrPatch": "f3c0e52c corrective production; 3b6bad55 corrective tests; audit/docs corrective commit pending",
   "review": {
     "usageAvailability": "unavailable",
     "totalTokens": null,
     "activeMinutes": null,
-    "reason": "Independent Lead integration review has not yet been recorded"
+    "reason": "Lead integration review rejected the first implementation for incomplete whole-envelope acquire revalidation, fairness advancement at acquire instead of reservation, a non-genuine v18 fixture, missing two-store concurrency coverage, and accepting null WakeId on v19. These findings were corrected in the focused follow-up; final Lead acceptance remains pending."
   },
   "overhead": {
     "availability": "unavailable",
@@ -57,9 +59,9 @@
     "verificationPassed": true,
     "qualityPassed": true,
     "scopePassed": true,
-    "independentChallenge": "The fixed real-dispatch starvation fixtures, transactional mutation/race cases, schema migration, token-safe release, active hold, lane fairness/restart, and race-odds delay-bypass cases passed; cross-component Lambda transient-retry and HTTP/telemetry work was not in this dispatched write slice and remains follow-up.",
+    "independentChallenge": "Lead review rejected the initial slice on five concrete gaps: whole-envelope validation after mutation/filtering, fairness advancement at acquire, incomplete v18 fixture, absent two-store concurrency test, and null-WakeId acceptance. The correction validates every envelope row before mutation; persists grant/cursor in the reservation transaction; tests hold/duplicate/AvailableAt races, v18 migration, concurrent dispatchers, configured delay and race-odds endpoint bypass, send-failure/restart, exact wake identity, and task-lease-safe release. Full API passed 345 with 1 skipped; full Collector passed 393; solution build passed with 0 warnings/0 errors; format verify, CodeGraph sync/query, audit validator and diff checks passed. Cross-component Lambda transient-retry and HTTP/telemetry work remain outside this dispatched write slice.",
     "retries": 0,
-    "leadCorrections": 0,
+    "leadCorrections": 1,
     "reviewPasses": 0,
     "promoted": false,
     "escapedDefects": 0,
