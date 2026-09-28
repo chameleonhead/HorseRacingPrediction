@@ -78,15 +78,15 @@ public partial class RaceAggregate
             }
         }
 
-        if (data.Payouts is { } payout)
+        var payoutSnapshot = data.Payouts ?? _state.PayoutResult;
+        if (payoutSnapshot is { } payout)
         {
             if (_state.Status < RaceStatus.ResultDeclared) throw new InvalidOperationException("Result has not been published.");
-            var old = _state.PayoutResult;
             Emit(new PayoutResultDeclared(payout.DeclaredAt,
-                Merge(payout.WinPayouts, old?.WinPayouts), Merge(payout.PlacePayouts, old?.PlacePayouts),
-                Merge(payout.QuinellaPayouts, old?.QuinellaPayouts), Merge(payout.ExactaPayouts, old?.ExactaPayouts),
-                Merge(payout.TrifectaPayouts, old?.TrifectaPayouts), Merge(payout.BracketQuinellaPayouts, old?.BracketQuinellaPayouts),
-                Merge(payout.WidePayouts, old?.WidePayouts), Merge(payout.TrioPayouts, old?.TrioPayouts)));
+                RemoveEmptyPlaceholder(payout.WinPayouts), RemoveEmptyPlaceholder(payout.PlacePayouts),
+                RemoveEmptyPlaceholder(payout.QuinellaPayouts), RemoveEmptyPlaceholder(payout.ExactaPayouts),
+                RemoveEmptyPlaceholder(payout.TrifectaPayouts), RemoveEmptyPlaceholder(payout.BracketQuinellaPayouts),
+                RemoveEmptyPlaceholder(payout.WidePayouts), RemoveEmptyPlaceholder(payout.TrioPayouts)));
         }
         if (data.Weather is { } weather)
             RecordWeatherObservation(weather.ObservationTime, weather.WeatherCode, weather.WeatherText,
@@ -95,6 +95,7 @@ public partial class RaceAggregate
             RecordTrackConditionObservation(track.ObservationTime, track.TurfConditionCode, track.DirtConditionCode, track.GoingDescriptionText);
     }
 
-    private static IReadOnlyList<PayoutEntry> Merge(IReadOnlyList<PayoutEntry>? incoming, IReadOnlyList<PayoutEntry>? old)
-        => incoming is { Count: > 0 } ? incoming : old ?? [];
+    private static IReadOnlyList<PayoutEntry> RemoveEmptyPlaceholder(IReadOnlyList<PayoutEntry>? entries)
+        => (entries ?? []).Where(entry => !(entry.Combination == "00" && entry.Amount == 0m)).ToArray();
+
 }

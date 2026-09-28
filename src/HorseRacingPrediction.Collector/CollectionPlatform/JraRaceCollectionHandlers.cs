@@ -418,6 +418,13 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 // the card selection. A retired card for a past race must not prevent result collection.
                 requiresCard = false;
             }
+            catch (JraNavigationException ex) when (IsResultCheckDue(raceId.Date, task.Attributes))
+            {
+                stageOutcomes.Add(new("ResolveCard", RaceArtifactKind.Card,
+                    CollectionAttemptResult.NotApplicable, "OfficialRaceCardUnavailable", ex.Message));
+                requiresCard = false;
+                cardUnavailableAfterResultDue = true;
+            }
             catch (JraPageKindMismatchException ex)
             {
                 stageOutcomes.Add(new("ResolveCard", RaceArtifactKind.Card,
@@ -640,7 +647,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
             }
             try
             {
-                raceResult = await resultWorkflow.RefreshPageAsync(resultPage, domainRaceId, string.Empty,
+                raceResult = await resultWorkflow.RefreshPageAsync(resultPage, domainRaceId, null,
                     cancellationToken).ConfigureAwait(false);
                 break;
             }

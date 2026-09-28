@@ -137,8 +137,8 @@ builder.Services.AddSingleton<CollectionMonitoringService>();
 builder.Services.AddSingleton<ICollectionSchedulePolicy, JraCollectionSchedulePolicy>();
 builder.Services.AddSingleton<INamedRevisionImpactCondition, HorseProfileLegacyLayoutRevisionCondition>();
 builder.Services.AddSingleton<INamedRevisionImpactCondition, RaceResultDeadHeatBeforeRevisionFiveCondition>();
-builder.Services.AddHostedService<CollectionScheduleService>();
-builder.Services.AddHostedService<CollectionBackfillRecoveryService>();
+builder.Services.AddCollectionBackgroundSchedulers(
+    builder.Configuration.GetValue("CollectionOrchestration:BackgroundSchedulersEnabled", true));
 builder.Services.AddSingleton<CollectionQueueCircuitBreakerState>();
 var collectionQueueSection = builder.Configuration.GetSection(CollectionQueueOptions.SectionName);
 builder.Services.Configure<CollectionQueueOptions>(collectionQueueSection);
@@ -192,7 +192,6 @@ builder.Services.Configure<JobFailureNotificationOptions>(jobFailureNotification
 builder.Services.AddSingleton<IAmazonSimpleNotificationService>(_ => new AmazonSimpleNotificationServiceClient());
 builder.Services.AddSingleton<ICollectionPipelineAlertPublisher, SnsCollectionPipelineAlertPublisher>();
 builder.Services.AddHostedService<CollectionPipelineAlertDispatchService>();
-builder.Services.AddHostedService<CollectionPlanningScheduler>();
 
 builder.Services.AddEventFlow(options =>
 {

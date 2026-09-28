@@ -831,6 +831,11 @@ public sealed class RaceResultPageParser
                         entryMatch.Groups["amount"].Value);
                 }
 
+                if (IsEmptyPayoutPlaceholder(combination, amount))
+                {
+                    continue;
+                }
+
                 int? popularity = entryMatch.Groups["pop"].Success
                     ? int.Parse(NormalizeDigits(entryMatch.Groups["pop"].Value))
                     : null;
@@ -904,9 +909,17 @@ public sealed class RaceResultPageParser
                     amountText);
             }
 
+            if (IsEmptyPayoutPlaceholder(NormalizeDigits(combinations[i]).Trim(), amount))
+            {
+                continue;
+            }
+
             bucket.Add(new PayoutLine(combinations[i], amount));
         }
     }
+
+    private static bool IsEmptyPayoutPlaceholder(string combination, decimal amount)
+        => combination == "00" && amount == 0m;
 
     private static List<string> SplitPayoutCellLines(string cell)
         => cell
