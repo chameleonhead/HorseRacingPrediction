@@ -1,6 +1,6 @@
-# Read-only production SQLite aggregate — execution not authorized
+# Read-only production SQLite aggregate — authorized, not yet run
 
-Status: Proposed for independent review. This is a prepared procedure only. It has not been run, and does not authorize SSH, production access, or any write/repair/restart/deployment action. A separate user authorization is required after review.
+Status: Authorized for the exact read-only diagnostic only. The user authorized this reviewed procedure while requesting implementation. It has not been run. This does not authorize any write, repair, retry, queue mutation, restart, pause/resume, or deployment action. Lead must still complete the recorded preflight and abort on any mismatch before running the allowlisted query.
 
 ## Purpose and output boundary
 
@@ -19,11 +19,11 @@ The capture timestamp is UTC and is produced by SQLite. The observation window i
 
 ## Preflight and abort conditions
 
-After the user separately authorizes this exact read-only diagnostic, use the already configured, approved SSH alias/identity; do not copy a host name, key, token, password, `.env`, application configuration, or SSH configuration into this record or output. Run only the allowlisted read-only checks and snapshot/query below.
+For this exact user-authorized read-only diagnostic, use only the already configured, approved SSH alias/identity; do not copy a host name, key, token, password, `.env`, application configuration, or SSH configuration into this record or output. Run only the allowlisted read-only checks and snapshot/query below.
 
 Abort before querying if any condition holds:
 
-1. The approved SSH identity/host is unclear, host-key verification fails, or the operator has not authorized this exact diagnostic.
+1. The approved SSH identity/host is unclear, host-key verification fails, or the requested operation cannot be proven to match this exact authorized diagnostic.
 2. The fixed source path is missing, is not a regular file, is not readable, resolves outside the expected application data directory, or either existing WAL sidecar is unreadable.
 3. `sqlite3` is missing, does not support `-readonly`, URI `mode=ro`, `.backup`, `.timeout`, JSON functions, or the query's SQLite syntax; or any required bounded/system utility (`timeout`, `realpath`, `stat`, `sha256sum`, `mktemp`, `date`) is missing. Do not install or upgrade tools during the incident.
 4. The online backup, query-only check, aggregate SQL, or either hash computation exceeds its own hard timeout; the total procedure reaches the 120-second outer timeout; or any step reports `SQLITE_BUSY`, malformed schema, missing expected tables/columns, hold-resolver mismatch, or another error. Do not fall back to a partial/main-file copy or extend a timed-out run in place; stop, clean only the exact private snapshot, and request independent review of a revised budget/procedure.
@@ -34,7 +34,7 @@ If the application is actively writing during the bounded backup, SQLite provide
 
 ## Allowlisted host commands
 
-The following is the complete command allowlist after explicit authorization. `APPROVED_LIGHTSAIL_ALIAS` is an existing SSH config alias supplied at execution time; do not replace it with or record a raw host/IP/key. Do not enable shell tracing. Do not run `docker compose config`, `docker inspect`, `env`, `printenv`, `ps` with command arguments, `journalctl`, `docker logs`, or commands that print configuration or row data.
+The following is the complete command allowlist under the recorded authorization. `APPROVED_LIGHTSAIL_ALIAS` is an existing SSH config alias supplied at execution time; do not replace it with or record a raw host/IP/key. Do not enable shell tracing. Do not run `docker compose config`, `docker inspect`, `env`, `printenv`, `ps` with command arguments, `journalctl`, `docker logs`, or commands that print configuration or row data.
 
 On the approved Lightsail host, run this single bounded script. `stat` and `sha256sum` results are local no-write evidence and must not be included in the shared aggregate report. The SQL result is the only database-derived output allowed to leave the host/session.
 

@@ -1,6 +1,6 @@
 # Mandatory dispatch-starvation reproduction tests
 
-Status: Proposed. This artifact specifies tests only; it changes no production code and performs no production access. Test execution becomes authorized only after the user approves the change record and all applicable decisions are closed.
+Status: Approved. This artifact specifies tests only; it changes no production code and performs no production access. Local test execution is within the approved implementation scope. It does not authorize production access or deployment.
 
 ## Gate and purpose
 
@@ -10,7 +10,7 @@ Run against the deployed implementation semantics from `ab1cda45` (or a source c
 
 ## Production-shaped local fixture
 
-Use a temporary file-backed SQLite database, a fixed/test clock, the real SQLite-backed `CollectionPlatformStore`, real `CollectionPlatformOutboxDispatcher`, a local deterministic queue adapter implementing send/receive/visibility/redelivery/partial-batch semantics, the real API endpoint hosted over local HTTP, the real `CollectionPlatformWorkerClient`, and the real `CollectionLambdaInvocation` wake path. The queue adapter is the only boundary substitute; do not mock the store, dispatcher, HTTP API/client, or Lambda invocation. Use the exact v1 acquire route and JSON semantics for the baseline where applicable. The post-fix E2E must use the status/body contract selected under C4 and verify client deserialization end to end.
+Use a temporary file-backed SQLite database, a fixed/test clock, the real SQLite-backed `CollectionPlatformStore`, real `CollectionPlatformOutboxDispatcher`, a local deterministic queue adapter implementing send/receive/visibility/redelivery/partial-batch semantics, the real API endpoint hosted over local HTTP, the real `CollectionPlatformWorkerClient`, and the real `CollectionLambdaInvocation` wake path. The queue adapter is the only boundary substitute; do not mock the store, dispatcher, HTTP API/client, or Lambda invocation. Use the exact v1 acquire route and JSON semantics for the baseline where applicable. The post-fix E2E must use the approved HTTP 201 Acquired / HTTP 200 typed NoWork JSON contract and verify client deserialization end to end.
 
 The reusable source fixture builder (proposed name `CollectionDispatchStarvationFixture.CreateAsync`) must seed `MaxInFlightEnvelopes=1`, an eligible `Ready` Background task with one due, undispatched, unheld outbox row at the task's current generation, and a higher-priority candidate that the deployed selector can reserve but the acquire endpoint rejects. Run two separate stale-candidate variants so each cause is proven independently:
 
@@ -55,7 +55,7 @@ The integrated test suite must also prove:
 
 ## Ownership, commands, and completion evidence
 
-T9 owns fixture/test authoring and the pre-fix red run; that red gate is a prerequisite to T3's production-behavior implementation. One sequential `gpt-6-luna` / high coding worker owns the fixture/test files; do not edit these concurrently with T3. After T9 is verified, T3 receives an explicit sequential handoff, implements the fix, and runs the unchanged seed green as part of AC3/AC5 completion. T4 owns contract-specific endpoint/client assertions after C4 is resolved; T4b owns instrumentation/alert tests. The anticipated focused commands are:
+T9 owns fixture/test authoring and the pre-fix red run; that red gate is a prerequisite to T3's production-behavior implementation. One sequential `gpt-6-luna` / high coding worker owns the fixture/test files; do not edit these concurrently with T3. After T9 is verified, T3 receives an explicit sequential handoff, implements the fix, and runs the unchanged seed green as part of AC3/AC5 completion. T4 owns endpoint/client assertions for the approved HTTP contract; T4b owns instrumentation/alert tests. The anticipated focused commands are:
 
 ```powershell
 dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --filter FullyQualifiedName~CollectionDispatchStarvationReproductionTests
@@ -64,4 +64,4 @@ dotnet test tests/HorseRacingPrediction.Collector.Tests/HorseRacingPrediction.Co
 
 If implementation uses different fixture/test names or project boundaries, update the command and write scope in the approved record before execution. The evidence must include: pre-fix source revision and the single intended failing assertion for both stale-candidate variants; unchanged seed/fixture identity; post-fix focused test results from T3; production-shaped SQLite + dispatcher + local queue + HTTP API + real Lambda E2E results; and the relevant full-project/build regression results. A mocks-only test suite does not satisfy this gate.
 
-No reproduction test contacts production, AWS, SSH, or the live queue. Passing local tests do not replace T1's independently reviewed and separately authorized aggregate, and approval of this test plan does not authorize implementation or deployment.
+No reproduction test contacts production, AWS, SSH, or the live queue. Passing local tests do not replace T1's independently reviewed and authorized aggregate. Approval authorizes the scoped implementation after the T1/T9 gates, but does not authorize deployment or broader production operations.
