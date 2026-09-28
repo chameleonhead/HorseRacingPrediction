@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260928_production-collection-starvation",
+  "taskId": "T4",
+  "attemptId": "T4-A1",
+  "state": "completed",
+  "taskDifficulty": "high",
+  "acceptanceCriteria": ["AC3", "AC4"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "Runtime model telemetry unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "Token telemetry unavailable"
+  },
+  "scope": [
+    "AcquireNextExecutionEndpoint.cs",
+    "CollectionModels.cs",
+    "CollectionPlatformWorkerClient.cs",
+    "CollectionLambdaInvocation.cs",
+    "API/Collector tests",
+    "CP-44 route-map and README",
+    "T4-A1 audit. Workflow route repair and reported verify-step investigation are outside this delegated write slice."
+  ],
+  "startRevision": "ae406bfe",
+  "endRevisionOrPatch": "2afeffb4",
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "Lead review pending"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "Effort telemetry unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "Elapsed telemetry unavailable"
+  },
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "API 362/1 skipped; Collector 402; build 0 warnings/errors; format, route/audit, CodeGraph and diff pass. Cases cover 201/200, release fences, expiry/re-wake, ack and retry; AC3 E2E/Lead review and workflow/verify follow-ups remain open.",
+    "retries": 3,
+    "leadCorrections": 3,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}
