@@ -3,16 +3,16 @@
   "changeId": "20260928_restore-fluentui-local-soak",
   "taskId": "T1",
   "attemptId": "T1-A2",
-  "state": "active",
+  "state": "completed",
   "taskDifficulty": "high",
   "acceptanceCriteria": ["AC1", "AC2", "AC3", "AC4", "AC5", "AC6", "AC7"],
   "route": {"tier":"lead","requestedModel":"gpt-6-astra","observedModel":null,"observationSource":null,"modelTelemetryReason":"observed runtime model unavailable"},
   "usage": {"availability":"unavailable","totalTokens":null,"reason":"per-agent usage unavailable"},
-  "scope": ["src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj","src/HorseRacingPrediction.Web/HorseRacingPrediction.Web.csproj","docs/changes/20260928_restore-fluentui-local-soak/README.md","docs/changes/20260928_restore-fluentui-local-soak/agent-audits","localhost isolated runtime"],
-  "review": {},
-  "overhead": {},
-  "elapsed": {},
+  "scope": ["src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj","src/HorseRacingPrediction.Web/HorseRacingPrediction.Web.csproj","docs/changes/20260928_restore-fluentui-local-soak/README.md","docs/changes/20260928_restore-fluentui-local-soak/agent-audits","docs/changes/20260928_restore-fluentui-local-soak/soak-summary.json","localhost isolated runtime"],
+  "review": {"usageAvailability":"unavailable","totalTokens":null,"activeMinutes":null,"reason":"parent and independent reviewer usage/active time unavailable"},
+  "overhead": {"availability":"unavailable","preparationMinutes":null,"integrationMinutes":null,"auditMinutes":null,"reason":"active effort telemetry unavailable"},
+  "elapsed": {"availability":"unavailable","minutes":null,"reason":"active effort unavailable; soak duration is evidence, not labor cost"},
   "startRevision": "f44b8006",
-  "endRevisionOrPatch": null,
-  "outcome": {}
+  "endRevisionOrPatch": "114fdc1e plus final README and soak-summary.json; evidence SHA ac09c979dc82674215b7b44486c6ff3dfb5ed4f830bcd72f1b1d6b168d3ba0c2",
+  "outcome": {"verificationPassed":true,"qualityPassed":true,"scopePassed":true,"independentChallenge":"Parent and independent audit accepted AC1-AC8: 25 relationally proven real jobs, 177 correct probe sets over 10808.4s, disclosed 258.216s sampling gap, stable PIDs/logs/DB, controlled stop and four integrity checks.","retries":1,"leadCorrections":0,"reviewPasses":2,"promoted":false,"escapedDefects":0,"escalations":0,"reviewMode":"detailed","detailReviewReason":"Corrected monitor false-positive at expected planning-bucket transition; parent explicitly accepted retrospective runtime continuity.","decision":"accept"}
 }

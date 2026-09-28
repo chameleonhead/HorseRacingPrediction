@@ -23,6 +23,7 @@
     "src/HorseRacingPrediction.Web/HorseRacingPrediction.Web.csproj",
     "docs/changes/20260928_restore-fluentui-local-soak/README.md",
     "docs/changes/20260928_restore-fluentui-local-soak/agent-audits",
+    "docs/changes/20260928_restore-fluentui-local-soak/soak-summary.json",
     "localhost isolated runtime"
   ],
   "review": {"usageAvailability":"unavailable","totalTokens":null,"activeMinutes":null,"reason":"review telemetry unavailable"},
