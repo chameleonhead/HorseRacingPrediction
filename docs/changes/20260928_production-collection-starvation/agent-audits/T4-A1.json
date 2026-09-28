@@ -25,7 +25,7 @@
     "CollectionLambdaInvocation.cs",
     "API/Collector tests",
     "CP-44 route-map and README",
-    "T4-A1 audit. Workflow route repair and reported verify-step investigation are outside this delegated write slice."
+    "T4-A1 audit"
   ],
   "startRevision": "ae406bfe",
   "endRevisionOrPatch": "T4 delayed-old-wake and unknown-status P2 closure after 2afeffb4",

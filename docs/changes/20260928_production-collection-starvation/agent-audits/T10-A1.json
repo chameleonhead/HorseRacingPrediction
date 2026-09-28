@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260928_production-collection-starvation",
+  "taskId": "T10",
+  "attemptId": "T10-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC3", "AC4"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "Runtime model telemetry unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "Per-attempt token telemetry unavailable"
+  },
+  "scope": [
+    ".github/workflows/app-deploy.yml",
+    "tests/scripts/test-deploy-pipeline-state.ps1",
+    "tests/scripts/test-entry-repair-local.ps1",
+    "docs/changes/20260928_production-collection-starvation/README.md",
+    "docs/changes/20260928_production-collection-starvation/agent-audits/T10-A1.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "Review token and active-time telemetry unavailable"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "Active effort telemetry unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "Reliable agent elapsed-time telemetry unavailable"
+  },
+  "startRevision": "099a6992ca90a795969e92987f02ffb456952b06",
+  "endRevisionOrPatch": "T10-A1 owned working-tree patch; coherent commit recorded after verification",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Exact deployment smoke command first reproduced the stale flat request and then a stale top-level receipt lookup; after correction, the same two-process localhost command passed including lock/fence assertions.",
+    "retries": 5,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

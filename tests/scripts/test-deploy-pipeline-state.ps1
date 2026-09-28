@@ -21,10 +21,12 @@ sleep() { :; }
 curl() {
   local url="${@: -1}"
   case "$url" in
-    */pipeline/resume) echo RESUMED >&2 ;;
+    */pipeline-state) if [ "$TEST_CASE" = get-failure ]; then return 22; fi; echo '{"isPaused":true}' ;;
     */pipeline/pause) if [ "$TEST_CASE" = pause-failure ]; then return 22; fi ;;
-    */pipeline) if [ "$TEST_CASE" = get-failure ]; then return 22; fi; echo '{}' ;;
-    */tasks\?*) echo '[]' ;;
+    */api/admin/collection/pipeline) if [ "$TEST_CASE" = get-failure ]; then return 22; fi; echo '{}' ;;
+    */pipeline) if [[ " $* " == *" -X PUT "* ]]; then echo RESUMED >&2; else return 90; fi ;;
+    */tasks\?*)
+      if [[ "$url" == *status=Running* ]]; then echo '{"items":[]}'; else echo '[]'; fi ;;
     */failure-notifications\?*) if [ "$TEST_CASE" = new-failure ]; then echo '[{}]'; else echo '[]'; fi ;;
     *) return 90 ;;
   esac
@@ -41,6 +43,11 @@ jq() {
       paused) echo true ;;
       *) echo false ;;
     esac
+  elif [[ "$filter" == *'.items | type == "array" and length == 0'* ]]; then
+    local input
+    input=$(cat)
+    if [ "$input" != '{"items":[]}' ] || [ "$TEST_CASE" = not-drained ]; then return 1; fi
+    echo true
   elif [[ "$filter" == *'type == "array" and length == 0'* ]]; then
     local input
     input=$(cat)
@@ -73,6 +80,24 @@ foreach ($case in @('running', 'paused', 'get-failure', 'invalid-state', 'pause-
     if (($code -eq 0) -ne ($case -in @('running', 'paused'))) { throw "Incorrect guard exit: $case ($code)" }
     if (($output -join "`n") -match 'RESUMED') { throw 'Guard resumed collection' }
     Write-Output "PASS guard-$case"
+}
+if ($script -notmatch '/api/v2/admin/collection' -or
+    $script -notmatch '/pipeline-state' -or
+    $script -notmatch '/failure-notifications\?view=Actionable&limit=1' -or
+    $script -notmatch '"\$base/tasks\?status=Running&limit=1"' -or
+    $script -notmatch '-X PUT' -or $script -notmatch '\$base/pipeline' -or
+    $script.Contains('/api/admin/collection') -or
+    $script.Contains('/pipeline/resume')) {
+    throw 'Post-deploy pipeline verification and resume must use the v2 routes and response shapes.'
+}
+$guardBase = [regex]::Match($guardScript, 'base="\$API_BASE_URL(?<path>/api/admin/collection)"')
+if (-not $guardBase.Success -or $guardScript -notmatch '/pipeline/pause' -or $guardScript.Contains('/api/v2/admin/collection')) {
+    throw 'Pre-deploy pause/drain must continue using v1 routes while v1 is active.'
+}
+$migrationRoute = '/migration-previews/race-entry-owner-repair'
+if (-not $workflow.Contains('/api/v2/admin/collection"') -or -not $workflow.Contains($migrationRoute) -or
+    $workflow.Contains('/api/admin/collection/migrations/race-entry-owners/preview')) {
+    throw 'Post-deploy race-entry owner preview must use its v2 route.'
 }
 if ($workflow.Contains('stop api || true') -or -not $workflow.Contains('Uncheckpointed SQLite WAL remains')) {
     throw 'Missing fail-closed backup guard'

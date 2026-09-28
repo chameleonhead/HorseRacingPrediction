@@ -275,22 +275,23 @@ jobs:
           LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
           API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
         run: |
-          base="https://${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}/api/admin/collection"
+          base="https://${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}/api/v2/admin/collection"
           # Preserve an operator/incident pause; resume only after successful deployment checks.
-          pipeline="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/pipeline")"
+          pipeline="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/pipeline-state")"
           jq -e '.isPaused == true' <<<"$pipeline" >/dev/null
           case "$ORIGINAL_WAS_PAUSED" in true|false) ;; *) exit 1 ;; esac
           running="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/tasks?status=Running&limit=1")"
-          jq -e 'type == "array" and length == 0' <<<"$running" >/dev/null
+          jq -e '.items | type == "array" and length == 0' <<<"$running" >/dev/null
           if [ "$ORIGINAL_WAS_PAUSED" = "false" ]; then
             # A task may have failed while draining under our deployment pause.
             # Conservatively require no actionable failures (including older ones).
-            failures="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/failure-notifications?limit=1")"
+            failures="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/failure-notifications?view=Actionable&limit=1")"
             if ! jq -e 'type == "array" and length == 0' <<<"$failures" >/dev/null; then
               echo "Actionable failures remain; pipeline stays paused for explicit recovery" >&2
               exit 1
             fi
-            curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" "$base/pipeline/resume" >/dev/null
+            curl --fail --silent --show-error -X PUT -H "X-Api-Key: $API_KEY" \
+              -H 'Content-Type: application/json' --data '{"paused":false}' "$base/pipeline" >/dev/null
           else
             echo "Collection remains paused; recovery requires an explicit operator decision."
           fi
@@ -478,8 +479,8 @@ jobs:
           LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
           API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
         run: |
-          base="https://${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}/api/admin/collection"
+          base="https://${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}/api/v2/admin/collection"
           preview="$(curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
-            "$base/migrations/race-entry-owners/preview")"
+            "$base/migration-previews/race-entry-owner-repair")"
           echo "Race entry owner migration preview: $preview"
           echo "Owner migration remains preview-only until its target-selection change record is approved."
