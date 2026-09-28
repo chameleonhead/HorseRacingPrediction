@@ -25,7 +25,7 @@
     "API+Collector telemetry-dispatcher-store-IaC tests"
   ],
   "startRevision": "2ffc59b3",
-  "endRevisionOrPatch": "T4b-A3 SQL aggregation correction and passing local gates; Lead integrated acceptance pending",
+  "endRevisionOrPatch": "28117cb3; Lead accepted local T4b/AC4 on pass 3",
   "review": {
     "usageAvailability": "unavailable",
     "totalTokens": null,
@@ -48,10 +48,10 @@
     "verificationPassed": true,
     "qualityPassed": true,
     "scopePassed": true,
-    "independentChallenge": "Focused correction for F14: GetDispatchTelemetrySnapshotAsync no longer acquires the business store gate; an independent deferred SQLite read transaction preserves one coherent snapshot; lane/definition counts, age minimums, reservations, legacy in-flight envelopes, and anomalies are filtered/aggregated in SQL; repair-hold matching invokes the existing resolver through a SQLite function with bounded memoization. A 2,001-row fixture captures grouped/limited aggregate SQL and returns one lane row; a deliberately blocked resolver proves a concurrent business AcquireAsync completes before telemetry resumes. Focused snapshot/telemetry tests 11/11; full API 383 passed/1 skipped; full Collector 406/406; IaC contract 14/14; solution build 0 warnings/errors; format verification, audit/route validators, CodeGraph sync, and diff-check pass. Terraform CLI unavailable; no cloud/deploy/write action in scope. Lead integrated acceptance remains pending.",
+    "independentChallenge": "F14 fix: snapshots use an independent deferred SQLite read transaction, never `_gate`, with hold-aware SQL aggregation and bounded output. Tests prove 2,001 rows collapse to one aggregate and a blocked resolver does not delay acquire. Lead pass 3 accepts F8-F14. Focused telemetry/queue/snapshot 16/16; snapshot repeated 3 times; API 383/1 skipped; Collector 406; IaC 14; build 0/0; format, validators, CodeGraph and diff pass. Terraform/OpenTofu unavailable: fmt/provider validate unverified. Local/static acceptance only; T1 blocked; T5 dependent/unauthorized.",
     "retries": 1,
     "leadCorrections": 0,
-    "reviewPasses": 0,
+    "reviewPasses": 1,
     "promoted": false,
     "escapedDefects": 0,
     "escalations": 0,
