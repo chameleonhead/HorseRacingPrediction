@@ -1845,7 +1845,7 @@ public sealed partial class CollectionPlatformStore
     {
         if (wake.ContractVersion != 1 || wake.WakeId == Guid.Empty || wake.DispatchEnvelopeId == Guid.Empty
             || string.IsNullOrWhiteSpace(wake.ReservationToken))
-            return new(CollectionExecutionAcquireStatus.NoWork);
+            return NoWork(CollectionExecutionNoWorkReason.InvalidRequest);
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -1854,20 +1854,22 @@ public sealed partial class CollectionPlatformStore
             await using var tx = ((SqliteConnection)db.Database.GetDbConnection()).BeginTransaction(deferred: false);
             db.Database.UseTransaction(tx);
             if (await db.Controls.AnyAsync(x => x.ControlId == "pipeline" && x.IsPaused, cancellationToken))
-                return new(CollectionExecutionAcquireStatus.NoWork);
+                return NoWork(CollectionExecutionNoWorkReason.PipelinePaused);
 
             var existing = await db.ExecutionLeases.SingleOrDefaultAsync(
                 x => x.DispatchEnvelopeId == wake.DispatchEnvelopeId, cancellationToken).ConfigureAwait(false);
             if (existing is not null)
             {
-                var priorEnvelope = existing.Status == "StartPending" && existing.LeaseExpiresAt > now
-                    && existing.WakeId == wake.WakeId && existing.ReservationToken == wake.ReservationToken
+                var matchingLease = existing.Status == "StartPending" && existing.LeaseExpiresAt > now
+                    && existing.WakeId == wake.WakeId && existing.ReservationToken == wake.ReservationToken;
+                var priorEnvelope = matchingLease
                     ? await BuildExecutionEnvelopeAsync(db, wake.DispatchEnvelopeId, cancellationToken).ConfigureAwait(false)
                     : null;
                 await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
-                return priorEnvelope is null ? new(CollectionExecutionAcquireStatus.NoWork)
-                    : new(CollectionExecutionAcquireStatus.Acquired, existing.ExecutionBatchId,
-                        existing.LeaseToken, priorEnvelope, existing.LeaseExpiresAt);
+                if (!matchingLease) return NoWork(CollectionExecutionNoWorkReason.LeaseConflict);
+                if (priorEnvelope is null) return NoWork(CollectionExecutionNoWorkReason.EnvelopeInvalid);
+                return new(CollectionExecutionAcquireStatus.Acquired, existing.ExecutionBatchId,
+                    existing.LeaseToken, priorEnvelope, existing.LeaseExpiresAt);
             }
 
             var rows = await db.DispatchOutbox.Where(x => x.EnvelopeId == wake.DispatchEnvelopeId
@@ -1875,52 +1877,61 @@ public sealed partial class CollectionPlatformStore
                     && x.WakeId == wake.WakeId
                     && x.ReservedUntilUnixMilliseconds > now.ToUnixTimeMilliseconds())
                 .ToListAsync(cancellationToken).ConfigureAwait(false);
-            if (rows.Count == 0) return new(CollectionExecutionAcquireStatus.NoWork);
+            if (rows.Count == 0) return NoWork(CollectionExecutionNoWorkReason.ReservationUnavailable);
             var envelopeRows = await db.DispatchOutbox.Where(x => x.EnvelopeId == wake.DispatchEnvelopeId)
                 .ToListAsync(cancellationToken).ConfigureAwait(false);
             if (envelopeRows.Count != rows.Count || envelopeRows.Any(row => row.DispatchedAt is not null
                     || row.ReservationToken != wake.ReservationToken || row.WakeId != wake.WakeId
                     || row.ReservedUntilUnixMilliseconds <= now.ToUnixTimeMilliseconds()))
-                return new(CollectionExecutionAcquireStatus.NoWork);
+                return NoWork(CollectionExecutionNoWorkReason.ReservationInconsistent);
             var taskIds = rows.Select(x => x.TaskId).Distinct().ToArray();
-            if (taskIds.Length != rows.Count) return new(CollectionExecutionAcquireStatus.NoWork);
+            if (taskIds.Length != rows.Count) return NoWork(CollectionExecutionNoWorkReason.ReservationInconsistent);
             var tasks = await db.Tasks.Where(x => taskIds.Contains(x.TaskId)).ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
-            if (tasks.Count != rows.Count || rows.Any(row => tasks.All(task => task.TaskId != row.TaskId
-                    || task.DispatchGeneration != row.DispatchGeneration || task.Status != CollectionTaskStatus.Ready
-                    || task.AvailableAt > now || row.AvailableAt > now || (task.DefinitionId != "race-odds"
-                        && row.CreatedAt > now.AddMilliseconds(-Math.Max(0, aggregationDelayMilliseconds)))
-                    || (task.LeaseExpiresAt.HasValue && task.LeaseExpiresAt.Value > now))))
-                return new(CollectionExecutionAcquireStatus.NoWork);
+            if (tasks.Count != rows.Count) return NoWork(CollectionExecutionNoWorkReason.ReservationInconsistent);
+            if (tasks.Any(task => task.LeaseExpiresAt.HasValue && task.LeaseExpiresAt.Value > now))
+                return NoWork(CollectionExecutionNoWorkReason.LeaseConflict);
+            if (rows.Any(row =>
+                    {
+                        var task = tasks.Single(x => x.TaskId == row.TaskId);
+                        return task.DispatchGeneration != row.DispatchGeneration
+                               || task.Status != CollectionTaskStatus.Ready
+                               || task.AvailableAt > now || row.AvailableAt > now
+                               || (task.DefinitionId != "race-odds"
+                                   && row.CreatedAt > now.AddMilliseconds(-Math.Max(0, aggregationDelayMilliseconds)));
+                    }))
+                return NoWork(CollectionExecutionNoWorkReason.TaskIneligible);
 
             var heldTaskIds = await HeldTaskIdsAsync(db, cancellationToken).ConfigureAwait(false);
             var heldIds = await ActiveHoldIdsAsync(db, cancellationToken).ConfigureAwait(false);
             if (rows.Any(row => heldTaskIds.Contains(row.TaskId)))
-                return new(CollectionExecutionAcquireStatus.NoWork);
+                return NoWork(CollectionExecutionNoWorkReason.RepairHold);
             foreach (var row in rows)
             {
                 if (await db.DispatchOutbox.CountAsync(other => other.TaskId == row.TaskId
                         && other.DispatchGeneration == row.DispatchGeneration && other.DispatchedAt == null,
                         cancellationToken).ConfigureAwait(false) != 1)
-                    return new(CollectionExecutionAcquireStatus.NoWork);
+                    return NoWork(CollectionExecutionNoWorkReason.ReservationInconsistent);
             }
             var resources = await (from task in db.Tasks
                                    join resource in db.Resources on task.ResourcePk equals resource.ResourcePk
                                    where taskIds.Contains(task.TaskId)
                                    select new { task.TaskId, resource }).ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
-            if (resources.Count != rows.Count || resources.Any(x => MatchesHold(x.resource, heldIds)))
-                return new(CollectionExecutionAcquireStatus.NoWork);
+            if (resources.Count != rows.Count)
+                return NoWork(CollectionExecutionNoWorkReason.ResourceUnavailable);
+            if (resources.Any(x => MatchesHold(x.resource, heldIds)))
+                return NoWork(CollectionExecutionNoWorkReason.RepairHold);
             if (await db.ExecutionLeases.AnyAsync(x => x.DispatchEnvelopeId == wake.DispatchEnvelopeId
                     && (x.Status == "StartPending" || x.Status == "Running") && x.LeaseExpiresAt > now,
                     cancellationToken).ConfigureAwait(false))
-                return new(CollectionExecutionAcquireStatus.NoWork);
+                return NoWork(CollectionExecutionNoWorkReason.LeaseConflict);
 
             var envelope = await BuildExecutionEnvelopeAsync(db, wake.DispatchEnvelopeId, cancellationToken)
                 .ConfigureAwait(false);
             if (envelope is null || envelope.Tasks.Count != rows.Count
                 || envelope.Tasks.Select(x => x.TaskId).ToHashSet().SetEquals(taskIds) is false)
-                return new(CollectionExecutionAcquireStatus.NoWork);
+                return NoWork(CollectionExecutionNoWorkReason.EnvelopeInvalid);
 
             var lease = new CollectionExecutionLeaseEntity
             {
@@ -1950,6 +1961,9 @@ public sealed partial class CollectionPlatformStore
         }
         finally { _gate.Release(); }
     }
+
+    private static CollectionExecutionAcquireResult NoWork(CollectionExecutionNoWorkReason reason)
+        => new(CollectionExecutionAcquireStatus.NoWork, NoWorkReason: reason);
 
     private static CollectionLane? ParseLane(string? value)
         => Enum.TryParse<CollectionLane>(value, out var lane) ? lane : null;

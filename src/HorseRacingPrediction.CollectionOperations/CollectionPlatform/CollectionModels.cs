@@ -146,6 +146,18 @@ public sealed record CollectionTaskAcquireResult(CollectionTaskAcquireStatus Sta
 public sealed record CollectionWakeSignal(Guid WakeId, Guid DispatchEnvelopeId, string ReservationToken,
     int ContractVersion = 1);
 public enum CollectionExecutionAcquireStatus { Acquired, NoWork }
+public enum CollectionExecutionNoWorkReason
+{
+    InvalidRequest,
+    PipelinePaused,
+    LeaseConflict,
+    ReservationUnavailable,
+    ReservationInconsistent,
+    TaskIneligible,
+    RepairHold,
+    ResourceUnavailable,
+    EnvelopeInvalid,
+}
 public enum CollectionReservationReleaseOutcome
 {
     NotAttempted,
@@ -157,7 +169,15 @@ public enum CollectionReservationReleaseOutcome
 }
 public sealed record CollectionExecutionAcquireResult(CollectionExecutionAcquireStatus Status,
     Guid? ExecutionBatchId = null, string? LeaseToken = null,
-    CollectionDispatchEnvelope? Envelope = null, DateTimeOffset? StartBefore = null);
+    CollectionDispatchEnvelope? Envelope = null, DateTimeOffset? StartBefore = null,
+    CollectionExecutionNoWorkReason? NoWorkReason = null)
+{
+    public bool SafeToReleaseReservation => Status == CollectionExecutionAcquireStatus.NoWork
+        && NoWorkReason is (CollectionExecutionNoWorkReason.PipelinePaused
+            or CollectionExecutionNoWorkReason.TaskIneligible
+            or CollectionExecutionNoWorkReason.RepairHold
+            or CollectionExecutionNoWorkReason.ResourceUnavailable);
+}
 public sealed record CollectionExecutionAcquireRequest(CollectionWakeSignal Wake, string QueueMessageId);
 public sealed record CollectionExecutionStartRequest(string LeaseToken, int LeaseSeconds,
     string? LambdaRequestId = null);
