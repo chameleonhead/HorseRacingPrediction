@@ -148,6 +148,55 @@ public sealed class CollectionDispatchStarvationReproductionTests
         }
     }
 
+    [TestMethod]
+    public async Task RaceOddsBypassesAggregationDelay_WhileOtherDefinitionsRemainDelayed()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "collection-race-odds-delay", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
+            { StateDirectory = directory }));
+            await store.RegisterDefinitionAsync(new("race-odds"), "Race odds", CollectionResourceType.RaceOdds,
+                1, "initial", false);
+            await store.RegisterDefinitionAsync(new("race-result"), "Race result", CollectionResourceType.RaceResult,
+                1, "initial", false);
+            var requestedAt = DateTimeOffset.UtcNow;
+            var odds = await store.RequestAsync(new(CollectionResourceType.RaceOdds, "JRA", "ODDS"),
+                new("race-odds"), 1, CollectionReason.Initial, requestedAt, CollectionLane.Background, 10);
+            var result = await store.RequestAsync(new(CollectionResourceType.RaceResult, "JRA", "RESULT"),
+                new("race-result"), 1, CollectionReason.Initial, requestedAt, CollectionLane.Background, 10);
+            var queue = new WakeCaptureQueue();
+            var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
+                Options.Create(new CollectionQueueOptions
+                {
+                    Enabled = true,
+                    DispatchBatchSize = 1,
+                    EnvelopeMaxTasks = 1,
+                    MaxInFlightEnvelopes = 1,
+                    AggregationDelayMilliseconds = 60_000
+                }), NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
+
+            await dispatcher.DispatchOnceAsync(CancellationToken.None);
+
+            var wake = queue.Wakes.Single();
+            var databasePath = Path.Combine(directory, "collection-platform.db");
+            var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                .UseSqlite($"Data Source={databasePath};Pooling=False;Default Timeout=30").Options;
+            var dispatched = await LoadOutboxForWakeAsync(dbOptions, wake.DispatchEnvelopeId);
+            Assert.AreEqual(odds.TaskId, dispatched.TaskId,
+                "race-odds must dispatch immediately despite the configured aggregation delay.");
+            await using var db = new CollectionPlatformDbContext(dbOptions);
+            var delayed = await db.DispatchOutbox.SingleAsync(x => x.TaskId == result.TaskId);
+            Assert.IsNull(delayed.ReservationToken,
+                "A similarly aged non-race-odds definition must remain delayed and unreserved.");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static async Task<CollectionDispatchOutboxEntity> LoadOutboxForWakeAsync(
         DbContextOptions<CollectionPlatformDbContext> dbOptions, Guid envelopeId)
     {
@@ -190,6 +239,21 @@ public sealed class CollectionDispatchStarvationReproductionTests
         {
             var failedIds = response.BatchItemFailures.Select(x => x.ItemIdentifier).ToHashSet(StringComparer.Ordinal);
             _messages.RemoveAll(x => !failedIds.Contains(x.MessageId));
+        }
+    }
+
+    private sealed class WakeCaptureQueue : ICollectionPlatformTaskQueue
+    {
+        public List<CollectionWakeSignal> Wakes { get; } = [];
+
+        public Task<CollectionQueueSendReceipt> SendAsync(CollectionDispatchEnvelope envelope,
+            CancellationToken cancellationToken) => throw new AssertFailedException("Only wake-only messages are expected.");
+
+        public Task<CollectionQueueSendReceipt> SendWakeAsync(CollectionWakeSignal wake,
+            CancellationToken cancellationToken)
+        {
+            Wakes.Add(wake);
+            return Task.FromResult(new CollectionQueueSendReceipt($"wake-{Wakes.Count}"));
         }
     }
 }
