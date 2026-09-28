@@ -1,6 +1,14 @@
-# Read-only production SQLite aggregate — authorized, not yet run
+# Read-only production SQLite aggregate — authorized, safely aborted before connection
 
-Status: Authorized for the exact read-only diagnostic only. The user authorized this reviewed procedure while requesting implementation. It has not been run. This does not authorize any write, repair, retry, queue mutation, restart, pause/resume, or deployment action. Lead must still complete the recorded preflight and abort on any mismatch before running the allowlisted query.
+Status: Authorized for the exact read-only diagnostic only. Local access preflight on 2026-09-28 at approximately 13:32 UTC found no approved runtime SSH alias and no local SSH config. Abort condition 1 was applied before any SSH connection. The production procedure and SQL have not run. This does not authorize any write, repair, retry, queue mutation, restart, pause/resume, or deployment action. Lead must still complete the recorded preflight and abort on any mismatch before running the allowlisted query.
+
+## T1 access preflight result
+
+- Local boolean-only checks: approved runtime alias available = false; local SSH config available = false; SSH client available = true. No alias, host, key, config contents, environment contents, or credentials were emitted.
+- Lead confirmed that no additional approved alias or independent resolver-equivalence review evidence is available. No alternate access discovery, SSH attempt, key creation, SSM access, or production command was attempted.
+- Snapshot, aggregate counts, SQLite version/query-only value, production observation window, source hash/metadata/WAL comparison, and remote exit status are unavailable because execution stopped before connection. No temporary snapshot was created; cleanup is not required. Source no-write evidence is limited to the fact that no remote operation occurred.
+- No stale/ineligible loop or production anomaly prevalence is proven or disproven. Missing counts must not be interpreted as zero.
+- T1 remains `Externally blocked`, blocking AC1 and dependent production-behavior changes. To resume, an operator must provision the already approved SSH alias/identity through the existing local access mechanism without putting credentials in chat or the repository; Lead must also record the required independent schema/source-mapping/resolver/privacy review. Then rerun the exact preflight and bounded procedure. Any different access method or procedure needs a reviewed revision first.
 
 ## Purpose and output boundary
 
