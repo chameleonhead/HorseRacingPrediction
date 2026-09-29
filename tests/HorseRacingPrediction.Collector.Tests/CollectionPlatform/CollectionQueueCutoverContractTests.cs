@@ -232,7 +232,9 @@ public sealed class CollectionQueueCutoverContractTests
         StringAssert.Contains(policy, "Action   = [\"cloudwatch:PutMetricData\"]");
         StringAssert.Contains(policy, "Resource = \"*\"");
         StringAssert.Contains(policy, "\"cloudwatch:namespace\" = local.collection_dispatch_namespace");
-        StringAssert.Contains(Observability, "collection_dispatch_namespace = \"HorseRacingPrediction/CollectionDispatch\"");
+        Assert.IsTrue(System.Text.RegularExpressions.Regex.IsMatch(
+            Observability,
+            "(?m)^\\s*collection_dispatch_namespace\\s*=\\s*\"HorseRacingPrediction/CollectionDispatch\"\\s*$"));
         Assert.IsFalse(policy.Contains("sqs:", StringComparison.OrdinalIgnoreCase));
         Assert.IsFalse(policy.Contains("sns:", StringComparison.OrdinalIgnoreCase));
         Assert.IsFalse(policy.Contains("iam:PassRole", StringComparison.OrdinalIgnoreCase));

@@ -1,6 +1,6 @@
 locals {
-  collection_dispatch_namespace = "HorseRacingPrediction/CollectionDispatch"
-  collection_dispatch_lanes     = ["Realtime", "Normal", "Background"]
+  collection_dispatch_namespace   = "HorseRacingPrediction/CollectionDispatch"
+  collection_dispatch_lanes       = ["Realtime", "Normal", "Background"]
   collection_dispatch_definitions = concat(var.collection_dispatch_definition_labels, ["OTHER"])
   collection_dispatch_lane_definitions = {
     for pair in setproduct(local.collection_dispatch_lanes, local.collection_dispatch_definitions) :
