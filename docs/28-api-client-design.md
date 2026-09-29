@@ -15,7 +15,7 @@ ApiClientはnet10.0でRefit / Refit.HttpClientFactory 16.3.0を参照済み。�
 - 入力と戻りデータの両方がある操作は、同じ語幹の`{Operation}{Resource}Request`と`{Operation}{Resource}Response`を対で用意する。入力パラメーターがなければRequestを、戻りデータがなければResponseを作らない。空型・空オブジェクト・形式上の対を作らない。enum、例外、値オブジェクト、補助クラスには機械的にDtoを付けない。
 - 業務データの塊は必ず`{Meaning}Dto`にする。Request/Responseは操作の入出力を表す入れ物であり、業務エンティティの項目を直接展開しない。詳細は`RaceDto Race`、一覧は`IReadOnlyList<RaceSummaryDto> Races`のように意味のあるプロパティ名を使う。無意味な共通`Data`による一律ラップはしない。
 - Response直下に置く項目は都度判断する。ページング情報、処理件数、受付IDなど操作・応答そのものの単一値は直下へ置ける。複数項目が一つの概念を表すなら`PaginationDto`や`CollectionProgressDto`等へまとめる。RaceId・RaceName・RaceDateなどエンティティの項目をResponseへ並べることは禁止する。Requestも業務データの塊を持つ場合は入力専用Dtoに分離し、path IDや単純な検索条件は直下に置ける。
-- `Dto`/`ReadModel`/`Snapshot`/`Entry`という従来名だけで型の役割を決めず、実際のHTTP境界・参照を確認する。同形であるという理由だけで統合しない。異なる応答形状には意味の異なる名前を付ける。
+- `Dto`/`ReadModel`/`Snapshot`/`Entry`という従来名だけで型の役割を決めず、実際のHTTP境界・参照を確認する。同じ意味・データ・nullability・制約を持ち自然に共有できる型は統合する（利用者の追加指示）。形だけの一致で統合せず、意味や必要項目が異なる型は区別する。統合候補の差分と全利用者を確認し、manifestへ複数旧型から統合先への対応と理由を記録する。
 - 例：`RacePredictionContextDto`はデータとして維持し`GetRacePredictionContextResponse.Context`へ格納。`HorseReadDto`は`HorseDto`、`PredictionTicketSummaryReadModel`は`PredictionTicketWithMarksDto`へ整理し、それぞれ操作別Responseが持つ。既存Summary形状とは異なるため名前だけで統合しない。
 - サーバー内部モデルがHTTPへ露出している箇所は共有のwire DTOと明示的マッピングを追加する。EF entity、Domain event、CollectionOperationsの実行モデル・永続モデル自体は移動しない。Contracts/ApiClientからApi、Infrastructure、CollectionOperationsを参照しない。
 - CLR名・OpenAPI schema IDに加えて、DTOを包むJSON構造も変更対象とする（利用者の2026-09-30指示）。業務データの意味、値、null、日時/enum表現、route、認証条件は維持する。旧形状との互換ラッパー/並行APIは作らない。既存利用者は同じHTTP実装のまま新Request/Responseの組立・取り出しへ追従させる。
@@ -65,8 +65,8 @@ using var response = await races.GetRaceAsync(new GetRaceRequest(raceId), cancel
 
 推奨はRoslynで型を認識した一括変更。最初に旧完全修飾名→新完全修飾名・配置先のmanifestを出し、重複・未分類を検出する。
 
-1. MSBuildWorkspaceでsolutionを読み、型名はRenamer.RenameSymbolAsyncで参照とともに変更する。
-2. API別分割は単一namespaceのRenameでは実現しない。型ごとに旧symbol参照を取得し、宣言namespace・配置・using・完全修飾名・aliasをRoslynの構文/意味モデルで変更する。独立DTOだけを新配置へ移す。
+1. MSBuildWorkspaceでsolutionを読み、manifestの旧完全修飾名をContracts compilationのsymbolへ対応付ける。
+2. 実装した移行ツールはRoslynの意味モデルで型参照symbolを識別し、構文rewriterで宣言名、namespace配置、完全修飾名、alias参照を更新する。API別分割は単一namespaceのRenameでは実現しないため、各型を個別に新配置へ移す。曖昧な名前の文字列置換は行わない。
 3. dry-runで差分を確認してから適用する。ツールは専用の`tools/ContractMigration`へ置き、manifestを変更記録へ残す。再実行時は既に移行済みの項目を検出し、衝突時に停止する。
 4. Razor、文字列内の型名、コード生成入力、ドキュメントはRoslynだけでは網羅を保証できない。rgで旧名・旧namespaceを照合し、Razor buildと全solution buildで確認する。歴史文書は書き換えない。
 5. Request/Responseの新設とJSONの包み直しは意味のある契約変更として別工程で行う。単純Renameへ混ぜない。format、新契約HTTPテスト、業務データ保存性、既存利用者の回帰テスト、差分確認を行う。

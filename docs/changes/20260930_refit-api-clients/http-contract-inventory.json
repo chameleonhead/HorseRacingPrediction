@@ -1,0 +1,4112 @@
+[
+  {
+    "path": "/api/v2/internal/collection/tasks/{id:guid}/leases",
+    "endpointFile": "AcquireCollectionTaskEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "id",
+        "kind": "path",
+        "type": "Guid"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "AcquireCollectionTaskRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new CollectionTaskAcquireResult(CollectionTaskAcquireStatus.RepairHeld)",
+        "kind": "Ok",
+        "hasData": true
+      },
+      {
+        "status": 200,
+        "payloadExpression": "new CollectionTaskAcquireResult(CollectionTaskAcquireStatus.RepairHeld)",
+        "kind": "Ok",
+        "hasData": true
+      },
+      {
+        "status": 201,
+        "payloadExpression": "$\"/api/v2/internal/collection/tasks/{id}/leases/{Uri.EscapeDataString(lease.LeaseToken)}\",\r\n                new CollectionTaskAcquireResult(CollectionTaskAcquireStatus.Acquired, lease)",
+        "kind": "Created",
+        "hasData": true
+      },
+      {
+        "status": 200,
+        "payloadExpression": "new CollectionTaskAcquireResult(await store.ClassifyAcquireFailureAsync(id, request.DispatchGeneration, token))",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": "new CollectionTaskAcquireResult(CollectionTaskAcquireStatus.RepairHeld) | $\"/api/v2/internal/collection/tasks/{id}/leases/{Uri.EscapeDataString(lease.LeaseToken)}\",\r\n                new CollectionTaskAcquireResult(CollectionTaskAcquireStatus.Acquired, lease) | new CollectionTaskAcquireResult(await store.ClassifyAcquireFailureAsync(id, request.DispatchGeneration, token))",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/AcquireCollectionTaskEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/internal/collection/execution-leases",
+    "endpointFile": "AcquireNextExecutionEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CollectionExecutionAcquireRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 201,
+        "payloadExpression": "result, ResponseJsonOptions, statusCode: StatusCodes.Status201Created",
+        "kind": "Json",
+        "hasData": true
+      },
+      {
+        "status": 200,
+        "payloadExpression": "result, ResponseJsonOptions, statusCode: StatusCodes.Status200OK",
+        "kind": "Json",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": "result, ResponseJsonOptions, statusCode: StatusCodes.Status201Created | result, ResponseJsonOptions, statusCode: StatusCodes.Status200OK",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/AcquireNextExecutionEndpoint.cs",
+    "handler": "Map lambda",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/migrations/race-detail",
+    "endpointFile": "ApplyRaceDetailMigrationEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "report",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": "report",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/ApplyRaceDetailMigrationEndpoint.cs",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/migrations/race-entry-owner-repair",
+    "endpointFile": "ApplyRaceEntryOwnerMigrationEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "CollectionPlatformEndpointSupport.BuildRaceEntryOwnerMigrationProgress(candidates, batch)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": "CollectionPlatformEndpointSupport.BuildRaceEntryOwnerMigrationProgress(candidates, batch)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/ApplyRaceEntryOwnerMigrationEndpoint.cs",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/tasks/{taskId:guid}",
+    "endpointFile": "CancelCollectionTaskEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "taskId",
+        "kind": "path",
+        "type": "Guid"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CollectionTaskCancellationRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 204,
+        "payloadExpression": "",
+        "kind": "NoContent",
+        "hasData": false
+      }
+    ],
+    "family": "Collection",
+    "method": "PATCH",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CancelCollectionTaskEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/v2/internal/collection/tasks/{id:guid}/attempts",
+    "endpointFile": "CompleteCollectionTaskAttemptEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "id",
+        "kind": "path",
+        "type": "Guid"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CompleteCollectionAttemptRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 204,
+        "payloadExpression": "",
+        "kind": "NoContent",
+        "hasData": false
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CompleteCollectionTaskAttemptEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/v2/admin/collection/backfill-batches",
+    "endpointFile": "CreateBackfillBatchEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CreateBackfillBatchRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 202,
+        "payloadExpression": "$\"/api/v2/admin/collection/backfill-batches/{Uri.EscapeDataString(batchId)}\", batch",
+        "kind": "Accepted",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": "$\"/api/v2/admin/collection/backfill-batches/{Uri.EscapeDataString(batchId)}\", batch",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CreateBackfillBatchEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/recovery-batches",
+    "endpointFile": "CreateCollectionRecoveryBatchEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CollectionRecoveryBatchRequest"
+      }
+    ],
+    "produces": [
+      {
+        "type": "CollectionFailureRecoveryResult",
+        "status": 202
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 202,
+        "payloadExpression": "CollectionFailureRecoveryResult (CollectionPlatformEndpointSupport.RecoverFailuresAsync)",
+        "hasData": true,
+        "kind": "Accepted"
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": "CollectionFailureRecoveryResult",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CreateCollectionRecoveryBatchEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/definitions/{definition}/revisions",
+    "endpointFile": "CreateCollectionRevisionEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "definition",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CreateCollectionRevisionRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new CollectionRevisionApplyResult(definition, request.Revision, affected)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": "new CollectionRevisionApplyResult(definition, request.Revision, affected)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CreateCollectionRevisionEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/task-batches",
+    "endpointFile": "CreateCollectionTaskBatchEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CollectionTaskBatchRequest"
+      }
+    ],
+    "produces": [
+      {
+        "type": "CollectionTaskBatchSubmissionResponse",
+        "status": 200
+      },
+      {
+        "type": "CollectionTaskBatchSubmissionResponse",
+        "status": 202
+      },
+      {
+        "type": "CollectionTaskBatchSubmissionResponse",
+        "status": 207
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 202,
+        "payloadExpression": "value: new CollectionTaskBatchSubmissionResponse(\r\n                        request.Mode, result, null)",
+        "kind": "Accepted",
+        "hasData": true
+      },
+      {
+        "status": 202,
+        "payloadExpression": "value: response",
+        "kind": "Accepted",
+        "hasData": true
+      },
+      {
+        "status": 207,
+        "payloadExpression": "response, statusCode: StatusCodes.Status207MultiStatus",
+        "kind": "Json",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": "CollectionTaskBatchSubmissionResponse",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CreateCollectionTaskBatchEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/tasks",
+    "endpointFile": "CreateCollectionTaskEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CollectionTaskRequest"
+      }
+    ],
+    "produces": [
+      {
+        "type": "CollectionTaskSubmissionResponse",
+        "status": 202
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 202,
+        "payloadExpression": "TaskLocation(receipt.TaskId), response",
+        "kind": "Accepted",
+        "hasData": true
+      },
+      {
+        "status": 200,
+        "payloadExpression": "response",
+        "kind": "Ok",
+        "hasData": true
+      },
+      {
+        "status": 422,
+        "payloadExpression": "identified, statusCode: StatusCodes.Status422UnprocessableEntity",
+        "kind": "Json",
+        "hasData": true
+      },
+      {
+        "status": 202,
+        "payloadExpression": "TaskLocation(receipt.TaskId), body",
+        "kind": "Accepted",
+        "hasData": true
+      },
+      {
+        "status": 200,
+        "payloadExpression": "body",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": "CollectionTaskSubmissionResponse",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CreateCollectionTaskEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/known-recovery-batches",
+    "endpointFile": "CreateKnownRecoveryBatchEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await service.ApplyKnownRecoveryAsync(JstTime.Now(), logger, token)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": "await service.ApplyKnownRecoveryAsync(JstTime.Now(), logger, token)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CreateKnownRecoveryBatchEndpoint.cs",
+    "handler": "Map lambda (service/logger are DI)",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/race-entry-owner-repair-batches",
+    "endpointFile": "CreateRaceEntryOwnerRepairBatchEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "RaceEntryOwnerRepairRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 202,
+        "payloadExpression": "value: new RaceEntryOwnerRepairReceipt(CollectionPlatformEndpointSupport.RaceEntryOwnerMigrationBatchId,\r\n                result.TargetCount, result.TasksCreated, result.Requests.Where(x => x.TaskId.HasValue).Select(x => x.TaskId!.Value).ToArray())",
+        "kind": "Accepted",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": "value: new RaceEntryOwnerRepairReceipt(CollectionPlatformEndpointSupport.RaceEntryOwnerMigrationBatchId,\r\n                result.TargetCount, result.TasksCreated, result.Requests.Where(x => x.TaskId.HasValue).Select(x => x.TaskId!.Value).ToArray())",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CreateRaceEntryOwnerRepairBatchEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/recollection-batches",
+    "endpointFile": "CreateRecollectionBatchEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CollectionRecollectionBatchRequest"
+      }
+    ],
+    "produces": [
+      {
+        "type": "CollectionRecollectionBatchResponse",
+        "status": 202
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 202,
+        "payloadExpression": "value: new CollectionRecollectionBatchResponse(request.Mode, expansion, null)",
+        "kind": "Accepted",
+        "hasData": true
+      },
+      {
+        "status": 202,
+        "payloadExpression": "$\"/api/v2/admin/collection/backfill-batches/{Uri.EscapeDataString(batchId)}\",\r\n                    new CollectionRecollectionBatchResponse(request.Mode, null, result)",
+        "kind": "Accepted",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": "CollectionRecollectionBatchResponse",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CreateRecollectionBatchEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/backfill-batches/{id}",
+    "endpointFile": "GetBackfillBatchEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "id",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "batch",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "batch",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetBackfillBatchEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/operations/dashboard",
+    "endpointFile": "GetCollectionDashboardEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new CollectionOperationsDashboard(await progressTask,\r\n                    CollectionFailureGrouping.Build(await notificationsTask), await backfillsTask, JstTime.Now())",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "new CollectionOperationsDashboard(await progressTask,\r\n                    CollectionFailureGrouping.Build(await notificationsTask), await backfillsTask, JstTime.Now())",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetCollectionDashboardEndpoint.cs",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/operations/monitoring-findings",
+    "endpointFile": "GetCollectionMonitoringFindingsEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await service.InspectAsync(JstTime.Now(), token)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "await service.InspectAsync(JstTime.Now(), token)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetCollectionMonitoringFindingsEndpoint.cs",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/pipeline-state",
+    "endpointFile": "GetCollectionPipelineEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await store.GetPipelineStateAsync(token)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "await store.GetPipelineStateAsync(token)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetCollectionPipelineEndpoint.cs",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/operations/progress",
+    "endpointFile": "GetCollectionProgressEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await store.GetProgressAsync(token)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "await store.GetProgressAsync(token)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetCollectionProgressEndpoint.cs",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/resources/{type}/{provider}/{resourceId}/definitions/{definition}",
+    "endpointFile": "GetCollectionResourceDetailEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "type",
+        "kind": "path",
+        "type": "CollectionResourceType"
+      },
+      {
+        "name": "provider",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "resourceId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "definition",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "historyPage",
+        "kind": "query",
+        "type": "int?"
+      },
+      {
+        "name": "requestHistoryPage",
+        "kind": "query",
+        "type": "int?"
+      },
+      {
+        "name": "taskHistoryPage",
+        "kind": "query",
+        "type": "int?"
+      },
+      {
+        "name": "attemptHistoryPage",
+        "kind": "query",
+        "type": "int?"
+      },
+      {
+        "name": "historyPageSize",
+        "kind": "query",
+        "type": "int?"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "detail",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "detail",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetCollectionResourceDetailEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/resources/{type}/{provider}/{resourceId}/definitions/{definition}/state",
+    "endpointFile": "GetCollectionResourceStateEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "type",
+        "kind": "path",
+        "type": "CollectionResourceType"
+      },
+      {
+        "name": "provider",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "resourceId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "definition",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "state",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "state",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetCollectionResourceStateEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/execution-batches/{id:guid}",
+    "endpointFile": "GetExecutionBatchEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "id",
+        "kind": "path",
+        "type": "Guid"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "batch",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "batch",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetExecutionBatchEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/failure-notification-groups/{groupKey}",
+    "endpointFile": "GetFailureNotificationGroupEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "groupKey",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "search",
+        "kind": "query",
+        "type": "string?"
+      },
+      {
+        "name": "page",
+        "kind": "query",
+        "type": "int?"
+      },
+      {
+        "name": "pageSize",
+        "kind": "query",
+        "type": "int?"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "result",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "result",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetFailureNotificationGroupEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/recovery-previews/known",
+    "endpointFile": "GetKnownRecoveryPreviewEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await service.PreviewKnownRecoveryAsync(JstTime.Now(), token)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "await service.PreviewKnownRecoveryAsync(JstTime.Now(), token)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetKnownRecoveryPreviewEndpoint.cs",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/migration-previews/owner-identity",
+    "endpointFile": "GetOwnerIdentityMigrationPreviewEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await service.PreviewOwnerIdentityMigrationAsync(token)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "await service.PreviewOwnerIdentityMigrationAsync(token)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetOwnerIdentityMigrationPreviewEndpoint.cs",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/races/{raceId}/readiness",
+    "endpointFile": "GetRaceCollectionReadinessEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await store.GetReadinessAsync(raceId, token)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "await store.GetReadinessAsync(raceId, token)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetRaceCollectionReadinessEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/migrations/race-entry-owner-repair",
+    "endpointFile": "GetRaceEntryOwnerMigrationEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "CollectionPlatformEndpointSupport\r\n                    .BuildRaceEntryOwnerMigrationProgress(candidates, batch)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "CollectionPlatformEndpointSupport\r\n                    .BuildRaceEntryOwnerMigrationProgress(candidates, batch)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetRaceEntryOwnerMigrationEndpoint.cs",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/recollection-batches",
+    "endpointFile": "GetRevisionRecollectionProgressEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "definition",
+        "kind": "query",
+        "type": "string"
+      },
+      {
+        "name": "revision",
+        "kind": "query",
+        "type": "int"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await store.GetRevisionRecollectionProgressAsync(new(definition), revision, conditions, token)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "await store.GetRevisionRecollectionProgressAsync(new(definition), revision, conditions, token)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetRevisionRecollectionProgressEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/operations/task-view-counts",
+    "endpointFile": "GetTaskViewCountsEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await store.GetTaskViewCountsAsync(token)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "await store.GetTaskViewCountsAsync(token)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetTaskViewCountsEndpoint.cs",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/internal/collection/tasks/{id:guid}/leases/{leaseId}",
+    "endpointFile": "HeartbeatCollectionTaskLeaseEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "id",
+        "kind": "path",
+        "type": "Guid"
+      },
+      {
+        "name": "leaseId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "HeartbeatCollectionTaskRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new { leaseId }",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "PATCH",
+    "responseShape": "new { leaseId }",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/HeartbeatCollectionTaskLeaseEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/backfill-batches",
+    "endpointFile": "ListBackfillBatchesEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await store.GetBackfillBatchesAsync(token)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "await store.GetBackfillBatchesAsync(token)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/ListBackfillBatchesEndpoint.cs",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/tasks",
+    "endpointFile": "ListCollectionTasksEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "status",
+        "kind": "query",
+        "type": "CollectionTaskStatus?"
+      },
+      {
+        "name": "limit",
+        "kind": "query",
+        "type": "int?"
+      },
+      {
+        "name": "statuses",
+        "kind": "query",
+        "type": "string?"
+      },
+      {
+        "name": "resourceType",
+        "kind": "query",
+        "type": "CollectionResourceType?"
+      },
+      {
+        "name": "provider",
+        "kind": "query",
+        "type": "string?"
+      },
+      {
+        "name": "definitionId",
+        "kind": "query",
+        "type": "string?"
+      },
+      {
+        "name": "lane",
+        "kind": "query",
+        "type": "CollectionLane?"
+      },
+      {
+        "name": "search",
+        "kind": "query",
+        "type": "string?"
+      },
+      {
+        "name": "errorSearch",
+        "kind": "query",
+        "type": "string?"
+      },
+      {
+        "name": "createdFrom",
+        "kind": "query",
+        "type": "DateTimeOffset?"
+      },
+      {
+        "name": "createdTo",
+        "kind": "query",
+        "type": "DateTimeOffset?"
+      },
+      {
+        "name": "actionableOnly",
+        "kind": "query",
+        "type": "bool?"
+      },
+      {
+        "name": "latestOnly",
+        "kind": "query",
+        "type": "bool?"
+      },
+      {
+        "name": "page",
+        "kind": "query",
+        "type": "int?"
+      },
+      {
+        "name": "pageSize",
+        "kind": "query",
+        "type": "int?"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await store.SearchTasksAsync(new(parsedStatuses, resourceType, provider,\r\n                    definitionId, lane, search, createdFrom, createdTo, errorSearch, page ?? 1,\r\n                    pageSize ?? limit ?? 50, actionableOnly ?? false, latestOnly ?? false), token)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "await store.SearchTasksAsync(new(parsedStatuses, resourceType, provider,\r\n                    definitionId, lane, search, createdFrom, createdTo, errorSearch, page ?? 1,\r\n                    pageSize ?? limit ?? 50, actionableOnly ?? false, latestOnly ?? false), token)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/ListCollectionTasksEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/failure-notification-groups",
+    "endpointFile": "ListFailureNotificationGroupsEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "limit",
+        "kind": "query",
+        "type": "int?"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "CollectionFailureGrouping.Build(notifications)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "CollectionFailureGrouping.Build(notifications)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/ListFailureNotificationGroupsEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/failure-notifications",
+    "endpointFile": "ListFailureNotificationsEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "view",
+        "kind": "query",
+        "type": "string?"
+      },
+      {
+        "name": "published",
+        "kind": "query",
+        "type": "bool?"
+      },
+      {
+        "name": "deliveryState",
+        "kind": "query",
+        "type": "string?"
+      },
+      {
+        "name": "limit",
+        "kind": "query",
+        "type": "int?"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await store.GetFailureNotificationsAsync(JstTime.Now(),\r\n                    Math.Clamp(limit ?? 100, 1, 1000), actionableOnly, unpublishedOnly,\r\n                    published, parsedState, token)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "await store.GetFailureNotificationsAsync(JstTime.Now(),\r\n                    Math.Clamp(limit ?? 100, 1, 1000), actionableOnly, unpublishedOnly,\r\n                    published, parsedState, token)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/ListFailureNotificationsEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/race-entry-owner-repair-candidates",
+    "endpointFile": "ListRaceEntryOwnerRepairCandidatesEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "date",
+        "kind": "query",
+        "type": "DateOnly"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new RaceEntryOwnerRepairPreview(date, races.Count, candidates)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "new RaceEntryOwnerRepairPreview(date, races.Count, candidates)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/ListRaceEntryOwnerRepairCandidatesEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/task-batch-previews",
+    "endpointFile": "PreviewCollectionTaskBatchEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "BulkCollectionOperationRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await store.PreviewBulkRequestAsync(new(request.DefinitionId), request.RequestedRevision, targets, token)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": "await store.PreviewBulkRequestAsync(new(request.DefinitionId), request.RequestedRevision, targets, token)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/PreviewCollectionTaskBatchEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/migration-previews/race-detail",
+    "endpointFile": "PreviewRaceDetailMigrationEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await store.MergeLegacyRaceDetailsAsync(false, JstTime.Now(), token)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": "await store.MergeLegacyRaceDetailsAsync(false, JstTime.Now(), token)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/PreviewRaceDetailMigrationEndpoint.cs",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/migration-previews/race-entry-owner-repair",
+    "endpointFile": "PreviewRaceEntryOwnerMigrationEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "CollectionPlatformEndpointSupport.BuildRaceEntryOwnerMigrationProgress(candidates, batch)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": "CollectionPlatformEndpointSupport.BuildRaceEntryOwnerMigrationProgress(candidates, batch)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/PreviewRaceEntryOwnerMigrationEndpoint.cs",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/recollection-previews",
+    "endpointFile": "PreviewRacePeriodRecollectionEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new RacePeriodRecollectionPreview(request.From, request.To,\r\n                request.To.DayNumber - request.From.DayNumber + 1, request.Provider.Trim().ToUpperInvariant())",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": "new RacePeriodRecollectionPreview(request.From, request.To,\r\n                request.To.DayNumber - request.From.DayNumber + 1, request.Provider.Trim().ToUpperInvariant())",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/PreviewRacePeriodRecollectionEndpoint.cs",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/revision-impact-previews",
+    "endpointFile": "PreviewRevisionImpactEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "RevisionImpactPreviewRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await store.PreviewRevisionImpactAsync(new(request.DefinitionId), request.Revision,\r\n                CollectionPlatformEndpointSupport.BuildImpact(request.Impact), conditions, token)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": "await store.PreviewRevisionImpactAsync(new(request.DefinitionId), request.Revision,\r\n                CollectionPlatformEndpointSupport.BuildImpact(request.Impact), conditions, token)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/PreviewRevisionImpactEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/backfill-batches/{id}/recovery-batches",
+    "endpointFile": "RecoverBackfillHolesEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "id",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 202,
+        "payloadExpression": "value: new BackfillHoleRecoveryResult(batch.Holes.Count, created)",
+        "kind": "Accepted",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "POST",
+    "responseShape": "value: new BackfillHoleRecoveryResult(batch.Holes.Count, created)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/RecoverBackfillHolesEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/states",
+    "endpointFile": "SearchCollectionStatesEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "statuses",
+        "kind": "query",
+        "type": "string?"
+      },
+      {
+        "name": "resourceType",
+        "kind": "query",
+        "type": "CollectionResourceType?"
+      },
+      {
+        "name": "provider",
+        "kind": "query",
+        "type": "string?"
+      },
+      {
+        "name": "definitionId",
+        "kind": "query",
+        "type": "string?"
+      },
+      {
+        "name": "search",
+        "kind": "query",
+        "type": "string?"
+      },
+      {
+        "name": "page",
+        "kind": "query",
+        "type": "int?"
+      },
+      {
+        "name": "pageSize",
+        "kind": "query",
+        "type": "int?"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await store.SearchStatesAsync(new(parsed, resourceType, provider,\r\n                    definitionId, search, page ?? 1, pageSize ?? 50), token)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Collection",
+    "method": "GET",
+    "responseShape": "await store.SearchStatesAsync(new(parsed, resourceType, provider,\r\n                    definitionId, search, page ?? 1, pageSize ?? 50), token)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/SearchCollectionStatesEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/collection/pipeline",
+    "endpointFile": "SetCollectionPipelineEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "SetCollectionPipelineRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 204,
+        "payloadExpression": "",
+        "kind": "NoContent",
+        "hasData": false
+      }
+    ],
+    "family": "Collection",
+    "method": "PUT",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/SetCollectionPipelineEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/v2/internal/collection/execution-batches/{id:guid}",
+    "endpointFile": "TransitionCollectionExecutionEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "id",
+        "kind": "path",
+        "type": "Guid"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CollectionExecutionTransitionRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 204,
+        "payloadExpression": "",
+        "kind": "NoContent",
+        "hasData": false
+      },
+      {
+        "status": 204,
+        "payloadExpression": "",
+        "kind": "NoContent",
+        "hasData": false
+      }
+    ],
+    "family": "Collection",
+    "method": "PATCH",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/TransitionCollectionExecutionEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/horses/{horseId}",
+    "endpointFile": "CorrectHorseDataEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "horseId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CorrectHorseDataRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Horses",
+    "method": "PATCH",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/CorrectHorseDataEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/horses/{horseId}/participations",
+    "endpointFile": "GetHorseParticipationsEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "horseId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "take",
+        "kind": "query",
+        "type": "int?"
+      },
+      {
+        "name": "skip",
+        "kind": "query",
+        "type": "int?"
+      }
+    ],
+    "produces": [
+      {
+        "type": "ParticipationHistoryResponse",
+        "status": 200
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await BuildParticipationHistoryAsync(\"Horse\", horseId, dbContext, take, skip, cancellationToken).ConfigureAwait(false)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Horses",
+    "method": "GET",
+    "responseShape": "ParticipationHistoryResponse",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/GetHorseParticipationsEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/horses/{horseId}",
+    "endpointFile": "GetHorseProfileEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "horseId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [
+      {
+        "type": "ApiContracts.HorseReadDto",
+        "status": 200
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "ToAgentHorse(readModel)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Horses",
+    "method": "GET",
+    "responseShape": "ApiContracts.HorseReadDto",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/GetHorseProfileEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/horses/{horseId}/race-history",
+    "endpointFile": "GetHorseRaceHistoryEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "horseId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [
+      {
+        "type": "ApiContracts.HorseRaceHistoryDto",
+        "status": 200
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "ToAgentHorseRaceHistory(readModel)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Horses",
+    "method": "GET",
+    "responseShape": "ApiContracts.HorseRaceHistoryDto",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/GetHorseRaceHistoryEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/horses/{horseId}/weight-history",
+    "endpointFile": "GetHorseWeightHistoryEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "horseId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [
+      {
+        "type": "HorseWeightHistoryResponse",
+        "status": 200
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "response",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Horses",
+    "method": "GET",
+    "responseShape": "HorseWeightHistoryResponse",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/GetHorseWeightHistoryEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/horses/{horseId}/aliases",
+    "endpointFile": "MergeHorseAliasEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "horseId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "MergeAliasRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Horses",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/MergeHorseAliasEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/horses",
+    "endpointFile": "RegisterHorseEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "RegisterHorseRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 201,
+        "payloadExpression": "$\"/api/horses/{horseId.Value}\", new { HorseId = horseId.Value }",
+        "kind": "Created",
+        "hasData": true
+      }
+    ],
+    "family": "Horses",
+    "method": "POST",
+    "responseShape": "$\"/api/horses/{horseId.Value}\", new { HorseId = horseId.Value }",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/RegisterHorseEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/horses",
+    "endpointFile": "SearchHorsesEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "queryObject",
+        "type": "SearchHorsesRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "ToPagedResponse(\r\n                            sorted,\r\n                            page,\r\n                            pageSize,\r\n                            x => new HorseSummaryResponse(\r\n                                x.HorseId,\r\n                                x.RegisteredName,\r\n                                x.NormalizedName,\r\n                                x.SexCode,\r\n                                x.BirthDate,\r\n                                x.Aliases.Count))",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Horses",
+    "method": "GET",
+    "responseShape": "ToPagedResponse(\r\n                            sorted,\r\n                            page,\r\n                            pageSize,\r\n                            x => new HorseSummaryResponse(\r\n                                x.HorseId,\r\n                                x.RegisteredName,\r\n                                x.NormalizedName,\r\n                                x.SexCode,\r\n                                x.BirthDate,\r\n                                x.Aliases.Count))",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/SearchHorsesEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/horses/{horseId}",
+    "endpointFile": "UpdateHorseProfileEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "horseId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "UpdateHorseProfileRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Horses",
+    "method": "PUT",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/UpdateHorseProfileEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/identity/horse",
+    "endpointFile": "ResolveHorseIdentityEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "ResolveHorseIdentityRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new ResolvedIdentity(await CollectionIdentityResolver.HorseAsync(db, request.Name, request.SourceIdentity, request.BirthDate, token))",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Identity",
+    "method": "POST",
+    "responseShape": "new ResolvedIdentity(await CollectionIdentityResolver.HorseAsync(db, request.Name, request.SourceIdentity, request.BirthDate, token))",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Identity/ResolveHorseIdentityEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/identity/race",
+    "endpointFile": "ResolveRaceIdentityEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "HorseRacingPrediction.Contracts.ResolveRaceIdentityRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new HorseRacingPrediction.Contracts.ResolvedIdentity(await CollectionIdentityResolver.RaceAsync(db, request.Date, request.Course, request.Number, token))",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Identity",
+    "method": "POST",
+    "responseShape": "new HorseRacingPrediction.Contracts.ResolvedIdentity(await CollectionIdentityResolver.RaceAsync(db, request.Date, request.Course, request.Number, token))",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Identity/ResolveRaceIdentityEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/jockeys/{jockeyId}",
+    "endpointFile": "CorrectJockeyDataEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "jockeyId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CorrectJockeyDataRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Jockeys",
+    "method": "PATCH",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/CorrectJockeyDataEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/jockeys/{jockeyId}/participations",
+    "endpointFile": "GetJockeyParticipationsEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "jockeyId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "take",
+        "kind": "query",
+        "type": "int?"
+      },
+      {
+        "name": "skip",
+        "kind": "query",
+        "type": "int?"
+      }
+    ],
+    "produces": [
+      {
+        "type": "ParticipationHistoryResponse",
+        "status": 200
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await BuildParticipationHistoryAsync(\"Jockey\", jockeyId, dbContext, take, skip, cancellationToken).ConfigureAwait(false)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Jockeys",
+    "method": "GET",
+    "responseShape": "ParticipationHistoryResponse",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/GetJockeyParticipationsEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/jockeys/{jockeyId}",
+    "endpointFile": "GetJockeyProfileEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "jockeyId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [
+      {
+        "type": "ApiContracts.JockeyDto",
+        "status": 200
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "ToAgentJockey(readModel)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Jockeys",
+    "method": "GET",
+    "responseShape": "ApiContracts.JockeyDto",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/GetJockeyProfileEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/jockeys/{jockeyId}/race-history",
+    "endpointFile": "GetJockeyRaceHistoryEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "jockeyId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [
+      {
+        "type": "ApiContracts.JockeyRaceHistoryDto",
+        "status": 200
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "ToAgentJockeyRaceHistory(readModel)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Jockeys",
+    "method": "GET",
+    "responseShape": "ApiContracts.JockeyRaceHistoryDto",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/GetJockeyRaceHistoryEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/jockeys/{jockeyId}/aliases",
+    "endpointFile": "MergeJockeyAliasEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "jockeyId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "MergeAliasRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Jockeys",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/MergeJockeyAliasEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/jockeys",
+    "endpointFile": "RegisterJockeyEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "RegisterJockeyRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 201,
+        "payloadExpression": "$\"/api/jockeys/{jockeyId.Value}\", new { JockeyId = jockeyId.Value }",
+        "kind": "Created",
+        "hasData": true
+      }
+    ],
+    "family": "Jockeys",
+    "method": "POST",
+    "responseShape": "$\"/api/jockeys/{jockeyId.Value}\", new { JockeyId = jockeyId.Value }",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/RegisterJockeyEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/jockeys",
+    "endpointFile": "SearchJockeysEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "queryObject",
+        "type": "SearchJockeysRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "ToPagedResponse(\r\n                            sorted,\r\n                            page,\r\n                            pageSize,\r\n                            x => new JockeySummaryResponse(\r\n                                x.JockeyId,\r\n                                x.DisplayName,\r\n                                x.NormalizedName,\r\n                                x.AffiliationCode,\r\n                                x.Aliases.Count))",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Jockeys",
+    "method": "GET",
+    "responseShape": "ToPagedResponse(\r\n                            sorted,\r\n                            page,\r\n                            pageSize,\r\n                            x => new JockeySummaryResponse(\r\n                                x.JockeyId,\r\n                                x.DisplayName,\r\n                                x.NormalizedName,\r\n                                x.AffiliationCode,\r\n                                x.Aliases.Count))",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/SearchJockeysEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/jockeys/{jockeyId}",
+    "endpointFile": "UpdateJockeyProfileEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "jockeyId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "UpdateJockeyProfileRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Jockeys",
+    "method": "PUT",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/UpdateJockeyProfileEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/races/{raceId}/ml-prediction",
+    "endpointFile": "GetMlPredictionEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [
+      {
+        "type": "ApiContracts.MlPredictionResponse",
+        "status": 200
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "response",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "MachineLearning",
+    "method": "GET",
+    "responseShape": "ApiContracts.MlPredictionResponse",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/MachineLearning/GetMlPredictionEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/ml/train",
+    "endpointFile": "TrainMlModelEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new { TrainedRaceCount = finishedRaces.Count, IsModelTrained = predictor.IsModelTrained }",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "MachineLearning",
+    "method": "POST",
+    "responseShape": "new { TrainedRaceCount = finishedRaces.Count, IsModelTrained = predictor.IsModelTrained }",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/MachineLearning/TrainMlModelEndpoint.cs",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/memos/{memoId}/subjects",
+    "endpointFile": "ChangeMemoSubjectsEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "memoId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "ChangeMemoSubjectsRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Memos",
+    "method": "PUT",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Memos/ChangeMemoSubjectsEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/memos",
+    "endpointFile": "CreateMemoEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CreateMemoRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 201,
+        "payloadExpression": "$\"/api/memos/{memoId.Value}\", new { MemoId = memoId.Value }",
+        "kind": "Created",
+        "hasData": true
+      }
+    ],
+    "family": "Memos",
+    "method": "POST",
+    "responseShape": "$\"/api/memos/{memoId.Value}\", new { MemoId = memoId.Value }",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Memos/CreateMemoEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/memos/{memoId}",
+    "endpointFile": "DeleteMemoEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "memoId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Memos",
+    "method": "DELETE",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Memos/DeleteMemoEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/memos/by-subject/{subjectType}/{subjectId}",
+    "endpointFile": "GetMemosBySubjectEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "subjectType",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "subjectId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "response",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Memos",
+    "method": "GET",
+    "responseShape": "response",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Memos/GetMemosBySubjectEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/memos/{memoId}",
+    "endpointFile": "UpdateMemoEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "memoId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "UpdateMemoRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Memos",
+    "method": "PUT",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Memos/UpdateMemoEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/admin/repairs/owner-identity/execute",
+    "endpointFile": "ExecuteOwnerIdentityRecoveryEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "OwnerIdentityRecoveryRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "receipts",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Owners",
+    "method": "POST",
+    "responseShape": "receipts",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Owners/ExecuteOwnerIdentityRecoveryEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/owners/{ownerId}",
+    "endpointFile": "GetOwnerEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "ownerId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "take",
+        "kind": "query",
+        "type": "int?"
+      },
+      {
+        "name": "skip",
+        "kind": "query",
+        "type": "int?"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new OwnerDetailResponse(owner, currentHorses, relatedTrainers, entries, mergeHistory, hasMoreParticipations, ownerTopHorses)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Owners",
+    "method": "GET",
+    "responseShape": "new OwnerDetailResponse(owner, currentHorses, relatedTrainers, entries, mergeHistory, hasMoreParticipations, ownerTopHorses)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Owners/GetOwnerEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/owners/{ownerId}/merge",
+    "endpointFile": "MergeOwnerEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "ownerId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "MergeOwnerRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 204,
+        "payloadExpression": "",
+        "kind": "NoContent",
+        "hasData": false
+      }
+    ],
+    "family": "Owners",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Owners/MergeOwnerEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/admin/repairs/owner-identity",
+    "endpointFile": "PreviewOwnerIdentityRecoveryEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "result",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Owners",
+    "method": "GET",
+    "responseShape": "result",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Owners/PreviewOwnerIdentityRecoveryEndpoint.cs",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/owners",
+    "endpointFile": "SearchOwnersEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "query",
+        "kind": "query",
+        "type": "string?"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "owners.OrderBy(x => x.DisplayName, StringComparer.Ordinal).ToList()",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Owners",
+    "method": "GET",
+    "responseShape": "owners.OrderBy(x => x.DisplayName, StringComparer.Ordinal).ToList()",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Owners/SearchOwnersEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/owners/{ownerId}",
+    "endpointFile": "UpdateOwnerEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "ownerId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "UpdateOwnerRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 204,
+        "payloadExpression": "",
+        "kind": "NoContent",
+        "hasData": false
+      }
+    ],
+    "family": "Owners",
+    "method": "PUT",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Owners/UpdateOwnerEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/predictions/{predictionTicketId}/betting-suggestions",
+    "endpointFile": "AddBettingSuggestionEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "predictionTicketId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "AddBettingSuggestionRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Predictions",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/AddBettingSuggestionEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/predictions/{predictionTicketId}/marks",
+    "endpointFile": "AddPredictionMarkEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "predictionTicketId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "AddPredictionMarkRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Predictions",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/AddPredictionMarkEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/predictions/{predictionTicketId}/rationales",
+    "endpointFile": "AddPredictionRationaleEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "predictionTicketId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "AddPredictionRationaleRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Predictions",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/AddPredictionRationaleEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/predictions/{predictionTicketId}",
+    "endpointFile": "CorrectPredictionMetadataEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "predictionTicketId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CorrectPredictionMetadataRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Predictions",
+    "method": "PATCH",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/CorrectPredictionMetadataEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/predictions",
+    "endpointFile": "CreatePredictionTicketEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CreatePredictionTicketRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 201,
+        "payloadExpression": "$\"/api/predictions/{predictionTicketId.Value}\", new { PredictionTicketId = predictionTicketId.Value }",
+        "kind": "Created",
+        "hasData": true
+      }
+    ],
+    "family": "Predictions",
+    "method": "POST",
+    "responseShape": "$\"/api/predictions/{predictionTicketId.Value}\", new { PredictionTicketId = predictionTicketId.Value }",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/CreatePredictionTicketEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/predictions/{predictionTicketId}/evaluate",
+    "endpointFile": "EvaluatePredictionTicketEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "predictionTicketId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "EvaluatePredictionTicketRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Predictions",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/EvaluatePredictionTicketEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/predictions/{predictionTicketId}/finalize",
+    "endpointFile": "FinalizePredictionTicketEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "predictionTicketId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Predictions",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/FinalizePredictionTicketEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/predictions/{predictionTicketId}",
+    "endpointFile": "GetPredictionTicketEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "predictionTicketId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [
+      {
+        "type": "PredictionTicketResponse",
+        "status": 200
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "response",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Predictions",
+    "method": "GET",
+    "responseShape": "PredictionTicketResponse",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/GetPredictionTicketEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/predictions/{predictionTicketId}/recalculate-evaluation",
+    "endpointFile": "RecalculatePredictionEvaluationEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "predictionTicketId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "RecalculatePredictionEvaluationRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Predictions",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/RecalculatePredictionEvaluationEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/predictions",
+    "endpointFile": "SearchPredictionTicketsEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "queryObject",
+        "type": "SearchPredictionTicketsRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "ToPagedResponse(\r\n                            sorted,\r\n                            page,\r\n                            pageSize,\r\n                            x =>\r\n                            {\r\n                                races.TryGetValue(x.RaceId ?? string.Empty, out var race);\r\n                                var primaryMark = x.Marks.OrderBy(m => m.PredictedRank).FirstOrDefault();\r\n                                var primaryHorseId = primaryMark is not null && race is not null\r\n                                    ? race.Entries.FirstOrDefault(e => e.EntryId == primaryMark.EntryId)?.HorseId\r\n                                    : null;\r\n                                return new PredictionTicketSummaryResponse(\r\n                                x.PredictionTicketId,\r\n                                x.RaceId,\r\n                                x.PredictorType,\r\n                                x.PredictorId,\r\n                                x.ConfidenceScore,\r\n                                x.SummaryComment,\r\n                                x.PredictedAt,\r\n                                (ApiContracts.TicketStatus)(int)x.TicketStatus,\r\n                                (ApiContracts.EvaluationStatus)(int)x.EvaluationStatus,\r\n                                x.Marks.Count,\r\n                                race?.RaceName, race?.RaceDate, race?.RacecourseCode, race?.RaceNumber,\r\n                                primaryHorseId is null ? null : horseNames.GetValueOrDefault(primaryHorseId));\r\n                            })",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Predictions",
+    "method": "GET",
+    "responseShape": "ToPagedResponse(\r\n                            sorted,\r\n                            page,\r\n                            pageSize,\r\n                            x =>\r\n                            {\r\n                                races.TryGetValue(x.RaceId ?? string.Empty, out var race);\r\n                                var primaryMark = x.Marks.OrderBy(m => m.PredictedRank).FirstOrDefault();\r\n                                var primaryHorseId = primaryMark is not null && race is not null\r\n                                    ? race.Entries.FirstOrDefault(e => e.EntryId == primaryMark.EntryId)?.HorseId\r\n                                    : null;\r\n                                return new PredictionTicketSummaryResponse(\r\n                                x.PredictionTicketId,\r\n                                x.RaceId,\r\n                                x.PredictorType,\r\n                                x.PredictorId,\r\n                                x.ConfidenceScore,\r\n                                x.SummaryComment,\r\n                                x.PredictedAt,\r\n                                (ApiContracts.TicketStatus)(int)x.TicketStatus,\r\n                                (ApiContracts.EvaluationStatus)(int)x.EvaluationStatus,\r\n                                x.Marks.Count,\r\n                                race?.RaceName, race?.RaceDate, race?.RacecourseCode, race?.RaceNumber,\r\n                                primaryHorseId is null ? null : horseNames.GetValueOrDefault(primaryHorseId));\r\n                            })",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/SearchPredictionTicketsEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/predictions/{predictionTicketId}/withdraw",
+    "endpointFile": "WithdrawPredictionTicketEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "predictionTicketId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "WithdrawPredictionTicketRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Predictions",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/WithdrawPredictionTicketEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/v2/internal/prediction-candidate-leases",
+    "endpointFile": "AcquirePredictionCandidateLeasesEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "AcquirePredictionCandidatesRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 204,
+        "payloadExpression": "",
+        "kind": "NoContent",
+        "hasData": false
+      },
+      {
+        "status": 200,
+        "payloadExpression": "leases",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "PredictionScheduling",
+    "method": "POST",
+    "responseShape": "leases",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/PredictionScheduling/AcquirePredictionCandidateLeasesEndpoint.cs",
+    "handler": "Map lambda (IPredictionSchedule is DI)",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/internal/prediction-candidates",
+    "endpointFile": "EnqueuePredictionCandidatesEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "EnqueuePredictionCandidatesRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 202,
+        "payloadExpression": "",
+        "kind": "Accepted",
+        "hasData": false
+      }
+    ],
+    "family": "PredictionScheduling",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/PredictionScheduling/EnqueuePredictionCandidatesEndpoint.cs",
+    "handler": "Map lambda (IPredictionSchedule is DI)",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/v2/internal/prediction-candidates/{raceId}",
+    "endpointFile": "TransitionPredictionCandidateEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "PredictionCandidateTransitionRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 204,
+        "payloadExpression": "",
+        "kind": "NoContent",
+        "hasData": false
+      },
+      {
+        "status": 204,
+        "payloadExpression": "",
+        "kind": "NoContent",
+        "hasData": false
+      }
+    ],
+    "family": "PredictionScheduling",
+    "method": "PATCH",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/PredictionScheduling/TransitionPredictionCandidateEndpoint.cs",
+    "handler": "Map lambda (IPredictionSchedule is DI)",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/v2/admin/races/{raceId}/entry-repairs",
+    "endpointFile": "ApplyRaceEntryRepairEndpoint.cs",
+    "handlerParameters": [
+      {
+        "type": "string",
+        "name": "raceId",
+        "kind": "path"
+      },
+      {
+        "type": "ApplyRaceEntryRepairRequest",
+        "name": "request",
+        "kind": "body"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "hasData": true,
+        "payloadExpression": "anonymous { OperationId, Fingerprint, Version, Verified, BackupHash, AssignmentFingerprint }",
+        "kind": "Ok"
+      }
+    ],
+    "family": "Races",
+    "method": "POST",
+    "responseShape": "anonymous { OperationId, Fingerprint, Version, Verified, BackupHash, AssignmentFingerprint }",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/ApplyRaceEntryRepairEndpoint.cs",
+    "handler": "RaceEntryRepairOperations.ApplyAsync",
+    "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/races/{raceId}/close",
+    "endpointFile": "CloseRaceLifecycleEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Races",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/CloseRaceLifecycleEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/races/{raceId}",
+    "endpointFile": "CorrectRaceDataEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CorrectRaceDataRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Races",
+    "method": "PATCH",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/CorrectRaceDataEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/races",
+    "endpointFile": "CreateRaceEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CreateRaceRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 201,
+        "payloadExpression": "$\"/api/races/{raceId.Value}\", new { RaceId = raceId.Value }",
+        "kind": "Created",
+        "hasData": true
+      }
+    ],
+    "family": "Races",
+    "method": "POST",
+    "responseShape": "$\"/api/races/{raceId.Value}\", new { RaceId = raceId.Value }",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/CreateRaceEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/races",
+    "endpointFile": "CreateRaceFromScheduleEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "PrepareHorseHistoryRaceRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new { raceId = id }",
+        "kind": "Ok",
+        "hasData": true
+      },
+      {
+        "status": 200,
+        "payloadExpression": "new { raceId = id }",
+        "kind": "Ok",
+        "hasData": true
+      },
+      {
+        "status": 201,
+        "payloadExpression": "$\"/api/v2/admin/races/{Uri.EscapeDataString(id)}\", new { raceId = id }",
+        "kind": "Created",
+        "hasData": true
+      }
+    ],
+    "family": "Races",
+    "method": "POST",
+    "responseShape": "new { raceId = id } | $\"/api/v2/admin/races/{Uri.EscapeDataString(id)}\", new { raceId = id }",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/CreateRaceFromScheduleEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/races/{raceId}/odds-snapshot-records",
+    "endpointFile": "CreateRaceOddsSnapshotEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "RecordRaceOddsSnapshotRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 201,
+        "payloadExpression": "$\"/api/v2/admin/races/{Uri.EscapeDataString(raceId)}/odds-snapshot-records\", null",
+        "kind": "Created",
+        "hasData": false
+      }
+    ],
+    "family": "Races",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/CreateRaceOddsSnapshotEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/races/{raceId}/entries/{entryId}/result",
+    "endpointFile": "DeclareEntryResultEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "entryId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "DeclareEntryResultRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Races",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/DeclareEntryResultEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/races/{raceId}/payout",
+    "endpointFile": "DeclarePayoutResultEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "ApiContracts.DeclarePayoutResultRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Races",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/DeclarePayoutResultEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/races/result-bulk",
+    "endpointFile": "DeclareRaceResultBulkEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "ApiContracts.DeclareRaceResultBulkRequest"
+      }
+    ],
+    "produces": [
+      {
+        "type": "ApiContracts.DeclareRaceResultBulkResponse",
+        "status": 200
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "DeclareRaceResultBulkResponse (RaceResultBulkService.ApplyCollectedRaceResultBulkAsync)",
+        "hasData": true,
+        "kind": "Ok"
+      }
+    ],
+    "family": "Races",
+    "method": "POST",
+    "responseShape": "DeclareRaceResultBulkResponse",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/DeclareRaceResultBulkEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/races/{raceId}/result",
+    "endpointFile": "DeclareRaceResultEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "DeclareRaceResultRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Races",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/DeclareRaceResultEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/races/{raceId}/comparison",
+    "endpointFile": "GetPredictionComparisonEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [
+      {
+        "type": "PredictionComparisonViewReadModel",
+        "status": 200
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "readModel",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Races",
+    "method": "GET",
+    "responseShape": "PredictionComparisonViewReadModel",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/GetPredictionComparisonEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/races/{raceId}/entry-repair/assignment-fence-state",
+    "endpointFile": "GetRaceAssignmentFenceEndpoint.cs",
+    "handlerParameters": [
+      {
+        "type": "string",
+        "name": "raceId",
+        "kind": "path"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "hasData": true,
+        "payloadExpression": "anonymous { generation, assignmentFingerprint }",
+        "kind": "Ok"
+      }
+    ],
+    "family": "Races",
+    "method": "GET",
+    "responseShape": "anonymous { generation, assignmentFingerprint }",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/GetRaceAssignmentFenceEndpoint.cs",
+    "handler": "RaceEntryRepairOperations.GetFenceAsync",
+    "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/races/{raceId}",
+    "endpointFile": "GetRaceEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [
+      {
+        "type": "RaceResponse",
+        "status": 200
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "response",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Races",
+    "method": "GET",
+    "responseShape": "RaceResponse",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/GetRaceEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/races/{raceId}/entry-repair/inspection",
+    "endpointFile": "GetRaceEntryRepairEndpoint.cs",
+    "handlerParameters": [
+      {
+        "type": "string",
+        "name": "raceId",
+        "kind": "path"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "hasData": true,
+        "payloadExpression": "RaceEntryRepairInspection",
+        "kind": "Ok"
+      }
+    ],
+    "family": "Races",
+    "method": "GET",
+    "responseShape": "RaceEntryRepairInspection",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/GetRaceEntryRepairEndpoint.cs",
+    "handler": "RaceEntryRepairOperations.GetInspectionAsync",
+    "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/races/{raceId}/entry-repair/hold-state",
+    "endpointFile": "GetRaceEntryRepairHoldEndpoint.cs",
+    "handlerParameters": [
+      {
+        "type": "string",
+        "name": "raceId",
+        "kind": "path"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "hasData": true,
+        "payloadExpression": "RaceRepairHoldSnapshot",
+        "kind": "Ok"
+      }
+    ],
+    "family": "Races",
+    "method": "GET",
+    "responseShape": "RaceRepairHoldSnapshot",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/GetRaceEntryRepairHoldEndpoint.cs",
+    "handler": "RaceEntryRepairOperations.GetHoldAsync",
+    "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/races/{raceId}/context",
+    "endpointFile": "GetRacePredictionContextEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [
+      {
+        "type": "ApiContracts.RacePredictionContextDto",
+        "status": 200
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "result",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Races",
+    "method": "GET",
+    "responseShape": "ApiContracts.RacePredictionContextDto",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/GetRacePredictionContextEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/races/{raceId}/odds-snapshot-records",
+    "endpointFile": "ListRaceOddsSnapshotsEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "model.OddsSnapshots",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Races",
+    "method": "GET",
+    "responseShape": "model.OddsSnapshots",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/ListRaceOddsSnapshotsEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/races/{raceId}/reschedule",
+    "endpointFile": "MarkRaceRescheduledEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "MarkRaceRescheduledRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Races",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/MarkRaceRescheduledEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/races/{raceId}/open-pre-race",
+    "endpointFile": "OpenPreRaceEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Races",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/OpenPreRaceEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/v2/admin/races/{raceId}/entry-repair-previews",
+    "endpointFile": "PreviewRaceEntryRepairEndpoint.cs",
+    "handlerParameters": [
+      {
+        "type": "string",
+        "name": "raceId",
+        "kind": "path"
+      },
+      {
+        "type": "RaceEntryRepairManifest",
+        "name": "manifest",
+        "kind": "body"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "hasData": true,
+        "payloadExpression": "anonymous { Eligible, Fingerprint, Version, PreviousEntries, Entries, GradeCode, ReferenceCounts, Blockers, Hold, SourceEvidence, SourceAssurance }",
+        "kind": "Ok"
+      }
+    ],
+    "family": "Races",
+    "method": "POST",
+    "responseShape": "anonymous { Eligible, Fingerprint, Version, PreviousEntries, Entries, GradeCode, ReferenceCounts, Blockers, Hold, SourceEvidence, SourceAssurance }",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/PreviewRaceEntryRepairEndpoint.cs",
+    "handler": "RaceEntryRepairOperations.PreviewAsync",
+    "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/races/{raceId}/card/publish",
+    "endpointFile": "PublishRaceCardEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "PublishRaceCardRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Races",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/PublishRaceCardEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/races/{raceId}/track-condition",
+    "endpointFile": "RecordTrackConditionEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "ApiContracts.RecordTrackConditionRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Races",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/RecordTrackConditionEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/races/{raceId}/weather",
+    "endpointFile": "RecordWeatherObservationEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "ApiContracts.RecordWeatherObservationRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Races",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/RecordWeatherObservationEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/races/{raceId}/entries",
+    "endpointFile": "RegisterEntryEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "RegisterEntryRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 201,
+        "payloadExpression": "$\"/api/races/{raceId}/entries/{entryId}\", new { RaceId = raceId, EntryId = entryId }",
+        "kind": "Created",
+        "hasData": true
+      }
+    ],
+    "family": "Races",
+    "method": "POST",
+    "responseShape": "$\"/api/races/{raceId}/entries/{entryId}\", new { RaceId = raceId, EntryId = entryId }",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/RegisterEntryEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/races/{raceId}/entry-repair/hold",
+    "endpointFile": "ReleaseRaceEntryRepairHoldEndpoint.cs",
+    "handlerParameters": [
+      {
+        "type": "string",
+        "name": "raceId",
+        "kind": "path"
+      },
+      {
+        "type": "ReleaseRaceEntryRepairRequest",
+        "name": "request",
+        "kind": "body"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "hasData": true,
+        "payloadExpression": "RaceRepairHoldSnapshot",
+        "kind": "Ok"
+      }
+    ],
+    "family": "Races",
+    "method": "PATCH",
+    "responseShape": "RaceRepairHoldSnapshot",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/ReleaseRaceEntryRepairHoldEndpoint.cs",
+    "handler": "RaceEntryRepairOperations.PatchHoldAsync",
+    "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/races",
+    "endpointFile": "SearchRacesEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "queryObject",
+        "type": "SearchRacesRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new PagedResponse<RaceSummaryResponse>(\r\n                            items,\r\n                            page,\r\n                            pageSize,\r\n                            totalCount,\r\n                            totalPages)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Races",
+    "method": "GET",
+    "responseShape": "new PagedResponse<RaceSummaryResponse>(\r\n                            items,\r\n                            page,\r\n                            pageSize,\r\n                            totalCount,\r\n                            totalPages)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/SearchRacesEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/races/{raceId}/start",
+    "endpointFile": "StartRaceEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Races",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/StartRaceEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/races/{raceId}/entries/{entryId}",
+    "endpointFile": "UpdateEntryCollectedDataEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "raceId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "entryId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "UpdateEntryCollectedDataRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new { RaceId = raceId, EntryId = entryId }",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Races",
+    "method": "PUT",
+    "responseShape": "new { RaceId = raceId, EntryId = entryId }",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/UpdateEntryCollectedDataEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/races/{raceId}/entry-repair/hold",
+    "endpointFile": "UpdateRaceEntryRepairHoldEndpoint.cs",
+    "handlerParameters": [
+      {
+        "type": "string",
+        "name": "raceId",
+        "kind": "path"
+      },
+      {
+        "type": "HoldRaceEntryRepairRequest",
+        "name": "request",
+        "kind": "body"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "hasData": true,
+        "payloadExpression": "RaceRepairHoldSnapshot",
+        "kind": "Ok"
+      }
+    ],
+    "family": "Races",
+    "method": "PUT",
+    "responseShape": "RaceRepairHoldSnapshot",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/UpdateRaceEntryRepairHoldEndpoint.cs",
+    "handler": "RaceEntryRepairOperations.PutHoldAsync",
+    "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/admin/repairs/20260913-jra-horse-identity/apply",
+    "endpointFile": "ApplyHorseIdentityRepairEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "ApplyHorseIdentityRepairRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new ApplyHorseIdentityRepairResponse(HorseIdentityRepairId, applied,\r\n                            completed.Length, disabled, running)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Repairs",
+    "method": "POST",
+    "responseShape": "new ApplyHorseIdentityRepairResponse(HorseIdentityRepairId, applied,\r\n                            completed.Length, disabled, running)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Repairs/ApplyHorseIdentityRepairEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/admin/repairs/subject-name-normalization/apply",
+    "endpointFile": "ApplySubjectNameNormalizationEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "ApplySubjectNameNormalizationRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new SubjectNameNormalizationApplyResult(request.Items.Count,\r\n                        results.Count(x => x.Status == \"Applied\"), results.Count(x => x.Status == \"Skipped\"),\r\n                        results.Count(x => x.Status == \"Failed\"), results)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Repairs",
+    "method": "POST",
+    "responseShape": "new SubjectNameNormalizationApplyResult(request.Items.Count,\r\n                        results.Count(x => x.Status == \"Applied\"), results.Count(x => x.Status == \"Skipped\"),\r\n                        results.Count(x => x.Status == \"Failed\"), results)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Repairs/ApplySubjectNameNormalizationEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/admin/repairs/subject-identification/dismiss",
+    "endpointFile": "DismissSubjectIdentificationFailuresEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "DismissSubjectIdentificationFailuresRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new DismissSubjectIdentificationFailuresResponse(\r\n                            result.SelectedCount, result.DismissedCount, result.AlreadyClosedCount)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Repairs",
+    "method": "POST",
+    "responseShape": "new DismissSubjectIdentificationFailuresResponse(\r\n                            result.SelectedCount, result.DismissedCount, result.AlreadyClosedCount)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Repairs/DismissSubjectIdentificationFailuresEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/admin/repairs/subject-identification/execute",
+    "endpointFile": "ExecuteSubjectIdentificationRepairEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "ExecuteSubjectIdentificationRepairRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 202,
+        "payloadExpression": "value: new ExecuteSubjectIdentificationRepairResponse(\r\n                                request.Items.Count, issueReceipts.Count(x => x.CreatedTask),\r\n                                issueReceipts.Count(x => !x.CreatedTask), issueReceipts.Where(x => x.TaskId.HasValue).Select(x => x.TaskId!.Value).ToArray())",
+        "kind": "Accepted",
+        "hasData": true
+      },
+      {
+        "status": 202,
+        "payloadExpression": "value: new ExecuteSubjectIdentificationRepairResponse(\r\n                            request.Items.Count, receipts.Count(x => x.CreatedTask), receipts.Count(x => !x.CreatedTask),\r\n                            receipts.Where(x => x.TaskId.HasValue).Select(x => x.TaskId!.Value).Distinct().ToArray(), merged, disabled, running)",
+        "kind": "Accepted",
+        "hasData": true
+      }
+    ],
+    "family": "Repairs",
+    "method": "POST",
+    "responseShape": "value: new ExecuteSubjectIdentificationRepairResponse(\r\n                                request.Items.Count, issueReceipts.Count(x => x.CreatedTask),\r\n                                issueReceipts.Count(x => !x.CreatedTask), issueReceipts.Where(x => x.TaskId.HasValue).Select(x => x.TaskId!.Value).ToArray()) | value: new ExecuteSubjectIdentificationRepairResponse(\r\n                            request.Items.Count, receipts.Count(x => x.CreatedTask), receipts.Count(x => !x.CreatedTask),\r\n                            receipts.Where(x => x.TaskId.HasValue).Select(x => x.TaskId!.Value).Distinct().ToArray(), merged, disabled, running)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Repairs/ExecuteSubjectIdentificationRepairEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/admin/repairs/20260913-jra-horse-identity",
+    "endpointFile": "GetHorseIdentityRepairEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "await BuildHorseIdentityRepairPreviewAsync(db, collectionStore, token).ConfigureAwait(false)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Repairs",
+    "method": "GET",
+    "responseShape": "await BuildHorseIdentityRepairPreviewAsync(db, collectionStore, token).ConfigureAwait(false)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Repairs/GetHorseIdentityRepairEndpoint.cs",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/admin/repairs/subject-identification",
+    "endpointFile": "GetSubjectIdentificationRepairEndpoint.cs",
+    "handlerParameters": [],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new SubjectIdentificationRepairPreviewResponse(candidates)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Repairs",
+    "method": "GET",
+    "responseShape": "new SubjectIdentificationRepairPreviewResponse(candidates)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Repairs/GetSubjectIdentificationRepairEndpoint.cs",
+    "requestPresent": false,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/admin/repairs/subject-name-normalization",
+    "endpointFile": "GetSubjectNameNormalizationEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "subjectType",
+        "kind": "query",
+        "type": "CollectionResourceType"
+      },
+      {
+        "name": "query",
+        "kind": "query",
+        "type": "string?"
+      },
+      {
+        "name": "page",
+        "kind": "query",
+        "type": "int?"
+      },
+      {
+        "name": "pageSize",
+        "kind": "query",
+        "type": "int?"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new SubjectNameNormalizationPage(items, searchPage.TotalCount, actualPage, actualPageSize)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Repairs",
+    "method": "GET",
+    "responseShape": "new SubjectNameNormalizationPage(items, searchPage.TotalCount, actualPage, actualPageSize)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Repairs/GetSubjectNameNormalizationEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/subjects/{kind}/{subjectId}/profiles/current",
+    "endpointFile": "GetSubjectProfileEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "kind",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "subjectId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new JraSubjectProfileDto(kind, profile.Name, profile.SourceIdentity,\r\n                        profile.SourceUrl, profile.Fields, profile.AcquiredAt)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Subjects",
+    "method": "GET",
+    "responseShape": "new JraSubjectProfileDto(kind, profile.Name, profile.SourceIdentity,\r\n                        profile.SourceUrl, profile.Fields, profile.AcquiredAt)",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Subjects/GetSubjectProfileEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/v2/admin/subjects/{kind}/{subjectId}/profile",
+    "endpointFile": "PutSubjectProfileEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "kind",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "subjectId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "JraSubjectProfileDto"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Subjects",
+    "method": "PUT",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Subjects/PutSubjectProfileEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/trainers/{trainerId}",
+    "endpointFile": "CorrectTrainerDataEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "trainerId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CorrectTrainerDataRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Trainers",
+    "method": "PATCH",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/CorrectTrainerDataEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/trainers/{trainerId}/participations",
+    "endpointFile": "GetTrainerParticipationsEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "trainerId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "take",
+        "kind": "query",
+        "type": "int?"
+      },
+      {
+        "name": "skip",
+        "kind": "query",
+        "type": "int?"
+      }
+    ],
+    "produces": [
+      {
+        "type": "ParticipationHistoryResponse",
+        "status": 200
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "new ParticipationHistoryResponse(\"Trainer\", trainerId, entries, relationships, hasMore)",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Trainers",
+    "method": "GET",
+    "responseShape": "ParticipationHistoryResponse",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/GetTrainerParticipationsEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/trainers/{trainerId}",
+    "endpointFile": "GetTrainerProfileEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "trainerId",
+        "kind": "path",
+        "type": "string"
+      }
+    ],
+    "produces": [
+      {
+        "type": "TrainerProfileResponse",
+        "status": 200
+      }
+    ],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "response",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Trainers",
+    "method": "GET",
+    "responseShape": "TrainerProfileResponse",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/GetTrainerProfileEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/trainers/{trainerId}/aliases",
+    "endpointFile": "MergeTrainerAliasEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "trainerId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "MergeAliasRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Trainers",
+    "method": "POST",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/MergeTrainerAliasEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  },
+  {
+    "path": "/api/trainers",
+    "endpointFile": "RegisterTrainerEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "RegisterTrainerRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 201,
+        "payloadExpression": "$\"/api/trainers/{trainerId.Value}\", new { TrainerId = trainerId.Value }",
+        "kind": "Created",
+        "hasData": true
+      }
+    ],
+    "family": "Trainers",
+    "method": "POST",
+    "responseShape": "$\"/api/trainers/{trainerId.Value}\", new { TrainerId = trainerId.Value }",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/RegisterTrainerEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/trainers",
+    "endpointFile": "SearchTrainersEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "queryObject",
+        "type": "SearchTrainersRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "ToPagedResponse(\r\n                            sorted,\r\n                            page,\r\n                            pageSize,\r\n                            x => new TrainerSummaryResponse(\r\n                                x.TrainerId,\r\n                                x.DisplayName,\r\n                                x.NormalizedName,\r\n                                x.AffiliationCode,\r\n                                x.Aliases.Count))",
+        "kind": "Ok",
+        "hasData": true
+      }
+    ],
+    "family": "Trainers",
+    "method": "GET",
+    "responseShape": "ToPagedResponse(\r\n                            sorted,\r\n                            page,\r\n                            pageSize,\r\n                            x => new TrainerSummaryResponse(\r\n                                x.TrainerId,\r\n                                x.DisplayName,\r\n                                x.NormalizedName,\r\n                                x.AffiliationCode,\r\n                                x.Aliases.Count))",
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/SearchTrainersEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": true
+  },
+  {
+    "path": "/api/trainers/{trainerId}",
+    "endpointFile": "UpdateTrainerProfileEndpoint.cs",
+    "handlerParameters": [
+      {
+        "name": "trainerId",
+        "kind": "path",
+        "type": "string"
+      },
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "UpdateTrainerProfileRequest"
+      }
+    ],
+    "produces": [],
+    "successOutcomes": [
+      {
+        "status": 200,
+        "payloadExpression": "",
+        "kind": "Ok",
+        "hasData": false
+      }
+    ],
+    "family": "Trainers",
+    "method": "PUT",
+    "responseShape": null,
+    "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/UpdateTrainerProfileEndpoint.cs",
+    "requestPresent": true,
+    "responsePresent": false
+  }
+]

@@ -11,8 +11,8 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Not started | 設計承認後にDTO移行、Refit、Factory、DI拡張を実装 |
-| Verification | Not started | 設計の静的調査済み。実装・新HTTP契約適合・回帰検証は未実施 |
+| Code | In progress | T2の契約型移行と後続のRequest/Response、Refit、Factory、未導入DI拡張を実施中 |
+| Verification | In progress | T1の135業務route shape inventoryを完了。Refit probeは進行中。実装回帰と新HTTP契約検証は未完了 |
 | Deployment/operation | Not applicable | 新クライアントの稼働ホストへの導入・デプロイは対象外 |
 
 ## Context
@@ -32,14 +32,14 @@
 正規設計は[APIクライアント設計](../../28-api-client-design.md)。
 
 1. APIグループごとに`I{Resource}Api`、`Contracts.{Resource}`。共通型はCommon（日時補助はCommon.Time）。他APIから参照されるだけでCommonへ移さない。
-2. 全135操作で入力/戻りデータの有無を確認し、両方ある場合に同じ語幹の専用Request/Responseを対で用意。入力なしはRequest不要、戻りデータなしはResponse不要。空型/空オブジェクトは禁止。業務データの塊はDtoとし、Responseは`RaceDto Race`等のプロパティで持つ。直下項目は操作メタデータ等に限り都度理由を記録。Requestもデータの塊は入力専用Dtoへ分離。GET/DELETEのbody追加はしない。異なる形状は無理に統合せず旧C#名の互換ラッパーは残さない。
+2. 全135操作で入力/戻りデータの有無を確認し、両方ある場合に同じ語幹の専用Request/Responseを対で用意。入力なしはRequest不要、戻りデータなしはResponse不要。空型/空オブジェクトは禁止。業務データの塊はDtoとし、Responseは`RaceDto Race`等のプロパティで持つ。直下項目は操作メタデータ等に限り都度理由を記録。Requestもデータの塊は入力専用Dtoへ分離。GET/DELETEのbody追加はしない。同じ意味・データ・制約を持つ型は自然な単位で統合する。異なる形状/意味は無理に統合せず旧C#名の互換ラッパーは残さない。
 3. 内部モデルをそのまま共有ライブラリへ移さず、wire DTOとマッピングを作る。永続型・実行型の名前/配置を維持し、ApiClient/Contractsからサーバープロジェクトへの参照を禁止する。
 4. 単一`IApiClientFactory.Create<TApi>()`で登録済みAPIだけを生成する。`AddHorseRacingApiClient`で共通HttpClient設定を用意し、IHttpClientBuilderでhandlerを追加可能にする。APIキーは任意、絶対BaseAddress/Timeout/header設定を検証。秘密を記録しない。自動retryなし。
 5. 公開操作は入力がある場合だけ専用Requestを受ける。戻りデータありはApiResponse<専用Response>、なしはIApiResponse。空Request/Response/JSONは作らず、既存の204を含む成功status/Location・エラー・認証は維持。DTOラップのJSON構造変更を許容し、業務値/null/enum/日時/既定値は維持する。
 6. Roslynの意味解析とRenameで型名/参照を変更し、型単位のnamespace移動とalias追従をツール化する。manifest、dry-run、衝突検出を設ける。Razor・文字列参照は検索とbuildで補完する。
 7. Refit 16.3.0を維持。既存抽象サービスとHTTP実装を維持し、導入は別途とする。
 
-2026-09-30追加指示（最新の訂正を反映）: 入力と戻りデータが両方ある操作だけRequest/Responseを対とする。片側がなければ対応する型は不要で空オブジェクトは禁止。ResponseにRaceの項目を直接置かずRaceDtoを持たせる。データの塊は必ずDto。直下項目の可否は都度判断する。これに伴い、当初の「HTTP JSON形状不変」制約を撤回する。OpenAPI変更許容の明示回答に整合する。最新訂正を含め2026-09-30の「不明点はありますか？なければ実装をお願いします。」により設計全体を承認。
+2026-09-30追加指示（最新の訂正を反映）: 入力と戻りデータが両方ある操作だけRequest/Responseを対とする。片側がなければ対応する型は不要で空オブジェクトは禁止。ResponseにRaceの項目を直接置かずRaceDtoを持たせる。データの塊は必ずDto。直下項目の可否は都度判断する。これに伴い、当初の「HTTP JSON形状不変」制約を撤回する。OpenAPI変更許容の明示回答に整合する。最新訂正を含め2026-09-30の「不明点はありますか？なければ実装をお願いします。」により設計全体を承認。その後の「統合が自然な場合は統合してください」に従い、同じ意味/データ/制約の型は統合を認め、対応表・既存利用者検証へ含める。利用者による明示変更として承認範囲へ反映。
 
 ## Hypothesis ledger
 
@@ -49,7 +49,7 @@
 | 全DTOはContractsだけに存在する | CollectionController/CollectionPlatformContracts.csはApi所属、CollectionOperations型を参照 | endpointと型宣言を確認し否定 | wire DTOを切り出す |
 | Summary等の型は名前だけ統一して結合できる | PredictionTicketSummaryReadModelはMarks、SummaryResponseはstatus/count等で形状が異なる | 宣言比較で否定 | データを意味名のDtoとし操作Responseから参照する |
 | namespace変更はHTTP仕様に一切影響しない | Program.csはFullNameをOpenAPI schema IDに使用 | CustomSchemaIdsを確認し否定 | 当初はJSON維持案。追加要件によりDTOラップも変更対象へ修正 |
-| CodeGraphで参照解析可能 | .codegraphは存在するがCLIがPATHに存在せずMCPも未提供 | codegraph explore失敗 | 静的検索/ソースを使用、実装後は利用可否を再確認しgraph検証を偽称しない |
+| CodeGraphで参照解析可能 | 調査当初CLI未導入。利用者追加指示で1.6.1を導入 | 初回index/status/explore成功 | 現在CLI使用可能、各workerへ使用指示済み |
 
 ## Concern and agreement ledger
 
@@ -67,8 +67,8 @@
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
 | AC1 | 台帳の全業務routeがAPI別Refitメソッドへ一対一対応し、method/path/query/body/CancellationTokenがサーバー契約と一致 | T1,T4,T5 | endpoint metadata対照、生成client送信検査、対象漏れ0 | Not started |
-| AC2 | 全135操作の入力/戻りの有無、必要なRequest/Response、API別namespace、業務データDto分離がmanifestと一致。空型・空オブジェクトを作らない。直下項目は理由を記録しエンティティ項目を展開しない。Commonに共通型。新旧JSONパスを対応付け、値/null/enum/日時/既定値を維持し全利用者がbuild可能 | T2,T3,T5 | 旧名検索、契約fixture比較、依存参照検査、全build | Not started |
-| AC3 | 一つのFactoryから全登録APIを生成でき、未登録型と不正設定を拒否。DIからの解決、共通header/serializer/handler/cancellation/error/入力なし・本文なしが動作 | T4,T5 | Factory/DI/HTTPテスト（404/409/204、Request不要の呼出、キャンセル、並行別API呼出） | Not started |
+| AC2 | 全135操作の入力/戻りの有無、必要なRequest/Response、API別namespace、業務データDto分離がmanifestと一致。空型・空オブジェクトを作らない。直下項目は理由を記録しエンティティ項目を展開しない。Commonに共通型。自然な同義DTO統合も対応表へ記録し、新旧JSONパスを対応付け、値/null/enum/日時/既定値を維持し全利用者がbuild可能 | T2,T3,T5 | 旧名検索、契約fixture比較、依存参照検査、全build | Not started |
+| AC3 | 一つのFactoryから全登録APIを生成でき、未登録型と不正設定を拒否。DIからの解決、共通header/serializer/handler/cancellation/error/入力なし・本文なしが動作 | T4,T5,T7 | Factory/DI/HTTPテスト（404/409/204、Request不要の呼出、キャンセル、並行別API呼出） | Not started |
 | AC4 | 拡張と使用例は提供するが、既存ホストに新DI登録を追加せず既存HTTP実装を置換しない | T2,T3,T4,T5,T6 | 起動処理/既存call path差分、登録検索、既存回帰 | Not started |
 | AC5 | ツールのdry-run・衝突検出・実適用を検証し、新clientの実HTTP往復と既存回帰/formatを通過。承認したDTOラップ以外に意図しない契約差分なし | T2,T3,T4,T5 | Roslyn fixture、TestServer経由の読み書き/認証失敗、CI相当build/test/format | Not started |
 | AC6 | 移行manifest、使用例、検証結果、全route台帳とこの記録が最終実装と一致 | T1,T2,T5,T6 | 文書validator、台帳照合、Lead最終監査 | Not started |
@@ -81,16 +81,17 @@
 
 ## Task plan
 
-全コード編集タスクを直列化し、同じ参照先やformatterで競合しない。各workerは一人がwrite ownerとなり、他の作業を取り消さない。public contract判断はLeadに戻す。Leadは設計と最終受入のみを保持（不可分なpublic contract/統合判断）。各workerが最小testとhandoff前regressionを実行し、Leadが独立証拠で採否を決める。
+全プロダクションコード編集タスクを直列化し、同じ参照先やformatterで競合しない。各workerは一人がwrite ownerとなり、他の作業を取り消さない。public contract判断はLeadに戻す。Leadは設計と最終受入のみを保持（不可分なpublic contract/統合判断）。各workerが最小testとhandoff前regressionを実行し、Leadが独立証拠で採否を決める。
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State | Routing | Audit | Result metrics |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | 全API棚卸し（AC1/AC6） | inventory explorer | requested gpt-6-luna/high | - | route-inventory.mdのみ | endpoint宣言と登録/route検索照合 | 136/136 source・登録との独立照合、重複0 | Verified | 境界の明確な調査 | read-only research | unavailable; retries 0; corrections 0; reviews 1 |
-| T2 | Roslyn移行ツール、全共有DTO分類/改名/参照追従（AC2/4/5/6） | contract-migration worker | gpt-6-luna/high予定 | 設計承認 | tools/ContractMigration; src; tests; docs/changes/20260930_refit-api-clients/contract-migration.json | tool fixture、Contracts tests、solution build | 未着手 | Runnable | 意味判断はLead、確定規則下の移行を直列実行 | T2-A1 | unavailable; retries 0; corrections 0; reviews 0 |
+| T1 | 全API棚卸し（AC1/AC6） | inventory explorer | requested gpt-6-luna/high | - | route-inventory.md; http-contract-inventory.md/.json | endpoint宣言と登録/route検索照合、handler input/result対照 | 136 routes (135 business); request 116/19; response data 94/41; corrected DI/delegate cases cross-checked; Lead accepted inventory as T3 baseline (counts do not prove wrappers) | Verified | 境界の明確な調査 | read-only research | unavailable; retries 0; corrections 1; reviews 1 |
+| T2 | Roslyn移行ツール、全共有DTO分類/改名/参照追従（AC2/4/5/6） | contract-migration worker | requested gpt-6-luna/high | 設計承認 | tools/ContractMigration; src; tests; docs/changes/20260930_refit-api-clients/contract-migration.json | tool fixture、Contracts tests、solution build | Tool Release build/self-test passed; independent full-solution dry-run exposed VF001; focused code/manifest correction is in place but rerun is paused; no production apply | In progress | 意味判断はLead、確定規則下の移行を直列実行 | T2-A1 | unavailable; retries 0; corrections 1; reviews 1 |
 | T3 | 入力/戻りの有無に応じた操作別Request/Response、DTO、サーバー/既存利用者mapping（AC2/4/5） | wire-contract worker | gpt-6-luna/high予定 | T2 | Contracts、Api境界mapping、関連test、既存利用者のRequest組立/Response取出し | 新契約HTTP試験、旧→新データ保存性、既存利用者回帰 | 未着手 | Dependent | 内部実行型を維持し独立比較 | dispatch時作成 | unavailable; retries 0; corrections 0; reviews 0 |
 | T4 | 全Refitインターフェース、Factory、DI（AC1/3/4/5） | api-client worker | gpt-6-luna/high予定 | T3 | ApiClient、新ApiClient.Tests、slnへのtest追加 | 全route送信、DI/Factory/error/cancel tests | 未着手 | Dependent | 凍結済みHTTP契約を実装 | dispatch時作成 | unavailable; retries 0; corrections 0; reviews 0 |
 | T5 | 独立HTTP往復/全回帰と局所修正（AC1-6） | verification worker | gpt-6-luna/high予定 | T4 | tests、直列の限定修正、検証記録 | TestServer、全solution test/build/format | 未着手 | Dependent | Leadが契約逸脱を判定し局所修正はworkerへ戻す | dispatch時作成 | unavailable; retries 0; corrections 0; reviews 0 |
 | T6 | 正規文書/台帳の最終反映と受入（AC4/6） | Lead | Lead | T5 | docs | 差分、独立反証、validator、task/AC追跡 | 未着手 | Dependent | 最終受入判断 | none | unavailable; retries 0; corrections 0; reviews 0 |
+| T7 | Refit16生成clientのpath/query/body/空応答検証（AC3） | refit-probe worker | requested gpt-6-luna/high | - | docs/changes/20260930_refit-api-clients/probes/refit | isolated probe run | Six groups passed; Lead accepted internal attributed transport; RF015 direct-Body route binding recorded as ruled-out probe pattern, not a production failure | Verified | Worker — independent verification; srcを変更しないためT2と並列可 | T7-A1 | unavailable; retries 0; corrections 0; reviews 1 |
 
 observed model・token・費用はtoolで証明されない限り未確認。調査T1のrequested値から推測しない。実装workerのauditはdispatch時に作成し`scripts/audit_agent_execution.py`で検証する。永続routing変更は行わない。
 
@@ -98,13 +99,19 @@ observed model・token・費用はtoolで証明されない限り未確認。調
 
 - Design and task-split review: Lead。設計・AC対応・直列ownershipを確認。route台帳を独立ソース抽出と登録宣言に照合し136/136、重複0。対象135/対象外1の収支一致。
 - Concern and agreement review: Lead。C1-C6を設計で処置。外部CLR/schema ID互換性・未導入境界を承認依頼に含める。2026-09-30の実装指示でC1-C6を含む最新設計を承認。
-- Pre-implementation review: Lead / 2026-09-30。T2をRunnable、T3-T6をDependentとして直列実行。T2はContracts/全参照の機械的移行とtools/ContractMigration、manifestのみ。新HTTP契約はT3で扱い、T2ではJSON/永続型不変。移行tool fixture→Contracts tests→solution Release buildをworker実行。反例は同名型/alias/Razor/enum/異形Summary。判断不明はLeadへ戻し、他タスクの書込は開始しない。
+- Pre-implementation review: Lead / 2026-09-30。T2をRunnable、T3-T6をDependentとして直列実行。T2はContracts/全参照の機械的移行とtools/ContractMigration、manifestのみ。新HTTP契約はT3で扱い、T2ではJSON/永続型不変。移行tool fixture→Contracts tests→solution Release buildをworker実行。反例は同名型/alias/Razor/enum/異形Summary。判断不明はLeadへ戻し、他タスクの書込は開始しない。現在はtool Release buildとself-testが成功し、独立dry-runでVF001が発生したため局所修正中。
 - Checkpoint review: DTO移行、wire mapping、client/DI、統合検証の検証済み単位で実施・コミット。
 - Final review: 未実施。全AC/タスクVerified、禁止runtime導入0、新契約適合/既存利用者追従、文書同期を確認してImplementedにする。
 
 ## Verification record
 
-設計調査のみ。プロダクションコードは変更していない。変更記録validator issues=0、git diff --check成功。前回は135操作の命名候補を照合（同一語幹、欠落0、重複0）。最新訂正で両型必須を撤回。台帳の型名は入力/戻りがある場合だけ適用する命名候補とし、型作成前にendpointの入力/戻りの実態で不要な側を除外する。Lead独立抽出で136 route全件がREADME台帳と一致し、登録宣言・重複なしを確認した。認証middlewareを独立確認しGETも保護対象と設計へ反映。CodeGraph CLI/MCPは使用不能のためgraph根拠なし。Refit 16.3.0の同梱README/XMLと公式ドキュメントを参照。実装後のCI主要gate:
+T1のroute・HTTP shape inventoryを独立確認しLeadが受入。T7は6 probe groupsが成功しLeadがaccept。直接`[Body]` Requestからnested route placeholderを結ぶ形はRF015/`ArgumentException`となったため、計測で不成立と確認し、public default interface methodからinternal attributed transportを呼ぶ形を採用候補として検証した。このRF015はisolated probe patternの結果であり、本番変更の失敗ではない。移行ツール単体のRelease buildは0警告/0エラー、自己テストは成功した。独立したsolution dry-runは`QualifiedNameSyntax`を`SimpleNameSyntax`へcastする`InvalidCastException`で終了（VF001、未解決）。T2は構文rewriterのguardとgeneric `PagedResponse<T>` target表記を修正し、静的差分を確認したが、Leadの指示により再実行を保留中。本番型移行は適用されていない。型manifestはContractsの148 top-level宣言と148件で一致し、重複targetなし。変更記録validator issues=0、git diff --check成功。認証middlewareを独立確認しGETも保護対象と設計へ反映。調査当初はCodeGraph CLI/MCPが使用不能だったが、追加指示で[CodeGraph導入](../20260930_codegraph-setup/README.md)を完了。以後はCLI exploreを優先し、coherent edit後にsyncして確認する。Refit 16.3.0の同梱README/XMLと公式ドキュメントを参照。実装後のCI主要gate:
+
+### Material verification failures
+
+| ID | Gate / evidence | State | Closure evidence |
+| --- | --- | --- | --- |
+| VF001 | Independent `dotnet run --no-build -c Release --project tools/ContractMigration/ContractMigration.csproj -- dry-run HorseRacingPrediction.sln docs/changes/20260930_refit-api-clients/contract-migration.json` terminated with `InvalidCastException` (`QualifiedNameSyntax` → `SimpleNameSyntax`) in `SemanticTypeRewriter.VisitClassDeclaration` via `CSharpSyntaxRewriter.VisitMemberAccessExpression`. No production apply occurred. | Open | Correct the syntax visitor and generic FQN representation, then pass the same full-solution dry-run with zero unresolved targets/collisions. |
 
 ```powershell
 dotnet restore HorseRacingPrediction.sln
@@ -119,7 +126,7 @@ API実HTTPfixtureはTestApplicationFactory/TestServerを利用し、外部デー
 
 ## Next action and remaining work
 
-設計承認済み。T2のmanifest/dry-run/tool検証から開始。T2-T6と全ACは未完了。意図的な未コミットは本変更記録、route台帳、正規設計、architecture更新のみ。設計段階で実装完了を主張しない。
+設計承認済み。T2はVF001とgeneric target表記をfocused correctionした後、元の全solution dry-run gateを再実行する。T7は独立probeとして並列実施し、T4の実装方式を反証する。T2-T7と全ACは未完了。意図的な未コミットは本変更記録、route台帳、正規設計、architecture更新のみ。設計段階で実装完了を主張しない。
 
 ## API contract inventory
 
@@ -267,3 +274,11 @@ API実HTTPfixtureはTestApplicationFactory/TestServerを利用し、外部デー
 | Subjects | PUT | `/api/v2/admin/subjects/{kind}/{subjectId}/profile` | 対象・ISubjectsApi; 入力あり: `PutSubjectProfileRequest` / 戻りあり: `PutSubjectProfileResponse` | W1-W4; Subjects利用者群 | `PutSubjectProfileEndpoint.cs` |
 | Subjects | GET | `/api/v2/admin/subjects/{kind}/{subjectId}/profiles/current` | 対象・ISubjectsApi; 入力あり: `GetSubjectProfileRequest` / 戻りあり: `GetSubjectProfileResponse` | W1-W4; Subjects利用者群 | `GetSubjectProfileEndpoint.cs` |
 | Health | GET | `/health` | 対象外・変更なし | 既存probe/JSONを維持 | `GetHealthEndpoint.cs` |
+
+### Frozen implementation clarifications (2026-09-30)
+
+- CodeGraph source/impact確認により、HorseProfileResponseとHorseReadDto、JockeyProfileResponseとJockeyDto、TrainerProfileResponseとTrainerDtoは、それぞれ同じ業務データの別表現である。各資源のHorseDto/JockeyDto/TrainerDtoへ自然に統合する。プロパティ順やrecord/class差を理由に重複を残さず、既存値を維持してconstructor/initializerを追従する。
+- HorseAliasEntry/JockeyAliasEntry/TrainerAliasEntryは同じ4項目。AliasResponseのSourceNameのみnon-null annotationだが、共通AliasDto.SourceNameはoptionalとして既存値をそのまま保持する。alias4型をCommon.AliasDtoへ統合する。型annotationの緩和はOpenAPI可読性優先・自然な統合という追加承認の範囲内。
+- AcquireNextExecutionEndpointのみcamelCase文字列enumとnull省略の応答JSON設定を持つ。通常APIの数値enumと区別し、client readerは両形式へ対応しつつrequestの数値enumを変えない。既存の日時意味も維持する。
+- OpenAPIのProduces/型metadataも新Response/Dtoと一致させる。本文なし200/201/202/204に空Response schemaや`{}`を追加しない。
+- T7は独立したRefit16.3.0試験。Requestオブジェクトのpath/query分解、path値のquery重複防止、GET bodyなし、ISO日付、typed body/response、本文なしとerror/cancellationを実行してT4のテンプレートを確定する。第三者ドキュメントだけで成功判定しない。

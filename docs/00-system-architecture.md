@@ -84,7 +84,7 @@ HorseRacingPrediction.Predictor ─────┴──────────
 ```
 
 - `Contracts`: APIの要求・応答DTO、enum、共通補助型を持ち、他プロジェクトへの参照を持たない。現行のDTOは主にルート名前空間にある
-- `ApiClient`: 現行は `IRaceQueryService` / `IPredictionWriteService` を持ち、`Contracts` を参照する。Refit 16.3.0は参照済みだが、資源別RefitクライアントとFactory/DI拡張は[APIクライアント設計](28-api-client-design.md)で提案中であり、まだホストへ導入しない
+- `ApiClient`: 現行の `IRaceQueryService` / `IPredictionWriteService` は既存利用者向けに維持する。Refit 16.3.0は参照済みで、資源別クライアント、Factory、未導入のDI拡張を[承認済み設計](28-api-client-design.md)に従って実装中。既存ホストへの導入は行わない
 - `Api` は共有DTOのほか、Collection等にローカル要求型や内部モデルを利用する境界がある。共有HTTP契約への分離方針と命名規約は[APIクライアント設計](28-api-client-design.md)を正規参照先とする
 - Collector・Predictor は HTTP（`X-Api-Key` 付き）でのみ Api と通信する。Predictor から Collector への参照は、移管済み補助型（HTTP クライアント、`IMemoWriteService`）の利用に限る
 - `Agents` は `RaceQueryTools`（`IRaceQueryService` 経由）を通じて Api のデータを読み取るのみで、書き込みは Predictor 側が `IMemoWriteService` で行う（Agents は Collector を参照しない）
