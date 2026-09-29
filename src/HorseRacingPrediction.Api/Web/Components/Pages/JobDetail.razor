@@ -86,13 +86,13 @@ else if (detail is not null)
 }
 
 @code {
-    [Parameter] public string CollectionResourceTypeName { get; set; } = string.Empty;
+    [Parameter] public string ResourceTypeName { get; set; } = string.Empty;
     [Parameter] public string Provider { get; set; } = string.Empty;
     [Parameter] public string ResourceId { get; set; } = string.Empty;
     [Parameter] public string DefinitionId { get; set; } = string.Empty;
     [SupplyParameterFromQuery(Name = "returnUrl")] public string? ReturnUrl { get; set; }
     private bool loading, busy; private int requestHistoryPage=1,taskHistoryPage=1,attemptHistoryPage=1; private const int HistoryPageSize=25; private CollectionResourceDetail? detail; private string? explicitUrl, operationMessage; private IReadOnlyList<string> errors=[],requestErrors=[],operationErrors=[];
-    private CollectionResourceType? Type => Enum.TryParse<CollectionResourceType>(CollectionResourceTypeName, true, out var value) ? value : null;
+    private CollectionResourceType? Type => Enum.TryParse<CollectionResourceType>(ResourceTypeName, true, out var value) ? value : null;
     private CollectionTaskSummary? LatestTask=>detail?.LatestTask;
     private IEnumerable<KeyValuePair<string,string>> VisibleMetadata =>
         (LatestTask?.Metadata ?? new Dictionary<string,string>())
@@ -110,7 +110,7 @@ else if (detail is not null)
     private PendingCollectionFailureNotification? ActiveFailure=>detail?.Failures?.Where(x=>x.ResolutionStatus is CollectionFailureResolutionStatus.Open or CollectionFailureResolutionStatus.RecoveryInProgress).OrderByDescending(x=>x.FailedAt).FirstOrDefault();
     private CollectionAttemptSummary? ActiveFailureAttempt=>ActiveFailure is null?null:detail?.Attempts.Where(x=>x.TaskId==ActiveFailure.TaskId).OrderByDescending(x=>x.StartedAt).FirstOrDefault();
     private CollectionAttemptSummary? AvailabilityWaitAttempt=>LatestTask?.Status!=CollectionTaskStatus.RetryWaiting?null:detail?.Attempts.Where(x=>x.TaskId==LatestTask.TaskId&&x.Result==CollectionAttemptResult.ResourceNotYetAvailable).OrderByDescending(x=>x.StartedAt).FirstOrDefault();
-    private string ResourceTypeLabel=>Type switch{CollectionResourceType.Race=>"レース",CollectionResourceType.RaceCard=>"出馬表",CollectionResourceType.RaceOdds=>"オッズ",CollectionResourceType.RaceResult=>"レース結果",CollectionResourceType.Horse=>"競走馬",CollectionResourceType.Jockey=>"騎手",CollectionResourceType.Trainer=>"調教師",_=>CollectionResourceTypeName};
+    private string ResourceTypeLabel=>Type switch{CollectionResourceType.Race=>"レース",CollectionResourceType.RaceCard=>"出馬表",CollectionResourceType.RaceOdds=>"オッズ",CollectionResourceType.RaceResult=>"レース結果",CollectionResourceType.Horse=>"競走馬",CollectionResourceType.Jockey=>"騎手",CollectionResourceType.Trainer=>"調教師",_=>ResourceTypeName};
     private string DefinitionLabel=>DefinitionId switch{"race-discovery"=>"開催レースの探索","race-detail"=>"レース詳細の収集","race-card"=>"出馬表の収集（旧）","race-odds"=>"オッズの収集","race-result"=>"レース結果の収集（旧）","horse-profile"=>"競走馬情報の収集","jockey-profile"=>"騎手情報の収集","trainer-profile"=>"調教師情報の収集","owner-identity"=>"馬主識別情報の収集",_=>DefinitionId};
     private string ResourceDescription=>$"{ResourceTypeLabel} ・ {Provider} ・ {ResourceId}";
     private string? DomainUrl=>Type switch{CollectionResourceType.Horse=>$"/horses/{Uri.EscapeDataString(ResourceId)}",CollectionResourceType.Jockey=>$"/jockeys/{Uri.EscapeDataString(ResourceId)}",CollectionResourceType.Trainer=>$"/trainers/{Uri.EscapeDataString(ResourceId)}",_=>null};
@@ -173,7 +173,7 @@ else if (detail is not null)
     private static string AvailabilityExplanation(string? code)=>code switch{"RaceNotStarted"=>"出馬表は取得済みです。発走後に結果を確認します。","RaceResultNotYetAvailable"=>"出馬表を保持したまま、JRAの結果公開後に自動再試行します。","ResultNotConfirmed"=>"現在の情報は未確定です。確定結果が公開された後に自動再試行します。",_=>"公開状況を次回予定時刻に自動確認します。"};
     private static string ShortId(Guid value)=>value.ToString("D")[..8];
     private string BatchUrl(Guid value)=>$"/jobs/execution-batches/{value:D}?returnUrl={Uri.EscapeDataString(NavigationPath)}";
-    private string NavigationPath=>$"/jobs/{Uri.EscapeDataString(CollectionResourceTypeName)}/{Uri.EscapeDataString(Provider)}/{Uri.EscapeDataString(ResourceId)}/{Uri.EscapeDataString(DefinitionId)}";
+    private string NavigationPath=>$"/jobs/{Uri.EscapeDataString(ResourceTypeName)}/{Uri.EscapeDataString(Provider)}/{Uri.EscapeDataString(ResourceId)}/{Uri.EscapeDataString(DefinitionId)}";
     private static string BatchTrace(CollectionAttemptSummary value)=>$"実行バッチ: {value.ExecutionBatchId}; Envelope: {value.DispatchEnvelopeId}; Queue message: {value.QueueMessageId}; Lambda request: {value.LambdaRequestId}";
     private static string ReasonLabel(CollectionReason value)=>value switch{CollectionReason.Initial=>"初回収集",CollectionReason.Backfill=>"過去データ収集",CollectionReason.Discovery=>"関連情報の発見",CollectionReason.ScheduledRefresh=>"定期更新",CollectionReason.DefinitionChanged=>"抽出仕様の変更",CollectionReason.ManualRefresh=>"手動再取得",CollectionReason.Recovery=>"失敗からの復旧",CollectionReason.PeriodRecollection=>"期間指定の再取得",_=>value.ToString()};
     private static string TaskStatusLabel(CollectionTaskStatus value)=>value switch{CollectionTaskStatus.Pending=>"登録待ち",CollectionTaskStatus.Ready=>"実行待ち",CollectionTaskStatus.Running=>"実行中",CollectionTaskStatus.RetryWaiting=>"再試行待ち",CollectionTaskStatus.WaitingDiscovery=>"取得先の探索待ち",CollectionTaskStatus.Succeeded=>"完了",CollectionTaskStatus.Failed=>"失敗",CollectionTaskStatus.Cancelled=>"中断",CollectionTaskStatus.DeadLetter=>"要対応",_=>value.ToString()};

@@ -111,7 +111,7 @@ public sealed class CollectionAdministrationComponentTests
         StringAssert.Contains(link.GetAttribute("href"), "/jobs/Horse/jra/H001/horse-profile");
 
         var detailCut = context.Render<JobDetail>(parameters => parameters
-            .Add(x => x.CollectionResourceTypeName, "Horse").Add(x => x.Provider, "jra")
+            .Add(x => x.ResourceTypeName, "Horse").Add(x => x.Provider, "jra")
             .Add(x => x.ResourceId, "H001").Add(x => x.DefinitionId, "horse-profile"));
         detailCut.WaitForAssertion(() => StringAssert.Contains(detailCut.Markup, "通常の方法で再取得"));
         StringAssert.Contains(detailCut.Markup, "収集処理の概要");

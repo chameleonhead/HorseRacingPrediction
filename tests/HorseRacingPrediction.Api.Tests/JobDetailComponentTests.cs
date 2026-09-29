@@ -278,7 +278,7 @@ public sealed class JobDetailComponentTests
 
     private static IRenderedComponent<JobDetail> RenderDetail(BunitContext context) =>
         context.Render<JobDetail>(parameters => parameters
-            .Add(x => x.CollectionResourceTypeName, "Horse")
+            .Add(x => x.ResourceTypeName, "Horse")
             .Add(x => x.Provider, "jra")
             .Add(x => x.ResourceId, "H001")
             .Add(x => x.DefinitionId, "horse-profile"));
