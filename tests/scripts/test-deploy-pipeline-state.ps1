@@ -22,9 +22,16 @@ curl() {
   local url="${@: -1}"
   case "$url" in
     */pipeline-state) if [ "$TEST_CASE" = get-failure ]; then return 22; fi; echo '{"isPaused":true}' ;;
-    */pipeline/pause) if [ "$TEST_CASE" = pause-failure ]; then return 22; fi ;;
     */api/admin/collection/pipeline) if [ "$TEST_CASE" = get-failure ]; then return 22; fi; echo '{}' ;;
-    */pipeline) if [[ " $* " == *" -X PUT "* ]]; then echo RESUMED >&2; else return 90; fi ;;
+    */pipeline)
+      if [[ " $* " != *" -X PUT "* ]]; then return 90; fi
+      if [[ " $* " == *'"paused":true'* ]]; then
+        if [ "$TEST_CASE" = pause-failure ]; then return 22; fi
+      elif [[ " $* " == *'"paused":false'* ]]; then
+        echo RESUMED >&2
+      else
+        return 90
+      fi ;;
     */tasks\?*)
       if [[ "$url" == *status=Running* ]]; then echo '{"items":[]}'; else echo '[]'; fi ;;
     */failure-notifications\?*) if [ "$TEST_CASE" = new-failure ]; then echo '[{}]'; else echo '[]'; fi ;;
@@ -54,7 +61,7 @@ jq() {
     if [ "$input" = '[{}]' ]; then return 1; fi
     if [ "$TEST_CASE" = not-drained ]; then return 1; fi
     echo true
-  elif [[ "$filter" == *'Invalid task list'* ]]; then
+  elif [[ "$filter" == *'.items | if type == "array" then length'* ]]; then
     if [ "$TEST_CASE" = invalid-tasks ]; then return 5; fi
     if [ "$TEST_CASE" = not-drained ]; then echo 1; else echo 0; fi
   else echo 0
@@ -90,9 +97,16 @@ if ($script -notmatch '/api/v2/admin/collection' -or
     $script.Contains('/pipeline/resume')) {
     throw 'Post-deploy pipeline verification and resume must use the v2 routes and response shapes.'
 }
-$guardBase = [regex]::Match($guardScript, 'base="\$API_BASE_URL(?<path>/api/admin/collection)"')
-if (-not $guardBase.Success -or $guardScript -notmatch '/pipeline/pause' -or $guardScript.Contains('/api/v2/admin/collection')) {
-    throw 'Pre-deploy pause/drain must continue using v1 routes while v1 is active.'
+$guardBase = [regex]::Match($guardScript, 'base="\$API_BASE_URL(?<path>/api/v2/admin/collection)"')
+if (-not $guardBase.Success -or
+    $guardScript -notmatch '"\$base/pipeline-state"' -or
+    $guardScript -notmatch '"\$base/tasks\?status=Running&limit=1"' -or
+    $guardScript -notmatch '-X PUT' -or
+    $guardScript -notmatch '"paused":true' -or
+    $guardScript -notmatch '\.items \| if type == "array" then length' -or
+    $guardScript.Contains('/api/admin/collection') -or
+    $guardScript.Contains('/pipeline/pause')) {
+    throw 'Pre-deploy pause/drain must use the v2 routes, payload, and response shapes.'
 }
 $migrationRoute = '/migration-previews/race-entry-owner-repair'
 if (-not $workflow.Contains('/api/v2/admin/collection"') -or -not $workflow.Contains($migrationRoute) -or
