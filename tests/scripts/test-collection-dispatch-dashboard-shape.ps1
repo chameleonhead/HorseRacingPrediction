@@ -14,7 +14,6 @@ function Invoke-ChildProcess {
         [string] $FilePath,
         [string[]] $Arguments,
         [string] $WorkingDirectory,
-        [string] $InputText = "",
         [int] $TimeoutMilliseconds = $processTimeoutMilliseconds
     )
 
@@ -24,7 +23,7 @@ function Invoke-ChildProcess {
     $startInfo.UseShellExecute = $false
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
-    $startInfo.RedirectStandardInput = $true
+    $startInfo.RedirectStandardInput = $false
     foreach ($argument in $Arguments) { [void] $startInfo.ArgumentList.Add($argument) }
 
     $process = [System.Diagnostics.Process]::new()
@@ -32,9 +31,6 @@ function Invoke-ChildProcess {
     [void] $process.Start()
     $stdoutTask = $process.StandardOutput.ReadToEndAsync()
     $stderrTask = $process.StandardError.ReadToEndAsync()
-    if ($InputText) { $process.StandardInput.WriteLine($InputText) }
-    $process.StandardInput.Close()
-
     if (-not $process.WaitForExit($TimeoutMilliseconds)) {
         try {
             $process.Kill($true)
@@ -119,7 +115,7 @@ try {
     }
     $expectedRowsJson = ConvertTo-Json -InputObject @($expectedRows) -Depth 5 -Compress
 
-$minimalConfig = @"
+    $testConfigTemplate = @"
 variable "collection_dispatch_definition_labels" {
   type    = list(string)
   default = ["race-discovery", "race-detail", "race-odds"]
@@ -132,17 +128,59 @@ locals {
   collection_dispatch_definition_labels = ["race-discovery", "race-detail", "race-odds"]
   collection_dispatch_dashboard_metrics = $($metrics.Groups["expr"].Value)
   expected_metric_rows                 = $expectedRowsJson
-  wrong_dimension_expected_rows = concat(
-    [concat(slice(local.expected_metric_rows[0], 0, 2), ["WrongDimension"], slice(local.expected_metric_rows[0], 3, 6))],
-    slice(local.expected_metric_rows, 1, length(local.expected_metric_rows))
-  )
-  duplicate_omitted_actual_rows = concat(
-    slice(local.collection_dispatch_dashboard_metrics, 0, 47),
-    [local.collection_dispatch_dashboard_metrics[0]]
-  )
+  tested_metric_rows                   = __TESTED_ROWS_EXPRESSION__
 }
 "@
-    Set-Content -LiteralPath (Join-Path $scratchRoot "main.tf") -Value $minimalConfig -NoNewline
+
+    $testFile = @'
+run "dashboard_metric_row_contract" {
+  command = plan
+
+  assert {
+    condition     = length(local.tested_metric_rows) == 48
+    error_message = "METRIC_ROW_COUNT_ASSERTION_FAILED"
+  }
+
+  assert {
+    condition = (
+      length(toset([for row in local.tested_metric_rows : jsonencode(row)])) == 48
+      && length(toset([for row in local.expected_metric_rows : jsonencode(row)])) == 48
+      && length(setintersection(
+        toset([for row in local.tested_metric_rows : jsonencode(row)]),
+        toset([for row in local.expected_metric_rows : jsonencode(row)])
+      )) == 48
+    )
+    error_message = "METRIC_ROW_EXACT_SET_ASSERTION_FAILED"
+  }
+}
+'@
+
+    function Invoke-ContractTestCase {
+        param(
+            [string] $Name,
+            [string] $TestedRowsExpression,
+            [bool] $ExpectSuccess
+        )
+
+        $caseDirectory = Join-Path $scratchRoot $Name
+        [void] (New-Item -ItemType Directory -Path $caseDirectory)
+        $configuration = $testConfigTemplate.Replace("__TESTED_ROWS_EXPRESSION__", $TestedRowsExpression)
+        Set-Content -LiteralPath (Join-Path $caseDirectory "main.tf") -Value $configuration -NoNewline
+        Set-Content -LiteralPath (Join-Path $caseDirectory "dashboard_metric_rows.tftest.hcl") -Value $testFile -NoNewline
+
+        $result = Invoke-ChildProcess -FilePath $terraform -Arguments @("test", "-no-color") -WorkingDirectory $caseDirectory
+        if ($result.TimedOut) {
+            throw "Provider-free Terraform test case '$Name' timed out after $([int]($processTimeoutMilliseconds / 1000)) seconds."
+        }
+        if ($ExpectSuccess) {
+            if ($result.ExitCode -ne 0) {
+                throw "Provider-free Terraform positive contract test failed (exit $($result.ExitCode)): $($result.Error)"
+            }
+        }
+        elseif ($result.ExitCode -eq 0 -or ($result.Output + $result.Error) -notmatch 'METRIC_ROW_EXACT_SET_ASSERTION_FAILED') {
+            throw "Provider-free Terraform negative contract test '$Name' did not fail at the expected exact-set assertion."
+        }
+    }
 
     $shell = (Get-Command pwsh -ErrorAction Stop).Source
     $stalledChild = Invoke-ChildProcess -FilePath $shell -Arguments @("-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 15") -WorkingDirectory $scratchRoot -TimeoutMilliseconds 1000
@@ -150,34 +188,25 @@ locals {
         throw "The process timeout counterexample did not terminate as a nonzero timed-out child."
     }
 
-    $expression = '[length(local.collection_dispatch_dashboard_metrics), length(local.expected_metric_rows), length(toset([for row in local.collection_dispatch_dashboard_metrics : jsonencode(row)])), length(toset([for row in local.expected_metric_rows : jsonencode(row)])), length(setintersection(toset([for row in local.collection_dispatch_dashboard_metrics : jsonencode(row)]), toset([for row in local.expected_metric_rows : jsonencode(row)])))]'
-    $console = Invoke-ChildProcess -FilePath $terraform -Arguments @("console") -WorkingDirectory $scratchRoot -InputText $expression
-    if ($console.TimedOut) {
-        throw "Provider-free Terraform console timed out after $([int]($processTimeoutMilliseconds / 1000)) seconds."
-    }
-    if ($console.ExitCode -ne 0 -or $console.Output -notmatch '(?s)^\s*\[\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,?\s*\]\s*$') {
-        throw "Provider-free Terraform console could not evaluate the exact dispatch metric-row set (exit $($console.ExitCode))."
-    }
-    $counts = [regex]::Match($console.Output, '(?s)^\s*\[\s*(?<actual>\d+)\s*,\s*(?<expected>\d+)\s*,\s*(?<uniqueActual>\d+)\s*,\s*(?<uniqueExpected>\d+)\s*,\s*(?<intersection>\d+)\s*,?\s*\]\s*$')
-    if (-not $counts.Success -or $counts.Groups["actual"].Value -ne "48" -or
-        $counts.Groups["expected"].Value -ne "48" -or $counts.Groups["uniqueActual"].Value -ne "48" -or
-        $counts.Groups["uniqueExpected"].Value -ne "48" -or $counts.Groups["intersection"].Value -ne "48") {
-        throw "Terraform found an exact metric-row set mismatch (actual=$($counts.Groups['actual'].Value), expected=$($counts.Groups['expected'].Value), unique-actual=$($counts.Groups['uniqueActual'].Value), unique-expected=$($counts.Groups['uniqueExpected'].Value), intersection=$($counts.Groups['intersection'].Value))."
-    }
+    Invoke-ContractTestCase -Name "positive" -TestedRowsExpression 'local.collection_dispatch_dashboard_metrics' -ExpectSuccess $true
+    Invoke-ContractTestCase -Name "wrong-dimension" -TestedRowsExpression @'
+concat(
+  [concat(
+    slice(local.collection_dispatch_dashboard_metrics[0], 0, 2),
+    ["WrongDimension"],
+    slice(local.collection_dispatch_dashboard_metrics[0], 3, 6)
+  )],
+  slice(local.collection_dispatch_dashboard_metrics, 1, length(local.collection_dispatch_dashboard_metrics))
+)
+'@ -ExpectSuccess $false
+    Invoke-ContractTestCase -Name "duplicate-omission" -TestedRowsExpression @'
+concat(
+  slice(local.collection_dispatch_dashboard_metrics, 0, 47),
+  [local.collection_dispatch_dashboard_metrics[0]]
+)
+'@ -ExpectSuccess $false
 
-    $wrongDimensionExpression = $expression -replace 'local\.expected_metric_rows', 'local.wrong_dimension_expected_rows'
-    $wrongDimension = Invoke-ChildProcess -FilePath $terraform -Arguments @("console") -WorkingDirectory $scratchRoot -InputText $wrongDimensionExpression
-    if ($wrongDimension.TimedOut -or $wrongDimension.ExitCode -ne 0 -or $wrongDimension.Output -notmatch '(?s)^\s*\[\s*48\s*,\s*48\s*,\s*48\s*,\s*48\s*,\s*47\s*,?\s*\]\s*$') {
-        throw "The mutated dimension-name counterexample did not fail exact-set equality as expected."
-    }
-
-    $duplicateOmitExpression = $expression -replace 'local\.collection_dispatch_dashboard_metrics', 'local.duplicate_omitted_actual_rows'
-    $duplicateOmit = Invoke-ChildProcess -FilePath $terraform -Arguments @("console") -WorkingDirectory $scratchRoot -InputText $duplicateOmitExpression
-    if ($duplicateOmit.TimedOut -or $duplicateOmit.ExitCode -ne 0 -or $duplicateOmit.Output -notmatch '(?s)^\s*\[\s*48\s*,\s*48\s*,\s*47\s*,\s*48\s*,\s*47\s*,?\s*\]\s*$') {
-        throw "The duplicate/omitted-row counterexample did not fail uniqueness and exact-set equality as expected."
-    }
-
-    Write-Output "PASS: provider-free exact metric-row set matches 48 canonical arrays; dimension and duplicate/omission counterexamples rejected; stalled-child timeout counterexample passed."
+    Write-Output "PASS: provider-free Terraform tests accept the canonical 48 metric arrays, reject mutated-dimension and duplicate/omission counterexamples, and the stalled-child timeout counterexample passed."
 }
 finally {
     if (Test-Path -LiteralPath $scratchRoot) {
