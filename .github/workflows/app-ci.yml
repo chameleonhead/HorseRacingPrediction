@@ -46,6 +46,10 @@ jobs:
         shell: pwsh
         run: ./tests/scripts/test-collector-temp-lifecycle.ps1 -Bash /bin/bash
 
+      - name: Verify Playwright container version
+        shell: pwsh
+        run: ./tests/scripts/test-playwright-container-version.ps1
+
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x

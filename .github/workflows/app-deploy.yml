@@ -42,6 +42,10 @@ jobs:
         shell: pwsh
         run: ./tests/scripts/test-collector-temp-lifecycle.ps1 -Bash /bin/bash
 
+      - name: Verify Playwright container version
+        shell: pwsh
+        run: ./tests/scripts/test-playwright-container-version.ps1
+
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
@@ -96,6 +100,9 @@ jobs:
       - name: Build collector Lambda container
         run: |
           docker build -f Dockerfile.collector-lambda -t collector-lambda-ci .
+          docker run --rm --entrypoint /var/task/.playwright/node/linux-x64/node \
+            collector-lambda-ci -e \
+            "const { chromium } = require('/var/task/.playwright/package'); (async () => { const browser = await chromium.launch({ headless: true }); const page = await browser.newPage(); await page.setContent('<main>ready</main>'); if (await page.textContent('main') !== 'ready') throw new Error('Unexpected page content'); await browser.close(); console.log('PASS Playwright Chromium launched in collector image'); })().catch(error => { console.error(error); process.exit(1); });"
           docker run --rm --entrypoint /bin/sh \
             -v "$PWD/tests/scripts/test-collector-core-suppression.sh:/tmp/test-collector-core-suppression.sh:ro" \
             collector-lambda-ci /tmp/test-collector-core-suppression.sh \
