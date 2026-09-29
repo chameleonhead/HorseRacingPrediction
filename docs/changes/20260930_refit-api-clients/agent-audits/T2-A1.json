@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260930_refit-api-clients",
+  "taskId": "T2",
+  "attemptId": "T2-A1",
+  "state": "active",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": [
+    "AC2",
+    "AC4",
+    "AC5",
+    "AC6"
+  ],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "not exposed"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "not exposed"
+  },
+  "scope": [
+    "tools/ContractMigration",
+    "src",
+    "tests",
+    "docs/changes/20260930_refit-api-clients/contract-migration.json"
+  ],
+  "review": {},
+  "overhead": {},
+  "elapsed": {},
+  "startRevision": "8c187433",
+  "endRevisionOrPatch": null,
+  "outcome": {}
+}
