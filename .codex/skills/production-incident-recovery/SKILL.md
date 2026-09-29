@@ -19,6 +19,15 @@ Restore service safely while keeping temporary recovery separate from root-cause
 5. Produce a durable corrective proposal with affected scope, safety boundaries, observable acceptance criteria, regression tests, deployment steps, and production verification. Follow `document-driven-development` when repository behavior or operations must change. Do not edit production code before its approval gate.
 6. After approval, implement and verify the permanent correction. Reproduce the production-shaped failure in a regression test, verify the unaffected safety behavior, deploy, recover only eligible failed work, and observe the production path through its terminal outcome.
 
+## Deployment entry point and credential boundary
+
+Before declaring a deployment blocked or ready to dispatch, identify the repository's canonical deployment entry point and honor any explicit route the user selected. Inspect its trigger and inputs, environment and credential bindings, ordered safety gates, and the relevant remote run evidence. Treat the selected workflow's runner, secrets, and identity federation as the execution environment when that workflow owns deployment.
+
+- Map each required credential to the step and environment that consumes it. Missing local AWS or SSH credentials block only a local execution path or a separately approved verification step that actually requires them; they do not block dispatch to a workflow that supplies its own credentials. Do not substitute local CLI or SSH checks for an explicitly selected workflow.
+- Preserve authorization and safety gates in the selected route. An explicit exclusion of a staged rollout, canary, or ramp removes those stages only; it does not waive unrelated backup, schema compatibility, rollback, or production-verification requirements unless the user explicitly changes those requirements too.
+- Distinguish dispatch from completion. A successful push or workflow dispatch proves only that work was submitted. Follow the matching run through a terminal result, inspect failed steps or actionable annotations, and complete the requested post-deployment health and production-path verification before reporting deployment complete.
+- If there is no canonical or user-selected workflow, use the documented local deployment route and establish its required local credentials before execution. If that route requires a credential that is unavailable, report the specific blocker.
+
 ## HorseRacingPrediction collection API diagnostics
 
 When diagnosing collection jobs or failure groups in this repository, read

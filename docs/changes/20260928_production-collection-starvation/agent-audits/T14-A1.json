@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260928_production-collection-starvation",
+  "taskId": "T14",
+  "attemptId": "T14-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC5", "AC6"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "Parent dispatch specified gpt-6-luna/high; runtime observed model telemetry unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "Per-attempt token telemetry unavailable"
+  },
+  "scope": [
+    ".codex/skills/production-incident-recovery/SKILL.md",
+    "docs/changes/20260928_production-collection-starvation/README.md",
+    "docs/changes/20260928_production-collection-starvation/agent-audits/T14-A1.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "Review usage and active-time telemetry unavailable"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "Preparation, integration, and audit effort telemetry unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "Reliable per-attempt elapsed telemetry unavailable"
+  },
+  "startRevision": "190dca9e0c171d2ebfee5770f81a16d3fb4ccb2b",
+  "endRevisionOrPatch": "T14 skill and release-record correction patch",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Current workflow source confirms workflow_dispatch/push triggers and runner-bound AWS role and Lightsail secrets; recorded C8 as still applicable and documented both credential-route counterexamples. Skill, agent-audit/change-record, and route validation pass; repository search found no separate change-record validator.",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 0,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}
