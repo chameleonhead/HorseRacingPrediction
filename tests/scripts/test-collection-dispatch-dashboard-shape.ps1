@@ -94,17 +94,52 @@ try {
         throw "The throughput widget must consume the structurally tested metric-row local without recursive flattening."
     }
 
-    $minimalConfig = @"
+    $canonicalNamespace = "HorseRacingPrediction/CollectionDispatch"
+    $canonicalLanes = @("Realtime", "Normal", "Background")
+    $canonicalDefinitions = @("race-discovery", "race-detail", "race-odds", "OTHER")
+    $canonicalMetricNames = @(
+        "eligible_ready_rows",
+        "oldest_eligible_age_seconds",
+        "acquire_success_by_lane_definition_total",
+        "terminal_task_completion_by_lane_definition_total"
+    )
+    if ($namespace.Groups["expr"].Value -cne '"' + $canonicalNamespace + '"' -or
+        $lanes.Groups["expr"].Value -cne '["Realtime", "Normal", "Background"]' -or
+        $labelDefault.Groups["expr"].Value -cne '["race-discovery", "race-detail", "race-odds"]') {
+        throw "The source namespace, lane, or registered-definition defaults differ from the frozen structural contract."
+    }
+
+    $expectedRows = [System.Collections.Generic.List[object]]::new()
+    foreach ($lane in $canonicalLanes) {
+        foreach ($definition in $canonicalDefinitions) {
+            foreach ($metricName in $canonicalMetricNames) {
+                $expectedRows.Add(@($canonicalNamespace, $metricName, "Lane", $lane, "Definition", $definition))
+            }
+        }
+    }
+    $expectedRowsJson = ConvertTo-Json -InputObject @($expectedRows) -Depth 5 -Compress
+
+$minimalConfig = @"
 variable "collection_dispatch_definition_labels" {
   type    = list(string)
-  default = $($labelDefault.Groups["expr"].Value)
+  default = ["race-discovery", "race-detail", "race-odds"]
 }
 
 locals {
-  collection_dispatch_namespace         = $($namespace.Groups["expr"].Value)
-  collection_dispatch_lanes             = $($lanes.Groups["expr"].Value)
-  collection_dispatch_definitions       = $($definitions.Groups["expr"].Value)
+  collection_dispatch_namespace         = "$canonicalNamespace"
+  collection_dispatch_lanes             = $([Convert]::ToString((ConvertTo-Json -InputObject @($canonicalLanes) -Compress)))
+  collection_dispatch_definitions       = $([Convert]::ToString((ConvertTo-Json -InputObject @($canonicalDefinitions) -Compress)))
+  collection_dispatch_definition_labels = ["race-discovery", "race-detail", "race-odds"]
   collection_dispatch_dashboard_metrics = $($metrics.Groups["expr"].Value)
+  expected_metric_rows                 = $expectedRowsJson
+  wrong_dimension_expected_rows = concat(
+    [concat(slice(local.expected_metric_rows[0], 0, 2), ["WrongDimension"], slice(local.expected_metric_rows[0], 3, 6))],
+    slice(local.expected_metric_rows, 1, length(local.expected_metric_rows))
+  )
+  duplicate_omitted_actual_rows = concat(
+    slice(local.collection_dispatch_dashboard_metrics, 0, 47),
+    [local.collection_dispatch_dashboard_metrics[0]]
+  )
 }
 "@
     Set-Content -LiteralPath (Join-Path $scratchRoot "main.tf") -Value $minimalConfig -NoNewline
@@ -115,20 +150,34 @@ locals {
         throw "The process timeout counterexample did not terminate as a nonzero timed-out child."
     }
 
-    $expression = '[length(local.collection_dispatch_dashboard_metrics), length(setproduct(local.collection_dispatch_lanes, local.collection_dispatch_definitions)) * 4, length([for row in local.collection_dispatch_dashboard_metrics : row if can(row[0]) && can(row[1]) && contains(["eligible_ready_rows", "oldest_eligible_age_seconds", "acquire_success_by_lane_definition_total", "terminal_task_completion_by_lane_definition_total"], tostring(row[1])) && length(row) == 6])]'
+    $expression = '[length(local.collection_dispatch_dashboard_metrics), length(local.expected_metric_rows), length(toset([for row in local.collection_dispatch_dashboard_metrics : jsonencode(row)])), length(toset([for row in local.expected_metric_rows : jsonencode(row)])), length(setintersection(toset([for row in local.collection_dispatch_dashboard_metrics : jsonencode(row)]), toset([for row in local.expected_metric_rows : jsonencode(row)])))]'
     $console = Invoke-ChildProcess -FilePath $terraform -Arguments @("console") -WorkingDirectory $scratchRoot -InputText $expression
     if ($console.TimedOut) {
         throw "Provider-free Terraform console timed out after $([int]($processTimeoutMilliseconds / 1000)) seconds."
     }
-    if ($console.ExitCode -ne 0 -or $console.Output -notmatch '(?s)^\s*\[\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,?\s*\]\s*$') {
-        throw "Provider-free Terraform console could not evaluate the dispatch metric-row structure (exit $($console.ExitCode))."
+    if ($console.ExitCode -ne 0 -or $console.Output -notmatch '(?s)^\s*\[\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,?\s*\]\s*$') {
+        throw "Provider-free Terraform console could not evaluate the exact dispatch metric-row set (exit $($console.ExitCode))."
     }
-    $counts = [regex]::Match($console.Output, '(?s)^\s*\[\s*(?<actual>\d+)\s*,\s*(?<expected>\d+)\s*,\s*(?<valid>\d+)\s*,?\s*\]\s*$')
-    if (-not $counts.Success -or $counts.Groups["actual"].Value -ne $counts.Groups["expected"].Value -or $counts.Groups["actual"].Value -ne $counts.Groups["valid"].Value) {
-        throw "Terraform found a metric-row cardinality or array-shape mismatch (actual=$($counts.Groups['actual'].Value), expected=$($counts.Groups['expected'].Value), valid=$($counts.Groups['valid'].Value))."
+    $counts = [regex]::Match($console.Output, '(?s)^\s*\[\s*(?<actual>\d+)\s*,\s*(?<expected>\d+)\s*,\s*(?<uniqueActual>\d+)\s*,\s*(?<uniqueExpected>\d+)\s*,\s*(?<intersection>\d+)\s*,?\s*\]\s*$')
+    if (-not $counts.Success -or $counts.Groups["actual"].Value -ne "48" -or
+        $counts.Groups["expected"].Value -ne "48" -or $counts.Groups["uniqueActual"].Value -ne "48" -or
+        $counts.Groups["uniqueExpected"].Value -ne "48" -or $counts.Groups["intersection"].Value -ne "48") {
+        throw "Terraform found an exact metric-row set mismatch (actual=$($counts.Groups['actual'].Value), expected=$($counts.Groups['expected'].Value), unique-actual=$($counts.Groups['uniqueActual'].Value), unique-expected=$($counts.Groups['uniqueExpected'].Value), intersection=$($counts.Groups['intersection'].Value))."
     }
 
-    Write-Output "PASS: provider-free metric-row structure is valid (actual/expected/valid=$($counts.Groups['actual'].Value)/$($counts.Groups['expected'].Value)/$($counts.Groups['valid'].Value)); stalled-child timeout counterexample passed."
+    $wrongDimensionExpression = $expression -replace 'local\.expected_metric_rows', 'local.wrong_dimension_expected_rows'
+    $wrongDimension = Invoke-ChildProcess -FilePath $terraform -Arguments @("console") -WorkingDirectory $scratchRoot -InputText $wrongDimensionExpression
+    if ($wrongDimension.TimedOut -or $wrongDimension.ExitCode -ne 0 -or $wrongDimension.Output -notmatch '(?s)^\s*\[\s*48\s*,\s*48\s*,\s*48\s*,\s*48\s*,\s*47\s*,?\s*\]\s*$') {
+        throw "The mutated dimension-name counterexample did not fail exact-set equality as expected."
+    }
+
+    $duplicateOmitExpression = $expression -replace 'local\.collection_dispatch_dashboard_metrics', 'local.duplicate_omitted_actual_rows'
+    $duplicateOmit = Invoke-ChildProcess -FilePath $terraform -Arguments @("console") -WorkingDirectory $scratchRoot -InputText $duplicateOmitExpression
+    if ($duplicateOmit.TimedOut -or $duplicateOmit.ExitCode -ne 0 -or $duplicateOmit.Output -notmatch '(?s)^\s*\[\s*48\s*,\s*48\s*,\s*47\s*,\s*48\s*,\s*47\s*,?\s*\]\s*$') {
+        throw "The duplicate/omitted-row counterexample did not fail uniqueness and exact-set equality as expected."
+    }
+
+    Write-Output "PASS: provider-free exact metric-row set matches 48 canonical arrays; dimension and duplicate/omission counterexamples rejected; stalled-child timeout counterexample passed."
 }
 finally {
     if (Test-Path -LiteralPath $scratchRoot) {
