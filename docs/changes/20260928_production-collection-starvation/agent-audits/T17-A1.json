@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260928_production-collection-starvation",
+  "taskId": "T17",
+  "attemptId": "T17-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC5", "AC6"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "Parent dispatch requested gpt-6-luna/high; runtime observed model telemetry unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "Token telemetry unavailable"
+  },
+  "scope": [
+    "docs/changes/20260928_production-collection-starvation/deployment-duration-audit.md",
+    "docs/changes/20260928_production-collection-starvation/README.md",
+    ".codex/skills/agent-task-orchestration/SKILL.md",
+    "docs/changes/20260928_production-collection-starvation/agent-audits/T17-A1.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "Review usage and active-time telemetry unavailable"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "Preparation, integration, and audit effort telemetry unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "Reliable per-attempt elapsed telemetry unavailable"
+  },
+  "startRevision": "90d3e6121ea06f2553e55a4e929821f4fe971b47",
+  "endRevisionOrPatch": "T17 deployment duration audit and conditional generated-artifact prompt gate",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Git and Actions run metadata establish the endpoint intervals, ten zero-queue-delay runs, and final 12m39s deployment interval. Sixteen existing audit artifacts sum to 13 retries, 11 Lead corrections, and 11 review passes; model, token, and per-attempt elapsed telemetry remain unavailable. Prompt-preventability matrix separates avoidable artifact/tooling gaps from necessary safety review. The skill gate is limited to declarative/generated artifacts; forward scenarios retain both triggered and non-triggered cases.",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 0,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

@@ -71,6 +71,18 @@ Every delegated prompt must state:
 
 If any required item is unavailable, the worker should stop at the boundary and report the missing information rather than inventing it. A coding worker does not report completion until it has created or updated the contracted tests and run the contracted commands successfully. If execution is genuinely unavailable, it reports the exact blocker and leaves the task incomplete for lead classification; source inspection alone is not a passing test result.
 
+## Declarative infrastructure and generated-artifact prompt gate
+
+Add this gate to a worker prompt when the assigned change edits declarative infrastructure or generates structured artifacts consumed by another system, such as dashboards, deployment manifests, or schemas. It does not apply to an ordinary application refactor that produces no such artifact.
+
+- Name the exact downstream consumer and validate the parsed artifact against its semantic schema and contract. String matches, a successful render, row counts, or cardinality alone are insufficient. When the artifact defines a set of entries, compare exact membership, uniqueness, and field or dimension names and values against an independently constructed expected set.
+- Include applicable counterexamples for malformed nesting or types, changed required fields or dimensions, duplicate entries, and omitted entries. Each must fail at the semantic contract assertion, not only at setup or parsing.
+- For formatter/tool parity and push gates, apply the existing [CI parity and push closure procedure](../learn-from-implementation-failures/SKILL.md#ci-parity-and-push-closure). In the prompt, identify the workflow's exact command, tool version, and runner OS. Require matching evidence before push; if the exact version or OS is unavailable, report that check as unverified and blocked rather than treating a different local tool or platform as proof.
+- Require child validation tools to run noninteractively with explicit stdin/EOF behavior, stage-labeled or streamed progress, a per-child timeout and outer bound, and process-tree termination on timeout. Include a deliberately stalled child case when child execution is part of the helper's correctness or operational risk.
+- For shell, pipe, path, console, or process behavior that may vary by platform, require validation on the workflow runner OS. If that execution is unavailable before push, preserve runner compatibility as unverified.
+
+This section adds artifact semantics and helper-process requirements to the worker prompt contract. General CI parity remains governed by the linked procedure above.
+
 ## Suitability and routing gates
 
 Delegate to a worker tier when the task is bounded, reversible, locally verifiable, and has low ambiguity. Keep it with the lead when it changes architecture, public contracts, security/privacy, data integrity, user-visible acceptance, or requires interpreting conflicting requirements. A research worker may gather sources and summarize them, but the lead verifies source quality and applies the conclusion.
