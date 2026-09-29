@@ -89,6 +89,7 @@ jobs:
         run: |
           terraform fmt -check -recursive
           terraform -chdir=infra/collector-lambda init -backend=false -input=false
+          pwsh ./tests/scripts/test-collection-dispatch-dashboard-shape.ps1
           terraform -chdir=infra/collector-lambda validate
 
       - name: Build collector Lambda container

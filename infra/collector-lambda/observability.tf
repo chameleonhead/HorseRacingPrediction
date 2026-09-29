@@ -2,6 +2,14 @@ locals {
   collection_dispatch_namespace   = "HorseRacingPrediction/CollectionDispatch"
   collection_dispatch_lanes       = ["Realtime", "Normal", "Background"]
   collection_dispatch_definitions = concat(var.collection_dispatch_definition_labels, ["OTHER"])
+  collection_dispatch_dashboard_metrics = concat([
+    for pair in setproduct(local.collection_dispatch_lanes, local.collection_dispatch_definitions) : [
+      [local.collection_dispatch_namespace, "eligible_ready_rows", "Lane", pair[0], "Definition", pair[1]],
+      [local.collection_dispatch_namespace, "oldest_eligible_age_seconds", "Lane", pair[0], "Definition", pair[1]],
+      [local.collection_dispatch_namespace, "acquire_success_by_lane_definition_total", "Lane", pair[0], "Definition", pair[1]],
+      [local.collection_dispatch_namespace, "terminal_task_completion_by_lane_definition_total", "Lane", pair[0], "Definition", pair[1]],
+    ]
+  ]...)
   collection_dispatch_lane_definitions = {
     for pair in setproduct(local.collection_dispatch_lanes, local.collection_dispatch_definitions) :
     "${lower(pair[0])}-${pair[1]}" => { lane = pair[0], definition = pair[1] }
@@ -305,18 +313,11 @@ resource "aws_cloudwatch_dashboard" "collection_dispatch" {
         width  = 24
         height = 6
         properties = {
-          title  = "Acquire and completion throughput by lane and definition"
-          region = var.aws_region
-          view   = "timeSeries"
-          period = 300
-          metrics = flatten([
-            for pair in setproduct(local.collection_dispatch_lanes, local.collection_dispatch_definitions) : [
-              [local.collection_dispatch_namespace, "eligible_ready_rows", "Lane", pair[0], "Definition", pair[1]],
-              [local.collection_dispatch_namespace, "oldest_eligible_age_seconds", "Lane", pair[0], "Definition", pair[1]],
-              [local.collection_dispatch_namespace, "acquire_success_by_lane_definition_total", "Lane", pair[0], "Definition", pair[1]],
-              [local.collection_dispatch_namespace, "terminal_task_completion_by_lane_definition_total", "Lane", pair[0], "Definition", pair[1]],
-            ]
-          ])
+          title   = "Acquire and completion throughput by lane and definition"
+          region  = var.aws_region
+          view    = "timeSeries"
+          period  = 300
+          metrics = local.collection_dispatch_dashboard_metrics
         }
       },
     ]
