@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260928_production-collection-starvation",
+  "taskId": "T13",
+  "attemptId": "T13-A1",
+  "state": "completed",
+  "taskDifficulty": "low",
+  "acceptanceCriteria": ["AC5"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "Lead dispatch requested gpt-6-luna/high; runtime observed model telemetry unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "Per-attempt token telemetry unavailable"
+  },
+  "scope": [
+    "docs/changes/20260928_production-collection-starvation/README.md",
+    "docs/changes/20260928_production-collection-starvation/agent-audits/T13-A1.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "Review token and active-time telemetry unavailable"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "Active effort telemetry unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "Reliable agent elapsed-time telemetry unavailable"
+  },
+  "startRevision": "3cd93905ab84246331b03633599429e4b38a190a",
+  "endRevisionOrPatch": "T13 docs-only T5 preflight record update",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Read-only Git and CLI evidence independently supports the 43-ahead/0-behind branch state, absent exact-SHA Actions runs, expired AWS session, missing SSH config, and missing release gates. The existing deploy guard script passed 14/14; audit validation and git diff --check passed. No production operation or push occurred.",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 0,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}
