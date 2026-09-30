@@ -124,3 +124,17 @@ Implementation verification, 2026-09-30:
 ## Deviations and follow-up
 
 承認済み設計からの逸脱なし。Remote GitHub Actions runは明示したnon-goalのまま未実施。
+
+### CI closure, 2026-09-30
+
+Push後のapp-ci run `36592333721`とapp-deploy run `36592333426`は、既存Collector contract test `DeployWorkflow_RestoresPipelineAfterHealthCheckWithoutLegacyMigration`がpre-deploy v1 routeを期待したままだったため、共通のTest stepで失敗した。Workflowのv2 guard、focused 14-case script、Playwright version guard、build、formatは成功しており、deployment jobには到達していない。
+
+承認済みAC1-AC3内のclosure itemとして、このtestをGET `/pipeline-state`、PUT `/pipeline`のpause payload、paged `.items` task shapeへ更新し、v1 baseと`/pipeline/pause`の不在を反例assertionに追加した。新しい外部仕様、production mutation、新規change recordは追加していない。
+
+Verification:
+
+- 最初のfocused `--no-build` runは修正前DLLを実行して旧assertionで失敗した。test projectを再buildして同じfocused testを再実行し、1/1 PASS。
+- `dotnet test tests/HorseRacingPrediction.Collector.Tests/HorseRacingPrediction.Collector.Tests.csproj --no-build --configuration Release` — 406/406 PASS。
+- `pwsh -NoProfile -File ./tests/scripts/test-deploy-pipeline-state.ps1 -Bash 'C:\Program Files\Git\bin\bash.exe'` — 14/14 PASS。
+- `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes` — exit 0。
+- Final scoped `git diff --check`とstatus reviewをcommit前に実施。Closure scopeはstale contract testと本追記のみ。

@@ -76,24 +76,30 @@ public sealed class CollectionQueueCutoverContractTests
         var infrastructureStart = lambdaJob.IndexOf("      - name: Initialize collector infrastructure",
             guardStart, StringComparison.Ordinal);
         var guard = Slice(lambdaJob, guardStart, infrastructureStart);
-        var preDeployPipelineRead = guard.IndexOf("\"$base/pipeline\"", StringComparison.Ordinal);
-        var preDeployPause = guard.IndexOf("\"$base/pipeline/pause\"", StringComparison.Ordinal);
+        var preDeployPipelineRead = guard.IndexOf("\"$base/pipeline-state\"", StringComparison.Ordinal);
+        var preDeployPause = guard.IndexOf(
+            "--data '{\"paused\":true,\"reason\":\"deployment version transition\"}' \"$base/pipeline\"",
+            StringComparison.Ordinal);
         var drainLoop = guard.IndexOf("for attempt in $(seq 1 60)", StringComparison.Ordinal);
 
         Assert.IsGreaterThanOrEqualTo(0, lambdaJobStart);
         Assert.IsGreaterThan(lambdaJobStart, migrationJobStart);
         StringAssert.Contains(lambdaJob, "name: Pause and drain collection before changing deployed versions");
-        StringAssert.Contains(guard, "base=\"$API_BASE_URL/api/admin/collection\"");
-        StringAssert.Contains(guard, "\"$base/pipeline\"");
-        StringAssert.Contains(guard, "\"$base/pipeline/pause\"");
+        StringAssert.Contains(guard, "base=\"$API_BASE_URL/api/v2/admin/collection\"");
+        StringAssert.Contains(guard, "\"$base/pipeline-state\"");
+        StringAssert.Contains(guard,
+            "--data '{\"paused\":true,\"reason\":\"deployment version transition\"}' \"$base/pipeline\"");
         StringAssert.Contains(guard, "\"$base/tasks?status=Running&limit=1\"");
+        StringAssert.Contains(guard, ".items | if type == \"array\" then length");
+        Assert.IsFalse(guard.Contains("/api/admin/collection", StringComparison.Ordinal));
+        Assert.IsFalse(guard.Contains("/pipeline/pause", StringComparison.Ordinal));
         StringAssert.Contains(guard, "for attempt in $(seq 1 60)");
         StringAssert.Contains(guard, "Collection drain timed out; pipeline remains paused");
         Assert.IsGreaterThan(preDeployPipelineRead, preDeployPause);
         Assert.IsGreaterThan(preDeployPause, drainLoop);
         Assert.IsGreaterThan(guardStart,
             lambdaJob.IndexOf("      - name: Apply collector Lambda infrastructure", StringComparison.Ordinal),
-            "The deployed-v1 pipeline pause and drain must precede the Lambda version change.");
+            "The pipeline pause and drain must precede the Lambda version change.");
 
         var apiDeployStart = DeployWorkflow.IndexOf("  deploy:", StringComparison.Ordinal);
         var apiDeployEnd = DeployWorkflow.IndexOf("  deploy-collector-lambda:", apiDeployStart,
