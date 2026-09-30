@@ -71,6 +71,12 @@ Before describing a slice as complete, trace each acceptance criterion through t
 - Treat new code calling a component that creates legacy work as continued legacy usage, even when wrapped by a new handler.
 - For capabilities registered or seeded outside the main application, maintain an entry-point matrix before completion. Enumerate every production bootstrap, initializer, importer/seed reader, scheduler, manual-operation surface, and compatibility adapter that can create or dispatch the affected work. For each affected resource/definition pair, prove registration, type mapping, required metadata, and terminal handler resolution at every applicable entry point. Searching only the main runtime registration or testing only the primary UI/API path is insufficient; an unclassified alternate entry point is an open completion item.
 
+## C# Symbol and File Migrations
+
+For behavior-preserving C# symbol or namespace migrations, use the repository's semantic rename tool for symbols, then make remaining convention fixes as syntax-category edits or explicit reviewed per-file edits. Do not use a broad text selector such as `^\s*using\s+` as an import selector: it also matches executable `using` declarations and statements such as `using var` and `using (...)`. `await using` is executable too and must be preserved.
+
+Before applying a mechanical cleanup repository-wide, exercise its selector on a representative fixture containing namespace, alias, static, and global using directives alongside `using var`, `await using`, and `using (...)`; confirm it selects only directives and compare non-import declarations and type bodies with the baseline. After splitting files, reconcile each declaration with its filename and namespace, then prove its body and surrounding comments/attributes/defaults are preserved before accepting build evidence.
+
 ## Finite public-contract inventory gate
 
 When a change migrates an external, public, or API contract and investigation discovers a finite set of routes, operations, or endpoints, enumerate every discovered item directly in the governing change-record `README.md` before approval. A linked route map, ID range, or total count is supporting evidence only; it does not replace the README ledger.
