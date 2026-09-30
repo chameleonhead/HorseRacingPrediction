@@ -15,14 +15,14 @@ public sealed class RacePredictionContextDto
     public int? DistanceMeters { get; set; }
     public string? DirectionCode { get; set; }
     public List<RacePredictionContextEntryDto> Entries { get; set; } = [];
-    public List<WeatherObservationSnapshot> WeatherObservations { get; set; } = [];
-    public List<TrackConditionSnapshot> TrackConditionObservations { get; set; } = [];
+    public List<RaceWeatherObservationDto> WeatherObservations { get; set; } = [];
+    public List<RaceTrackConditionDto> TrackConditionObservations { get; set; } = [];
 
-    public WeatherObservationSnapshot? LatestWeather => WeatherObservations.Count == 0
+    public RaceWeatherObservationDto? LatestWeather => WeatherObservations.Count == 0
         ? null
         : WeatherObservations.OrderByDescending(x => x.ObservationTime).First();
 
-    public TrackConditionSnapshot? LatestTrackCondition => TrackConditionObservations.Count == 0
+    public RaceTrackConditionDto? LatestTrackCondition => TrackConditionObservations.Count == 0
         ? null
         : TrackConditionObservations.OrderByDescending(x => x.ObservationTime).First();
 }

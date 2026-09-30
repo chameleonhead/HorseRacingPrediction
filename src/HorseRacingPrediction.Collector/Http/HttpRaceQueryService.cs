@@ -95,14 +95,14 @@ public sealed class HttpRaceQueryService : IRaceQueryService
         return new MemoBySubjectDto
         {
             SubjectKey = $"{subjectType.ToUpperInvariant()}:{subjectId}",
-            Memos = memos.Select(m => new MemoSnapshot(
+            Memos = memos.Select(m => new MemoDto(
                 m.MemoId,
                 m.AuthorId,
                 m.MemoType,
                 m.Content,
                 m.CreatedAt,
-                m.Subjects.Select(s => new MemoSubjectSnapshot(s.SubjectType, s.SubjectId)).ToList(),
-                m.Links.Select(l => new MemoLinkSnapshot(l.LinkId, l.LinkType, l.Title, l.Url, l.StorageKey)).ToList())).ToList()
+                m.Subjects.Select(s => new HorseRacingPrediction.Contracts.Memos.MemoSubjectDto(s.SubjectType, s.SubjectId)).ToList(),
+                m.Links.Select(l => new HorseRacingPrediction.Contracts.Memos.MemoLinkDto(l.LinkId, l.LinkType, l.Title, l.Url, l.StorageKey)).ToList())).ToList()
         };
     }
 

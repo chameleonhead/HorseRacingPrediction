@@ -438,15 +438,14 @@
     "HorseProfileResponse -> Horses.HorseDto",
     "JockeyProfileResponse -> Jockeys.JockeyDto",
     "TrainerProfileResponse -> Trainers.TrainerDto",
-    "HorseAliasEntry + JockeyAliasEntry + TrainerAliasEntry -> Common.AliasDto (SourceName remains nullable)"
-  ],
-  "remainingNaturalMerges": [
-    "MemoSnapshot -> MemoDto",
-    "MemoSubjectSnapshot -> MemoSubjectDto",
-    "MemoLinkSnapshot -> MemoLinkDto",
+    "HorseAliasEntry + JockeyAliasEntry + TrainerAliasEntry -> Common.AliasDto (SourceName remains nullable)",
+    "MemoSnapshot -> Memos.MemoDto",
+    "MemoSubjectSnapshot -> Memos.MemoSubjectDto",
+    "MemoLinkSnapshot -> Memos.MemoLinkDto",
     "WeatherObservationSnapshot -> Races.RaceWeatherObservationDto",
     "TrackConditionSnapshot -> Races.RaceTrackConditionDto"
   ],
+  "remainingNaturalMerges": [],
   "excludedFirstStage": [
     "Namespace/folder movement",
     "Convention exceptions and same-meaning DTO consolidation",
@@ -471,7 +470,7 @@
   },
   "fileRenames": {
     "sourceFiles": 30,
-    "status": "148 type files use the matching simple type name and resource namespace folder; no grouped source files remain"
+    "status": "After five natural merges, 137 Contracts declarations remain; all 137 are in a matching simple-type filename and resource namespace folder, with one top-level type per source file"
   },
   "referenceReview": {
     "internalOldNameReferences": 21,
@@ -487,5 +486,18 @@
     "format": "passed: dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes",
     "codeGraphSync": "passed after coherent edit",
     "diffCheck": "pending checkpoint"
+  },
+  "a5Verification": {
+    "attribution": "The A5 source/test patch existed in the working tree at task resume. This attempt independently reviewed the patch, verified the old wire payload against merged DTOs, and ran the final checks; it does not claim authorship of the pre-existing edits.",
+    "contractsDeclarations": "137 source files, 137 public top-level declarations; 0 multiple-declaration files, basename mismatches, or namespace-folder mismatches",
+    "tests": {
+      "contracts": "passed: 48/48",
+      "collector": "passed: 407/407 after installing the project-pinned Playwright Chromium with the existing script; initial run had 1 environment-only missing-browser failure",
+      "api": "passed: 383, skipped: 1, total: 384"
+    },
+    "releaseBuild": "passed: 0 warnings, 0 errors",
+    "format": "passed: dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes",
+    "codeGraph": "passed after coherent A5 source edit: CODEGRAPH_NO_DAEMON=1 codegraph sync .; status reported index up to date, then RacePredictionContextDto exploration found current DTO and callers",
+    "diffCheck": "passed at T2/T8 checkpoint"
   }
 }

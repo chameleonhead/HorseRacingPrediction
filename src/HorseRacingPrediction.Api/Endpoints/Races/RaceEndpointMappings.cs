@@ -121,8 +121,8 @@ internal static class RaceEndpointMappings
             DistanceMeters = model.DistanceMeters,
             DirectionCode = model.DirectionCode,
             Entries = model.Entries.Select(x => new HorseRacingPrediction.Contracts.Races.RacePredictionContextEntryDto(x.EntryId, x.HorseId, x.HorseNumber, x.JockeyId, x.TrainerId, x.GateNumber, x.AssignedWeight, x.SexCode, x.Age, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode, x.OwnerName, (HorseRacingPrediction.Contracts.Races.RaceEntryParticipationStatus)x.ParticipationStatus)).ToList(),
-            WeatherObservations = model.WeatherObservations.Select(x => new HorseRacingPrediction.Contracts.Races.WeatherObservationSnapshot(x.ObservationTime, x.WeatherCode, x.WeatherText, x.TemperatureCelsius, x.HumidityPercent, x.WindDirectionCode, x.WindSpeedMeterPerSecond)).ToList(),
-            TrackConditionObservations = model.TrackConditionObservations.Select(x => new HorseRacingPrediction.Contracts.Races.TrackConditionSnapshot(x.ObservationTime, x.TurfConditionCode, x.DirtConditionCode, x.GoingDescriptionText)).ToList()
+            WeatherObservations = model.WeatherObservations.Select(x => new HorseRacingPrediction.Contracts.Races.RaceWeatherObservationDto(x.ObservationTime, x.WeatherCode, x.WeatherText, x.TemperatureCelsius, x.HumidityPercent, x.WindDirectionCode, x.WindSpeedMeterPerSecond)).ToList(),
+            TrackConditionObservations = model.TrackConditionObservations.Select(x => new HorseRacingPrediction.Contracts.Races.RaceTrackConditionDto(x.ObservationTime, x.TurfConditionCode, x.DirtConditionCode, x.GoingDescriptionText)).ToList()
         };
 
     internal static RaceEntryDto ToRaceEntryResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int? horseNumber, int? gateNumber, string? horseName, string? ownerName, string? ownerId)

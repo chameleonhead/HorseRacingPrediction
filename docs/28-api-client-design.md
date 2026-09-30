@@ -35,6 +35,8 @@ public sealed record SearchRacesResponse(
 
 GET/DELETEのRequestを用意することとJSON bodyの追加は別である。path値はpathへ、検索条件はqueryへ割り当て、IDをqueryへ重複送信しない。必要ならRefitインターフェースの公開メソッドから属性付きtransportメソッドへ分解して渡す。入力のない操作はRequest引数を持たず、CancellationTokenのみを受け取る。CancellationTokenや認証ヘッダーは業務入力の有無の判定に含めない。path/queryだけの操作は入力ありとして扱う。
 
+Refit 16.3.0の隔離probeでは、利用者向けの操作interfaceと属性付きtransportを分ける構成を確認した。Factoryが返す利用者向けfacadeはRequestのpath/query値をscalar transport引数へ割り当て、body入力がある操作ではDTOを含む専用Requestをbodyとして渡す。内部transportがRefit route/query/body属性を持つ。path値をqueryへ重複させず、GETにbodyを付けない。Requestのpath/query metadataはJSON bodyから除外する。直接の`[Body]` Request objectからroute placeholderへbindする方式は使わない。DateOnly queryは`yyyy-MM-dd`、DateTimeOffsetは`O`形式を使い、endpointの期待形式と一致させる。
+
 戻りデータがない操作にはResponseを作らず、本文なしの応答を維持する。204を200へ変更したり、`{}`を返したりしない。既存の200/201/202/204/207とLocationは意味を維持する。エラーは成功Responseへ偽装せず既存status/error契約を維持する。
 
 ## FactoryとDI
@@ -47,7 +49,7 @@ FactoryはIHttpClientFactory管理の共通named HttpClientとRefit生成実装�
 
 公開操作は入力がある場合だけ専用Requestを受け取り、CancellationTokenは常に受け取る。戻りデータがある場合は`Task<ApiResponse<TResponse>>`、ない場合は`Task<IApiResponse>`とする。後者はHTTP status/header/errorを扱うためのRefit型であり、空の業務ResponseやJSONを作るものではない。業務DTOや配列はResponse内に保持する。404/409/422等とエラー本文を保持する。transport failureとcancellationは例外として伝播する。応答のDispose責任を使用例に示す。URL/query名、日付、配列形式をendpointへ明示的に合わせ、null queryは省略する。
 
-System.Text.JsonはAPIと同じWeb既定・JST converterを使う。Refit 16.3.0の同梱仕様に従い生成クライアントと必要なJSON metadataを用意する。reflection fallback依存を暗黙追加しない。パッケージの更新は目的外。
+System.Text.JsonはAPIと同じWeb既定・JST converterを使う。Refit 16.3.0の同梱仕様に従い、明示したsource-generated JSON metadataをRefit serializer optionsへ渡し、reflection fallbackへ暗黙依存しない。Request enumは数値JSONを維持し、response readerは数値または文字列enumを受け入れる。DateOnly query formatterはISO日付を生成する。パッケージの更新は目的外。
 
 ```csharp
 // 将来の利用例。この変更ではアプリの起動処理へ追加しない。

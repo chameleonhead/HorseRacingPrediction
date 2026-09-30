@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260930_refit-api-clients",
+  "taskId": "T8",
+  "attemptId": "T8-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC2", "AC4", "AC5", "AC6"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "not exposed"
+  },
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "not exposed"},
+  "scope": [
+    "src/HorseRacingPrediction.Contracts/Memos",
+    "src/HorseRacingPrediction.Contracts/Races",
+    "src/HorseRacingPrediction.Api/Endpoints/Races",
+    "src/HorseRacingPrediction.Collector/Http",
+    "tests/HorseRacingPrediction.Contracts.Tests",
+    "tests/HorseRacingPrediction.Collector.Tests/Http",
+    "docs/changes/20260930_refit-api-clients/README.md",
+    "docs/changes/20260930_refit-api-clients/contract-migration.json",
+    "docs/changes/20260930_refit-api-clients/agent-audits/T8-A1.json"
+  ],
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "review usage and active time were not exposed"},
+  "overhead": {"availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "effort telemetry was not captured"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "reliable effort telemetry was not exposed"},
+  "startRevision": "a7bd8c47",
+  "endRevisionOrPatch": "working-tree patch: resumed T8 memo/weather merge review and verification",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "A5 source/test patch predated this attempt and is not attributed to it. Old/new fields, nulls, order, and DateTimeOffset offsets were reviewed; 137/137 Contracts files match one declaration, stem, and namespace folder. Contracts 48/48, Collector 407/407, Api 383/1 skip, Release build 0/0, and format passed. Application/persistence models are unchanged.",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

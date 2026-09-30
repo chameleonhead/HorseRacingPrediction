@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260930_refit-api-clients",
+  "taskId": "T7",
+  "attemptId": "T7-A2",
+  "state": "completed",
+  "taskDifficulty": "low",
+  "acceptanceCriteria": ["AC3"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "not exposed"
+  },
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "not exposed"},
+  "scope": ["docs/changes/20260930_refit-api-clients/probes/refit"],
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "review usage and active time were not exposed"},
+  "overhead": {"availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "effort telemetry was not captured"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "reliable worker elapsed effort was not exposed"},
+  "startRevision": "a7bd8c47",
+  "endRevisionOrPatch": "working-tree probe artifact: T7-A2 query/serializer correction and clean Rebuild",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "The probe source existed as an untracked artifact before this attempt; the audit attributes only A2 corrections visible in the scoped artifact, not the entire source. A clean Rebuild passed six groups covering path/query binding, ISO DateOnly, enum serialization, source-generated metadata, typed body/response, no GET body, and empty/error/cancellation behavior. The sole warning is the expected RF015 negative-control fixture; 0 errors. Lead inspected the concrete pattern and accepted the public facade with internal attributed Refit transport.",
+    "retries": 1,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}
