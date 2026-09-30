@@ -12,11 +12,11 @@ internal static class DeclarePayoutResultEndpoint
     {
         group.MapPost("/races/{raceId}/payout",
                     [SwaggerOperation(Summary = "Declare payout result", Description = "Declares payout information for win/place/quinella/exacta/trifecta bets")]
-        async (string raceId, ApiContracts.DeclarePayoutResultRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string raceId, HorseRacingPrediction.Contracts.Races.DeclarePayoutResultRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
                         try
                         {
-                            static IReadOnlyList<PayoutEntry>? ToPayoutEntries(IReadOnlyList<ApiContracts.PayoutEntryDto>? dtos) =>
+                            static IReadOnlyList<PayoutEntry>? ToPayoutEntries(IReadOnlyList<HorseRacingPrediction.Contracts.Races.PayoutEntryDto>? dtos) =>
                                 dtos?.Select(d => new PayoutEntry(d.Combination, d.Amount)).ToList();
 
                             var command = new DeclarePayoutResultCommand(

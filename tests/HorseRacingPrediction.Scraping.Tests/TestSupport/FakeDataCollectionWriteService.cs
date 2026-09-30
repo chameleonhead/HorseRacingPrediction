@@ -1,5 +1,7 @@
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Interfaces;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Scraping.Tests.TestSupport;
 

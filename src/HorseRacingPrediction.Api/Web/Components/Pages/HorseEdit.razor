@@ -2,6 +2,8 @@
 @attribute [Authorize]
 @inject AdminApiClient Api
 @inject NavigationManager Nav
+@using HorseRacingPrediction.Contracts.Common
+@using HorseRacingPrediction.Contracts.Horses
 
 <RaceOpsObjectHeader BackHref="@($"/horses/{Uri.EscapeDataString(HorseId)}")" BackLabel="← 馬詳細に戻る" Title="@(horse?.RegisteredName ?? "馬の管理情報")" Section="データ / 馬" />
 

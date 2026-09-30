@@ -4,5 +4,5 @@ namespace HorseRacingPrediction.Api.CollectionController;
 // the existing UI. The legacy reacquisition endpoints themselves have been removed.
 public static class RaceReacquisitionEndpointExtensions
 {
-    internal static string? ResolveCourse(string? value) => HorseRacingPrediction.Contracts.RaceCourseIdentity.Canonicalize(value);
+    internal static string? ResolveCourse(string? value) => HorseRacingPrediction.Contracts.Races.RaceCourseIdentity.Canonicalize(value);
 }

@@ -19,7 +19,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.FluentUI.AspNetCore.Components;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.PredictionScheduling;
-using HorseRacingPrediction.Contracts.Time;
+using HorseRacingPrediction.Contracts.Common.Time;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace HorseRacingPrediction.Api.Tests;

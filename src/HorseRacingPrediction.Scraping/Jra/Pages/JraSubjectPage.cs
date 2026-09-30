@@ -1,6 +1,7 @@
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra.Models;
+using HorseRacingPrediction.Contracts.Subjects;
+
 namespace HorseRacingPrediction.Scraping.Jra.Pages;
 
 public sealed record JraSubjectPage(JraSubjectProfileDto Profile, IReadOnlyList<HorseHistoryRaceLink> Races,

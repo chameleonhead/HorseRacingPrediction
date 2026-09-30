@@ -1,7 +1,14 @@
 using System.Net.Http.Json;
 using System.Text.Json;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.ApiClient;
+
+using HorseRacingPrediction.Contracts.Horses;
+using HorseRacingPrediction.Contracts.Jockeys;
+using HorseRacingPrediction.Contracts.MachineLearning;
+using HorseRacingPrediction.Contracts.Memos;
+using HorseRacingPrediction.Contracts.Predictions;
+using HorseRacingPrediction.Contracts.Races;
+using HorseRacingPrediction.Contracts.Trainers;
 
 namespace HorseRacingPrediction.Collector.Http;
 
@@ -132,7 +139,7 @@ public sealed class HttpRaceQueryService : IRaceQueryService
 
         return new MlPredictionDto(
             dto.RaceId,
-            dto.Rankings.Select(x => new HorseRacingPrediction.Contracts.MlHorsePredictionDto(
+            dto.Rankings.Select(x => new HorseRacingPrediction.Contracts.MachineLearning.MlHorsePredictionDto(
                 x.EntryId,
                 x.HorseId,
                 x.HorseNumber,

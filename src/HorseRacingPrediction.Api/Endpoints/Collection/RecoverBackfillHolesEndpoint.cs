@@ -1,7 +1,7 @@
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.Contracts.Time;
+using HorseRacingPrediction.Contracts.Common.Time;
+
 
 namespace HorseRacingPrediction.Api.Endpoints.Collection;
 

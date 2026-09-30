@@ -1,6 +1,7 @@
 using EventFlow.EntityFramework;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Infrastructure.Persistence;
+
+using HorseRacingPrediction.Contracts.Identity;
 
 namespace HorseRacingPrediction.Api.Endpoints.Identity;
 

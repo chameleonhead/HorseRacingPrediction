@@ -2,6 +2,8 @@
 @attribute [Authorize]
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
+@using HorseRacingPrediction.Contracts.Collection
+@using HorseRacingPrediction.Contracts.Common.Time
 @implements IAsyncDisposable
 
 <RaceOpsPageHeader Section="運用" Title="収集管理" Description="収集処理の進行状況を確認し、失敗から復旧します。">

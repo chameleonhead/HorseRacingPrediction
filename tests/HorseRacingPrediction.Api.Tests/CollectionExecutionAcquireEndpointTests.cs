@@ -3,12 +3,13 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Amazon.CloudWatch.Model;
+
+using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.Api.Tests;
 

@@ -4,7 +4,6 @@ using EventFlow.Subscribers;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using System.Security.Cryptography;
@@ -12,6 +11,9 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Web;
 using Microsoft.AspNetCore.Mvc;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 

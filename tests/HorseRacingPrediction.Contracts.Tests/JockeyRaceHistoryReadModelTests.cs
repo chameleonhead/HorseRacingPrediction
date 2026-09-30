@@ -1,4 +1,5 @@
-using HorseRacingPrediction.Contracts;
+
+using HorseRacingPrediction.Contracts.Jockeys;
 
 namespace HorseRacingPrediction.Contracts.Tests;
 

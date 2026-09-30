@@ -1,4 +1,3 @@
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
@@ -7,6 +6,8 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+
+using HorseRacingPrediction.Contracts.Common;
 
 namespace HorseRacingPrediction.Scraping.Jra.Navigation;
 

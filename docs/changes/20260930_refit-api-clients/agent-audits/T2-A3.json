@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260930_refit-api-clients",
+  "taskId": "T2",
+  "attemptId": "T2-A3",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": [
+    "AC2",
+    "AC4",
+    "AC5",
+    "AC6"
+  ],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "not exposed"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "not exposed"
+  },
+  "scope": [
+    "src",
+    "tools/HorseRacingPrediction.CollectionInitializer",
+    "tests",
+    "docs/28-api-client-design.md",
+    "docs/changes/20260930_refit-api-clients/README.md",
+    "docs/changes/20260930_refit-api-clients/contract-migration.json",
+    "docs/changes/20260930_refit-api-clients/agent-audits/T2-A2.json",
+    "docs/changes/20260930_refit-api-clients/agent-audits/T2-A3.json",
+    "docs/changes/20260930_refit-api-clients/agent-audits/history/T2-A1.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review usage and active time were not exposed"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "effort telemetry was not captured"
+  },
+  "elapsed": {
+    "minutes": null,
+    "availability": "unavailable",
+    "reason": "elapsed-time telemetry was unavailable"
+  },
+  "startRevision": "efb8e9fdf1d8badf4b4fcf8bf6c69095aeb95c63",
+  "endRevisionOrPatch": "working-tree patch: T2-A3 namespace and one-type-per-file checkpoint",
+  "outcome": {
+    "reviewMode": "detailed",
+    "reviewPasses": 1,
+    "qualityPassed": true,
+    "decision": "accept",
+    "verificationPassed": true,
+    "scopePassed": true,
+    "promoted": false,
+    "escalations": 0,
+    "leadCorrections": 0,
+    "retries": 1,
+    "independentChallenge": "Compared 148 declaration ordered-token streams against efb8e9fd after normalizing 53 approved names/resource namespaces: 0 missing/extra/mismatch. XML docs 47/47 and 213 using-var scopes/order preserved. Inventory: 148 types/files, namespace-folder mismatches 0. Release build, format verify, and non-External tests passed (1511/1 skipped).",
+    "escapedDefects": 0,
+    "detailReviewReason": "A broad selector altered using-var declarations across 50 files; split omitted comments and reversed three pairs. Worker restored/corrected them; independent body/comment/order checks passed. Initial Scraping failures were missing Chromium; project Playwright install enabled a passing rerun."
+  }
+}

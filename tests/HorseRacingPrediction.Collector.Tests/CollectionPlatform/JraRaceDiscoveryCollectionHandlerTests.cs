@@ -1,12 +1,13 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using Microsoft.Extensions.Options;
+
+using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -165,7 +166,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         Assert.IsTrue(sink.Requests.Any(x => x.Resource.Type == CollectionResourceType.Race
             && x.Resource.Id == $"{date:yyyyMMdd}:Nakayama:1"));
         Assert.IsTrue(sink.Requests.Where(x => x.Definition.Value == "race-detail").All(x => x.RequestedRevision ==
-            HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail));
+            HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail));
     }
 
     [TestMethod]
@@ -746,7 +747,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         public Task<CollectionRequestBulkResponse> RequestManyAsync(CollectionRequestBulkRequest request,
             CancellationToken cancellationToken)
         {
-            var outcomes = request.Items.Select((item, index) => new CollectionRequestBulkOutcome(
+            var outcomes = request.Items.Select((item, index) => new CollectionRequestBulkOutcomeDto(
                 item.ItemKey,
                 failureMode == "rejected" ? "Rejected" : "Created",
                 RequestId: Guid.NewGuid(), TaskId: Guid.NewGuid(), CreatedTask: true,

@@ -43,7 +43,7 @@ public sealed class CollectionWorkerLeaseHandler : DelegatingHandler
                     && code.GetString() is "RaceRepairHeld" or "StaleRaceAssignmentFence")
                 {
                     response.Dispose();
-                    throw new HorseRacingPrediction.Contracts.CollectionRepairHeldException();
+                    throw new HorseRacingPrediction.Contracts.Collection.CollectionRepairHeldException();
                 }
             }
             catch (System.Text.Json.JsonException) { }

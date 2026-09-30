@@ -1,8 +1,12 @@
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Interfaces;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using System.Text.RegularExpressions;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Common.Time;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 
@@ -190,18 +194,18 @@ public sealed class JraRaceResultCollectionWorkflow
         var weather = string.IsNullOrWhiteSpace(resultPage.WeatherText)
             ? null
             : new RecordWeatherObservationRequest(
-                HorseRacingPrediction.Contracts.Time.JstTime.Now(), WeatherCode: null, resultPage.WeatherText,
+                HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(), WeatherCode: null, resultPage.WeatherText,
                 TemperatureCelsius: null, HumidityPercent: null, WindDirectionCode: null, WindSpeedMeterPerSecond: null);
 
         var trackCondition = string.IsNullOrWhiteSpace(resultPage.TrackConditionText)
             ? null
             : new RecordTrackConditionRequest(
-                HorseRacingPrediction.Contracts.Time.JstTime.Now(), TurfConditionCode: null, DirtConditionCode: null, resultPage.TrackConditionText);
+                HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(), TurfConditionCode: null, DirtConditionCode: null, resultPage.TrackConditionText);
 
         var payouts = resultPage.Payouts is null || winningEntry is null
             ? null
             : new DeclarePayoutResultRequest(
-                HorseRacingPrediction.Contracts.Time.JstTime.Now(),
+                HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(),
                 ToPayoutEntries(resultPage.Payouts.WinPayouts),
                 ToPayoutEntries(resultPage.Payouts.PlacePayouts),
                 ToPayoutEntries(resultPage.Payouts.QuinellaPayouts),

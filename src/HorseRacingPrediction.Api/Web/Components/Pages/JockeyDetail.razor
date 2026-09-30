@@ -2,6 +2,8 @@
 @attribute [Authorize]
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
+@using HorseRacingPrediction.Contracts.Common
+@using HorseRacingPrediction.Contracts.Jockeys
 
 <RaceOpsObjectHeader BackHref="/jockeys" BackLabel="← 騎手一覧に戻る" Title="@(jockey?.DisplayName ?? "騎手詳細")" Section="データ / 騎手">
     <Actions><FluentButton Appearance="@Appearance.Outline" Href="@($"/jockeys/{Uri.EscapeDataString(JockeyId)}/edit")">編集</FluentButton></Actions>

@@ -1,12 +1,14 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.Http;
-using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common.Time;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
@@ -140,7 +142,7 @@ public sealed class CollectionPlatformWorkerClient
                 completion = CollectionAttemptFailureClassifier.WithTaskContext(
                     new(CollectionAttemptResult.TransientFailure, "CollectorTimeout",
                         "Collector execution was cancelled or reached its deadline.",
-                        RetryAt: HorseRacingPrediction.Contracts.Time.JstTime.Now().AddMinutes(1)),
+                        RetryAt: HorseRacingPrediction.Contracts.Common.Time.JstTime.Now().AddMinutes(1)),
                     task);
                 handlerElapsed = _clock.GetElapsedTime(handlerStarted, _clock.GetTimestamp());
                 handlerMeasured = true;

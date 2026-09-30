@@ -1,7 +1,6 @@
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using EventFlow.EntityFramework;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.Scraping.Browser;
@@ -17,6 +16,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using System.Net.Http.Json;
 using System.Text.Json;
+
+using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -37,7 +38,7 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
                 1, "initial", false);
             await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", CollectionResourceType.Race,
-                HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail, "artifact state machine", false);
+                HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail, "artifact state machine", false);
             await store.RegisterDefinitionAsync(new("race-odds"), "Race odds", CollectionResourceType.RaceOdds,
                 1, "initial", false);
 
@@ -108,7 +109,7 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             var detail = tasks.Single(x => x.Definition.Value == "race-detail");
             var odds = tasks.Single(x => x.Definition.Value == "race-odds");
             Assert.AreEqual(CollectionTaskStatus.Ready, detail.Status);
-            Assert.AreEqual(HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
+            Assert.AreEqual(HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail,
                 detail.RequestedRevision);
             Assert.AreEqual(CollectionTaskStatus.Ready, odds.Status);
             Assert.AreEqual($"{date:yyyyMMdd}:Tokyo:11", detail.Resource.Id);
@@ -125,7 +126,7 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
                     Provider = "JRA",
                     ResourceId = detail.Resource.Id,
                     DefinitionId = "race-detail",
-                    RequestedRevision = HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
+                    RequestedRevision = HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail,
                     Reason = CollectionReason.Discovery,
                     Lane = CollectionLane.Realtime,
                     Priority = 80,

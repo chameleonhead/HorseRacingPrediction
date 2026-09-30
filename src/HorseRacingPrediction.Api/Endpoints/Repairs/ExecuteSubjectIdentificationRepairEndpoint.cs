@@ -1,12 +1,14 @@
 using EventFlow.EntityFramework;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.Contracts.Time;
+using HorseRacingPrediction.Contracts.Common.Time;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Repairs;
 
 namespace HorseRacingPrediction.Api.Endpoints.Repairs;
 
@@ -98,7 +100,7 @@ internal static class ExecuteSubjectIdentificationRepairEndpoint
                         var horsePreview = await BuildHorseIdentityRepairPreviewAsync(db, collectionStore, token)
                             .ConfigureAwait(false);
                         var plans = new List<(PendingCollectionFailureNotification Failure, Uri? Url, int Revision,
-                            HorseIdentityRepairCandidateResponse? Merge, string? RedirectTarget)>();
+                            HorseIdentityRepairCandidateDto? Merge, string? RedirectTarget)>();
                         foreach (var item in request.Items)
                         {
                             var failure = byId[item.NotificationId];
@@ -125,7 +127,7 @@ internal static class ExecuteSubjectIdentificationRepairEndpoint
                                 .ConfigureAwait(false);
                             if (state is null)
                                 return Results.Conflict(new[] { $"{failure.Resource}: 収集状態が見つかりません。" });
-                            HorseIdentityRepairCandidateResponse? merge = null;
+                            HorseIdentityRepairCandidateDto? merge = null;
                             string? redirectTarget = null;
                             if (failure.Resource.Type == CollectionResourceType.Horse)
                             {

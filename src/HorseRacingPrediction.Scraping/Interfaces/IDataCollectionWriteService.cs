@@ -1,4 +1,6 @@
-﻿using HorseRacingPrediction.Contracts;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Scraping.Interfaces;
 
@@ -118,9 +120,9 @@ public interface IDataCollectionWriteService
         string raceId, int? horseNumber, string horseName, string? jockeyName, string? trainerName,
         int? gateNumber, decimal? assignedWeight, string? sexCode, int? age, decimal? declaredWeight,
         decimal? declaredWeightDiff, string? ownerName, string? jraHorseSourceIdentity,
-        HorseRacingPrediction.Contracts.RaceEntryParticipationStatus participationStatus,
+        HorseRacingPrediction.Contracts.Races.RaceEntryParticipationStatus participationStatus,
         CancellationToken cancellationToken = default)
-        => participationStatus == HorseRacingPrediction.Contracts.RaceEntryParticipationStatus.Active
+        => participationStatus == HorseRacingPrediction.Contracts.Races.RaceEntryParticipationStatus.Active
             ? UpsertRaceEntryWithHorseIdentityAsync(raceId, horseNumber, horseName, jockeyName, trainerName,
                 gateNumber, assignedWeight, sexCode, age, declaredWeight, declaredWeightDiff, ownerName,
                 jraHorseSourceIdentity, cancellationToken)

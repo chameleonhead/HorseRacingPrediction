@@ -1,5 +1,7 @@
 using ApiContracts = HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.Contracts;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Horses;
 
 namespace HorseRacingPrediction.Api.Endpoints.Horses;
 
@@ -22,7 +24,7 @@ internal static class HorseEndpointMappings
             _ => null
         };
 
-    internal static ApiContracts.HorseDto ToAgentHorse(HorseRacingPrediction.Application.Queries.ReadModels.HorseReadModel model)
+    internal static HorseRacingPrediction.Contracts.Horses.HorseDto ToAgentHorse(HorseRacingPrediction.Application.Queries.ReadModels.HorseReadModel model)
         => new()
         {
             HorseId = model.HorseId,
@@ -36,13 +38,13 @@ internal static class HorseEndpointMappings
             DamName = model.DamName,
             DamsireName = model.DamsireName,
             CoatColor = model.CoatColor,
-            Aliases = model.Aliases.Select(x => new ApiContracts.HorseAliasEntry(x.AliasType, x.AliasValue, x.SourceName, x.IsPrimary)).ToList()
+            Aliases = model.Aliases.Select(x => new HorseRacingPrediction.Contracts.Common.HorseAliasEntry(x.AliasType, x.AliasValue, x.SourceName, x.IsPrimary)).ToList()
         };
 
-    internal static ApiContracts.HorseRaceHistoryDto ToAgentHorseRaceHistory(HorseRacingPrediction.Application.Queries.ReadModels.HorseRaceHistoryReadModel model)
+    internal static HorseRacingPrediction.Contracts.Horses.HorseRaceHistoryDto ToAgentHorseRaceHistory(HorseRacingPrediction.Application.Queries.ReadModels.HorseRaceHistoryReadModel model)
         => new()
         {
             HorseId = model.HorseId,
-            Entries = model.Entries.Select(x => new ApiContracts.HorseRaceHistoryEntryDto(x.RaceId, x.EntryId, x.RaceDate, x.RacecourseCode, x.SurfaceCode, x.DistanceMeters, x.DirectionCode, x.GradeCode, x.GateNumber, x.AssignedWeight, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode, x.JockeyId, x.TrainerId, x.FinishPosition, x.LastThreeFurlongTime, x.CornerPositions, x.PrizeMoney)).ToList()
+            Entries = model.Entries.Select(x => new HorseRacingPrediction.Contracts.Horses.HorseRaceHistoryEntryDto(x.RaceId, x.EntryId, x.RaceDate, x.RacecourseCode, x.SurfaceCode, x.DistanceMeters, x.DirectionCode, x.GradeCode, x.GateNumber, x.AssignedWeight, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode, x.JockeyId, x.TrainerId, x.FinishPosition, x.LastThreeFurlongTime, x.CornerPositions, x.PrizeMoney)).ToList()
         };
 }

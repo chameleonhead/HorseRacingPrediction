@@ -1,0 +1,16 @@
+
+namespace HorseRacingPrediction.Contracts.Trainers;
+
+public sealed class SearchTrainersRequest
+{
+    public string? TrainerId { get; init; }
+    public string? Query { get; init; }
+    public string? DisplayName { get; init; }
+    public string? NormalizedName { get; init; }
+    public string? AffiliationCode { get; init; }
+    public string? AliasValue { get; init; }
+    public int? Page { get; init; }
+    public int? PageSize { get; init; }
+    public string? SortBy { get; init; }
+    public bool? SortDescending { get; init; }
+}

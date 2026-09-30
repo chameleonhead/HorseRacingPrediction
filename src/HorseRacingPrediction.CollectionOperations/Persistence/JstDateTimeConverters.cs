@@ -1,4 +1,4 @@
-using HorseRacingPrediction.Contracts.Time;
+using HorseRacingPrediction.Contracts.Common.Time;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace HorseRacingPrediction.CollectionOperations.Persistence;

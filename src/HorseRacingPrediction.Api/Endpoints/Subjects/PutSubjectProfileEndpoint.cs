@@ -5,7 +5,6 @@ using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Application.Commands.Horses;
 using HorseRacingPrediction.Application.Commands.Jockeys;
 using HorseRacingPrediction.Application.Commands.Trainers;
-using HorseRacingPrediction.Contracts;
 using Microsoft.AspNetCore.Mvc;
 using HorseRacingPrediction.Domain;
 using HorseRacingPrediction.Domain.Horses;
@@ -13,6 +12,9 @@ using HorseRacingPrediction.Domain.Jockeys;
 using HorseRacingPrediction.Domain.Trainers;
 using System.Globalization;
 using System.Text.RegularExpressions;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Subjects;
 
 namespace HorseRacingPrediction.Api.Endpoints.Subjects;
 

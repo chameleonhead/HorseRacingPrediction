@@ -1,6 +1,6 @@
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts.Time;
+using HorseRacingPrediction.Contracts.Common.Time;
 using Microsoft.AspNetCore.Mvc;
 namespace HorseRacingPrediction.Api.Endpoints.Collection;
 

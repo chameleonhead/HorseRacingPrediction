@@ -1,7 +1,8 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using System.Globalization;
 using System.Text.RegularExpressions;
+
+using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 

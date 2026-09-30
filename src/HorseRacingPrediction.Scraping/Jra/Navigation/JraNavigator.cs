@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
@@ -48,7 +48,7 @@ public sealed partial class JraNavigator
     /// <see cref="_raceCardLookupPeriodDays"/> の既定値。
     /// </summary>
     public const int DefaultRaceCardLookupPeriodDays =
-        HorseRacingPrediction.Contracts.JraCollectionPolicy.DefaultRaceCardLookupPeriodDays;
+        HorseRacingPrediction.Contracts.Collection.JraCollectionPolicy.DefaultRaceCardLookupPeriodDays;
 
     // NOTE(レース一覧URLキャッシュを撤回): 一度、ブラウザの「戻る」（GoBack）の不安定さ対策として
     // 直前に到達したレース一覧ページのURLをキャッシュし、そのURLへ直接ナビゲート（再GET）する
@@ -106,7 +106,7 @@ public sealed partial class JraNavigator
         _browser = browser;
         _pageReader = pageReader;
         _logger = logger ?? NullLogger<JraNavigator>.Instance;
-        _today = today ?? (() => HorseRacingPrediction.Contracts.Time.JstTime.Today());
+        _today = today ?? (() => HorseRacingPrediction.Contracts.Common.Time.JstTime.Today());
         _raceCardLookupPeriodDays = raceCardLookupPeriodDays ?? DefaultRaceCardLookupPeriodDays;
     }
 

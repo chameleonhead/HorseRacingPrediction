@@ -1,13 +1,17 @@
 using EventFlow.EntityFramework;
 using EventFlow.EntityFramework.EventStores;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Horses;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Api.Tests;
 

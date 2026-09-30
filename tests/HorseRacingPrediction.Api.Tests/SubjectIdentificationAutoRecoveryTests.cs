@@ -1,6 +1,7 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.DependencyInjection;
+
+using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.Api.Tests;
 

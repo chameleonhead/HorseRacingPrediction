@@ -12,7 +12,7 @@ internal static class RecordTrackConditionEndpoint
     {
         group.MapPost("/races/{raceId}/track-condition",
                     [SwaggerOperation(Summary = "Record track condition", Description = "Records a track condition observation for a race")]
-        async (string raceId, ApiContracts.RecordTrackConditionRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string raceId, HorseRacingPrediction.Contracts.Races.RecordTrackConditionRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
                         try
                         {

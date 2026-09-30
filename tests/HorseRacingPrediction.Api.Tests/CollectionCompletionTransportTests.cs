@@ -1,13 +1,14 @@
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using System.Net.Http.Json;
 using Amazon.CloudWatch.Model;
 using Microsoft.Extensions.Logging.Abstractions;
+
+using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.Api.Tests;
 

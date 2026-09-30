@@ -2,7 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
+
+using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -62,7 +63,7 @@ public sealed class CollectionRequestApiClientTests
         Assert.IsFalse(response.Outcomes[2].CreatedTask);
     }
 
-    private static CollectionRequestBulkItem Item(string key, string type, string id, string definition) =>
+    private static CollectionRequestBulkItemDto Item(string key, string type, string id, string definition) =>
         new(key, type, "JRA", id, definition, 1, "Discovery", "Realtime", 70, null,
             new DateOnly(2026, 9, 12), null);
 
@@ -84,13 +85,13 @@ public sealed class CollectionRequestApiClientTests
             var outcomes = returnPartialOutcomes
                 ? new[]
                 {
-                    new CollectionRequestBulkOutcome(items[0].ItemKey, "Created",
+                    new CollectionRequestBulkOutcomeDto(items[0].ItemKey, "Created",
                         Guid.NewGuid(), Guid.NewGuid(), true),
-                    new CollectionRequestBulkOutcome(items[1].ItemKey, "Rejected",
+                    new CollectionRequestBulkOutcomeDto(items[1].ItemKey, "Rejected",
                         ErrorCode: "DefinitionMissing", Message: "missing-definition"),
-                    new CollectionRequestBulkOutcome(items[2].ItemKey, "Held"),
+                    new CollectionRequestBulkOutcomeDto(items[2].ItemKey, "Held"),
                 }
-                : items.Select(x => new CollectionRequestBulkOutcome(x.ItemKey, "Created")).ToArray();
+                : items.Select(x => new CollectionRequestBulkOutcomeDto(x.ItemKey, "Created")).ToArray();
             return new(HttpStatusCode.OK)
             {
                 Content = JsonContent.Create(new CollectionTaskBatchSubmissionResponse("ExplicitItems", null,

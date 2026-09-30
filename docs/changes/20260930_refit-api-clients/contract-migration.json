@@ -3,10 +3,10 @@
   "changeId": "20260930_refit-api-clients",
   "taskId": "T2",
   "attemptId": "T2-A2",
-  "status": "First semantic rename slice complete; namespace and one-type-per-file cleanup pending",
+  "status": "53 semantic renames and resource namespace/folder plus one-type-per-file layout complete; approved natural DTO merges pending",
   "tool": "Roslynator DotNet CLI 1.0.0 rename-symbol",
   "selection": "INamedTypeSymbol in HorseRacingPrediction.Contracts assembly, exact old name; no JSON properties/values or domain/persistence symbols",
-  "verification": "Per-mapping semantic dry-run and apply; Contracts tests; Release solution build; CI format verification; old-name inventory",
+  "verification": "Semantic actual apply with target inventory; independent declaration-body/XML-doc/using-scope comparison; Contracts tests; full non-External solution tests; Release build; format verification",
   "mappings": [
     {
       "oldName": "HorseReadDto",
@@ -416,6 +416,24 @@
       "actualApplyCount": 1
     }
   ],
+  "additionalSemanticRenames": [
+    "DeclareRaceResultBulkItemOutcome -> RaceResultBulkItemOutcomeDto",
+    "CollectionRequestBulkItem -> CollectionRequestBulkItemDto",
+    "CollectionRequestBulkOutcome -> CollectionRequestBulkOutcomeDto",
+    "RaceOddsEntryRequest -> RaceOddsEntryInputDto",
+    "RaceOddsObservationRequest -> RaceOddsObservationInputDto",
+    "HorseIdentityRepairCandidateResponse -> HorseIdentityRepairCandidateDto",
+    "HorseIdentityRepairPreviewResponse -> HorseIdentityRepairPreviewDto",
+    "SubjectIdentificationRepairCandidateResponse -> SubjectIdentificationRepairCandidateDto",
+    "SubjectIdentificationRepairPreviewResponse -> SubjectIdentificationRepairPreviewDto",
+    "ExecuteSubjectIdentificationRepairItem -> SubjectIdentificationRepairInputDto",
+    "SubjectNameNormalizationCandidate -> SubjectNameNormalizationCandidateDto",
+    "SubjectNameNormalizationPage -> SubjectNameNormalizationPageDto",
+    "ApplySubjectNameNormalizationItem -> SubjectNameNormalizationInputDto",
+    "SubjectNameNormalizationApplyResult -> SubjectNameNormalizationApplyResultDto",
+    "SubjectNameNormalizationItemResult -> SubjectNameNormalizationItemResultDto",
+    "AliasResponse -> AliasDto"
+  ],
   "excludedFirstStage": [
     "Namespace/folder movement",
     "Convention exceptions and same-meaning DTO consolidation",
@@ -427,9 +445,9 @@
   "toolApply": {
     "command": "C:/Users/yuto.nagano/.codex/tmp/refit-rename-tools/roslynator.exe rename-symbol",
     "version": "Roslynator DotNet CLI 1.0.0 (Roslyn 5.0.0)",
-    "selection": "Exact Contracts assembly symbol predicate; --scope type --on-error abort; 1 first symbol + 36-symbol switch batch",
+    "selection": "Exact Contracts assembly symbol predicate; --scope type --on-error abort; 1 first symbol + 36-symbol switch batch, followed by an additional 16-symbol switch batch",
     "exitCode": 0,
-    "appliedCount": 37,
+    "appliedCount": 53,
     "dryRunExit": "failed: NullReferenceException in MSBuildWorkspace.TryApplyChanges; zero source writes",
     "fixture": "Actual-mode single-symbol rename on disposable fixture succeeded and build passed before production apply"
   },
@@ -440,7 +458,7 @@
   },
   "fileRenames": {
     "sourceFiles": 30,
-    "status": "renamed to simple type names; grouped files retained temporarily for T2 stage 2 split"
+    "status": "148 type files use the matching simple type name and resource namespace folder; no grouped source files remain"
   },
   "referenceReview": {
     "internalOldNameReferences": 21,
@@ -451,7 +469,8 @@
   },
   "verificationResults": {
     "contractsTests": "passed: 43/43",
-    "solutionBuild": "passed: 0 errors, 1 existing nullable warning in CollectionAdministrationComponentTests.cs:444",
+    "solutionBuild": "passed after resource-folder moves and formatting: 0 errors, 1 existing nullable warning in CollectionAdministrationComponentTests.cs:445",
+    "solutionTests": "passed: 1511 passed, 1 skipped, TestCategory!=External; Chromium installed through the existing Playwright script after the first run exposed the missing local browser",
     "format": "passed: dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes",
     "codeGraphSync": "passed after coherent edit",
     "diffCheck": "pending checkpoint"

@@ -3,13 +3,14 @@ using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Api.Web.Components.Pages;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.FluentUI.AspNetCore.Components;
 using System.Net.Http.Json;
 using BatchDetailPage = HorseRacingPrediction.Api.Web.Components.Pages.CollectionExecutionBatchDetail;
+
+using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.Api.Tests;
 

@@ -1,8 +1,10 @@
 using HorseRacingPrediction.ApiClient;
-using HorseRacingPrediction.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common;
 
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 

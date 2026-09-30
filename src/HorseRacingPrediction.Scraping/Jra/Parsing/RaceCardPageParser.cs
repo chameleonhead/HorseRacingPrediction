@@ -1,8 +1,10 @@
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using System.Text.RegularExpressions;
 using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Scraping.Jra.Parsing;
 

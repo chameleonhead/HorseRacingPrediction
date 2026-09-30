@@ -25,11 +25,13 @@
   },
   "scope": [
     "src",
+    "tools/HorseRacingPrediction.CollectionInitializer",
     "tests",
     "docs/28-api-client-design.md",
     "docs/changes/20260930_refit-api-clients/README.md",
     "docs/changes/20260930_refit-api-clients/contract-migration.json",
     "docs/changes/20260930_refit-api-clients/agent-audits/T2-A2.json",
+    "docs/changes/20260930_refit-api-clients/agent-audits/T2-A3.json",
     "docs/changes/20260930_refit-api-clients/agent-audits/history/T2-A1.json"
   ],
   "review": {

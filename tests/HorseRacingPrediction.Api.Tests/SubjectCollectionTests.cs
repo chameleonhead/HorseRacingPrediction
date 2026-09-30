@@ -1,6 +1,11 @@
-using HorseRacingPrediction.Contracts;
 using System.Net;
 using System.Net.Http.Json;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Horses;
+using HorseRacingPrediction.Contracts.Races;
+using HorseRacingPrediction.Contracts.Subjects;
+using HorseRacingPrediction.Contracts.Trainers;
 
 namespace HorseRacingPrediction.Api.Tests;
 

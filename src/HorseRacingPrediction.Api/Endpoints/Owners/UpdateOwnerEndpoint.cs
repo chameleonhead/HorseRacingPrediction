@@ -1,8 +1,10 @@
 using EventFlow.EntityFramework;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+
+using HorseRacingPrediction.Contracts.Common.Time;
+using HorseRacingPrediction.Contracts.Owners;
 
 namespace HorseRacingPrediction.Api.Endpoints.Owners;
 
@@ -21,7 +23,7 @@ internal static class UpdateOwnerEndpoint
                         using var dbContext = dbContextProvider.CreateContext();
                         var owners = await BuildOwnersAsync(dbContext, cancellationToken).ConfigureAwait(false);
                         if (owners.All(x => x.OwnerId != ownerId)) return Results.NotFound();
-                        var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
+                        var now = HorseRacingPrediction.Contracts.Common.Time.JstTime.Now();
                         var normalized = NormalizeOwnerName(request.DisplayName.Trim());
                         if (normalized.Length == 0) return Results.BadRequest(new[] { "表示名を入力してください。" });
                         var mapping = await dbContext.OwnerAliasMappings.SingleOrDefaultAsync(x => x.NormalizedAlias == normalized, cancellationToken).ConfigureAwait(false);

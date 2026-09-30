@@ -11,8 +11,8 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | In progress | T2の第1段階として37件のContracts型をRoslynatorで意味的に改名し、Razor参照を補正済み。資源別namespace・全型1ファイル化・統合は継続中。後続のRequest/Response、Refit、Factory、未導入DI拡張も未完了 |
-| Verification | In progress | T1の135業務route shape inventoryを完了。Refit probeは進行中。実装回帰と新HTTP契約検証は未完了 |
+| Code | In progress | T2のsemantic rename 53件、Contractsの資源別namespace・対応フォルダー化・全型1ファイル化を完了。承認済みの自然な統合と後続Request/Response、Refit、Factory、未導入DI拡張は未完了 |
+| Verification | In progress | namespace/split checkpointはRelease build、format verify、全非Externalテスト1511 passed/1 skippedで確認。自然な統合、Refit、Factory、HTTP契約検証は未完了 |
 | Deployment/operation | Not applicable | 新クライアントの稼働ホストへの導入・デプロイは対象外 |
 
 ## Context
@@ -86,7 +86,7 @@
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State | Routing | Audit | Result metrics |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | 全API棚卸し（AC1/AC6） | inventory explorer | requested gpt-6-luna/high | - | route-inventory.md; http-contract-inventory.md/.json | endpoint宣言と登録/route検索照合、handler input/result対照 | 136 routes (135 business); request 116/19; response data 94/41; corrected DI/delegate cases cross-checked; Lead accepted inventory as T3 baseline (counts do not prove wrappers) | Verified | 境界の明確な調査 | read-only research | unavailable; retries 0; corrections 1; reviews 1 |
-| T2 | 既存ツールで共有型を改名し、規約例外を個別修正（AC2/4/5/6） | rename_tool_inventory / contract-migration worker | requested gpt-6-luna/high | 設計承認 | src; tests; docs/28-api-client-design.md; docs/changes/20260930_refit-api-clients/README.md; docs/changes/20260930_refit-api-clients/contract-migration.json; docs/changes/20260930_refit-api-clients/agent-audits/T2-A2.json; docs/changes/20260930_refit-api-clients/agent-audits/history/T2-A1.json | CLI target/collision inventory + actual apply、Contracts tests、solution build、format | 37型のsemantic renameとRazor 17ファイル/67参照を完了。dry-runはRoslynatorのNullReferenceExceptionで失敗し、実適用は隔離fixtureで確認後に実施。資源namespace/1型1ファイル/統合は継続 | In progress | 意味判断はLead、確定規則下の移行を直列実行 | T2-A2 | unavailable; retries 1; corrections 0; reviews 1 |
+| T2 | 既存ツールで共有型を改名し、規約例外を個別修正（AC2/4/5/6） | rename_tool_inventory / contract-migration worker | requested gpt-6-luna/high | 設計承認 | src; tools/HorseRacingPrediction.CollectionInitializer; tests; docs/28-api-client-design.md; docs/changes/20260930_refit-api-clients/README.md; docs/changes/20260930_refit-api-clients/contract-migration.json; docs/changes/20260930_refit-api-clients/agent-audits/T2-A2.json; docs/changes/20260930_refit-api-clients/agent-audits/T2-A3.json; docs/changes/20260930_refit-api-clients/agent-audits/history/T2-A1.json | CLI inventory/apply、Contracts tests、solution build、format | Roslynator semantic rename 53件を適用。148宣言を resource namespace/folder に配置し、148個の型名一致ファイルへ分割。独立比較で宣言body token 148/148、XML docs 47/47、using-var順序/スコープを確認。Release build、format verify、非External全テスト1511 passed/1 skipped。dry-runはNullReferenceExceptionのため成功扱いせず、衝突inventoryとisolated actual fixtureを使用。自然な型統合は継続 | In progress | 意味判断はLead、確定規則下の移行を直列実行 | T2-A2,T2-A3 | unavailable; retries 2; corrections 0; reviews 2 |
 | T3 | 入力/戻りの有無に応じた操作別Request/Response、DTO、サーバー/既存利用者mapping（AC2/4/5） | wire-contract worker | gpt-6-luna/high予定 | T2 | Contracts、Api境界mapping、関連test、既存利用者のRequest組立/Response取出し | 新契約HTTP試験、旧→新データ保存性、既存利用者回帰 | 未着手 | Dependent | 内部実行型を維持し独立比較 | dispatch時作成 | unavailable; retries 0; corrections 0; reviews 0 |
 | T4 | 全Refitインターフェース、Factory、DI（AC1/3/4/5） | api-client worker | gpt-6-luna/high予定 | T3 | ApiClient、新ApiClient.Tests、slnへのtest追加 | 全route送信、DI/Factory/error/cancel tests | 未着手 | Dependent | 凍結済みHTTP契約を実装 | dispatch時作成 | unavailable; retries 0; corrections 0; reviews 0 |
 | T5 | 独立HTTP往復/全回帰と局所修正（AC1-6） | verification worker | gpt-6-luna/high予定 | T4 | tests、直列の限定修正、検証記録 | TestServer、全solution test/build/format | 未着手 | Dependent | Leadが契約逸脱を判定し局所修正はworkerへ戻す | dispatch時作成 | unavailable; retries 0; corrections 0; reviews 0 |
@@ -137,6 +137,8 @@ API実HTTPfixtureはTestApplicationFactory/TestServerを利用し、外部デー
 Pre-implementation review (restart): Leadは契約判断・統合受入を保持し、機械的実行はLuna/highへ直列委譲する。改名段階では業務値、JSON property名、内部/永続モデル、runtime登録を変更しない。同名のDomain型とContracts型は区別する。公開済みCLIは作業用ディレクトリへ導入し、リポジトリへ新規tool projectを追加しない。例外の修正も同じwrite ownerが実施し、dry-runと適用の後に関連test、solution build、CI format、旧名検索で検証する。
 
 第1 checkpointではRoslynator actual-modeで37 Contracts型のsemantic renameとRazor補正を完了。次は資源別namespace化、全型1ファイル化、承認済み同義型統合と回帰検証。T2-T6と全ACは未完了。T7の過去検証結果は記録のみ存在し、T4で再現可能な実HTTP試験を実施する。再開時の意図的な未コミットは本記録の方式更新のみ。
+
+第2 checkpointでは追加16型を含むsemantic rename 53件、148 Contracts宣言のresource namespaceと同名folderへの配置、1型1ファイル化を完了した。独立reviewはbaseline対比で型body ordered-token mismatch 0/148、XML documentation line 47/47、213 using-var declarationのscope/order preservationを確認した。初回のdirective cleanupがusing-varを誤って選択したため全213宣言を復元し、3箇所の逆順を個別修正した。Roslynatorのdry-run制約は既知のまま保持する。`dotnet build HorseRacingPrediction.sln -c Release --no-restore`成功、`dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`成功、`dotnet test HorseRacingPrediction.sln --no-build -c Release --filter "TestCategory!=External"`は1511 passed/1 skipped。1回目のtest runではScraping 78件がPlaywright Chromium未導入で失敗したため、既存のPlaywright install scriptでChromiumを導入して再実行し全件成功した。T2は承認済み自然な型統合が残るためIn progress。
 
 ## API contract inventory
 

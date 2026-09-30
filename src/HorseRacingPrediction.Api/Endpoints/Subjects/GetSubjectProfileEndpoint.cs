@@ -1,8 +1,9 @@
 using EventFlow.Queries;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Application.Queries.ReadModels;
-using HorseRacingPrediction.Contracts;
 using Microsoft.AspNetCore.Mvc;
+
+using HorseRacingPrediction.Contracts.Subjects;
 
 namespace HorseRacingPrediction.Api.Endpoints.Subjects;
 

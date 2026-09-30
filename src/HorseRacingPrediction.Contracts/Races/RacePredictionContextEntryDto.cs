@@ -1,0 +1,18 @@
+
+namespace HorseRacingPrediction.Contracts.Races;
+
+public sealed record RacePredictionContextEntryDto(
+    string EntryId,
+    string HorseId,
+    int? HorseNumber,
+    string? JockeyId,
+    string? TrainerId,
+    int? GateNumber,
+    decimal? AssignedWeight,
+    string? SexCode,
+    int? Age,
+    decimal? DeclaredWeight,
+    decimal? DeclaredWeightDiff,
+    string? RunningStyleCode,
+    string? OwnerName = null,
+    RaceEntryParticipationStatus ParticipationStatus = RaceEntryParticipationStatus.Active);

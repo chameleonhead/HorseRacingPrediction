@@ -1,11 +1,14 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.Http;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Predictor.Scheduling;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Net;
 using System.Net.Http.Json;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Predictions;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -104,7 +107,7 @@ public sealed class RaceCancellationTests
         Assert.AreNotEqual(before.EntryAssignmentFingerprint, after.EntryAssignmentFingerprint);
         http.DefaultRequestHeaders.Add("X-Race-Hold-Generation", "0");
         http.DefaultRequestHeaders.Add("X-Race-Assignment-Fingerprint", before.EntryAssignmentFingerprint);
-        var odds = new HorseRacingPrediction.Contracts.RecordRaceOddsSnapshotRequest(DateTimeOffset.UtcNow, [new(1, 2.5m)]);
+        var odds = new HorseRacingPrediction.Contracts.Races.RecordRaceOddsSnapshotRequest(DateTimeOffset.UtcNow, [new(1, 2.5m)]);
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync($"/api/v2/admin/races/{raceId}/odds-snapshot-records", odds)).StatusCode);
         http.DefaultRequestHeaders.Remove("X-Race-Assignment-Fingerprint");
         http.DefaultRequestHeaders.Add("X-Race-Assignment-Fingerprint", after.EntryAssignmentFingerprint);

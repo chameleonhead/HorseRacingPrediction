@@ -1,6 +1,8 @@
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 

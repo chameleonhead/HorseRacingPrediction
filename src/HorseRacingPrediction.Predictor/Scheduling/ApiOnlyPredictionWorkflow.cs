@@ -1,7 +1,9 @@
 using System.Globalization;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.ApiClient;
 using Microsoft.Extensions.Logging;
+
+using HorseRacingPrediction.Contracts.MachineLearning;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Predictor.Scheduling;
 

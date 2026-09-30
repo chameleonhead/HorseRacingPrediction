@@ -19,7 +19,7 @@ public sealed class RaceEntryRepairInspector(IDbContextProvider<EventStoreDbCont
 {
     private static readonly JsonSerializerOptions ComparisonOptions = new()
     {
-        Converters = { new HorseRacingPrediction.Contracts.Time.JstStoredDateTimeOffsetJsonConverter() }
+        Converters = { new HorseRacingPrediction.Contracts.Common.Time.JstStoredDateTimeOffsetJsonConverter() }
     };
     private static readonly string MemoAggregateName = new MemoAggregate(MemoId.New).Name.Value;
     private static readonly HashSet<string> KnownTables =

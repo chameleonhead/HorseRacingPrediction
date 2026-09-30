@@ -1,8 +1,10 @@
 using EventFlow.EntityFramework;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Owners;
 
 namespace HorseRacingPrediction.Api.Endpoints.Owners;
 

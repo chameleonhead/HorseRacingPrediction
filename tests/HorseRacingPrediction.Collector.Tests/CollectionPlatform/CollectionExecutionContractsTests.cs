@@ -1,9 +1,10 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using Microsoft.Extensions.Options;
 using System.Net;
+
+using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 

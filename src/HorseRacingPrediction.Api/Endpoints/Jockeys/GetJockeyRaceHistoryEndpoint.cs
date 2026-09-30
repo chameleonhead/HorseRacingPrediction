@@ -28,7 +28,7 @@ internal static class GetJockeyRaceHistoryEndpoint
                     .AddEndpointFilter<RacePredictionReadEndpointFilter>()
                     .WithName("GetJockeyRaceHistory")
                     .WithTags("Jockey API")
-                    .Produces<ApiContracts.JockeyRaceHistoryDto>(StatusCodes.Status200OK)
+                    .Produces<HorseRacingPrediction.Contracts.Jockeys.JockeyRaceHistoryDto>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

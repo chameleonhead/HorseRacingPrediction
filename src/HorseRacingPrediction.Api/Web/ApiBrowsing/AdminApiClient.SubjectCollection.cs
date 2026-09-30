@@ -1,4 +1,5 @@
-using HorseRacingPrediction.Contracts;
+using HorseRacingPrediction.Contracts.Subjects;
+
 namespace HorseRacingPrediction.Api.Web.ApiBrowsing;
 
 public sealed partial class AdminApiClient

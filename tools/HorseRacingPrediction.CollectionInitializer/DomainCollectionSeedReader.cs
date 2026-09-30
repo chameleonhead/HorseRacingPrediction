@@ -1,5 +1,6 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Races;
 using Microsoft.Data.Sqlite;
 
 namespace HorseRacingPrediction.CollectionInitializer;
@@ -46,7 +47,7 @@ public sealed class DomainCollectionSeedReader(string domainDatabasePath)
     }
 
     private static string CanonicalCourse(string value) =>
-        HorseRacingPrediction.Contracts.RaceCourseIdentity.ResourceCode(value) ?? value;
+        HorseRacingPrediction.Contracts.Races.RaceCourseIdentity.ResourceCode(value) ?? value;
 
     private static async Task ReadProfilesAsync(SqliteConnection connection, List<CollectionInitializationSeed> seeds,
         CancellationToken cancellationToken)

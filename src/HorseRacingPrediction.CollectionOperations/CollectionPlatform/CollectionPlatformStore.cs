@@ -1,9 +1,13 @@
-using HorseRacingPrediction.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
 using System.Text.Json;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Common.Time;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
@@ -103,7 +107,7 @@ public sealed partial class CollectionPlatformStore
                     Revision = currentRevision,
                     Description = revisionDescription,
                     MayRequireRecollection = mayRequireRecollection,
-                    CreatedAt = HorseRacingPrediction.Contracts.Time.JstTime.Now(),
+                    CreatedAt = HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(),
                 });
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -1154,7 +1158,7 @@ public sealed partial class CollectionPlatformStore
                                  || resource.Type == CollectionResourceType.RaceResult || resource.Type == CollectionResourceType.RaceOdds)
                          select new { resource.ResourceId, resource.AttributesJson, task.LeaseExpiresAt, task.RaceHoldGeneration }).SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
-        if (row?.LeaseExpiresAt is null || row.LeaseExpiresAt <= HorseRacingPrediction.Contracts.Time.JstTime.Now()) return false;
+        if (row?.LeaseExpiresAt is null || row.LeaseExpiresAt <= HorseRacingPrediction.Contracts.Common.Time.JstTime.Now()) return false;
         var hold = await db.RaceRepairHolds.Where(x => x.RaceId == raceId).OrderByDescending(x => x.Generation).FirstOrDefaultAsync(cancellationToken);
         if (hold is not null && (hold.ReleasedAt is null || row.RaceHoldGeneration != hold.Generation)) return false;
         return RaceResourceMatches(row.ResourceId, row.AttributesJson, raceId);
@@ -2435,7 +2439,7 @@ public sealed partial class CollectionPlatformStore
         var latestTasks = tasks.GroupBy(x => new { x.ResourcePk, x.DefinitionId })
             .Select(group => group.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.TaskId).First())
             .ToList();
-        var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
+        var now = HorseRacingPrediction.Contracts.Common.Time.JstTime.Now();
         var counts = latestTasks.GroupBy(x => x.Status).ToDictionary(x => x.Key, x => x.Count());
         int Count(params CollectionTaskStatus[] statuses) => statuses.Sum(x => counts.GetValueOrDefault(x));
         var openFailureTaskIds = (await db.FailureNotifications.AsNoTracking()
@@ -2779,7 +2783,7 @@ public sealed partial class CollectionPlatformStore
                 var previewAttempts = await db.Attempts.CountAsync(x => previewTaskIds.Contains(x.TaskId), cancellationToken);
                 var previewLocations = await db.Locations.CountAsync(x => legacyPks.Contains(x.ResourcePk), cancellationToken);
                 var previewStates = await db.States.CountAsync(x => legacyPks.Contains(x.ResourcePk), cancellationToken);
-                var previewToday = DateOnly.FromDateTime(HorseRacingPrediction.Contracts.Time.JstTime.Convert(now).Date);
+                var previewToday = DateOnly.FromDateTime(HorseRacingPrediction.Contracts.Common.Time.JstTime.Convert(now).Date);
                 var previewSupplements = mapped.GroupBy(x => (x.Source.Provider, x.Id)).Count(group =>
                 {
                     var pks = group.Select(x => x.Source.ResourcePk).ToArray();
@@ -2828,7 +2832,7 @@ public sealed partial class CollectionPlatformStore
             var locationCount = 0;
             var stateCount = 0;
             var supplementCount = 0;
-            var today = DateOnly.FromDateTime(HorseRacingPrediction.Contracts.Time.JstTime.Convert(now).Date);
+            var today = DateOnly.FromDateTime(HorseRacingPrediction.Contracts.Common.Time.JstTime.Convert(now).Date);
             foreach (var group in mapped.GroupBy(x => (x.Source.Provider, x.Id)))
             {
                 var first = group.First();
@@ -4207,7 +4211,7 @@ public sealed partial class CollectionPlatformStore
 
     private static bool TryCanonicalCourse(string value, out string canonical)
     {
-        canonical = HorseRacingPrediction.Contracts.RaceCourseIdentity.ResourceCode(value) ?? string.Empty;
+        canonical = HorseRacingPrediction.Contracts.Races.RaceCourseIdentity.ResourceCode(value) ?? string.Empty;
         return canonical.Length > 0;
     }
 

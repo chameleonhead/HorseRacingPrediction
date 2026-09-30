@@ -3,12 +3,16 @@ using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Http;
-using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using System.Net.Http.Json;
 using System.Text.Json;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Horses;
+using HorseRacingPrediction.Contracts.Identity;
+using HorseRacingPrediction.Contracts.Subjects;
 
 namespace HorseRacingPrediction.Api.Tests;
 

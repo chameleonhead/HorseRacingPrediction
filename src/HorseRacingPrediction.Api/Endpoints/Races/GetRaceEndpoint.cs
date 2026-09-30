@@ -1,11 +1,12 @@
 using EventFlow.EntityFramework;
 using ApiContracts = HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using AppReadModels = HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Swashbuckle.AspNetCore.Annotations;
+
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Api.Endpoints.Races;
 
@@ -143,7 +144,7 @@ internal static class GetRaceEndpoint
                             readModel.RacecourseCode,
                             readModel.RaceNumber,
                             readModel.RaceName,
-                            (ApiContracts.RaceStatus)(int)readModel.Status,
+                            (HorseRacingPrediction.Contracts.Races.RaceStatus)(int)readModel.Status,
                             null, null,
                             readModel.GradeCode,
                             readModel.SurfaceCode,

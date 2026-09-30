@@ -1,8 +1,10 @@
 using EventFlow;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Domain.Races;
 using Swashbuckle.AspNetCore.Annotations;
+
+using HorseRacingPrediction.Contracts.Common.Time;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Api.Endpoints.Races;
 
@@ -19,7 +21,7 @@ internal static class DeclareRaceResultEndpoint
                             var command = new DeclareRaceResultCommand(
                                 new RaceId(raceId),
                                 request.WinningHorseName,
-                                request.DeclaredAt ?? HorseRacingPrediction.Contracts.Time.JstTime.Now());
+                                request.DeclaredAt ?? HorseRacingPrediction.Contracts.Common.Time.JstTime.Now());
 
                             var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                             return result.IsSuccess

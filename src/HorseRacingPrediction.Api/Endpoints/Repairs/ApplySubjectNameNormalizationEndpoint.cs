@@ -3,11 +3,13 @@ using EventFlow.EntityFramework;
 using HorseRacingPrediction.Application.Commands.Horses;
 using HorseRacingPrediction.Application.Commands.Jockeys;
 using HorseRacingPrediction.Application.Commands.Trainers;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Domain.Horses;
 using HorseRacingPrediction.Domain.Jockeys;
 using HorseRacingPrediction.Domain.Trainers;
 using HorseRacingPrediction.Infrastructure.Persistence;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Repairs;
 
 namespace HorseRacingPrediction.Api.Endpoints.Repairs;
 
@@ -39,7 +41,7 @@ internal static class ApplySubjectNameNormalizationEndpoint
                         rowsByType[type] = await GetAllSubjectNamesAsync(db, type, token).ConfigureAwait(false);
                     }
 
-                    var results = new List<SubjectNameNormalizationItemResult>(request.Items.Count);
+                    var results = new List<SubjectNameNormalizationItemResultDto>(request.Items.Count);
                     foreach (var item in request.Items)
                     {
                         var rows = rowsByType[item.SubjectType];
@@ -94,7 +96,7 @@ internal static class ApplySubjectNameNormalizationEndpoint
                         }
                     }
 
-                    return Results.Ok(new SubjectNameNormalizationApplyResult(request.Items.Count,
+                    return Results.Ok(new SubjectNameNormalizationApplyResultDto(request.Items.Count,
                         results.Count(x => x.Status == "Applied"), results.Count(x => x.Status == "Skipped"),
                         results.Count(x => x.Status == "Failed"), results));
                 });

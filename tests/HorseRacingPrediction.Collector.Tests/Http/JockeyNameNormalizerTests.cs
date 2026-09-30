@@ -1,5 +1,6 @@
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra.Normalization;
+
+using HorseRacingPrediction.Contracts.Common;
 
 namespace HorseRacingPrediction.Collector.Tests.Http;
 

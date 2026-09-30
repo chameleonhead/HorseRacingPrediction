@@ -1,9 +1,11 @@
 using EventFlow.EntityFramework;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Swashbuckle.AspNetCore.Annotations;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Trainers;
 
 namespace HorseRacingPrediction.Api.Endpoints.Trainers;
 

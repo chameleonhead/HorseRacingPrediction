@@ -1,7 +1,8 @@
 using System.Net;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.Http;
-using HorseRacingPrediction.Contracts;
+
+using HorseRacingPrediction.Contracts.Identity;
 
 namespace HorseRacingPrediction.Collector.Tests.Http;
 

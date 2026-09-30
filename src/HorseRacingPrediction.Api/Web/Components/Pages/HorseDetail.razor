@@ -1,6 +1,8 @@
 @page "/horses/{HorseId}"
 @attribute [Authorize]
 @inject AdminApiClient Api
+@using HorseRacingPrediction.Contracts.Common
+@using HorseRacingPrediction.Contracts.Horses
 
 <RaceOpsObjectHeader BackHref="/horses" BackLabel="← 馬一覧に戻る" Title="@(horse?.RegisteredName ?? "馬詳細")" Section="データ / 馬">
     <Actions>

@@ -1,6 +1,11 @@
-using HorseRacingPrediction.Contracts;
 using System.Net;
 using System.Net.Http.Json;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Horses;
+using HorseRacingPrediction.Contracts.Jockeys;
+using HorseRacingPrediction.Contracts.Repairs;
+using HorseRacingPrediction.Contracts.Trainers;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -73,10 +78,10 @@ public sealed class SubjectNameNormalizationEndpointsTests
 
         var firstResponse = await _client.PostAsJsonAsync(
             "/api/admin/repairs/subject-name-normalization/apply", request);
-        var first = await firstResponse.Content.ReadFromJsonAsync<SubjectNameNormalizationApplyResult>();
+        var first = await firstResponse.Content.ReadFromJsonAsync<SubjectNameNormalizationApplyResultDto>();
         var secondResponse = await _client.PostAsJsonAsync(
             "/api/admin/repairs/subject-name-normalization/apply", request);
-        var second = await secondResponse.Content.ReadFromJsonAsync<SubjectNameNormalizationApplyResult>();
+        var second = await secondResponse.Content.ReadFromJsonAsync<SubjectNameNormalizationApplyResultDto>();
         var profile = await _client.GetFromJsonAsync<TrainerProfileResponse>($"/api/trainers/{trainerId}");
 
         Assert.AreEqual(HttpStatusCode.OK, firstResponse.StatusCode);
@@ -101,7 +106,7 @@ public sealed class SubjectNameNormalizationEndpointsTests
             "/api/admin/repairs/subject-name-normalization/apply",
             new ApplySubjectNameNormalizationRequest(
                 [new(CollectionResourceType.Trainer, trainerId, candidate.ManifestToken)]));
-        var result = await response.Content.ReadFromJsonAsync<SubjectNameNormalizationApplyResult>();
+        var result = await response.Content.ReadFromJsonAsync<SubjectNameNormalizationApplyResultDto>();
 
         Assert.AreEqual(1, result!.SkippedCount);
         StringAssert.Contains(result.Items.Single().Message, "検索後に名称が変更");
@@ -119,8 +124,8 @@ public sealed class SubjectNameNormalizationEndpointsTests
         Assert.AreEqual(HttpStatusCode.BadRequest, owner.StatusCode);
     }
 
-    private async Task<SubjectNameNormalizationPage> SearchAsync(CollectionResourceType type, string query) =>
-        (await _client.GetFromJsonAsync<SubjectNameNormalizationPage>(
+    private async Task<SubjectNameNormalizationPageDto> SearchAsync(CollectionResourceType type, string query) =>
+        (await _client.GetFromJsonAsync<SubjectNameNormalizationPageDto>(
             $"/api/admin/repairs/subject-name-normalization?subjectType={type}&query={Uri.EscapeDataString(query)}"))!;
 
     private async Task RegisterHorseAsync(string id, string display, string normalized) =>

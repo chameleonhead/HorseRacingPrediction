@@ -4,8 +4,7 @@ using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Api.Web.Components.Pages;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.Contracts.Time;
+using HorseRacingPrediction.Contracts.Common.Time;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,6 +12,8 @@ using Microsoft.Extensions.Options;
 using Microsoft.FluentUI.AspNetCore.Components;
 using System.Net.Http.Json;
 using System.Text.Json;
+
+using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.Api.Tests;
 

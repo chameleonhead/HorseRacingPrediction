@@ -1,5 +1,4 @@
 using HorseRacingPrediction.ApiClient;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Interfaces;
 using HorseRacingPrediction.Scraping.Jra.Normalization;
 using System.Globalization;
@@ -7,6 +6,11 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Common.Time;
+using HorseRacingPrediction.Contracts.Identity;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Collector.Http;
 
@@ -417,7 +421,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? ownerName,
         string? jraHorseSourceIdentity,
         CancellationToken cancellationToken,
-        HorseRacingPrediction.Contracts.RaceEntryParticipationStatus? participationStatus = null)
+        HorseRacingPrediction.Contracts.Races.RaceEntryParticipationStatus? participationStatus = null)
     {
         ValidateRequiredText(raceId, nameof(raceId));
 
@@ -536,7 +540,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string raceId, int? horseNumber, string horseName, string? jockeyName, string? trainerName,
         int? gateNumber, decimal? assignedWeight, string? sexCode, int? age, decimal? declaredWeight,
         decimal? declaredWeightDiff, string? ownerName, string? jraHorseSourceIdentity,
-        HorseRacingPrediction.Contracts.RaceEntryParticipationStatus participationStatus,
+        HorseRacingPrediction.Contracts.Races.RaceEntryParticipationStatus participationStatus,
         CancellationToken cancellationToken = default) =>
         UpsertRaceEntryCoreAsync(raceId, horseNumber, horseName, jockeyName, trainerName, gateNumber,
             assignedWeight, sexCode, age, declaredWeight, declaredWeightDiff, ownerName,
@@ -674,7 +678,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
 
         var request = new
         {
-            DeclaredAt = HorseRacingPrediction.Contracts.Time.JstTime.Now(),
+            DeclaredAt = HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(),
             WinPayouts = ParsePayoutsForRequest(winPayoutsJson),
             PlacePayouts = ParsePayoutsForRequest(placePayoutsJson),
             QuinellaPayouts = ParsePayoutsForRequest(quinellaPayoutsJson),
@@ -800,7 +804,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
                 AuthorId = (string?)"Collector",
                 MemoType = "SourceCitation",
                 Content = title ?? "JRAサイトからの自動取得",
-                CreatedAt = HorseRacingPrediction.Contracts.Time.JstTime.Now(),
+                CreatedAt = HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(),
                 Subjects = subjects.Select(s => new { s.SubjectType, s.SubjectId }).ToList(),
                 Links = new[]
                 {

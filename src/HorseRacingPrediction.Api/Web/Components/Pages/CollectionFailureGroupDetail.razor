@@ -2,6 +2,8 @@
 @attribute [Authorize]
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
+@using HorseRacingPrediction.Contracts.Collection
+@using HorseRacingPrediction.Contracts.Common.Time
 
 <RaceOpsObjectHeader BackHref="@BackHref" BackLabel="← 収集管理に戻る" Title="@Title" Section="運用 / 収集管理 / 障害" Description="@HeaderDescription" Status="@StatusLabel" StatusTone="danger">
     <Actions><FluentButton OnClick="LoadAsync" Disabled="busy">更新</FluentButton>@if(RecoveryAllowed){<FluentButton Appearance="@Appearance.Accent" OnClick="@(() => ConfirmRecovery(false))" Disabled="@(busy || pageData is null || pageData.TotalCount == 0)">対象をまとめて再取得</FluentButton>}</Actions>

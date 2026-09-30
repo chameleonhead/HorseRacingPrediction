@@ -1,15 +1,17 @@
 using System.Net.Http.Json;
 using Bunit;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Api.Web.Components.Pages;
-using HorseRacingPrediction.Contracts.Time;
+using HorseRacingPrediction.Contracts.Common.Time;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.FluentUI.AspNetCore.Components;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -78,7 +80,7 @@ public sealed class RaceListTabsComponentTests
             {
                 Content = JsonContent.Create(new PagedResponse<RaceSummaryDto>(
                 [new("R001", JstTime.Today(), "06", 1, "テストレース",
-                    HorseRacingPrediction.Contracts.RaceStatus.ResultDeclared, 16, "テストホース", DateTimeOffset.UtcNow)],
+                    HorseRacingPrediction.Contracts.Races.RaceStatus.ResultDeclared, 16, "テストホース", DateTimeOffset.UtcNow)],
                 1, 50, 1, 1))
             });
     }

@@ -1,6 +1,8 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.Options;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common.Time;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 
@@ -17,10 +19,10 @@ public sealed class CollectionPlanningScheduler : BackgroundService
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
+            var now = HorseRacingPrediction.Contracts.Common.Time.JstTime.Now();
             var planningBucketHour = now.Hour / 3 * 3;
             var bucket = new DateTimeOffset(now.Year, now.Month, now.Day, planningBucketHour, 0, 0,
-                HorseRacingPrediction.Contracts.Time.JstTime.Offset);
+                HorseRacingPrediction.Contracts.Common.Time.JstTime.Offset);
             var resource = new ResourceKey(CollectionResourceType.Race, "JRA", $"discovery:{bucket:yyyyMMddHH}");
             var definition = new CollectionDefinitionId("race-discovery");
             // A planning bucket is a logical resource. Once registered, its state is the durable

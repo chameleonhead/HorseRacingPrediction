@@ -1,10 +1,12 @@
 using EventFlow.EntityFramework;
 using ApiContracts = HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Swashbuckle.AspNetCore.Annotations;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Predictions;
 
 namespace HorseRacingPrediction.Api.Endpoints.Predictions;
 
@@ -110,8 +112,8 @@ internal static class SearchPredictionTicketsEndpoint
                                 x.ConfidenceScore,
                                 x.SummaryComment,
                                 x.PredictedAt,
-                                (ApiContracts.TicketStatus)(int)x.TicketStatus,
-                                (ApiContracts.EvaluationStatus)(int)x.EvaluationStatus,
+                                (HorseRacingPrediction.Contracts.Predictions.TicketStatus)(int)x.TicketStatus,
+                                (HorseRacingPrediction.Contracts.Predictions.EvaluationStatus)(int)x.EvaluationStatus,
                                 x.Marks.Count,
                                 race?.RaceName, race?.RaceDate, race?.RacecourseCode, race?.RaceNumber,
                                 primaryHorseId is null ? null : horseNames.GetValueOrDefault(primaryHorseId));

@@ -1,6 +1,8 @@
 @page "/jobs/execution-batches/{ExecutionBatchId:guid}"
 @attribute [Authorize]
 @inject AdminApiClient Api
+@using HorseRacingPrediction.Contracts.Collection
+@using HorseRacingPrediction.Contracts.Common.Time
 
 <RaceOpsObjectHeader BackHref="@BackHref" BackLabel="← 収集詳細に戻る" Title="実行バッチ詳細"
                      Section="運用 / 収集管理" Description="同じLambda呼び出しとブラウザーセッションで処理された収集タスクです。">

@@ -1,10 +1,13 @@
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
 using HorseRacingPrediction.Scraping.Jra.Workflow;
 using HorseRacingPrediction.Scraping.Tests.TestSupport;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Scraping.Tests.Jra;
 
@@ -79,8 +82,8 @@ public sealed class JraRaceResultCollectionWorkflowTests
         var page = CreateResultPage(TestRaceId, new RaceResultEntry(ResultStatus.Finished, 1, 1, "テスト馬", "騎手", TimeSpan.FromSeconds(90)));
         var (session, _, writer) = CreateContext(new Dictionary<RaceId, IJraPage> { [TestRaceId] = page });
         await using var scope = session;
-        writer.BulkWriteException = new HorseRacingPrediction.Contracts.CollectionRepairHeldException();
-        await Assert.ThrowsExactlyAsync<HorseRacingPrediction.Contracts.CollectionRepairHeldException>(() =>
+        writer.BulkWriteException = new HorseRacingPrediction.Contracts.Collection.CollectionRepairHeldException();
+        await Assert.ThrowsExactlyAsync<HorseRacingPrediction.Contracts.Collection.CollectionRepairHeldException>(() =>
             new JraRaceResultCollectionWorkflow(session, writer).CollectAsync(TestRaceId));
         Assert.HasCount(1, writer.DeclareRaceResultBulkCalls);
         Assert.IsEmpty(writer.DeclareRaceEntryResultCalls);

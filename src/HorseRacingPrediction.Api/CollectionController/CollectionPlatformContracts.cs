@@ -1,5 +1,6 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
+using HorseRacingPrediction.Contracts.Collection;
+
 namespace HorseRacingPrediction.Api.CollectionController;
 
 public sealed record CreateCollectionRequest(CollectionResourceType ResourceType, string Provider, string ResourceId,

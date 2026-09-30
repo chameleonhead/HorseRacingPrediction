@@ -12,7 +12,7 @@ internal static class RecordWeatherObservationEndpoint
     {
         group.MapPost("/races/{raceId}/weather",
                     [SwaggerOperation(Summary = "Record weather observation", Description = "Records a weather observation for a race")]
-        async (string raceId, ApiContracts.RecordWeatherObservationRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string raceId, HorseRacingPrediction.Contracts.Races.RecordWeatherObservationRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
                         try
                         {

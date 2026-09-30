@@ -4,9 +4,10 @@ using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.ApiClient;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Domain.Races;
 using Microsoft.AspNetCore.Mvc;
+
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Api.Endpoints.Races;
 

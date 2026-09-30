@@ -1,5 +1,5 @@
 using System.Text.Json;
-using HorseRacingPrediction.Contracts.Time;
+using HorseRacingPrediction.Contracts.Common.Time;
 using Microsoft.Data.Sqlite;
 
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;

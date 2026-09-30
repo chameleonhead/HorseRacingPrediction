@@ -2,12 +2,14 @@ using EventFlow.EntityFramework;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
 using System.Text;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Owners;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 

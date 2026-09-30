@@ -1,4 +1,6 @@
-using HorseRacingPrediction.Contracts;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common.Time;
 
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
@@ -6,7 +8,7 @@ public sealed class JraCollectionSchedulePolicy : ICollectionSchedulePolicy
 {
     public CollectionSchedule Evaluate(ResourceKey resource, CollectionStateSnapshot state, DateTimeOffset now)
     {
-        var localNow = HorseRacingPrediction.Contracts.Time.JstTime.Convert(now);
+        var localNow = HorseRacingPrediction.Contracts.Common.Time.JstTime.Convert(now);
         var date = ParseDate(resource.Id);
         return resource.Type switch
         {

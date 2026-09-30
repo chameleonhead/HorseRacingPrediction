@@ -1,8 +1,9 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using System.Globalization;
 using System.Text.RegularExpressions;
+
+using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 

@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using System.Linq.Expressions;
 using System.Text.Json;
-using HorseRacingPrediction.Contracts.Time;
+using HorseRacingPrediction.Contracts.Common.Time;
 
 namespace HorseRacingPrediction.Infrastructure.Persistence;
 

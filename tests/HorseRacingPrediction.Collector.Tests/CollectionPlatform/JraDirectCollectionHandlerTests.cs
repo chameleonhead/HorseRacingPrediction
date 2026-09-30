@@ -1,13 +1,15 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Workflow;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
 using Microsoft.Extensions.Options;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 

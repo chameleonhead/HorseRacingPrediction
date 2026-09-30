@@ -125,7 +125,7 @@ public sealed class PredictionScheduleStore : IPredictionSchedule
             entity.LeaseToken = null;
             entity.LeaseExpiresAt = null;
             entity.LastError = error;
-            entity.UpdatedAt = HorseRacingPrediction.Contracts.Time.JstTime.Now();
+            entity.UpdatedAt = HorseRacingPrediction.Contracts.Common.Time.JstTime.Now();
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return true;
         }

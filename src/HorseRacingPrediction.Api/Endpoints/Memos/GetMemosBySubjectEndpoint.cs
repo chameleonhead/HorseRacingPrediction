@@ -1,8 +1,9 @@
 using EventFlow.Queries;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Memos;
 using Swashbuckle.AspNetCore.Annotations;
+
+using HorseRacingPrediction.Contracts.Memos;
 
 namespace HorseRacingPrediction.Api.Endpoints.Memos;
 

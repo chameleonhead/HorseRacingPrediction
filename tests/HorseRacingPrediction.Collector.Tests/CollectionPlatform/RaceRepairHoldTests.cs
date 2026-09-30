@@ -1,9 +1,11 @@
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -246,7 +248,7 @@ public sealed class RaceRepairHoldTests
         Assert.IsNotNull(lease);
         var hold = await store.HoldRaceForRepairAsync(RaceId, Guid.NewGuid().ToString(), 0, "review", now);
         await store.RequestAsync(Target, Detail, 4, CollectionReason.DefinitionChanged, now);
-        var completion = CollectionAttemptFailureClassifier.FromException(new HorseRacingPrediction.Contracts.CollectionRepairHeldException());
+        var completion = CollectionAttemptFailureClassifier.FromException(new HorseRacingPrediction.Contracts.Collection.CollectionRepairHeldException());
         Assert.AreEqual(CollectionFailureImpact.Isolated, completion.FailureImpact);
         Assert.IsTrue(await store.CompleteAttemptAsync(lease.TaskId, lease.LeaseToken, now, completion));
         Assert.IsFalse((await store.GetPipelineStateAsync()).IsPaused);

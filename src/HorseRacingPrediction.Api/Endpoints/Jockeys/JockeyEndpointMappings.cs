@@ -1,5 +1,7 @@
 using ApiContracts = HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.Contracts;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Jockeys;
 
 namespace HorseRacingPrediction.Api.Endpoints.Jockeys;
 
@@ -22,20 +24,20 @@ internal static class JockeyEndpointMappings
             _ => null
         };
 
-    internal static ApiContracts.JockeyDto ToAgentJockey(HorseRacingPrediction.Application.Queries.ReadModels.JockeyReadModel model)
+    internal static HorseRacingPrediction.Contracts.Jockeys.JockeyDto ToAgentJockey(HorseRacingPrediction.Application.Queries.ReadModels.JockeyReadModel model)
         => new()
         {
             JockeyId = model.JockeyId,
             DisplayName = model.DisplayName,
             NormalizedName = model.NormalizedName,
             AffiliationCode = model.AffiliationCode,
-            Aliases = model.Aliases.Select(x => new ApiContracts.JockeyAliasEntry(x.AliasType, x.AliasValue, x.SourceName, x.IsPrimary)).ToList()
+            Aliases = model.Aliases.Select(x => new HorseRacingPrediction.Contracts.Common.JockeyAliasEntry(x.AliasType, x.AliasValue, x.SourceName, x.IsPrimary)).ToList()
         };
 
-    internal static ApiContracts.JockeyRaceHistoryDto ToAgentJockeyRaceHistory(HorseRacingPrediction.Application.Queries.ReadModels.JockeyRaceHistoryReadModel model)
+    internal static HorseRacingPrediction.Contracts.Jockeys.JockeyRaceHistoryDto ToAgentJockeyRaceHistory(HorseRacingPrediction.Application.Queries.ReadModels.JockeyRaceHistoryReadModel model)
         => new()
         {
             JockeyId = model.JockeyId,
-            Entries = model.Entries.Select(x => new ApiContracts.JockeyRaceHistoryEntryDto(x.RaceId, x.EntryId, x.HorseId, x.RaceDate, x.RacecourseCode, x.SurfaceCode, x.DistanceMeters, x.DirectionCode, x.GradeCode, x.FinishPosition, x.PrizeMoney)).ToList()
+            Entries = model.Entries.Select(x => new HorseRacingPrediction.Contracts.Jockeys.JockeyRaceHistoryEntryDto(x.RaceId, x.EntryId, x.HorseId, x.RaceDate, x.RacecourseCode, x.SurfaceCode, x.DistanceMeters, x.DirectionCode, x.GradeCode, x.FinishPosition, x.PrizeMoney)).ToList()
         };
 }

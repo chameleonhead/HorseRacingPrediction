@@ -1,11 +1,14 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Subjects;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -553,7 +556,7 @@ public sealed class JraSubjectCollectionHandlerTests
             .Distinct(StringComparer.Ordinal).ToArray());
         Assert.IsTrue(requests.BatchRequests.Single().Items.All(item => item.Lane == "Background"
             && item.Priority == (int)CollectionPriority.Background
-            && item.RequestedRevision == HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail
+            && item.RequestedRevision == HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail
             && item.DefinitionId == "race-detail"
             && item.EffectiveDate.HasValue
             && item.ExplicitUrl is not null
@@ -760,7 +763,7 @@ public sealed class JraSubjectCollectionHandlerTests
                 SubjectTask("horse-a", "A", new Dictionary<string, string>()), CancellationToken.None));
         }
 
-        static CollectionRequestBulkOutcome SuccessfulOutcome(string itemKey) =>
+        static CollectionRequestBulkOutcomeDto SuccessfulOutcome(string itemKey) =>
             new(itemKey, "Created", Guid.NewGuid(), Guid.NewGuid());
     }
 
@@ -991,7 +994,7 @@ public sealed class JraSubjectCollectionHandlerTests
             }
             return Task.FromResult(BatchResponseFactory?.Invoke(request)
                 ?? new CollectionRequestBulkResponse(request.Items.Select(item =>
-                    new CollectionRequestBulkOutcome(item.ItemKey, "Created", Guid.NewGuid(), Guid.NewGuid(), true))
+                    new CollectionRequestBulkOutcomeDto(item.ItemKey, "Created", Guid.NewGuid(), Guid.NewGuid(), true))
                     .ToArray()));
         }
         public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, int requestedRevision,

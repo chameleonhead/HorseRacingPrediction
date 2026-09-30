@@ -30,7 +30,7 @@ public static class TrainingDataBuilder
             var entries = context.Entries.Where(entry => entry.ParticipationStatus ==
                 HorseRacingPrediction.Domain.Races.RaceEntryParticipationStatus.Active).ToList();
             var fieldSize = entries.Count;
-            var raceDate = race.RaceDate ?? HorseRacingPrediction.Contracts.Time.JstTime.Today();
+            var raceDate = race.RaceDate ?? HorseRacingPrediction.Contracts.Common.Time.JstTime.Today();
 
             var leaderCount = entries.Count(e => e.RunningStyleCode == "逃");
             var frontRunnerCount = entries.Count(e => e.RunningStyleCode == "先");

@@ -2,6 +2,8 @@
 @attribute [Authorize]
 @inject AdminApiClient Api
 @inject IJSRuntime JS
+@using HorseRacingPrediction.Contracts.Collection
+@using HorseRacingPrediction.Contracts.Common.Time
 
 <RaceOpsObjectHeader BackHref="@BackHref" BackLabel="← 収集管理に戻る" Title="@DefinitionLabel" Section="運用 / 収集管理" Description="@ResourceDescription" Status="@StatusLabel" StatusTone="@StatusTone">
     <Actions><FluentButton OnClick="LoadAsync" Disabled="busy">更新</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="RequestAsync" Disabled="@(busy || detail is null || AvailabilityWaitAttempt is not null)">通常の方法で再取得</FluentButton></Actions>

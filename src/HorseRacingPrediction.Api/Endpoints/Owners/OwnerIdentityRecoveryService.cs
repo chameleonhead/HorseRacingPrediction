@@ -5,9 +5,12 @@ using System.Text;
 using System.Text.Json;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Owners;
 
 namespace HorseRacingPrediction.Api;
 

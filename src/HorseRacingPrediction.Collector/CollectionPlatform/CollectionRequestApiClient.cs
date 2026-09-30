@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
+
+using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
@@ -14,7 +15,7 @@ public interface ICollectionRequestSink
     async Task<CollectionRequestBulkResponse> RequestManyAsync(CollectionRequestBulkRequest request,
         CancellationToken cancellationToken)
     {
-        var outcomes = new List<CollectionRequestBulkOutcome>();
+        var outcomes = new List<CollectionRequestBulkOutcomeDto>();
         foreach (var item in request.Items)
         {
             if (!Enum.TryParse<CollectionResourceType>(item.ResourceType, true, out var resourceType)

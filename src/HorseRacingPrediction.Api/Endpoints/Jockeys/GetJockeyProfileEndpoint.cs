@@ -26,7 +26,7 @@ internal static class GetJockeyProfileEndpoint
                     })
                     .WithName("GetJockeyProfile")
                     .WithTags("Jockey API")
-                    .Produces<ApiContracts.JockeyDto>(StatusCodes.Status200OK)
+                    .Produces<HorseRacingPrediction.Contracts.Jockeys.JockeyDto>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

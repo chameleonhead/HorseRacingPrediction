@@ -1,12 +1,14 @@
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using Microsoft.Extensions.Options;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
@@ -33,8 +35,8 @@ public sealed class RaceOddsSnapshotApiClient(HttpClient client) : IRaceOddsSnap
     {
         using var response = await client.PostAsJsonAsync($"api/v2/admin/races/{Uri.EscapeDataString(raceId)}/odds-snapshot-records",
             new RecordRaceOddsSnapshotRequest(page.ObservedAt,
-                page.Entries.Select(x => new RaceOddsEntryRequest(x.HorseNumber, x.WinOdds, x.Popularity)).ToArray(),
-                page.Entries.Select(x => new RaceOddsObservationRequest("Win", x.HorseNumber.ToString(),
+                page.Entries.Select(x => new RaceOddsEntryInputDto(x.HorseNumber, x.WinOdds, x.Popularity)).ToArray(),
+                page.Entries.Select(x => new RaceOddsObservationInputDto("Win", x.HorseNumber.ToString(),
                     x.WinOdds, x.Popularity)).ToArray()),
             cancellationToken).ConfigureAwait(false);
         if (response.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.BadRequest)

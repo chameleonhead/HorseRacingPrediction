@@ -1,6 +1,7 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.Options;
+
+using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -57,7 +58,7 @@ public sealed class CollectionBulkOperationsTests
         await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, 2, "previous", false);
         var previous = await store.RequestAsync(resource, definition, 2, CollectionReason.Recovery, Now,
             CollectionLane.Normal, 30, effectiveDate: new(2026, 4, 4));
-        var revision = HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail;
+        var revision = HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail;
         await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race, revision, "fix", false);
         var targets = new[] { new CollectionBulkTarget(resource) };
         Assert.AreEqual(1, (await store.PreviewBulkRequestAsync(definition, revision, targets)).TargetCount);

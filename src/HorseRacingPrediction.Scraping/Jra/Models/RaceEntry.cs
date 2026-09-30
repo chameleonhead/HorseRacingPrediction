@@ -23,4 +23,4 @@ public sealed record RaceEntry(
     string? HorseSourceIdentity = null,
     string? JockeyProfileUrl = null,
     string? TrainerProfileUrl = null,
-    HorseRacingPrediction.Contracts.RaceEntryParticipationStatus ParticipationStatus = HorseRacingPrediction.Contracts.RaceEntryParticipationStatus.Active);
+    HorseRacingPrediction.Contracts.Races.RaceEntryParticipationStatus ParticipationStatus = HorseRacingPrediction.Contracts.Races.RaceEntryParticipationStatus.Active);

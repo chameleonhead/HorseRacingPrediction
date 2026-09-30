@@ -1,7 +1,9 @@
 using EventFlow.Queries;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using Swashbuckle.AspNetCore.Annotations;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Trainers;
 
 namespace HorseRacingPrediction.Api.Endpoints.Trainers;
 
@@ -25,7 +27,7 @@ internal static class GetTrainerProfileEndpoint
                             readModel.NormalizedName,
                             readModel.AffiliationCode,
                             readModel.Aliases
-                                .Select(a => new AliasResponse(a.AliasType, a.AliasValue, a.SourceName, a.IsPrimary))
+                                .Select(a => new AliasDto(a.AliasType, a.AliasValue, a.SourceName, a.IsPrimary))
                                 .ToList());
 
                         return Results.Ok(response);

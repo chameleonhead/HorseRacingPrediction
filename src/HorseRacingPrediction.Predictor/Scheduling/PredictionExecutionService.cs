@@ -75,7 +75,7 @@ public sealed class PredictionExecutionService : BackgroundService
 
     private async Task RunOneCycleAsync(CancellationToken cancellationToken)
     {
-        var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
+        var now = HorseRacingPrediction.Contracts.Common.Time.JstTime.Now();
         var minAge = TimeSpan.FromMinutes(Math.Max(0, _options.PredictionMinAgeMinutes));
 
         var candidates = await _schedule

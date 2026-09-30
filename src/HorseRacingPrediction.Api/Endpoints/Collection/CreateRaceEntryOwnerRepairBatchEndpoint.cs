@@ -1,12 +1,13 @@
 using EventFlow.EntityFramework;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.Contracts.Time;
+using HorseRacingPrediction.Contracts.Common.Time;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
+using HorseRacingPrediction.Contracts.Collection;
+
 namespace HorseRacingPrediction.Api.Endpoints.Collection;
 
 internal static class CreateRaceEntryOwnerRepairBatchEndpoint

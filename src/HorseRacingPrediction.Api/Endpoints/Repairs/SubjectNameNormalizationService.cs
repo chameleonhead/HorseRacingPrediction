@@ -1,8 +1,11 @@
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Repairs;
 
 namespace HorseRacingPrediction.Api.Endpoints.Repairs;
 
@@ -57,7 +60,7 @@ internal static class SubjectNameNormalizationService
             _ => [],
         };
 
-    internal static SubjectNameNormalizationCandidate BuildSubjectNameNormalizationCandidate(CollectionResourceType type,
+    internal static SubjectNameNormalizationCandidateDto BuildSubjectNameNormalizationCandidate(CollectionResourceType type,
         SubjectNameRow row, IReadOnlyList<SubjectNameRow> all)
     {
         var subjectType = type.ToString();

@@ -33,7 +33,7 @@ internal static class GetRacePredictionContextEndpoint
                     .AddEndpointFilter<RacePredictionReadEndpointFilter>()
                     .WithName("GetRacePredictionContext")
                     .WithTags("Race API")
-                    .Produces<ApiContracts.RacePredictionContextDto>(StatusCodes.Status200OK)
+                    .Produces<HorseRacingPrediction.Contracts.Races.RacePredictionContextDto>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

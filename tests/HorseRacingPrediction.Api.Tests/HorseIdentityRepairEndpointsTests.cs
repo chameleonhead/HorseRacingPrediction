@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Http.Json;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
@@ -9,6 +8,12 @@ using HorseRacingPrediction.Api.Endpoints.Repairs;
 using EventFlow.EntityFramework;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Horses;
+using HorseRacingPrediction.Contracts.Races;
+using HorseRacingPrediction.Contracts.Repairs;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -56,7 +61,7 @@ public sealed class HorseIdentityRepairEndpointsTests
         var store = application.Services.GetRequiredService<CollectionPlatformStore>();
         await SubjectCollectionDefinitions.RegisterAsync(store);
 
-        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewDto>(
             "/api/admin/repairs/subject-identification");
         var candidate = preview!.Candidates.Single(x => x.NotificationId == issueId);
         Assert.IsTrue(candidate.SafeToExecute);
@@ -212,7 +217,7 @@ public sealed class HorseIdentityRepairEndpointsTests
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "主体名がありません。",
                 PageIdentification: "SubjectIdentification:MissingName"));
 
-        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewDto>(
             "/api/admin/repairs/subject-identification");
         var candidate = preview!.Candidates.Single(x => x.SubjectId == resource.Id);
         Assert.AreEqual("Blocked", candidate.Evaluation);
@@ -221,7 +226,7 @@ public sealed class HorseIdentityRepairEndpointsTests
 
         using var response = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
             new ExecuteSubjectIdentificationRepairRequest(
-                [new ExecuteSubjectIdentificationRepairItem(candidate.NotificationId)]));
+                [new SubjectIdentificationRepairInputDto(candidate.NotificationId)]));
         Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
     }
 
@@ -244,7 +249,7 @@ public sealed class HorseIdentityRepairEndpointsTests
         await store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "主体名がありません。",
                 PageIdentification: "SubjectIdentification:MissingName"));
-        var candidate = (await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+        var candidate = (await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewDto>(
             "/api/admin/repairs/subject-identification"))!.Candidates.Single(x => x.SubjectId == resource.Id);
 
         using var response = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/dismiss",
@@ -253,7 +258,7 @@ public sealed class HorseIdentityRepairEndpointsTests
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.AreEqual(1, result!.DismissedCount);
-        Assert.IsEmpty((await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+        Assert.IsEmpty((await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewDto>(
             "/api/admin/repairs/subject-identification"))!.Candidates.Where(x => x.SubjectId == resource.Id));
         Assert.AreEqual(CollectionTaskStatus.Failed,
             (await store.GetTasksAsync()).Single(x => x.TaskId == taskId).Status);
@@ -290,7 +295,7 @@ public sealed class HorseIdentityRepairEndpointsTests
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified",
                 "同定不能: 公開検索に一致候補がありません。期待=Horse:トイムム 産駒"));
 
-        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewDto>(
             "/api/admin/repairs/subject-identification");
         var candidate = preview!.Candidates.Single(x => x.SubjectId == resource.Id);
 
@@ -386,7 +391,7 @@ public sealed class HorseIdentityRepairEndpointsTests
         await store.CompleteAttemptAsync(failedTaskId, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "識別失敗",
                 new Uri(sourceUrl), new Uri(sourceUrl)));
-        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewDto>(
             "/api/admin/repairs/subject-identification");
         var candidate = preview!.Candidates.Single(x => x.SubjectId == sourceId);
         Assert.AreEqual("MergeReady", candidate.Evaluation);
@@ -394,7 +399,7 @@ public sealed class HorseIdentityRepairEndpointsTests
 
         using var response = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
             new ExecuteSubjectIdentificationRepairRequest(
-                [new ExecuteSubjectIdentificationRepairItem(candidate.NotificationId)]));
+                [new SubjectIdentificationRepairInputDto(candidate.NotificationId)]));
         var result = await response.Content.ReadFromJsonAsync<ExecuteSubjectIdentificationRepairResponse>();
         Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
         Assert.AreEqual(1, result!.MergedCount);
@@ -435,7 +440,7 @@ public sealed class HorseIdentityRepairEndpointsTests
         await store.CompleteAttemptAsync(excludedTaskId, excludedLease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "race"));
 
-        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewDto>(
             "/api/admin/repairs/subject-identification");
 
         CollectionAssert.AreEquivalent(subjectTypes, preview!.Candidates.Select(x => x.SubjectType).ToArray());
@@ -462,7 +467,7 @@ public sealed class HorseIdentityRepairEndpointsTests
         await store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "0件でした", url, url));
 
-        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewDto>(
             "/api/admin/repairs/subject-identification");
         var candidate = preview!.Candidates.Single(x => x.SubjectId == resource.Id);
         Assert.AreEqual("RetryReady", candidate.Evaluation);
@@ -471,7 +476,7 @@ public sealed class HorseIdentityRepairEndpointsTests
 
         using var response = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
             new ExecuteSubjectIdentificationRepairRequest(
-                [new ExecuteSubjectIdentificationRepairItem(candidate.NotificationId)]));
+                [new SubjectIdentificationRepairInputDto(candidate.NotificationId)]));
         Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<ExecuteSubjectIdentificationRepairResponse>();
         Assert.AreEqual(1, result!.CreatedTaskCount);
@@ -502,7 +507,7 @@ public sealed class HorseIdentityRepairEndpointsTests
         await store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", error, null, url));
 
-        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewDto>(
             "/api/admin/repairs/subject-identification");
         var candidate = preview!.Candidates.Single(x => x.SubjectId == resource.Id);
         Assert.AreEqual("RetryReady", candidate.Evaluation);
@@ -511,7 +516,7 @@ public sealed class HorseIdentityRepairEndpointsTests
 
         using var response = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
             new ExecuteSubjectIdentificationRepairRequest(
-                [new ExecuteSubjectIdentificationRepairItem(candidate.NotificationId)]));
+                [new SubjectIdentificationRepairInputDto(candidate.NotificationId)]));
         var result = await response.Content.ReadFromJsonAsync<ExecuteSubjectIdentificationRepairResponse>();
         Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
         Assert.AreEqual(1, result!.CreatedTaskCount);
@@ -558,7 +563,7 @@ public sealed class HorseIdentityRepairEndpointsTests
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "0件でした", invalid, invalid));
         var failure = (await store.GetActionableFailureNotificationsAsync(DateTimeOffset.UtcNow, 10)).Single();
 
-        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewDto>(
             "/api/admin/repairs/subject-identification");
         var candidate = preview!.Candidates.Single(x => x.NotificationId == failure.NotificationId);
         Assert.AreEqual("Blocked", candidate.Evaluation);
@@ -567,7 +572,7 @@ public sealed class HorseIdentityRepairEndpointsTests
 
         using var response = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
             new ExecuteSubjectIdentificationRepairRequest(
-                [new ExecuteSubjectIdentificationRepairItem(candidate.NotificationId, invalid.AbsoluteUri)]));
+                [new SubjectIdentificationRepairInputDto(candidate.NotificationId, invalid.AbsoluteUri)]));
         Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
     }
 
@@ -632,7 +637,7 @@ public sealed class HorseIdentityRepairEndpointsTests
         var sourceTask = await collectionStore.RequestAsync(sourceResource, new("horse-profile"), revision,
             CollectionReason.ManualRefresh, DateTimeOffset.UtcNow);
 
-        var preview = await http.GetFromJsonAsync<HorseIdentityRepairPreviewResponse>(
+        var preview = await http.GetFromJsonAsync<HorseIdentityRepairPreviewDto>(
             "/api/admin/repairs/20260913-jra-horse-identity");
         var candidates = preview!.Candidates.ToArray();
         Assert.HasCount(2, candidates);
@@ -652,7 +657,7 @@ public sealed class HorseIdentityRepairEndpointsTests
                 CollectionReason.ManualRefresh, DateTimeOffset.UtcNow));
         var oldProfile = await http.GetAsync($"/api/horses/{sourceId}");
         Assert.AreEqual(HttpStatusCode.OK, oldProfile.StatusCode);
-        var resolved = await oldProfile.Content.ReadFromJsonAsync<HorseRacingPrediction.Contracts.HorseDto>();
+        var resolved = await oldProfile.Content.ReadFromJsonAsync<HorseRacingPrediction.Contracts.Horses.HorseDto>();
         Assert.AreEqual(targetId, resolved!.HorseId);
 
         var second = await http.PostAsJsonAsync("/api/admin/repairs/20260913-jra-horse-identity/apply",

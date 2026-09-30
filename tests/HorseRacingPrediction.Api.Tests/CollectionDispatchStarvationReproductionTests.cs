@@ -4,12 +4,14 @@ using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Api.Tests;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.TestHost;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common;
 
 namespace HorseRacingPrediction.Api.Tests;
 

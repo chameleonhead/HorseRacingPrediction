@@ -1,8 +1,9 @@
 using EventFlow;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Application.Commands.Horses;
 using HorseRacingPrediction.Domain.Horses;
 using Swashbuckle.AspNetCore.Annotations;
+
+using HorseRacingPrediction.Contracts.Horses;
 
 namespace HorseRacingPrediction.Api.Endpoints.Horses;
 

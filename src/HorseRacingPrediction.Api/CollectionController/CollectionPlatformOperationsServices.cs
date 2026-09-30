@@ -29,7 +29,7 @@ public sealed class CollectionPlatformWatchdogService(
     {
         if ((await store.GetPipelineStateAsync(cancellationToken).ConfigureAwait(false)).IsPaused)
             return new(0, 0, 0);
-        var result = await store.RunWatchdogAsync(HorseRacingPrediction.Contracts.Time.JstTime.Now(),
+        var result = await store.RunWatchdogAsync(HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(),
             Math.Max(1, _options.MaxJobDispatchAttempts),
             TimeSpan.FromMinutes(Math.Max(1, _options.DispatchGraceMinutes)), cancellationToken).ConfigureAwait(false);
         if (result.ReclaimedLeases + result.RedispatchedTasks + result.DeadLetteredTasks > 0)
@@ -100,7 +100,7 @@ public sealed class CollectionBackfillRecoveryService(
         {
             try
             {
-                var resumed = await store.ResumeIncompleteBackfillBatchesAsync(HorseRacingPrediction.Contracts.Time.JstTime.Now(), stoppingToken)
+                var resumed = await store.ResumeIncompleteBackfillBatchesAsync(HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(), stoppingToken)
                     .ConfigureAwait(false);
                 if (resumed > 0) logger.LogWarning("Resumed {Count} incomplete backfill batch expansions.", resumed);
             }
@@ -151,11 +151,11 @@ public sealed class CollectionPipelineAlertDispatchService(
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             await store.MarkFailureNotificationPublishFailedAsync(notification.NotificationId,
-                HorseRacingPrediction.Contracts.Time.JstTime.Now(), ex.Message, cancellationToken).ConfigureAwait(false);
+                HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(), ex.Message, cancellationToken).ConfigureAwait(false);
             throw;
         }
         await store.MarkFailureNotificationPublishedAsync(notification.NotificationId,
-            HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
+            HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
         return true;
     }
 }

@@ -1,7 +1,8 @@
 using EventFlow.EntityFramework;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Infrastructure.Persistence;
+
+using HorseRacingPrediction.Contracts.Repairs;
 
 namespace HorseRacingPrediction.Api.Endpoints.Repairs;
 
@@ -19,7 +20,7 @@ internal static class GetSubjectIdentificationRepairEndpoint
                         using var db = provider.CreateContext();
                         var candidates = await BuildSubjectIdentificationRepairPreviewAsync(db, collectionStore, token)
                             .ConfigureAwait(false);
-                        return Results.Ok(new SubjectIdentificationRepairPreviewResponse(candidates));
+                        return Results.Ok(new SubjectIdentificationRepairPreviewDto(candidates));
                     });
     }
 }

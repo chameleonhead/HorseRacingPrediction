@@ -1,9 +1,10 @@
 using HorseRacingPrediction.CollectionInitializer;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
+
+using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -88,7 +89,7 @@ public sealed class CollectionPlatformInitializationTests
         var databasePath = Path.Combine(target, "collection-platform.db");
         Assert.AreEqual(4, await ReadScalarAsync(databasePath,
             "SELECT COUNT(*) FROM collection_definitions WHERE DefinitionId IN ('horse-profile','jockey-profile','trainer-profile','owner-identity');"));
-        Assert.AreEqual((long)HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
+        Assert.AreEqual((long)HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail,
             await ReadScalarAsync(databasePath,
                 "SELECT CurrentRevision FROM collection_definitions WHERE DefinitionId = 'race-detail';"));
     }

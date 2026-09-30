@@ -1,4 +1,7 @@
-using HorseRacingPrediction.Contracts;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common.Time;
+using HorseRacingPrediction.Contracts.Identity;
 
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
@@ -124,10 +127,10 @@ public static class CollectionAttemptFailureClassifier
 {
     public static CollectionAttemptCompletion FromException(Exception exception)
     {
-        if (exception is HorseRacingPrediction.Contracts.SubjectIdentityResolutionException identity)
+        if (exception is HorseRacingPrediction.Contracts.Identity.SubjectIdentityResolutionException identity)
             return new(CollectionAttemptResult.PermanentFailure, identity.Code, identity.Message,
                 HttpStatusCode: (int)identity.StatusCode, FailureImpact: CollectionFailureImpact.Isolated);
-        if (exception is HorseRacingPrediction.Contracts.CollectionRepairHeldException)
+        if (exception is HorseRacingPrediction.Contracts.Collection.CollectionRepairHeldException)
             return new(CollectionAttemptResult.TransientFailure, "RaceRepairHeld", exception.Message,
                 FailureImpact: CollectionFailureImpact.Isolated);
         if (IsClosedBrowserSession(exception))
@@ -194,7 +197,7 @@ public sealed class CollectionTaskExecutor(CollectionPlatformStore store, Collec
             result = CollectionAttemptFailureClassifier.FromException(ex);
         }
         result = CollectionAttemptFailureClassifier.WithTaskContext(result, task);
-        return await store.CompleteAttemptAsync(task.TaskId, task.LeaseToken, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
+        return await store.CompleteAttemptAsync(task.TaskId, task.LeaseToken, HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(),
             result, completionToken).ConfigureAwait(false);
     }
 }

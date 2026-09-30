@@ -1,9 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
 using HorseRacingPrediction.Api.CollectionController;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using Microsoft.Extensions.DependencyInjection;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -108,7 +110,7 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
 
         using var first = await http.PostAsJsonAsync("/api/races/result-bulk", card);
         using var replay = await http.PostAsJsonAsync("/api/races/result-bulk", card);
-        var race = await http.GetFromJsonAsync<HorseRacingPrediction.Contracts.RaceDto>(
+        var race = await http.GetFromJsonAsync<HorseRacingPrediction.Contracts.Races.RaceDto>(
             $"/api/races/{created.RaceId}");
 
         Assert.AreEqual(HttpStatusCode.OK, first.StatusCode);

@@ -1,8 +1,9 @@
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Browser.Snapshots;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
 using Microsoft.Playwright;
+
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Scraping.Tests.Parsing;
 

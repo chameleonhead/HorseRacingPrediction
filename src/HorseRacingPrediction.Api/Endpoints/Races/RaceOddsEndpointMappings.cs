@@ -1,12 +1,13 @@
-using HorseRacingPrediction.Contracts;
+
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Api.Endpoints.Races;
 
 internal static class RaceOddsEndpointMappings
 {
     internal static Dictionary<string, string[]> Validate(DateTimeOffset observedAt,
-        IReadOnlyList<RaceOddsEntryRequest> entries,
-        IReadOnlyList<RaceOddsObservationRequest>? observations)
+        IReadOnlyList<RaceOddsEntryInputDto> entries,
+        IReadOnlyList<RaceOddsObservationInputDto>? observations)
     {
         var errors = new Dictionary<string, string[]>();
         if (observedAt == default)

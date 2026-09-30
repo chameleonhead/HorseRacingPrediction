@@ -1,11 +1,14 @@
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.Contracts.Time;
+using HorseRacingPrediction.Contracts.Common.Time;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
 using System.Text.RegularExpressions;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Repairs;
 
 namespace HorseRacingPrediction.Api.Endpoints.Repairs;
 
@@ -16,7 +19,7 @@ internal static partial class SubjectIdentificationRepairService
     internal const string SubjectNotIdentifiedErrorCode = "SubjectNotIdentified";
 
 
-    internal static async Task<IReadOnlyList<SubjectIdentificationRepairCandidateResponse>>
+    internal static async Task<IReadOnlyList<SubjectIdentificationRepairCandidateDto>>
         BuildSubjectIdentificationRepairPreviewAsync(EventStoreDbContext db,
             CollectionPlatformStore collectionStore, CancellationToken token)
     {
@@ -28,7 +31,7 @@ internal static partial class SubjectIdentificationRepairService
         var horseRedirects = await db.HorseIdentityRepairRedirects.AsNoTracking()
             .Where(x => x.RepairId == HorseIdentityRepairId)
             .ToDictionaryAsync(x => x.SourceHorseId, x => x.TargetHorseId, token).ConfigureAwait(false);
-        var result = new List<SubjectIdentificationRepairCandidateResponse>(failures.Length);
+        var result = new List<SubjectIdentificationRepairCandidateDto>(failures.Length);
         foreach (var failure in failures)
         {
             var detail = await collectionStore.GetResourceDetailPagedAsync(
@@ -173,7 +176,7 @@ internal static partial class SubjectIdentificationRepairService
                 StringComparison.Ordinal)) == true;
 
     internal static async Task ApplyHorseMergeAsync(EventStoreDbContext db,
-        HorseIdentityRepairCandidateResponse candidate, CancellationToken token)
+        HorseIdentityRepairCandidateDto candidate, CancellationToken token)
     {
         var row = await db.HorseIdentityRepairCandidates.SingleAsync(
             x => x.CandidateId == candidate.CandidateId, token).ConfigureAwait(false);

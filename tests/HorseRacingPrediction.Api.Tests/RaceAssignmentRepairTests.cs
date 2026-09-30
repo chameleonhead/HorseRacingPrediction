@@ -5,7 +5,6 @@ using EventFlow.EntityFramework;
 using EventFlow.EntityFramework.EventStores;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.ApiClient;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +13,12 @@ using RacePredictionContextReadModel = HorseRacingPrediction.Application.Queries
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.TestHost;
 using HorseRacingPrediction.Collector.Http;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Memos;
+using HorseRacingPrediction.Contracts.Predictions;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -78,7 +83,7 @@ public sealed class RaceAssignmentRepairTests
         var preview = await (await http.PostAsJsonAsync($"/api/v2/admin/races/{raceId}/entry-repair-previews", manifest)).Content.ReadFromJsonAsync<JsonElement>();
         var ticketId = "predictionticket-" + Guid.NewGuid();
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync("/api/predictions",
-            new HorseRacingPrediction.Contracts.CreatePredictionTicketRequest(raceId, "AI", "local", 0.5m, null, ticketId))).StatusCode);
+            new HorseRacingPrediction.Contracts.Predictions.CreatePredictionTicketRequest(raceId, "AI", "local", 0.5m, null, ticketId))).StatusCode);
         // Simulate an independent legacy writer bypassing HTTP after the preview.
         var bus = app.Services.GetRequiredService<EventFlow.ICommandBus>();
         await bus.PublishAsync(new HorseRacingPrediction.Application.Commands.Predictions.CreatePredictionTicketCommand(
@@ -110,7 +115,7 @@ public sealed class RaceAssignmentRepairTests
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         Assert.ThrowsExactly<ArgumentException>(() => new HorseRacingPrediction.Domain.Memos.MemoId("notes-1"));
         var memoId = "memo-" + Guid.NewGuid();
-        var memo = new HorseRacingPrediction.Contracts.CreateMemoRequest("human", "Note", "1番を注目", DateTimeOffset.UtcNow,
+        var memo = new HorseRacingPrediction.Contracts.Memos.CreateMemoRequest("human", "Note", "1番を注目", DateTimeOffset.UtcNow,
             [new("Horse", DeterministicIdGenerator.BuildHorseId("", HorseA))], MemoId: memoId);
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/memos", memo)).StatusCode);
         (await http.DeleteAsync("/api/memos/" + memoId)).EnsureSuccessStatusCode();

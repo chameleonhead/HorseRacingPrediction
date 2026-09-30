@@ -1,6 +1,8 @@
 using EventFlow.EntityFramework;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Infrastructure.Persistence;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Repairs;
 
 namespace HorseRacingPrediction.Api.Endpoints.Repairs;
 
@@ -28,7 +30,7 @@ internal static class GetSubjectNameNormalizationEndpoint
                     var all = await GetAllSubjectNamesAsync(db, subjectType, token).ConfigureAwait(false);
                     var items = searchPage.Rows
                         .Select(row => BuildSubjectNameNormalizationCandidate(subjectType, row, all)).ToArray();
-                    return Results.Ok(new SubjectNameNormalizationPage(items, searchPage.TotalCount, actualPage, actualPageSize));
+                    return Results.Ok(new SubjectNameNormalizationPageDto(items, searchPage.TotalCount, actualPage, actualPageSize));
                 });
     }
 }

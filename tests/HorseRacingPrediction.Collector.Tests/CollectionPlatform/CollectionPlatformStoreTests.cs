@@ -1,7 +1,6 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using Microsoft.Data.Sqlite;
@@ -9,6 +8,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Options;
 using System.Data.Common;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common.Time;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -23,7 +25,7 @@ public sealed class CollectionPlatformStoreTests
         var start = now.AddMinutes(-8);
         var definition = new CollectionDefinitionId("race-detail");
         var race = new ResourceKey(CollectionResourceType.Race, "JRA", "20260927:Hanshin:4");
-        var revision = HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail;
+        var revision = HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail;
         await store.RegisterDefinitionAsync(definition, "Race", CollectionResourceType.Race, revision, "DOM", false);
         var receipt = await store.RequestAsync(race, definition, revision, CollectionReason.Initial, now.AddMinutes(-10),
             effectiveDate: new DateOnly(2026, 9, 27));
@@ -1209,7 +1211,7 @@ public sealed class CollectionPlatformStoreTests
     public async Task TaskViewCounts_RunningIncludesOnlyUnexpiredLeasesWithoutReclaimingTasks()
     {
         var store = await CreateStoreAsync();
-        var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
+        var now = HorseRacingPrediction.Contracts.Common.Time.JstTime.Now();
         var expired = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "EXPIRED"),
             HorseProfile, 7, CollectionReason.Initial, now.AddMinutes(-10));
         var active = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "ACTIVE"),

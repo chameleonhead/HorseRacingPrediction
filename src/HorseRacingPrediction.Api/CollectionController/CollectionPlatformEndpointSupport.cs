@@ -1,9 +1,12 @@
 using EventFlow.EntityFramework;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common.Time;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 
@@ -15,10 +18,10 @@ internal static class CollectionPlatformEndpointSupport
     {
         var date = race.RaceDate ?? throw new InvalidOperationException("Race date is required.");
         var number = race.RaceNumber ?? throw new InvalidOperationException("Race number is required.");
-        var course = HorseRacingPrediction.Contracts.RaceCourseIdentity.ResourceCode(race.RacecourseCode)
+        var course = HorseRacingPrediction.Contracts.Races.RaceCourseIdentity.ResourceCode(race.RacecourseCode)
             ?? throw new InvalidOperationException($"Unsupported JRA racecourse '{race.RacecourseCode}'.");
-        var firstDate = HorseRacingPrediction.Contracts.Time.JstTime.Today()
-            .AddDays(-HorseRacingPrediction.Contracts.JraCollectionPolicy.DefaultRaceCardLookupPeriodDays);
+        var firstDate = HorseRacingPrediction.Contracts.Common.Time.JstTime.Today()
+            .AddDays(-HorseRacingPrediction.Contracts.Collection.JraCollectionPolicy.DefaultRaceCardLookupPeriodDays);
         var eligibility = date >= firstDate ? RaceEntryOwnerRepairEligibility.CardRetrievalCandidate
             : RaceEntryOwnerRepairEligibility.OutsideCardLookupPeriod;
         var reason = eligibility == RaceEntryOwnerRepairEligibility.CardRetrievalCandidate
@@ -83,7 +86,7 @@ internal static class CollectionPlatformEndpointSupport
             var revision = requestedRevision ?? state?.RequiredRevision
                 ?? throw new InvalidOperationException("Collection state was not found for a pending failure.");
             var receipt = await store.RequestAsync(failure.Resource, failure.Definition, revision, CollectionReason.Recovery,
-                HorseRacingPrediction.Contracts.Time.JstTime.Now(), lane, priority, cancellationToken: token);
+                HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(), lane, priority, cancellationToken: token);
             if (receipt.CreatedTask) created++;
             if (receipt.TaskId is { } taskId) taskIds.Add(taskId);
         }
@@ -134,7 +137,7 @@ internal static class CollectionPlatformEndpointSupport
     {
         if (!string.Equals(request.Provider?.Trim(), "JRA", StringComparison.OrdinalIgnoreCase)) return "Provider must be JRA.";
         if (request.From > request.To) return "開始日は終了日以前にしてください。";
-        if (request.To > HorseRacingPrediction.Contracts.Time.JstTime.Today()) return "未来日のレースは再取得できません。";
+        if (request.To > HorseRacingPrediction.Contracts.Common.Time.JstTime.Today()) return "未来日のレースは再取得できません。";
         if (request.To.DayNumber - request.From.DayNumber + 1 > 31) return "期間は31日以内にしてください。";
         return null;
     }

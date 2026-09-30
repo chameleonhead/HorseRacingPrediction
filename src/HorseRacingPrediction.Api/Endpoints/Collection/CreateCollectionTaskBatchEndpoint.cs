@@ -1,9 +1,11 @@
 using EventFlow.EntityFramework;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common.Time;
 
 namespace HorseRacingPrediction.Api.Endpoints.Collection;
 
@@ -39,7 +41,7 @@ internal static class CreateCollectionTaskBatchEndpoint
                         ? $"manual:{Guid.NewGuid():N}" : bulk.BatchId;
                     var result = await store.ExecuteBulkRequestAsync(new(bulk.DefinitionId),
                         bulk.RequestedRevision, bulk.Reason, targets,
-                        HorseRacingPrediction.Contracts.Time.JstTime.Now(), batchId,
+                        HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(), batchId,
                         bulk.Lane, bulk.Priority, token);
                     return Results.Accepted(value: new CollectionTaskBatchSubmissionResponse(
                         request.Mode, result, null));
@@ -70,9 +72,9 @@ internal static class CreateCollectionTaskBatchEndpoint
                             explicitUrl, item.EffectiveDate, item.Attributes));
                     }
                     var outcomes = await store.RequestManyAsync(itemRequest.BatchId, items,
-                        HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
+                        HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(), token);
                     var itemResponse = new CollectionRequestBulkResponse(outcomes.Select(outcome =>
-                        new CollectionRequestBulkOutcome(outcome.ItemKey, outcome.Status,
+                        new CollectionRequestBulkOutcomeDto(outcome.ItemKey, outcome.Status,
                             outcome.Receipt?.RequestId, outcome.Receipt?.TaskId,
                             outcome.Receipt?.CreatedTask ?? false, outcome.ErrorCode, outcome.Message)).ToArray());
                     var response = new CollectionTaskBatchSubmissionResponse(request.Mode, null, itemResponse);

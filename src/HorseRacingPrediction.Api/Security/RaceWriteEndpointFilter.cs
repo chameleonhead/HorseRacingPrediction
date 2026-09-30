@@ -1,11 +1,16 @@
 using EventFlow.EntityFramework;
 using EventFlow.EventStores;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Domain.Predictions;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Memos;
+using HorseRacingPrediction.Contracts.Predictions;
+using HorseRacingPrediction.Contracts.Races;
+using HorseRacingPrediction.Contracts.Repairs;
 
 namespace HorseRacingPrediction.Api.Security;
 

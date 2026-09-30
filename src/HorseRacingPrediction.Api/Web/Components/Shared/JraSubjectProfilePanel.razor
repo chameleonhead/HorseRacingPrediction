@@ -1,4 +1,6 @@
 @inject AdminApiClient Api
+@using HorseRacingPrediction.Contracts.Common.Time
+@using HorseRacingPrediction.Contracts.Subjects
 
 <section class="detail-group" aria-label="JRA公開プロフィール">
     <h3>JRA公開プロフィール</h3>
@@ -19,7 +21,7 @@
     [Parameter,EditorRequired] public string SubjectId { get; set; } = "";
     [Parameter] public int Revision { get; set; }
     private string? loadedKey;
-    private HorseRacingPrediction.Contracts.JraSubjectProfileDto? profile;
+    private HorseRacingPrediction.Contracts.Subjects.JraSubjectProfileDto? profile;
     private bool loading,error;
     protected override async Task OnParametersSetAsync()
     {

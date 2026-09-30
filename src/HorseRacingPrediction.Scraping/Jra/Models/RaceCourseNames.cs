@@ -8,7 +8,7 @@ public static class RaceCourseNames
     // 検索順は判定優先度と一致させる。
     private static readonly (string Text, RaceCourse Course)[] Entries = Enum.GetValues<RaceCourse>()
         .Where(course => course != RaceCourse.Unknown)
-        .Select(course => (HorseRacingPrediction.Contracts.RaceCourseIdentity.Canonicalize(course.ToString())
+        .Select(course => (HorseRacingPrediction.Contracts.Races.RaceCourseIdentity.Canonicalize(course.ToString())
             ?? throw new InvalidOperationException($"Unmapped course: {course}"), course)).ToArray();
 
     /// <summary>

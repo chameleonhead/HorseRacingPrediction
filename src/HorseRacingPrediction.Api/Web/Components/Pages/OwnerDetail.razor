@@ -3,6 +3,9 @@
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@using HorseRacingPrediction.Contracts.Common
+@using HorseRacingPrediction.Contracts.Common.Time
+@using HorseRacingPrediction.Contracts.Owners
 
 <RaceOpsObjectHeader BackHref="/owners" BackLabel="← 馬主一覧に戻る" Title="@(owner?.Summary.DisplayName ?? "馬主詳細")" Section="データ / 馬主">
     <Actions><FluentButton Appearance="@Appearance.Outline" Href="@($"/owners/{Uri.EscapeDataString(OwnerId)}/edit")">編集</FluentButton></Actions>

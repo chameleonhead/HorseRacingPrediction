@@ -1,5 +1,6 @@
-using HorseRacingPrediction.Contracts;
 using AppReadModels = HorseRacingPrediction.Application.Queries.ReadModels;
+
+using HorseRacingPrediction.Contracts.Trainers;
 
 namespace HorseRacingPrediction.Api.Endpoints.Trainers;
 

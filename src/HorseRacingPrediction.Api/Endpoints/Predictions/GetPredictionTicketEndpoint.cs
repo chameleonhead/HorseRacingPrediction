@@ -1,11 +1,12 @@
 using EventFlow.EntityFramework;
 using EventFlow.Queries;
 using ApiContracts = HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Swashbuckle.AspNetCore.Annotations;
+
+using HorseRacingPrediction.Contracts.Predictions;
 
 namespace HorseRacingPrediction.Api.Endpoints.Predictions;
 
@@ -41,8 +42,8 @@ internal static class GetPredictionTicketEndpoint
                                     entries.GetValueOrDefault(x.EntryId),
                                     entries.TryGetValue(x.EntryId, out var horseId) ? horseNames.GetValueOrDefault(horseId) : null))
                                 .ToList(),
-                            (ApiContracts.TicketStatus)(int)readModel.TicketStatus,
-                            (ApiContracts.EvaluationStatus)(int)readModel.EvaluationStatus,
+                            (HorseRacingPrediction.Contracts.Predictions.TicketStatus)(int)readModel.TicketStatus,
+                            (HorseRacingPrediction.Contracts.Predictions.EvaluationStatus)(int)readModel.EvaluationStatus,
                             race?.RaceName, race?.RaceDate, race?.RacecourseCode, race?.RaceNumber);
 
                         return Results.Ok(response);

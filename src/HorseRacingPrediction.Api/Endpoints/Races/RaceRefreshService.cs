@@ -4,10 +4,12 @@ using EventFlow.Queries;
 using HorseRacingPrediction.Application.Commands.Horses;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using static HorseRacingPrediction.Api.Endpoints.Races.RaceEndpointMappings;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Api.Endpoints.Races;
 

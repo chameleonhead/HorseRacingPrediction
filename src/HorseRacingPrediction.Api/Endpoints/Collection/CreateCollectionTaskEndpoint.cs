@@ -22,7 +22,7 @@ internal static class CreateCollectionTaskEndpoint
                         var receipt = await store.RequestAsync(
                             new(resourceRequest.ResourceType, resourceRequest.Provider, resourceRequest.ResourceId),
                             new(resourceRequest.DefinitionId), resourceRequest.RequestedRevision, resourceRequest.Reason,
-                            HorseRacingPrediction.Contracts.Time.JstTime.Now(), resourceRequest.Lane,
+                            HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(), resourceRequest.Lane,
                             resourceRequest.Priority, explicitUrl, resourceRequest.BatchId,
                             resourceRequest.EffectiveDate, resourceRequest.Attributes, token);
                         var response = new CollectionTaskSubmissionResponse(request.Mode, receipt,
@@ -53,16 +53,16 @@ internal static class CreateCollectionTaskEndpoint
                     var lane = CollectionLane.Realtime;
                     var priority = resource.Type switch
                     {
-                        HorseRacingPrediction.Contracts.CollectionResourceType.RaceOdds => (int)CollectionPriority.High,
-                        HorseRacingPrediction.Contracts.CollectionResourceType.RaceResult => (int)CollectionPriority.Critical,
-                        HorseRacingPrediction.Contracts.CollectionResourceType.RaceCard => 80,
+                        HorseRacingPrediction.Contracts.Collection.CollectionResourceType.RaceOdds => (int)CollectionPriority.High,
+                        HorseRacingPrediction.Contracts.Collection.CollectionResourceType.RaceResult => (int)CollectionPriority.Critical,
+                        HorseRacingPrediction.Contracts.Collection.CollectionResourceType.RaceCard => 80,
                         _ => (int)CollectionPriority.Normal,
                     };
                     var currentRevision = await store.GetCurrentRevisionAsync(definition, token);
                     try
                     {
                         var receipt = await store.RequestAsync(resource, definition, currentRevision,
-                            CollectionReason.ManualRefresh, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
+                            CollectionReason.ManualRefresh, HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(),
                             lane, priority, explicitUrl, effectiveDate: identified.EffectiveDate,
                             attributes: identified.Attributes, cancellationToken: token);
                         var body = new CollectionTaskSubmissionResponse(request.Mode, receipt, resource,

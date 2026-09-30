@@ -1,8 +1,10 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.Options;
 using Amazon.Runtime;
 using System.Text.Json;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common.Time;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 
@@ -45,7 +47,7 @@ public sealed class CollectionPlatformOutboxDispatcher(
 
     internal async Task DispatchOnceAsync(CancellationToken cancellationToken)
     {
-        var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
+        var now = HorseRacingPrediction.Contracts.Common.Time.JstTime.Now();
         var reclaimed = await store.ReclaimExpiredExecutionLeasesAsync(now, cancellationToken).ConfigureAwait(false);
         if (telemetry is not null)
             for (var index = 0; index < reclaimed; index++)
@@ -139,7 +141,7 @@ public sealed class CollectionPlatformOutboxDispatcher(
                 {
                     receiptPersisting = true;
                     if (!await store.MarkDispatchedAsync(group.Select(x => x.OutboxId).ToArray(), reservationToken,
-                        envelopeId, receipt.MessageId, HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken)
+                        envelopeId, receipt.MessageId, HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(), cancellationToken)
                         .ConfigureAwait(false))
                     {
                         if (telemetry is not null)

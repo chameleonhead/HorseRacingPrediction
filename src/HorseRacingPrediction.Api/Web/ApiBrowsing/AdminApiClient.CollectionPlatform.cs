@@ -2,7 +2,8 @@ using System.Net.Http.Json;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Api.Endpoints.Collection;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
+
+using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.Api.Web.ApiBrowsing;
 

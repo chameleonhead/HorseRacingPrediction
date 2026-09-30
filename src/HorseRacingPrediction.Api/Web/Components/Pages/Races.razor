@@ -1,9 +1,13 @@
+@using HorseRacingPrediction.Contracts.Common
+@using HorseRacingPrediction.Contracts.Common.Time
+@using HorseRacingPrediction.Contracts.Races
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Common.Time;
+using HorseRacingPrediction.Contracts.Races;
 @page "/races"
 @attribute [Authorize]
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
-@using HorseRacingPrediction.Contracts
-
 <RaceOpsPageHeader Section="レース・予想" Title="レース" Description="期間を問わず同じ行形式で検索・ページングします。" />
 
 <FluentTabs Class="page-view-tabs" ShowActiveIndicator="true" ActiveTabId="@ActivePreset" ActiveTabIdChanged="OnPresetChanged" aria-label="期間プリセット">

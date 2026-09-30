@@ -1,8 +1,10 @@
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Interfaces;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
 using HorseRacingPrediction.Scraping.Jra.Pages;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Common.Time;
 
 namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 
@@ -92,7 +94,7 @@ public sealed partial class JraRaceCardCollectionWorkflow
         var errors = new List<string>();
         var outcomes = new List<RaceCardRaceOutcome>();
         var racecourseName = RaceCourseNames.GetJraName(course);
-        var nowJst = HorseRacingPrediction.Contracts.Time.JstTime.Now(_timeProvider);
+        var nowJst = HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(_timeProvider);
         var todayJst = DateOnly.FromDateTime(nowJst.Date);
         var allRacesClosed = raceList.Races.Count > 0;
 

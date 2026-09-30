@@ -1,8 +1,11 @@
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Repairs;
 
 namespace HorseRacingPrediction.Api.Endpoints.Repairs;
 
@@ -11,7 +14,7 @@ internal static class HorseIdentityRepairService
     internal const string HorseIdentityRepairId = "20260913-jra-horse-identity-repair";
 
 
-    internal static async Task<HorseIdentityRepairPreviewResponse> BuildHorseIdentityRepairPreviewAsync(
+    internal static async Task<HorseIdentityRepairPreviewDto> BuildHorseIdentityRepairPreviewAsync(
         EventStoreDbContext db, CollectionPlatformStore collectionStore, CancellationToken token)
     {
         var candidates = await db.HorseIdentityRepairCandidates.AsNoTracking()
@@ -21,7 +24,7 @@ internal static class HorseIdentityRepairService
         var races = await db.RacePredictionContexts.AsNoTracking().ToListAsync(token).ConfigureAwait(false);
         var redirects = await db.HorseIdentityRepairRedirects.AsNoTracking()
             .ToDictionaryAsync(x => x.SourceHorseId, token).ConfigureAwait(false);
-        var result = new List<HorseIdentityRepairCandidateResponse>();
+        var result = new List<HorseIdentityRepairCandidateDto>();
         foreach (var candidate in candidates)
         {
             string? blocked = null;

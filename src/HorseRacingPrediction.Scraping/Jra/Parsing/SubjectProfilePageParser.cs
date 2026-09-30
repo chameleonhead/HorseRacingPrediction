@@ -1,4 +1,3 @@
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
@@ -8,6 +7,9 @@ using System.Text.RegularExpressions;
 using PageContentKind = HorseRacingPrediction.Scraping.Browser.Snapshots.PageContentKind;
 using PageContentNode = HorseRacingPrediction.Scraping.Browser.Snapshots.PageContentNode;
 using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Common.Time;
 
 namespace HorseRacingPrediction.Scraping.Jra.Parsing;
 
@@ -67,7 +69,7 @@ public static class SubjectProfilePageParser
         }
         var nextView = snapshot.Links.FirstOrDefault(l => Regex.IsMatch(Normalize(l.Title), @"^(次へ|次のページ|次の[0-9]+件|次)$"));
         var next = nextView is null ? null : new PageLinkSnapshot(nextView.Url, nextView.Title);
-        return new(new(subjectType, name, sourceIdentity, snapshot.Url, fields, HorseRacingPrediction.Contracts.Time.JstTime.Now()), races.DistinctBy(x => x.Key).ToArray(), next);
+        return new(new(subjectType, name, sourceIdentity, snapshot.Url, fields, HorseRacingPrediction.Contracts.Common.Time.JstTime.Now()), races.DistinctBy(x => x.Key).ToArray(), next);
     }
     public static void Validate(JraSubjectPage page, JraSubjectIdentity expected)
     {

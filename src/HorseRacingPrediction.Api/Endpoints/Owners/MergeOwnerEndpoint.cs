@@ -1,8 +1,10 @@
 using EventFlow.EntityFramework;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+
+using HorseRacingPrediction.Contracts.Common.Time;
+using HorseRacingPrediction.Contracts.Owners;
 
 namespace HorseRacingPrediction.Api.Endpoints.Owners;
 
@@ -28,7 +30,7 @@ internal static class MergeOwnerEndpoint
                         if (target is null || source is null) return Results.NotFound();
 
                         var actor = "Admin UI";
-                        var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
+                        var now = HorseRacingPrediction.Contracts.Common.Time.JstTime.Now();
                         foreach (var alias in source.NameVariants)
                         {
                             var normalized = NormalizeOwnerName(alias);

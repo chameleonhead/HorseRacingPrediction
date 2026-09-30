@@ -1,4 +1,5 @@
-using HorseRacingPrediction.Contracts;
+
+using HorseRacingPrediction.Contracts.Common;
 
 namespace HorseRacingPrediction.Scraping.Tests.Jra;
 

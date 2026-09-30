@@ -2,6 +2,8 @@
 @attribute [Authorize]
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
+@using HorseRacingPrediction.Contracts.Collection
+@using HorseRacingPrediction.Contracts.Common.Time
 @implements IDisposable
 
 <RaceOpsPageHeader Section="運用 / 収集管理" Title="収集運用" Description="障害への対応、過去データ収集、抽出仕様変更の進捗をまとめて管理します。">

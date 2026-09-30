@@ -1,7 +1,6 @@
 using EventFlow;
 using EventFlow.EntityFramework;
 using ApiContracts = HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Application.Commands.Horses;
 using HorseRacingPrediction.Application.Commands.Jockeys;
 using HorseRacingPrediction.Application.Commands.Trainers;
@@ -12,6 +11,8 @@ using HorseRacingPrediction.Domain.Jockeys;
 using HorseRacingPrediction.Domain.Trainers;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Api.Endpoints.Races;
 
@@ -106,7 +107,7 @@ internal static class RaceEndpointMappings
                 .Trim()
                 .Where(c => !char.IsWhiteSpace(c)));
 
-    internal static ApiContracts.RacePredictionContextDto ToAgentRacePredictionContext(HorseRacingPrediction.Application.Queries.ReadModels.RacePredictionContextReadModel model)
+    internal static HorseRacingPrediction.Contracts.Races.RacePredictionContextDto ToAgentRacePredictionContext(HorseRacingPrediction.Application.Queries.ReadModels.RacePredictionContextReadModel model)
         => new()
         {
             RaceId = model.RaceId,
@@ -114,14 +115,14 @@ internal static class RaceEndpointMappings
             RacecourseCode = model.RacecourseCode,
             RaceNumber = model.RaceNumber,
             RaceName = model.RaceName,
-            Status = (ApiContracts.RaceStatus)(int)model.Status,
+            Status = (HorseRacingPrediction.Contracts.Races.RaceStatus)(int)model.Status,
             GradeCode = model.GradeCode,
             SurfaceCode = model.SurfaceCode,
             DistanceMeters = model.DistanceMeters,
             DirectionCode = model.DirectionCode,
-            Entries = model.Entries.Select(x => new ApiContracts.RacePredictionContextEntryDto(x.EntryId, x.HorseId, x.HorseNumber, x.JockeyId, x.TrainerId, x.GateNumber, x.AssignedWeight, x.SexCode, x.Age, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode, x.OwnerName, (ApiContracts.RaceEntryParticipationStatus)x.ParticipationStatus)).ToList(),
-            WeatherObservations = model.WeatherObservations.Select(x => new ApiContracts.WeatherObservationSnapshot(x.ObservationTime, x.WeatherCode, x.WeatherText, x.TemperatureCelsius, x.HumidityPercent, x.WindDirectionCode, x.WindSpeedMeterPerSecond)).ToList(),
-            TrackConditionObservations = model.TrackConditionObservations.Select(x => new ApiContracts.TrackConditionSnapshot(x.ObservationTime, x.TurfConditionCode, x.DirtConditionCode, x.GoingDescriptionText)).ToList()
+            Entries = model.Entries.Select(x => new HorseRacingPrediction.Contracts.Races.RacePredictionContextEntryDto(x.EntryId, x.HorseId, x.HorseNumber, x.JockeyId, x.TrainerId, x.GateNumber, x.AssignedWeight, x.SexCode, x.Age, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode, x.OwnerName, (HorseRacingPrediction.Contracts.Races.RaceEntryParticipationStatus)x.ParticipationStatus)).ToList(),
+            WeatherObservations = model.WeatherObservations.Select(x => new HorseRacingPrediction.Contracts.Races.WeatherObservationSnapshot(x.ObservationTime, x.WeatherCode, x.WeatherText, x.TemperatureCelsius, x.HumidityPercent, x.WindDirectionCode, x.WindSpeedMeterPerSecond)).ToList(),
+            TrackConditionObservations = model.TrackConditionObservations.Select(x => new HorseRacingPrediction.Contracts.Races.TrackConditionSnapshot(x.ObservationTime, x.TurfConditionCode, x.DirtConditionCode, x.GoingDescriptionText)).ToList()
         };
 
     internal static RaceEntryDto ToRaceEntryResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int? horseNumber, int? gateNumber, string? horseName, string? ownerName, string? ownerId)
@@ -170,7 +171,7 @@ internal static class RaceEndpointMappings
             entry.RunningStyleCode,
             ownerName,
             ownerId,
-            (ApiContracts.RaceEntryParticipationStatus)entry.ParticipationStatus);
+            (HorseRacingPrediction.Contracts.Races.RaceEntryParticipationStatus)entry.ParticipationStatus);
 
     internal static RaceWeatherObservationDto ToRaceWeatherObservationResponse(
         HorseRacingPrediction.Application.Queries.ReadModels.WeatherObservationSnapshot observation)

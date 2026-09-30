@@ -1,11 +1,19 @@
 using HorseRacingPrediction.Api.Security;
-using HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.Contracts.Time;
+using HorseRacingPrediction.Contracts.Common.Time;
 using Microsoft.Extensions.Options;
 using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using System.Web;
+
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Horses;
+using HorseRacingPrediction.Contracts.Jockeys;
+using HorseRacingPrediction.Contracts.Memos;
+using HorseRacingPrediction.Contracts.Owners;
+using HorseRacingPrediction.Contracts.Predictions;
+using HorseRacingPrediction.Contracts.Races;
+using HorseRacingPrediction.Contracts.Trainers;
 
 namespace HorseRacingPrediction.Api.Web.ApiBrowsing;
 
@@ -60,10 +68,10 @@ public sealed partial class AdminApiClient
     public Task<HorseProfileResponse?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)
         => GetJsonAsync<HorseProfileResponse>($"/api/horses/{Uri.EscapeDataString(horseId)}", cancellationToken);
 
-    public Task<HorseRacingPrediction.Contracts.HorseRaceHistoryDto?> GetHorseRaceHistoryAsync(
+    public Task<HorseRacingPrediction.Contracts.Horses.HorseRaceHistoryDto?> GetHorseRaceHistoryAsync(
         string horseId,
         CancellationToken cancellationToken = default)
-        => GetJsonAsync<HorseRacingPrediction.Contracts.HorseRaceHistoryDto>(
+        => GetJsonAsync<HorseRacingPrediction.Contracts.Horses.HorseRaceHistoryDto>(
             $"/api/horses/{Uri.EscapeDataString(horseId)}/race-history",
             cancellationToken);
 
@@ -76,10 +84,10 @@ public sealed partial class AdminApiClient
     public Task<JockeyProfileResponse?> GetJockeyAsync(string jockeyId, CancellationToken cancellationToken = default)
         => GetJsonAsync<JockeyProfileResponse>($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", cancellationToken);
 
-    public Task<HorseRacingPrediction.Contracts.JockeyRaceHistoryDto?> GetJockeyRaceHistoryAsync(
+    public Task<HorseRacingPrediction.Contracts.Jockeys.JockeyRaceHistoryDto?> GetJockeyRaceHistoryAsync(
         string jockeyId,
         CancellationToken cancellationToken = default)
-        => GetJsonAsync<HorseRacingPrediction.Contracts.JockeyRaceHistoryDto>(
+        => GetJsonAsync<HorseRacingPrediction.Contracts.Jockeys.JockeyRaceHistoryDto>(
             $"/api/jockeys/{Uri.EscapeDataString(jockeyId)}/race-history",
             cancellationToken);
 

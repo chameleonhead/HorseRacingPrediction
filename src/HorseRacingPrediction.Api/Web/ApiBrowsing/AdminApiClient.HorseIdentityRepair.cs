@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
-using HorseRacingPrediction.Contracts;
+
+using HorseRacingPrediction.Contracts.Repairs;
 
 namespace HorseRacingPrediction.Api.Web.ApiBrowsing;
 
@@ -7,9 +8,9 @@ public sealed partial class AdminApiClient
 {
     private const string HorseIdentityRepairPath = "/api/admin/repairs/20260913-jra-horse-identity";
 
-    public Task<HorseIdentityRepairPreviewResponse?> GetHorseIdentityRepairPreviewAsync(
+    public Task<HorseIdentityRepairPreviewDto?> GetHorseIdentityRepairPreviewAsync(
         CancellationToken token = default)
-        => GetJsonAsync<HorseIdentityRepairPreviewResponse>(HorseIdentityRepairPath, token);
+        => GetJsonAsync<HorseIdentityRepairPreviewDto>(HorseIdentityRepairPath, token);
 
     public async Task<AdminApiResult<ApplyHorseIdentityRepairResponse>> ApplyHorseIdentityRepairAsync(
         IReadOnlyList<string> candidateIds, CancellationToken token = default)

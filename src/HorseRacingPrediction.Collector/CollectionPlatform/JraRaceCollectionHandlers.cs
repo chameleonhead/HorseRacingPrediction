@@ -1,5 +1,4 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.PredictionScheduling;
 using HorseRacingPrediction.Scraping.Interfaces;
 using HorseRacingPrediction.Scraping.Jra;
@@ -8,6 +7,10 @@ using HorseRacingPrediction.Scraping.Jra.Navigation;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Workflow;
 using Microsoft.Extensions.Options;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common.Time;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
@@ -47,7 +50,7 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
             or CollectionReason.PeriodRecollection;
         var firstOffset = isSingleDayDiscovery ? 0 : -7;
         var lastOffset = isSingleDayDiscovery ? 0 : 7;
-        var raceRequests = new List<CollectionRequestBulkItem>();
+        var raceRequests = new List<CollectionRequestBulkItemDto>();
         DateOnly? earliestUnpublishedDate = null;
         string? unpublishedMessage = null;
         var cancellations = new List<JraMeetingCancellation>();
@@ -148,7 +151,7 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                             ["number"] = race.Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
                         };
                         if (task.Attributes.TryGetValue("batchId", out var batchId)) attributes["batchId"] = batchId;
-                        CollectionRequestBulkItem? oddsRequest = null;
+                        CollectionRequestBulkItemDto? oddsRequest = null;
                         Uri? detailUrl;
                         if (!resultRoute)
                         {
@@ -161,7 +164,7 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                             {
                                 var oddsAttributes = new Dictionary<string, string>(attributes)
                                 { ["startTime"] = start.ToString("HH:mm") };
-                                oddsRequest = new CollectionRequestBulkItem(
+                                oddsRequest = new CollectionRequestBulkItemDto(
                                     $"odds:{id}", CollectionResourceType.RaceOdds.ToString(), "JRA", id, "race-odds", 1,
                                     CollectionReason.Discovery.ToString(), CollectionLane.Realtime.ToString(), 90,
                                     null, date, oddsAttributes);
@@ -172,9 +175,9 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                             detailUrl = JraRaceDetailUrl.Validate(
                                 CollectionHttpUrl.Resolve(race.ResultUrl, page.Url), CollectionResourceType.RaceResult, race.Id);
                         }
-                        raceRequests.Add(new CollectionRequestBulkItem(
+                        raceRequests.Add(new CollectionRequestBulkItemDto(
                             $"race:{id}", CollectionResourceType.Race.ToString(), "JRA", id, "race-detail",
-                            HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
+                            HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail,
                             (task.Reason is CollectionReason.Backfill or CollectionReason.PeriodRecollection
                                 ? task.Reason
                                 : CollectionReason.Discovery).ToString(),
@@ -224,7 +227,7 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
 
     private bool IsFutureJst(DateOnly date) => date > TodayJst();
 
-    private static void ValidateDiscoveryBatchResponse(IReadOnlyList<CollectionRequestBulkItem> items,
+    private static void ValidateDiscoveryBatchResponse(IReadOnlyList<CollectionRequestBulkItemDto> items,
         CollectionRequestBulkResponse response)
     {
         var expectedKeys = items.Select(item => item.ItemKey).Order(StringComparer.Ordinal).ToArray();
@@ -490,7 +493,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                     stageOutcomes.Add(new("ResolveCard", RaceArtifactKind.Card,
                         CollectionAttemptResult.ResourceNotYetAvailable, "RaceCardNotYetAvailable", ex.Message));
                     return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceCardNotYetAvailable",
-                        ex.Message, RetryAt: HorseRacingPrediction.Contracts.Time.JstTime.Now().AddMinutes(30),
+                        ex.Message, RetryAt: HorseRacingPrediction.Contracts.Common.Time.JstTime.Now().AddMinutes(30),
                         LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes);
                 }
             }
@@ -544,7 +547,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 .ConfigureAwait(false);
         }
         if (requiresCard && result is { Error: null, Entries: not null }
-            && result.Entries.Any(entry => entry.ParticipationStatus == HorseRacingPrediction.Contracts.RaceEntryParticipationStatus.Active
+            && result.Entries.Any(entry => entry.ParticipationStatus == HorseRacingPrediction.Contracts.Races.RaceEntryParticipationStatus.Active
                 && entry.HorseNumber is null))
         {
             // The provisional card and its stable horse identities are persisted, but
@@ -560,8 +563,8 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 FailureImpact: CollectionFailureImpact.Isolated);
         }
         if (requiresCard && result?.Error is null && predictionSchedule is not null
-            && result?.Entries?.Any(entry => entry.ParticipationStatus == HorseRacingPrediction.Contracts.RaceEntryParticipationStatus.Active) == true)
-            await predictionSchedule.EnqueueAsync([result!.RaceId!], HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
+            && result?.Entries?.Any(entry => entry.ParticipationStatus == HorseRacingPrediction.Contracts.Races.RaceEntryParticipationStatus.Active) == true)
+            await predictionSchedule.EnqueueAsync([result!.RaceId!], HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
         if (resultAlreadyCurrent)
         {
             // No Result operation occurred. Emitting NotApplicable would mark the persisted
@@ -839,7 +842,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 attributes["rescheduledFromDomainRaceId"] = sourceDomainRaceId;
             if (card.StartTime is { } start) attributes["startTime"] = start.ToString("HH:mm");
             var url = Uri.TryCreate(card.Url, UriKind.Absolute, out var parsed) ? parsed : null;
-            await requests.RequestAsync(new(CollectionResourceType.Race, "JRA", id), new("race-detail"), HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
+            await requests.RequestAsync(new(CollectionResourceType.Race, "JRA", id), new("race-detail"), HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail,
                 CollectionReason.Recovery, CollectionLane.Realtime, 100, url, candidateId.Date,
                 attributes, cancellationToken).ConfigureAwait(false);
             return new(candidateId, url);

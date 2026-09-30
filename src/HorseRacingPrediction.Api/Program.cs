@@ -1,3 +1,5 @@
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common.Time;
 using Amazon.CloudWatch;
 using Amazon.SimpleNotificationService;
 using Amazon.SQS;
@@ -12,8 +14,6 @@ using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.Contracts.Time;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure;
 using HorseRacingPrediction.Infrastructure.Persistence;
@@ -229,7 +229,7 @@ var app = builder.Build();
 
 var collectionPlatform = app.Services.GetRequiredService<CollectionPlatformStore>();
 await collectionPlatform.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race, 1, "Initial", false);
-await collectionPlatform.RegisterDefinitionAsync(new("race-detail"), "Race detail", CollectionResourceType.Race, HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
+await collectionPlatform.RegisterDefinitionAsync(new("race-detail"), "Race detail", CollectionResourceType.Race, HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail,
     "Race resource artifact state machine", false);
 await collectionPlatform.RegisterDefinitionAsync(new("race-odds"), "Race odds", CollectionResourceType.RaceOdds, 1, "Initial", false);
 await SubjectCollectionDefinitions.RegisterAsync(collectionPlatform);

@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
-using HorseRacingPrediction.Contracts;
+
+using HorseRacingPrediction.Contracts.Repairs;
 
 namespace HorseRacingPrediction.Api.Web.ApiBrowsing;
 
@@ -7,13 +8,13 @@ public sealed partial class AdminApiClient
 {
     private const string SubjectIdentificationRepairPath = "/api/admin/repairs/subject-identification";
 
-    public Task<SubjectIdentificationRepairPreviewResponse?> GetSubjectIdentificationRepairPreviewAsync(
+    public Task<SubjectIdentificationRepairPreviewDto?> GetSubjectIdentificationRepairPreviewAsync(
         CancellationToken cancellationToken = default)
-        => GetJsonAsync<SubjectIdentificationRepairPreviewResponse>(SubjectIdentificationRepairPath, cancellationToken);
+        => GetJsonAsync<SubjectIdentificationRepairPreviewDto>(SubjectIdentificationRepairPath, cancellationToken);
 
     public async Task<AdminApiResult<ExecuteSubjectIdentificationRepairResponse>>
         ExecuteSubjectIdentificationRepairAsync(
-            IReadOnlyList<ExecuteSubjectIdentificationRepairItem> items,
+            IReadOnlyList<SubjectIdentificationRepairInputDto> items,
             CancellationToken cancellationToken = default)
     {
         using var response = await _httpClient.PostAsJsonAsync(

@@ -1,7 +1,14 @@
 using HorseRacingPrediction.ApiClient;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Agents.Plugins;
 using Microsoft.Extensions.AI;
+
+using HorseRacingPrediction.Contracts.Horses;
+using HorseRacingPrediction.Contracts.Jockeys;
+using HorseRacingPrediction.Contracts.MachineLearning;
+using HorseRacingPrediction.Contracts.Memos;
+using HorseRacingPrediction.Contracts.Predictions;
+using HorseRacingPrediction.Contracts.Races;
+using HorseRacingPrediction.Contracts.Trainers;
 
 namespace HorseRacingPrediction.Agents.Tests;
 

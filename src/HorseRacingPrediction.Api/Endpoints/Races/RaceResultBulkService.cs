@@ -7,8 +7,7 @@ using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Commands.Trainers;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
-using HorseRacingPrediction.Contracts.Time;
+using HorseRacingPrediction.Contracts.Common.Time;
 using HorseRacingPrediction.Domain.Horses;
 using HorseRacingPrediction.Domain.Jockeys;
 using HorseRacingPrediction.Domain.Races;
@@ -18,6 +17,11 @@ using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text;
 using static HorseRacingPrediction.Api.Endpoints.Races.RaceEndpointMappings;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Owners;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Api.Endpoints.Races;
 
@@ -54,7 +58,7 @@ internal static partial class RaceResultBulkService
 
         var errors = new List<string>();
         var relatedErrors = new List<string>();
-        var outcomes = new List<DeclareRaceResultBulkItemOutcome>();
+        var outcomes = new List<RaceResultBulkItemOutcomeDto>();
         var accepted = new List<(RaceResultEntryBulkDto Source, EntryDetails Entry, EntryResultDetails Result,
             string HorseName, string? JockeyName, string? TrainerName)>();
         var seenNumbers = new HashSet<int>();
@@ -467,7 +471,7 @@ internal static partial class RaceResultBulkService
     internal static IReadOnlyList<PayoutEntry> ToPayoutEntries(IReadOnlyList<PayoutEntryDto>? values)
         => values?.Select(item => new PayoutEntry(item.Combination, item.Amount)).ToArray() ?? [];
 
-    internal static void MarkAcceptedOutcomesFailed(List<DeclareRaceResultBulkItemOutcome> outcomes,
+    internal static void MarkAcceptedOutcomesFailed(List<RaceResultBulkItemOutcomeDto> outcomes,
         string errorCode, string message)
     {
         for (var index = 0; index < outcomes.Count; index++)

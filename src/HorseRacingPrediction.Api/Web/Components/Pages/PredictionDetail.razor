@@ -1,6 +1,7 @@
 @page "/predictions/{PredictionTicketId}"
 @attribute [Authorize]
 @inject AdminApiClient Api
+@using HorseRacingPrediction.Contracts.Predictions
 
 <RaceOpsObjectHeader BackHref="/predictions" BackLabel="← 予想票一覧に戻る" Title="@(prediction is null ? "予想票詳細" : $"{RaceDisplayName(prediction)} 予想票")" Section="レース・予想 / 予想票" />
 

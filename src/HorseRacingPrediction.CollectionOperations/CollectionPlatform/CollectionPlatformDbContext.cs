@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using HorseRacingPrediction.CollectionOperations.Persistence;
-using HorseRacingPrediction.Contracts;
+
+using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 

@@ -1,9 +1,12 @@
 using EventFlow.EntityFramework;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common.Time;
+using HorseRacingPrediction.Contracts.Repairs;
 
 namespace HorseRacingPrediction.Api.Endpoints.Repairs;
 
@@ -71,7 +74,7 @@ internal static class ApplyHorseIdentityRepairEndpoint
                                     TargetHorseId = targetHorseId,
                                     RepairId = HorseIdentityRepairId,
                                     JraIdentity = sourceGroup.First().JraIdentity,
-                                    CreatedAt = HorseRacingPrediction.Contracts.Time.JstTime.Now(),
+                                    CreatedAt = HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(),
                                 });
                             }
                             else if (!string.Equals(redirect.TargetHorseId, targetHorseId, StringComparison.Ordinal))
@@ -82,7 +85,7 @@ internal static class ApplyHorseIdentityRepairEndpoint
                             {
                                 var candidate = await db.HorseIdentityRepairCandidates.SingleAsync(
                                     x => x.CandidateId == item.CandidateId, token).ConfigureAwait(false);
-                                candidate.AppliedAt ??= HorseRacingPrediction.Contracts.Time.JstTime.Now();
+                                candidate.AppliedAt ??= HorseRacingPrediction.Contracts.Common.Time.JstTime.Now();
                                 applied++;
                             }
                         }
@@ -95,7 +98,7 @@ internal static class ApplyHorseIdentityRepairEndpoint
                             var suppression = await collectionStore.SuppressResourceAsync(
                                 new ResourceKey(CollectionResourceType.Horse, "JRA", candidate.SourceHorseId),
                                 "JRA競走馬識別子の不具合修復により統合元データを削除済みです。",
-                                HorseIdentityRepairId, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token)
+                                HorseIdentityRepairId, HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(), token)
                                 .ConfigureAwait(false);
                             disabled += suppression.CancelledTasks;
                             running += suppression.RunningCancellationRequests;

@@ -2,11 +2,12 @@ using EventFlow;
 using EventFlow.EntityFramework;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Application.Commands.Races;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
+
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Api.Endpoints.Races;
 

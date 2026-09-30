@@ -1,6 +1,8 @@
 @page "/settings"
 @attribute [Authorize]
 @inject AdminApiClient Api
+@using HorseRacingPrediction.Contracts.Collection
+@using HorseRacingPrediction.Contracts.Repairs
 
 <RaceOpsPageHeader Section="運用" Title="その他設定"
                    Description="通常の編集や収集管理とは別の、低頻度の管理操作です。">
@@ -60,7 +62,7 @@
                           Disabled="@(busy || normalizationPage.Items.All(x => !x.CanApply))">このページの補正可能な対象をすべて選択</FluentButton>
         </div>
         <div class="repair-grid">
-            <FluentDataGrid Items="@normalizationPage.Items.AsQueryable()" TGridItem="SubjectNameNormalizationCandidate" aria-label="名称の正規化候補">
+            <FluentDataGrid Items="@normalizationPage.Items.AsQueryable()" TGridItem="SubjectNameNormalizationCandidateDto" aria-label="名称の正規化候補">
                 <TemplateColumn Title="選択"><FluentCheckbox ThreeState="true" CheckState="@NormalizationSelected(context)" CheckStateChanged="@(value => SetNormalizationSelected(context, value == true))" Disabled="@(!context.CanApply || busy)" aria-label="@($"{context.CurrentDisplayName}を選択")" /></TemplateColumn>
                 <TemplateColumn Title="対象"><strong>@context.CurrentDisplayName</strong><small>@SubjectTypeLabel(context.SubjectType) / @context.SubjectId</small></TemplateColumn>
                 <TemplateColumn Title="現在"><span>@context.CurrentDisplayName</span><small>正規化名: @context.CurrentNormalizedName</small></TemplateColumn>
@@ -200,7 +202,7 @@
     else
     {
         <div class="repair-grid">
-            <FluentDataGrid Items="@FilteredSubjectCandidates.AsQueryable()" TGridItem="SubjectIdentificationRepairCandidateResponse" aria-label="主体識別情報の補正候補">
+            <FluentDataGrid Items="@FilteredSubjectCandidates.AsQueryable()" TGridItem="SubjectIdentificationRepairCandidateDto" aria-label="主体識別情報の補正候補">
                 <TemplateColumn Title="選択"><FluentCheckbox ThreeState="true" CheckState="@SubjectCheckState(context)" CheckStateChanged="@(value => SetSubjectSelected(context, value == true))" Disabled="@busy" aria-label="@($"{SubjectTypeLabel(context.SubjectType)} {context.SubjectId}を選択")" /></TemplateColumn>
                 <TemplateColumn Title="状態"><RaceOpsStatusBadge Label="@SubjectStatusLabel(context)" Tone="@(SubjectActionable(context) ? "success" : "warning")" /></TemplateColumn>
                 <TemplateColumn Title="主体"><span>@SubjectTypeLabel(context.SubjectType)</span><small>@context.SubjectId</small>@if(context.MergeTargetId is not null){<small>統合先: @context.MergeTargetId</small>}</TemplateColumn>
@@ -312,7 +314,7 @@
         </div>
 
         <div class="repair-grid">
-            <FluentDataGrid Items="@candidates.AsQueryable()" TGridItem="HorseIdentityRepairCandidateResponse"
+            <FluentDataGrid Items="@candidates.AsQueryable()" TGridItem="HorseIdentityRepairCandidateDto"
                             aria-label="JRA競走馬識別子の補正候補">
                 <TemplateColumn Title="選択">
                     <FluentCheckbox ThreeState="true" ShowIndeterminate="false" CheckState="@IsSelected(context.CandidateId)"
@@ -399,14 +401,14 @@
 
 @code {
     private const string RepairId = "20260913-jra-horse-identity-repair";
-    private IReadOnlyList<HorseIdentityRepairCandidateResponse> candidates = [];
+    private IReadOnlyList<HorseIdentityRepairCandidateDto> candidates = [];
     private readonly HashSet<string> selected = new(StringComparer.Ordinal);
     private IReadOnlyList<string> errors = [];
     private string? success;
     private bool loading = true;
     private bool busy;
     private bool confirming;
-    private IReadOnlyList<SubjectIdentificationRepairCandidateResponse> subjectCandidates = [];
+    private IReadOnlyList<SubjectIdentificationRepairCandidateDto> subjectCandidates = [];
     private readonly HashSet<Guid> selectedSubjects = [];
     private string subjectFilter = string.Empty;
     private bool subjectLoading = true;
@@ -418,17 +420,17 @@
     private bool confirmingOwnerRepair;
     private string normalizationType = "Trainer";
     private string normalizationQuery = string.Empty;
-    private SubjectNameNormalizationPage? normalizationPage;
-    private SubjectNameNormalizationApplyResult? normalizationResult;
+    private SubjectNameNormalizationPageDto? normalizationPage;
+    private SubjectNameNormalizationApplyResultDto? normalizationResult;
     private readonly HashSet<string> selectedNormalization = new(StringComparer.Ordinal);
     private IReadOnlyList<string> normalizationErrors = [];
     private string? normalizationValidation;
     private bool normalizationSearched;
     private bool normalizationLoading;
     private bool confirmingNormalization;
-    private IReadOnlyList<SubjectIdentificationRepairCandidateResponse> FilteredSubjectCandidates =>
+    private IReadOnlyList<SubjectIdentificationRepairCandidateDto> FilteredSubjectCandidates =>
         string.IsNullOrWhiteSpace(subjectFilter) ? subjectCandidates : subjectCandidates.Where(x => x.SubjectType.ToString() == subjectFilter).ToArray();
-    private IEnumerable<SubjectIdentificationRepairCandidateResponse> SelectedSubjectCandidates =>
+    private IEnumerable<SubjectIdentificationRepairCandidateDto> SelectedSubjectCandidates =>
         subjectCandidates.Where(x => selectedSubjects.Contains(x.NotificationId));
     private int SelectedActionableSubjectCount => SelectedSubjectCandidates.Count(SubjectActionable);
     private int SelectedBlockedSubjectCount => selectedSubjects.Count - SelectedActionableSubjectCount;
@@ -441,11 +443,11 @@
         RaceEntryOwnerRepairEligibility.OutsideCardLookupPeriod => "期間外・補正不能",
         _ => "要確認"
     };
-    private IEnumerable<HorseIdentityRepairCandidateResponse> SelectedCandidates =>
+    private IEnumerable<HorseIdentityRepairCandidateDto> SelectedCandidates =>
         candidates.Where(x => selected.Contains(x.CandidateId));
     private int NormalizationTotalPages => normalizationPage is null ? 1
         : Math.Max(1, (int)Math.Ceiling((double)normalizationPage.TotalCount / normalizationPage.PageSize));
-    private IEnumerable<SubjectNameNormalizationCandidate> SelectedNormalizationCandidates =>
+    private IEnumerable<SubjectNameNormalizationCandidateDto> SelectedNormalizationCandidates =>
         normalizationPage?.Items.Where(NormalizationSelected) ?? [];
 
     protected override Task OnInitializedAsync() => LoadAsync();
@@ -482,7 +484,7 @@
         finally { subjectLoading = false; }
     }
 
-    private static bool SubjectActionable(SubjectIdentificationRepairCandidateResponse candidate) =>
+    private static bool SubjectActionable(SubjectIdentificationRepairCandidateDto candidate) =>
         candidate.SafeToExecute;
 
     private async Task SearchNormalizationAsync(int page)
@@ -509,9 +511,9 @@
         finally { normalizationLoading = false; }
     }
 
-    private static string NormalizationKey(SubjectNameNormalizationCandidate candidate) => $"{candidate.SubjectType}:{candidate.SubjectId}";
-    private bool NormalizationSelected(SubjectNameNormalizationCandidate candidate) => selectedNormalization.Contains(NormalizationKey(candidate));
-    private void SetNormalizationSelected(SubjectNameNormalizationCandidate candidate, bool value)
+    private static string NormalizationKey(SubjectNameNormalizationCandidateDto candidate) => $"{candidate.SubjectType}:{candidate.SubjectId}";
+    private bool NormalizationSelected(SubjectNameNormalizationCandidateDto candidate) => selectedNormalization.Contains(NormalizationKey(candidate));
+    private void SetNormalizationSelected(SubjectNameNormalizationCandidateDto candidate, bool value)
     {
         var key = NormalizationKey(candidate);
         if (value && candidate.CanApply) selectedNormalization.Add(key); else selectedNormalization.Remove(key);
@@ -525,7 +527,7 @@
     {
         if (busy || normalizationPage is null || selectedNormalization.Count == 0) return;
         var items = normalizationPage.Items.Where(NormalizationSelected)
-            .Select(x => new ApplySubjectNameNormalizationItem(x.SubjectType, x.SubjectId, x.ManifestToken)).ToArray();
+            .Select(x => new SubjectNameNormalizationInputDto(x.SubjectType, x.SubjectId, x.ManifestToken)).ToArray();
         if (items.Length == 0) return;
         busy = true; normalizationErrors = []; success = null;
         try
@@ -579,8 +581,8 @@
     }
 
     private bool SubjectSelected(Guid id) => selectedSubjects.Contains(id);
-    private bool SubjectCheckState(SubjectIdentificationRepairCandidateResponse candidate) => SubjectSelected(candidate.NotificationId);
-    private void SetSubjectSelected(SubjectIdentificationRepairCandidateResponse candidate, bool value)
+    private bool SubjectCheckState(SubjectIdentificationRepairCandidateDto candidate) => SubjectSelected(candidate.NotificationId);
+    private void SetSubjectSelected(SubjectIdentificationRepairCandidateDto candidate, bool value)
     {
         if (value) selectedSubjects.Add(candidate.NotificationId);
         else selectedSubjects.Remove(candidate.NotificationId);
@@ -592,7 +594,7 @@
         busy = true; errors = []; success = null;
         try
         {
-            var items = selectedSubjects.Select(id => new ExecuteSubjectIdentificationRepairItem(id)).ToArray();
+            var items = selectedSubjects.Select(id => new SubjectIdentificationRepairInputDto(id)).ToArray();
             var result = await Api.ExecuteSubjectIdentificationRepairAsync(items);
             if (!result.Success || result.Value is null)
             {
@@ -634,7 +636,7 @@
         finally { dismissingSubjects = false; busy = false; }
     }
 
-    private string SubjectStatusLabel(SubjectIdentificationRepairCandidateResponse candidate) =>
+    private string SubjectStatusLabel(SubjectIdentificationRepairCandidateDto candidate) =>
         candidate.Evaluation == "DismissRecommended" ? "対応不要候補"
             : !SubjectActionable(candidate) ? "要確認"
             : candidate.Evaluation == "MergeReady" ? "名寄せ後に再収集" : "再収集可能";

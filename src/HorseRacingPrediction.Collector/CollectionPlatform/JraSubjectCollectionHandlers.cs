@@ -1,5 +1,4 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Interfaces;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
@@ -8,6 +7,11 @@ using HorseRacingPrediction.Scraping.Jra.Parsing;
 using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
+
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Identity;
+using HorseRacingPrediction.Contracts.Subjects;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
@@ -204,7 +208,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             {
                 await DiscoverHorseReferencesAsync(task, page.Profile, requests, cancellationToken).ConfigureAwait(false);
             }
-            catch (HorseRacingPrediction.Contracts.SubjectIdentityResolutionException ex)
+            catch (HorseRacingPrediction.Contracts.Identity.SubjectIdentityResolutionException ex)
             {
                 return CollectionAttemptFailureClassifier.FromException(ex) with
                 {
@@ -359,7 +363,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         {
             if (!seenPages.Add(string.Join('|', page.Races.Select(x => x.Key))))
                 throw new JraCollectionException("出走履歴のページ送りが進みません。");
-            var itemsByRace = new Dictionary<string, CollectionRequestBulkItem>(StringComparer.Ordinal);
+            var itemsByRace = new Dictionary<string, CollectionRequestBulkItemDto>(StringComparer.Ordinal);
             foreach (var history in page.Races.Where(x => x.ExclusionReason is null && x.Link is not null))
             {
                 var url = CollectionHttpUrl.Resolve(history.Link!.Url, page.Url);
@@ -372,8 +376,8 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
                 };
                 if (priorityUntil is not null)
                     requestAttributes["weekendPriorityUntil"] = priorityUntil.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-                itemsByRace.TryAdd(resource.Id, new CollectionRequestBulkItem(
-                    resource.Id, resource.Type.ToString(), resource.Provider, resource.Id, "race-detail", HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
+                itemsByRace.TryAdd(resource.Id, new CollectionRequestBulkItemDto(
+                    resource.Id, resource.Type.ToString(), resource.Provider, resource.Id, "race-detail", HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail,
                     CollectionReason.Discovery.ToString(), lane.ToString(), priority, url?.AbsoluteUri,
                     effectiveDate, requestAttributes));
             }
@@ -391,7 +395,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         }
     }
 
-    private static void ValidateHistoryBatchResponse(IReadOnlyList<CollectionRequestBulkItem> items,
+    private static void ValidateHistoryBatchResponse(IReadOnlyList<CollectionRequestBulkItemDto> items,
         CollectionRequestBulkResponse response)
     {
         var expectedKeys = items.Select(item => item.ItemKey).Order(StringComparer.Ordinal).ToArray();

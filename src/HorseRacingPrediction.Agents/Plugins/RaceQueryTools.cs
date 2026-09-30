@@ -1,8 +1,9 @@
 using System.ComponentModel;
 using System.Text;
 using HorseRacingPrediction.ApiClient;
-using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.AI;
+
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Agents.Plugins;
 
@@ -256,7 +257,7 @@ public sealed class RaceQueryTools
             return $"レース ID '{raceId}' は見つかりませんでした。";
 
         var entries = model.Entries.Where(entry => entry.ParticipationStatus ==
-            HorseRacingPrediction.Contracts.RaceEntryParticipationStatus.Active).ToList();
+            HorseRacingPrediction.Contracts.Races.RaceEntryParticipationStatus.Active).ToList();
         var fieldSize = entries.Count;
 
         var leaderCount = entries.Count(e => e.RunningStyleCode == "逃");
