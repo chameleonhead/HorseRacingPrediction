@@ -49,8 +49,12 @@ public class RaceEndpointsTests
     public async Task CreateRace_ReturnsCreated()
     {
         var raceId = $"race-{Guid.NewGuid()}";
-        var request = new CreateRaceRequest(
-            new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId);
+        var request = new CreateRaceRequest(new(
+            new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId));
+        var requestJson = JsonSerializer.SerializeToElement(request, JsonOptions);
+        Assert.IsTrue(requestJson.TryGetProperty("race", out var nestedRace));
+        Assert.IsFalse(requestJson.TryGetProperty("raceId", out _));
+        Assert.AreEqual(raceId, nestedRace.GetProperty("raceId").GetString());
 
         var response = await _client.PostAsJsonAsync("/api/races", request, JsonOptions);
 
@@ -62,8 +66,8 @@ public class RaceEndpointsTests
     public async Task CreateRace_WhenAlreadyExists_ReturnsConflict()
     {
         var raceId = $"race-{Guid.NewGuid()}";
-        var request = new CreateRaceRequest(
-            new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId);
+        var request = new CreateRaceRequest(new(
+            new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId));
 
         var firstResponse = await _client.PostAsJsonAsync("/api/races", request, JsonOptions);
         var secondResponse = await _client.PostAsJsonAsync("/api/races", request, JsonOptions);
@@ -73,17 +77,39 @@ public class RaceEndpointsTests
     }
 
     [TestMethod]
+    public async Task NullNestedOperationPayloads_ReturnExistingBadRequestStringArrays()
+    {
+        var cases = new[]
+        {
+            ("/api/races", "{\"race\":null}", "Race is required."),
+            ($"/api/races/{Guid.NewGuid()}/entries", "{\"entry\":null}", "Entry is required."),
+            ("/api/races/result-bulk", "{\"result\":null}", "Request is required.")
+        };
+
+        foreach (var (path, json, expectedMessage) in cases)
+        {
+            using var response = await _client.PostAsync(path,
+                new StringContent(json, System.Text.Encoding.UTF8, "application/json"));
+            Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode, path);
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.AreEqual(JsonValueKind.Array, body.RootElement.ValueKind, path);
+            Assert.AreEqual(expectedMessage, body.RootElement[0].GetString(), path);
+        }
+    }
+
+    [TestMethod]
     public async Task GetRace_AfterCreate_ReturnsCorrectData()
     {
         var raceId = $"race-{Guid.NewGuid()}";
-        var request = new CreateRaceRequest(
-            new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId);
+        var request = new CreateRaceRequest(new(
+            new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId));
         await _client.PostAsJsonAsync("/api/races", request, JsonOptions);
 
         var response = await _client.GetAsync($"/api/races/{raceId}");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        var race = await response.Content.ReadFromJsonAsync<RaceDto>(JsonOptions);
+        var raceResponse = await response.Content.ReadFromJsonAsync<GetRaceResponse>(JsonOptions);
+        var race = raceResponse?.Race;
         Assert.IsNotNull(race);
         Assert.AreEqual(raceId, race.RaceId);
         Assert.AreEqual("TOKYO", race.RacecourseCode);
@@ -97,16 +123,17 @@ public class RaceEndpointsTests
     {
         var sourceId = $"race-{Guid.NewGuid()}";
         var replacementId = $"race-{Guid.NewGuid()}";
-        await _client.PostAsJsonAsync("/api/races", new CreateRaceRequest(
-            new DateOnly(2026, 9, 21), "NAKAYAMA", 2, "source", sourceId), JsonOptions);
-        await _client.PostAsJsonAsync("/api/races", new CreateRaceRequest(
-            new DateOnly(2026, 9, 22), "NAKAYAMA", 2, "replacement", replacementId), JsonOptions);
+        await _client.PostAsJsonAsync("/api/races", new CreateRaceRequest(new(
+            new DateOnly(2026, 9, 21), "NAKAYAMA", 2, "source", sourceId)), JsonOptions);
+        await _client.PostAsJsonAsync("/api/races", new CreateRaceRequest(new(
+            new DateOnly(2026, 9, 22), "NAKAYAMA", 2, "replacement", replacementId)), JsonOptions);
 
         var response = await _client.PostAsJsonAsync($"/api/races/{sourceId}/reschedule",
-            new MarkRaceRescheduledRequest(replacementId), JsonOptions);
+            new MarkRaceRescheduledRequest(new(replacementId)), JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        var source = await _client.GetFromJsonAsync<RaceDto>($"/api/races/{sourceId}", JsonOptions);
+        var sourceResponse = await _client.GetFromJsonAsync<GetRaceResponse>($"/api/races/{sourceId}", JsonOptions);
+        var source = sourceResponse?.Race;
         Assert.IsNotNull(source);
         Assert.AreEqual(RaceStatus.Rescheduled, source.Status);
         Assert.AreEqual(replacementId, source.ReplacementRaceId);
@@ -117,15 +144,16 @@ public class RaceEndpointsTests
     public async Task CreateRace_WithCollectedMetadata_PersistsMetadata()
     {
         var raceId = $"race-{Guid.NewGuid()}";
-        var request = new CreateRaceRequest(
+        var request = new CreateRaceRequest(new(
             new DateOnly(2026, 8, 9), "札幌", 4, "3歳未勝利", raceId,
             GradeCode: "未勝利",
             SurfaceCode: "ダート",
             DistanceMeters: 1700,
-            DirectionCode: "右");
+            DirectionCode: "右"));
 
         var createResponse = await _client.PostAsJsonAsync("/api/races", request, JsonOptions);
-        var race = await _client.GetFromJsonAsync<RaceDto>($"/api/races/{raceId}", JsonOptions);
+        var raceResponse = await _client.GetFromJsonAsync<GetRaceResponse>($"/api/races/{raceId}", JsonOptions);
+        var race = raceResponse?.Race;
 
         Assert.AreEqual(HttpStatusCode.Created, createResponse.StatusCode);
         Assert.IsNotNull(race);
@@ -144,11 +172,12 @@ public class RaceEndpointsTests
         var raceId = DeterministicIdGenerator.BuildRaceId(date, course, raceNumber);
         var raceName = "第40回 産経賞セントウルステークス GⅡ";
         await _client.PostAsJsonAsync("/api/races",
-            new CreateRaceRequest(date, course, raceNumber, raceName, raceId), JsonOptions);
+            new CreateRaceRequest(new(date, course, raceNumber, raceName, raceId)), JsonOptions);
 
         var response = await _client.PostAsJsonAsync("/api/races/result-bulk",
-            new DeclareRaceResultBulkRequest(date, course, raceNumber, raceName), JsonOptions);
-        var race = await _client.GetFromJsonAsync<RaceDto>($"/api/races/{raceId}", JsonOptions);
+            new DeclareRaceResultBulkRequest(new(date, course, raceNumber, raceName)), JsonOptions);
+        var raceResponse = await _client.GetFromJsonAsync<GetRaceResponse>($"/api/races/{raceId}", JsonOptions);
+        var race = raceResponse?.Race;
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsNotNull(race);
@@ -168,28 +197,29 @@ public class RaceEndpointsTests
             Math.Min(8, (number + 1) / 2), 55m, number % 2 == 0 ? "F" : "M", 3, number,
             450 + number, number % 3, number, false, $"馬主{number}", $"{number}", 12.3m,
             AdditionalPrizeMoney: 10_000m)).ToArray();
-        var request = new DeclareRaceResultBulkRequest(date, course, raceNumber, "一括登録検証",
+        var request = new DeclareRaceResultBulkRequest(new(date, course, raceNumber, "一括登録検証",
             EntryCount: 18, WinningHorseName: "一括馬1", DeclaredAt: observedAt, Entries: entries,
             Weather: new(observedAt, "SUNNY", "晴", 24m, 50m, "N", 2m),
             TrackCondition: new(observedAt, "GOOD", "GOOD", "良"),
-            Payouts: new(observedAt, [new("1", 250m)], null, null, null, null));
+            Payouts: new(observedAt, [new("1", 250m)], null, null, null, null)));
 
         var first = await _client.PostAsJsonAsync("/api/races/result-bulk", request, JsonOptions);
         var firstBody = await first.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
         var raceId = DeterministicIdGenerator.BuildRaceId(date, course, raceNumber);
         Assert.AreEqual(HttpStatusCode.OK, first.StatusCode, await first.Content.ReadAsStringAsync());
         Assert.IsNotNull(firstBody);
-        Assert.IsEmpty(firstBody.Errors, string.Join(" | ", firstBody.Errors));
-        var race = await _client.GetFromJsonAsync<RaceDto>($"/api/races/{raceId}", JsonOptions);
+        Assert.IsEmpty(firstBody.Result.Errors, string.Join(" | ", firstBody.Result.Errors));
+        var raceResponse = await _client.GetFromJsonAsync<GetRaceResponse>($"/api/races/{raceId}", JsonOptions);
+        var race = raceResponse?.Race;
         var eventsAfterFirst = CountStoredEvents();
         var replay = await _client.PostAsJsonAsync("/api/races/result-bulk", request, JsonOptions);
         var eventsAfterReplay = CountStoredEvents();
 
         Assert.AreEqual(HttpStatusCode.OK, first.StatusCode);
         Assert.IsNotNull(firstBody);
-        Assert.IsEmpty(firstBody.Errors);
-        Assert.HasCount(18, firstBody.Outcomes!);
-        Assert.IsTrue(firstBody.Outcomes!.All(item => item.Status == "Accepted"));
+        Assert.IsEmpty(firstBody.Result.Errors);
+        Assert.HasCount(18, firstBody.Result.Outcomes!);
+        Assert.IsTrue(firstBody.Result.Outcomes!.All(item => item.Status == "Accepted"));
         Assert.IsNotNull(race);
         Assert.HasCount(18, race.Entries);
         Assert.HasCount(18, race.EntryResults);
@@ -213,23 +243,24 @@ public class RaceEndpointsTests
         const string horseName = "識別子付き競走馬";
         const string sourceIdentity =
             "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002026123456/00";
-        var request = new DeclareRaceResultBulkRequest(date, course, 1, "主体ID検証",
+        var request = new DeclareRaceResultBulkRequest(new(date, course, 1, "主体ID検証",
             EntryCount: 1, IsRaceCard: true,
             Entries:
             [
                 new RaceResultEntryBulkDto(1, null, null, null, null, null, null,
                     HorseName: horseName, JockeyName: "▲識別 騎手", TrainerName: "識別 調教師（美浦）",
                     HorseSourceIdentity: sourceIdentity),
-            ]);
+            ]));
 
         var response = await _client.PostAsJsonAsync("/api/races/result-bulk", request, JsonOptions);
         var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsNotNull(body);
-        Assert.IsEmpty(body.Errors, string.Join(" | ", body.Errors));
-        Assert.IsTrue(body.CorePersisted);
-        var race = await _client.GetFromJsonAsync<RaceDto>($"/api/races/{body.RaceId}", JsonOptions);
+        Assert.IsEmpty(body.Result.Errors, string.Join(" | ", body.Result.Errors));
+        Assert.IsTrue(body.Result.CorePersisted);
+        var raceResponse = await _client.GetFromJsonAsync<GetRaceResponse>($"/api/races/{body.Result.RaceId}", JsonOptions);
+        var race = raceResponse?.Race;
         Assert.IsNotNull(race);
         Assert.IsEmpty(race.EntryResults);
         var entry = race.Entries.Single();
@@ -267,27 +298,30 @@ public class RaceEndpointsTests
         var date = new DateOnly(2026, 9, 20);
         var course = $"PREFLIGHT-{Guid.NewGuid():N}";
         var name = $"事前判定馬{Guid.NewGuid():N}";
-        var first = new DeclareRaceResultBulkRequest(date, course, 1, "事前判定", EntryCount: 1,
+        var first = new DeclareRaceResultBulkRequest(new(date, course, 1, "事前判定", EntryCount: 1,
             IsRaceCard: true,
-            Entries: [new(1, null, null, null, null, null, null, HorseName: name)]);
+            Entries: [new(1, null, null, null, null, null, null, HorseName: name)]));
         var firstResponse = await _client.PostAsJsonAsync("/api/races/result-bulk", first, JsonOptions);
         firstResponse.EnsureSuccessStatusCode();
         const string identity = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002026654321/00";
         var second = first with
         {
-            IsRaceCard = true,
-            Entries = [new(1, null, null, null, null, null, null, HorseName: name, HorseSourceIdentity: identity)],
+            Result = first.Result! with
+            {
+                IsRaceCard = true,
+                Entries = [new(1, null, null, null, null, null, null, HorseName: name, HorseSourceIdentity: identity)],
+            },
         };
 
         var eventsBefore = CountStoredEvents();
         var response = await _client.PostAsJsonAsync("/api/races/result-bulk", second, JsonOptions);
         var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        Assert.IsTrue(body!.Errors.Any(x => x.Contains("HorseIdentityEvidenceRequired", StringComparison.Ordinal)), string.Join(" | ", body.Errors));
-        Assert.IsFalse(body.CorePersisted);
+        Assert.IsTrue(body!.Result.Errors.Any(x => x.Contains("HorseIdentityEvidenceRequired", StringComparison.Ordinal)), string.Join(" | ", body.Result.Errors));
+        Assert.IsFalse(body.Result.CorePersisted);
         Assert.AreEqual(eventsBefore, CountStoredEvents());
         using var db = _app.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext();
-        Assert.AreEqual(0, await db.SubjectIdentificationRepairIssues.CountAsync(x => x.RequestedByRaceId == body.RaceId));
+        Assert.AreEqual(0, await db.SubjectIdentificationRepairIssues.CountAsync(x => x.RequestedByRaceId == body.Result.RaceId));
 
         var repeated = await _client.PostAsJsonAsync("/api/races/result-bulk", second, JsonOptions);
         repeated.EnsureSuccessStatusCode();
@@ -302,28 +336,29 @@ public class RaceEndpointsTests
         const string horseName = "既存ID補正馬";
         const string sourceIdentity =
             "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002026654321/00";
-        var initial = new DeclareRaceResultBulkRequest(date, course, 2, "既存ID補正",
+        var initial = new DeclareRaceResultBulkRequest(new(date, course, 2, "既存ID補正",
             EntryCount: 1, WinningHorseName: horseName, DeclaredAt: DateTimeOffset.UtcNow,
-            Entries: [new(1, 1, "1:36.0", null, null, null, null, HorseName: horseName)]);
+            Entries: [new(1, 1, "1:36.0", null, null, null, null, HorseName: horseName)]));
         var initialResponse = await _client.PostAsJsonAsync("/api/races/result-bulk", initial, JsonOptions);
         var initialBody = await initialResponse.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
         Assert.IsNotNull(initialBody);
 
-        var refresh = new DeclareRaceResultBulkRequest(date, course, 2, "既存ID補正", EntryCount: 1,
+        var refresh = new DeclareRaceResultBulkRequest(new(date, course, 2, "既存ID補正", EntryCount: 1,
             Entries:
             [
                 new(1, null, null, null, null, null, null, HorseName: horseName,
                     HorseSourceIdentity: sourceIdentity),
             ],
-            TargetRaceId: initialBody.RaceId, RefreshExistingData: true, IsRaceCard: true);
+            TargetRaceId: initialBody.Result.RaceId, RefreshExistingData: true, IsRaceCard: true));
         var refreshResponse = await _client.PostAsJsonAsync("/api/races/result-bulk", refresh, JsonOptions);
         var refreshBody = await refreshResponse.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
-        var race = await _client.GetFromJsonAsync<RaceDto>($"/api/races/{initialBody.RaceId}", JsonOptions);
+        var raceResponse = await _client.GetFromJsonAsync<GetRaceResponse>($"/api/races/{initialBody.Result.RaceId}", JsonOptions);
+        var race = raceResponse?.Race;
 
         Assert.AreEqual(HttpStatusCode.OK, refreshResponse.StatusCode);
         Assert.IsNotNull(race);
-        Assert.IsFalse(refreshBody!.CorePersisted);
-        Assert.IsTrue(refreshBody.Errors.Any(error => error.Contains("HorseIdentityEvidenceRequired")), string.Join(" | ", refreshBody.Errors));
+        Assert.IsFalse(refreshBody!.Result.CorePersisted);
+        Assert.IsTrue(refreshBody.Result.Errors.Any(error => error.Contains("HorseIdentityEvidenceRequired")), string.Join(" | ", refreshBody.Result.Errors));
         Assert.AreEqual(DeterministicIdGenerator.BuildHorseId(horseName),
             race.Entries.Single().HorseId);
     }
@@ -332,15 +367,15 @@ public class RaceEndpointsTests
     public async Task DeclareRaceResultBulk_InvalidEntries_ReturnsStructuredRejections()
     {
         var response = await _client.PostAsJsonAsync("/api/races/result-bulk",
-            new DeclareRaceResultBulkRequest(new DateOnly(2026, 9, 14), $"INVALID-{Guid.NewGuid():N}", 1,
-                "入力検証", Entries: [new(0, null, null, null, null, null, null)]), JsonOptions);
+            new DeclareRaceResultBulkRequest(new(new DateOnly(2026, 9, 14), $"INVALID-{Guid.NewGuid():N}", 1,
+                "入力検証", Entries: [new(0, null, null, null, null, null, null)])), JsonOptions);
         var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsNotNull(body);
-        Assert.HasCount(1, body.Outcomes!);
-        Assert.AreEqual("Rejected", body.Outcomes![0].Status);
-        Assert.AreEqual("InvalidHorseNumber", body.Outcomes[0].ErrorCode);
+        Assert.HasCount(1, body.Result.Outcomes!);
+        Assert.AreEqual("Rejected", body.Result.Outcomes![0].Status);
+        Assert.AreEqual("InvalidHorseNumber", body.Result.Outcomes[0].ErrorCode);
     }
 
     [TestMethod]
@@ -348,15 +383,15 @@ public class RaceEndpointsTests
     {
         var eventsBefore = CountStoredEvents();
         var response = await _client.PostAsJsonAsync("/api/races/result-bulk",
-            new DeclareRaceResultBulkRequest(new DateOnly(2026, 9, 21), $"HYBRID-{Guid.NewGuid():N}", 1,
+            new DeclareRaceResultBulkRequest(new(new DateOnly(2026, 9, 21), $"HYBRID-{Guid.NewGuid():N}", 1,
                 "混在入力", IsRaceCard: true,
-                Entries: [new(1, 1, "1:35.0", null, null, null, null, HorseName: "混在馬")]), JsonOptions);
+                Entries: [new(1, 1, "1:35.0", null, null, null, null, HorseName: "混在馬")])), JsonOptions);
         var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsNotNull(body);
-        Assert.IsFalse(body.CorePersisted);
-        Assert.IsTrue(body.Outcomes!.All(x => x.ErrorCode == "RaceCardContainsResultData"));
+        Assert.IsFalse(body.Result.CorePersisted);
+        Assert.IsTrue(body.Result.Outcomes!.All(x => x.ErrorCode == "RaceCardContainsResultData"));
         Assert.AreEqual(eventsBefore, CountStoredEvents());
     }
 
@@ -365,17 +400,17 @@ public class RaceEndpointsTests
     {
         var eventsBefore = CountStoredEvents();
         var response = await _client.PostAsJsonAsync("/api/races/result-bulk",
-            new DeclareRaceResultBulkRequest(new DateOnly(2026, 9, 14), $"PREVALIDATE-{Guid.NewGuid():N}", 2,
+            new DeclareRaceResultBulkRequest(new(new DateOnly(2026, 9, 14), $"PREVALIDATE-{Guid.NewGuid():N}", 2,
                 "事前検証", EntryCount: 1,
-                Entries: [new(1, 1, "1:40.0", null, null, null, null, HorseName: "残してはいけない馬")]),
+                Entries: [new(1, 1, "1:40.0", null, null, null, null, HorseName: "残してはいけない馬")])),
             JsonOptions);
         var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsNotNull(body);
-        Assert.IsNotEmpty(body.Errors);
-        Assert.AreEqual("Failed", body.Outcomes![0].Status);
-        Assert.AreEqual("RaceBulkValidationFailed", body.Outcomes[0].ErrorCode);
+        Assert.IsNotEmpty(body.Result.Errors);
+        Assert.AreEqual("Failed", body.Result.Outcomes![0].Status);
+        Assert.AreEqual("RaceBulkValidationFailed", body.Result.Outcomes[0].ErrorCode);
         Assert.AreEqual(eventsBefore, CountStoredEvents());
     }
 
@@ -393,7 +428,7 @@ public class RaceEndpointsTests
         var horseId = $"horse-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2026, 8, 9), "札幌", 4, "3歳未勝利", raceId),
+            new CreateRaceRequest(new(new DateOnly(2026, 8, 9), "札幌", 4, "3歳未勝利", raceId)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/horses",
@@ -401,14 +436,15 @@ public class RaceEndpointsTests
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
-            new PublishRaceCardRequest(1),
+            new PublishRaceCardRequest(new(1)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(horseId, 1, null, null, null, null, null, null, null, null),
+            new RegisterEntryRequest(new(horseId, 1, null, null, null, null, null, null, null, null)),
             JsonOptions);
 
-        var race = await _client.GetFromJsonAsync<RaceDto>($"/api/races/{raceId}", JsonOptions);
+        var raceResponse = await _client.GetFromJsonAsync<GetRaceResponse>($"/api/races/{raceId}", JsonOptions);
+        var race = raceResponse?.Race;
 
         Assert.IsNotNull(race);
         Assert.AreEqual(1, race.Entries.Count);
@@ -425,28 +461,28 @@ public class RaceEndpointsTests
 
         await _client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 3, $"RaceSearch-{key}-A", tokyoRace1),
+            new CreateRaceRequest(new(new DateOnly(2025, 6, 15), "TOKYO", 3, $"RaceSearch-{key}-A", tokyoRace1)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 7, $"RaceSearch-{key}-B", tokyoRace2),
+            new CreateRaceRequest(new(new DateOnly(2025, 6, 15), "TOKYO", 7, $"RaceSearch-{key}-B", tokyoRace2)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "NAKAYAMA", 11, $"RaceSearch-{key}-C", nakayamaRace),
+            new CreateRaceRequest(new(new DateOnly(2025, 6, 15), "NAKAYAMA", 11, $"RaceSearch-{key}-C", nakayamaRace)),
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/races?racecourseCode=TOKYO&raceName=RaceSearch-{key}&page=2&pageSize=1&sortBy=raceNumber&sortDescending=false");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<RaceSummaryDto>>(JsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<SearchRacesResponse>(JsonOptions);
         Assert.IsNotNull(result);
-        Assert.AreEqual(2, result.TotalCount);
-        Assert.AreEqual(2, result.TotalPages);
-        Assert.AreEqual(1, result.Items.Count);
-        Assert.AreEqual(tokyoRace2, result.Items[0].RaceId);
-        Assert.AreEqual(7, result.Items[0].RaceNumber);
+        Assert.AreEqual(2, result.Pagination.TotalCount);
+        Assert.AreEqual(2, result.Pagination.TotalPages);
+        Assert.AreEqual(1, result.Races.Count);
+        Assert.AreEqual(tokyoRace2, result.Races[0].RaceId);
+        Assert.AreEqual(7, result.Races[0].RaceNumber);
     }
 
     [TestMethod]
@@ -463,7 +499,7 @@ public class RaceEndpointsTests
 
             var createResponse = await firstClient.PostAsJsonAsync(
                 "/api/races",
-                new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 9, "Restart Persistence Cup", raceId),
+                new CreateRaceRequest(new(new DateOnly(2025, 6, 15), "TOKYO", 9, "Restart Persistence Cup", raceId)),
                 JsonOptions);
 
             Assert.AreEqual(HttpStatusCode.Created, createResponse.StatusCode);
@@ -479,17 +515,18 @@ public class RaceEndpointsTests
                 var getResponse = await secondClient.GetAsync($"/api/races/{raceId}");
                 Assert.AreEqual(HttpStatusCode.OK, getResponse.StatusCode);
 
-                var race = await getResponse.Content.ReadFromJsonAsync<RaceDto>(JsonOptions);
+                var raceEnvelope = await getResponse.Content.ReadFromJsonAsync<GetRaceResponse>(JsonOptions);
+                var race = raceEnvelope?.Race;
                 Assert.IsNotNull(race);
                 Assert.AreEqual(raceId, race.RaceId);
 
                 var searchResponse = await secondClient.GetAsync($"/api/races?raceId={raceId}");
                 Assert.AreEqual(HttpStatusCode.OK, searchResponse.StatusCode);
 
-                var result = await searchResponse.Content.ReadFromJsonAsync<PagedResponse<RaceSummaryDto>>(JsonOptions);
+                var result = await searchResponse.Content.ReadFromJsonAsync<SearchRacesResponse>(JsonOptions);
                 Assert.IsNotNull(result);
-                Assert.AreEqual(1, result.TotalCount);
-                Assert.AreEqual(raceId, result.Items[0].RaceId);
+                Assert.AreEqual(1, result.Pagination.TotalCount);
+                Assert.AreEqual(raceId, result.Races[0].RaceId);
             }
             finally
             {
@@ -510,12 +547,12 @@ public class RaceEndpointsTests
         var raceId = $"race-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId),
+            new CreateRaceRequest(new(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId)),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
-            new PublishRaceCardRequest(18),
+            new PublishRaceCardRequest(new(18)),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -527,16 +564,16 @@ public class RaceEndpointsTests
         var raceId = $"race-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId),
+            new CreateRaceRequest(new(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId)),
             JsonOptions);
 
         var firstResponse = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
-            new PublishRaceCardRequest(18),
+            new PublishRaceCardRequest(new(18)),
             JsonOptions);
         var secondResponse = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
-            new PublishRaceCardRequest(18),
+            new PublishRaceCardRequest(new(18)),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, firstResponse.StatusCode);
@@ -549,16 +586,16 @@ public class RaceEndpointsTests
         var raceId = $"race-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId),
+            new CreateRaceRequest(new(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
-            new PublishRaceCardRequest(18),
+            new PublishRaceCardRequest(new(18)),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/result",
-            new DeclareRaceResultRequest("ディープインパクト", DateTimeOffset.UtcNow),
+            new DeclareRaceResultRequest(new("ディープインパクト", DateTimeOffset.UtcNow)),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -570,12 +607,12 @@ public class RaceEndpointsTests
         var raceId = $"race-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId),
+            new CreateRaceRequest(new(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId)),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/result",
-            new DeclareRaceResultRequest("ディープインパクト", DateTimeOffset.UtcNow),
+            new DeclareRaceResultRequest(new("ディープインパクト", DateTimeOffset.UtcNow)),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
@@ -591,7 +628,7 @@ public class RaceEndpointsTests
 
         await _client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 12, 28), "NAKAYAMA", 11, "有馬記念", raceId),
+            new CreateRaceRequest(new(new DateOnly(2025, 12, 28), "NAKAYAMA", 11, "有馬記念", raceId)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/horses",
@@ -599,35 +636,35 @@ public class RaceEndpointsTests
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
-            new PublishRaceCardRequest(16),
+            new PublishRaceCardRequest(new(16)),
             JsonOptions);
 
         var entryResponse = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(horseId, 1, null, null, 1, 57.0m, "M", 4, 450.0m, 0.0m, entryId),
+            new RegisterEntryRequest(new(horseId, 1, null, null, 1, 57.0m, "M", 4, 450.0m, 0.0m, RunningStyleCode: entryId)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, entryResponse.StatusCode);
 
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/result",
-            new DeclareRaceResultRequest("イクイノックス", declaredAt),
+            new DeclareRaceResultRequest(new("イクイノックス", declaredAt)),
             JsonOptions);
 
         var entryResultResponse = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries/{entryId}/result",
-            new DeclareEntryResultRequest(1, "2:11.3", null, "35.1", null, null),
+            new DeclareEntryResultRequest(new(1, "2:11.3", null, "35.1", null, null)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, entryResultResponse.StatusCode);
 
         var payoutResponse = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/payout",
-            new DeclarePayoutResultRequest(
+            new DeclarePayoutResultRequest(new(
                 declaredAt,
                 WinPayouts: new[] { new PayoutEntryDto("1", 350m) },
                 PlacePayouts: null,
                 QuinellaPayouts: null,
                 ExactaPayouts: null,
-                TrifectaPayouts: null),
+                TrifectaPayouts: null)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, payoutResponse.StatusCode);
 
@@ -647,7 +684,7 @@ public class RaceEndpointsTests
 
         await _client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 12, 28), "NAKAYAMA", 11, "有馬記念", raceId),
+            new CreateRaceRequest(new(new DateOnly(2025, 12, 28), "NAKAYAMA", 11, "有馬記念", raceId)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/horses",
@@ -655,24 +692,24 @@ public class RaceEndpointsTests
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
-            new PublishRaceCardRequest(16),
+            new PublishRaceCardRequest(new(16)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(horseId, 1, null, null, 1, 57.0m, "M", 4, 450.0m, 0.0m, entryId),
+            new RegisterEntryRequest(new(horseId, 1, null, null, 1, 57.0m, "M", 4, 450.0m, 0.0m, RunningStyleCode: entryId)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/result",
-            new DeclareRaceResultRequest("イクイノックス", DateTimeOffset.UtcNow),
+            new DeclareRaceResultRequest(new("イクイノックス", DateTimeOffset.UtcNow)),
             JsonOptions);
 
         var first = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries/{entryId}/result",
-            new DeclareEntryResultRequest(1, "2:11.3", null, "35.1", null, null),
+            new DeclareEntryResultRequest(new(1, "2:11.3", null, "35.1", null, null)),
             JsonOptions);
         var second = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries/{entryId}/result",
-            new DeclareEntryResultRequest(1, "2:11.3", null, "35.1", null, null),
+            new DeclareEntryResultRequest(new(1, "2:11.3", null, "35.1", null, null)),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, first.StatusCode);
@@ -689,7 +726,7 @@ public class RaceEndpointsTests
 
         await _client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 12, 28), "NAKAYAMA", 11, "有馬記念", raceId),
+            new CreateRaceRequest(new(new DateOnly(2025, 12, 28), "NAKAYAMA", 11, "有馬記念", raceId)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/horses",
@@ -697,36 +734,36 @@ public class RaceEndpointsTests
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
-            new PublishRaceCardRequest(16),
+            new PublishRaceCardRequest(new(16)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(horseId, 1, null, null, 1, 57.0m, "M", 4, 450.0m, 0.0m, entryId),
+            new RegisterEntryRequest(new(horseId, 1, null, null, 1, 57.0m, "M", 4, 450.0m, 0.0m, RunningStyleCode: entryId)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/result",
-            new DeclareRaceResultRequest("イクイノックス", declaredAt),
+            new DeclareRaceResultRequest(new("イクイノックス", declaredAt)),
             JsonOptions);
 
         var first = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/payout",
-            new DeclarePayoutResultRequest(
+            new DeclarePayoutResultRequest(new(
                 declaredAt,
                 WinPayouts: new[] { new PayoutEntryDto("1", 350m) },
                 PlacePayouts: null,
                 QuinellaPayouts: null,
                 ExactaPayouts: null,
-                TrifectaPayouts: null),
+                TrifectaPayouts: null)),
             JsonOptions);
         var second = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/payout",
-            new DeclarePayoutResultRequest(
+            new DeclarePayoutResultRequest(new(
                 declaredAt,
                 WinPayouts: new[] { new PayoutEntryDto("1", 350m) },
                 PlacePayouts: null,
                 QuinellaPayouts: null,
                 ExactaPayouts: null,
-                TrifectaPayouts: null),
+                TrifectaPayouts: null)),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, first.StatusCode);
@@ -744,16 +781,16 @@ public class RaceEndpointsTests
 
         await _client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2026, 5, 30), "TOKYO", 9, "自動作成テスト", raceId),
+            new CreateRaceRequest(new(new DateOnly(2026, 5, 30), "TOKYO", 9, "自動作成テスト", raceId)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
-            new PublishRaceCardRequest(18),
+            new PublishRaceCardRequest(new(18)),
             JsonOptions);
 
         var entryResponse = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(
+            new RegisterEntryRequest(new(
                 HorseId: horseId,
                 HorseNumber: 1,
                 JockeyId: jockeyId,
@@ -768,7 +805,7 @@ public class RaceEndpointsTests
                 EntryId: entryId,
                 HorseName: "テストホース",
                 JockeyName: "テスト騎手",
-                TrainerName: "テスト調教師"),
+                TrainerName: "テスト調教師")),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.Created, entryResponse.StatusCode);
@@ -793,7 +830,7 @@ public class RaceEndpointsTests
 
         await _client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 12, 28), "NAKAYAMA", 11, "有馬記念", raceId),
+            new CreateRaceRequest(new(new DateOnly(2025, 12, 28), "NAKAYAMA", 11, "有馬記念", raceId)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/horses",
@@ -801,47 +838,48 @@ public class RaceEndpointsTests
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
-            new PublishRaceCardRequest(16),
+            new PublishRaceCardRequest(new(16)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(
+            new RegisterEntryRequest(new(
                 horseId, 1, null, null, 1, 57.0m, "M", 4, 450.0m, 0.0m,
                 EntryId: entryId,
-                OwnerName: "レース時点の馬主"),
+                OwnerName: "レース時点の馬主")),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/weather",
-            new RecordWeatherObservationRequest(observedAt, "SUNNY", "晴れ", 22.5m, 55.0m, "N", 3.2m),
+            new RecordWeatherObservationRequest(new(observedAt, "SUNNY", "晴れ", 22.5m, 55.0m, "N", 3.2m)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/track-condition",
-            new RecordTrackConditionRequest(observedAt, "GOOD", "STANDARD", "良"),
+            new RecordTrackConditionRequest(new(observedAt, "GOOD", "STANDARD", "良")),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/result",
-            new DeclareRaceResultRequest("イクイノックス", observedAt),
+            new DeclareRaceResultRequest(new("イクイノックス", observedAt)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries/{entryId}/result",
-            new DeclareEntryResultRequest(1, "2:11.3", null, "35.1", null, 500000m),
+            new DeclareEntryResultRequest(new(1, "2:11.3", null, "35.1", null, 500000m)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/payout",
-            new DeclarePayoutResultRequest(
+            new DeclarePayoutResultRequest(new(
                 observedAt,
                 WinPayouts: [new PayoutEntryDto("1", 350m)],
                 PlacePayouts: [new PayoutEntryDto("1", 180m)],
                 QuinellaPayouts: null,
                 ExactaPayouts: null,
-                TrifectaPayouts: null),
+                TrifectaPayouts: null)),
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/races/{raceId}");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
-        var race = await response.Content.ReadFromJsonAsync<RaceDto>(JsonOptions);
+        var raceEnvelope = await response.Content.ReadFromJsonAsync<GetRaceResponse>(JsonOptions);
+        var race = raceEnvelope?.Race;
         Assert.IsNotNull(race);
         Assert.AreEqual(1, race.Entries.Count);
         Assert.AreEqual(entryId, race.Entries[0].EntryId);
@@ -872,12 +910,12 @@ public class RaceEndpointsTests
         var raceId = $"race-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "東京優駿", raceId),
+            new CreateRaceRequest(new(new DateOnly(2025, 6, 15), "TOKYO", 5, "東京優駿", raceId)),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/weather",
-            new RecordWeatherObservationRequest(DateTimeOffset.UtcNow, "SUNNY", "晴れ", 22.5m, 55.0m, "N", 3.2m),
+            new RecordWeatherObservationRequest(new(DateTimeOffset.UtcNow, "SUNNY", "晴れ", 22.5m, 55.0m, "N", 3.2m)),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -889,12 +927,12 @@ public class RaceEndpointsTests
         var raceId = $"race-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "東京優駿", raceId),
+            new CreateRaceRequest(new(new DateOnly(2025, 6, 15), "TOKYO", 5, "東京優駿", raceId)),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/track-condition",
-            new RecordTrackConditionRequest(DateTimeOffset.UtcNow, "GOOD", null, "Good to Firm"),
+            new RecordTrackConditionRequest(new(DateTimeOffset.UtcNow, "GOOD", null, "Good to Firm")),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -906,11 +944,11 @@ public class RaceEndpointsTests
         var raceId = $"race-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "東京優駿", raceId),
+            new CreateRaceRequest(new(new DateOnly(2025, 6, 15), "TOKYO", 5, "東京優駿", raceId)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
-            new PublishRaceCardRequest(18),
+            new PublishRaceCardRequest(new(18)),
             JsonOptions);
 
         var openResponse = await _client.PostAsJsonAsync(
@@ -932,12 +970,12 @@ public class RaceEndpointsTests
         var raceId = $"race-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "誤ったレース名", raceId),
+            new CreateRaceRequest(new(new DateOnly(2025, 6, 15), "TOKYO", 5, "誤ったレース名", raceId)),
             JsonOptions);
 
         var response = await _client.PatchAsJsonAsync(
             $"/api/races/{raceId}",
-            new CorrectRaceDataRequest("正しいレース名", null, null, "G1", "TURF", 2400, null, "レース名の修正"),
+            new CorrectRaceDataRequest(new("正しいレース名", null, null, "G1", "TURF", 2400, null, "レース名の修正")),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);

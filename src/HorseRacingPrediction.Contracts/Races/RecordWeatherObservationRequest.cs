@@ -1,12 +1,10 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace HorseRacingPrediction.Contracts.Races;
 
-public sealed record RecordWeatherObservationRequest(
-    [property: Required] DateTimeOffset ObservationTime,
-    string? WeatherCode,
-    string? WeatherText,
-    decimal? TemperatureCelsius,
-    decimal? HumidityPercent,
-    string? WindDirectionCode,
-    decimal? WindSpeedMeterPerSecond);
+public sealed record RecordWeatherObservationRequest(RecordWeatherObservationInputDto? Observation)
+{
+    [JsonIgnore]
+    public string RaceId { get; init; } = string.Empty;
+}

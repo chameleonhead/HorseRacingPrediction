@@ -713,16 +713,9 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
     {
         ValidateRequiredText(raceId, nameof(raceId));
 
-        var request = new
-        {
-            ObservationTime = observationTime,
-            WeatherCode = weatherCode,
-            WeatherText = weatherText,
-            TemperatureCelsius = temperatureCelsius,
-            HumidityPercent = humidityPercent,
-            WindDirectionCode = windDirectionCode,
-            WindSpeedMeterPerSecond = windSpeedMeterPerSecond
-        };
+        var request = new RecordWeatherObservationRequest(new RecordWeatherObservationInputDto(
+            observationTime, weatherCode, weatherText, temperatureCelsius, humidityPercent,
+            windDirectionCode, windSpeedMeterPerSecond));
 
         var response = await _httpClient
             .PostAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}/weather", request, cancellationToken)
@@ -748,13 +741,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
     {
         ValidateRequiredText(raceId, nameof(raceId));
 
-        var request = new
-        {
-            ObservationTime = observationTime,
-            TurfConditionCode = turfConditionCode,
-            DirtConditionCode = dirtConditionCode,
-            GoingDescriptionText = goingDescriptionText
-        };
+        var request = new RecordTrackConditionRequest(new RecordTrackConditionInputDto(
+            observationTime, turfConditionCode, dirtConditionCode, goingDescriptionText));
 
         var response = await _httpClient
             .PostAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}/track-condition", request, cancellationToken)
@@ -770,7 +758,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         return $"レース {raceId} の馬場状態を記録しました。";
     }
 
-    public async Task<DeclareRaceResultBulkResponse> DeclareRaceResultBulkAsync(
+    public async Task<DeclareRaceResultBulkResultDto> DeclareRaceResultBulkAsync(
         DeclareRaceResultBulkRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -783,7 +771,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             .ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions, cancellationToken)
             .ConfigureAwait(false);
 
-        return outcome ?? new DeclareRaceResultBulkResponse(string.Empty, []);
+        return outcome?.Result ?? new DeclareRaceResultBulkResultDto(string.Empty, []);
     }
 
     public async Task RecordSourceCitationAsync(

@@ -1,4 +1,5 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Api.Security;
 
@@ -35,14 +36,15 @@ public sealed class RaceActiveCollectionEndpointFilter(CollectionPlatformStore s
         if (!string.IsNullOrWhiteSpace(routeId)) return routeId;
         foreach (var argument in context.Arguments.Where(x => x is not null))
         {
-            var type = argument!.GetType();
-            var target = type.GetProperty("TargetRaceId")?.GetValue(argument)?.ToString();
+            var contractInput = GetContractInput(argument!);
+            var type = contractInput?.GetType() ?? argument!.GetType();
+            var target = type.GetProperty("TargetRaceId")?.GetValue(contractInput)?.ToString();
             if (!string.IsNullOrWhiteSpace(target)) return target;
-            var explicitRaceId = type.GetProperty("RaceId")?.GetValue(argument)?.ToString();
+            var explicitRaceId = type.GetProperty("RaceId")?.GetValue(contractInput)?.ToString();
             if (!string.IsNullOrWhiteSpace(explicitRaceId)) return explicitRaceId;
-            if (type.GetProperty("RaceDate")?.GetValue(argument) is DateOnly date
-                && type.GetProperty("RacecourseCode")?.GetValue(argument) is string course
-                && type.GetProperty("RaceNumber")?.GetValue(argument) is int number)
+            if (type.GetProperty("RaceDate")?.GetValue(contractInput) is DateOnly date
+                && type.GetProperty("RacecourseCode")?.GetValue(contractInput) is string course
+                && type.GetProperty("RaceNumber")?.GetValue(contractInput) is int number)
             {
                 using var db = provider.CreateContext();
                 return await CollectionIdentityResolver.RaceAsync(db, date, course, number, context.HttpContext.RequestAborted);
@@ -50,4 +52,22 @@ public sealed class RaceActiveCollectionEndpointFilter(CollectionPlatformStore s
         }
         return null;
     }
+
+    private static object? GetContractInput(object argument) => argument switch
+    {
+        CreateRaceRequest { Race: { } input } => input,
+        CreateRaceFromScheduleRequest { Schedule: { } input } => input,
+        CorrectRaceDataRequest { Race: { } input } => input,
+        RegisterEntryRequest { Entry: { } input } => input,
+        UpdateEntryCollectedDataRequest { Entry: { } input } => input,
+        DeclareEntryResultRequest { Result: { } input } => input,
+        DeclareRaceResultRequest { Result: { } input } => input,
+        DeclarePayoutResultRequest { Payout: { } input } => input,
+        DeclareRaceResultBulkRequest { Result: { } input } => input,
+        MarkRaceRescheduledRequest { Reschedule: { } input } => input,
+        PublishRaceCardRequest { Card: { } input } => input,
+        RecordWeatherObservationRequest { Observation: { } input } => input,
+        RecordTrackConditionRequest { Observation: { } input } => input,
+        _ => argument
+    };
 }

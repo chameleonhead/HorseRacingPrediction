@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260930_refit-api-clients",
+  "taskId": "T3",
+  "attemptId": "T3-A1",
+  "state": "completed",
+  "taskDifficulty": "high",
+  "acceptanceCriteria": [
+    "AC2",
+    "AC4",
+    "AC5"
+  ],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose worker model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime did not expose per-worker usage"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.Contracts/Races",
+    "src/HorseRacingPrediction.Api/Endpoints/Races (R1 endpoints/readers only)",
+    "existing HTTP consumer R1 call sites",
+    "tests/HorseRacingPrediction.Contracts.Tests",
+    "tests/HorseRacingPrediction.Collector.Tests",
+    "tests/HorseRacingPrediction.Scraping.Tests",
+    "tests/scripts/test-entry-repair-local.ps1 (R1 bulk/context callers only)",
+    "docs/changes/20260930_refit-api-clients/http-contract-inventory.json",
+    "docs/changes/20260930_refit-api-clients/README.md",
+    "docs/changes/20260930_refit-api-clients/agent-audits/T3-A1.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "telemetry unavailable"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "telemetry unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "telemetry unavailable"
+  },
+  "startRevision": "c4fd22b6",
+  "endRevisionOrPatch": "working-tree:T3-R1 final source/docs/tests checkpoint",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Lead reviewed R1 DTO/body paths, both filters, consumers, source-value preservation, and literal script callers. Three findings were fixed: repair receipt stays flat; context grade unwraps; Collector null-success fallback remains with EnsureSuccessStatusCode. Final gates passed. Two broad API test rewrites were restored and the test scope split to T3-A2.",
+    "promoted": false,
+    "escapedDefects": 0,
+    "retries": 2,
+    "leadCorrections": 3,
+    "reviewPasses": 1,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

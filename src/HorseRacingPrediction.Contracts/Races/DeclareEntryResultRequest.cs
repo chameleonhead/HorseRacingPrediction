@@ -1,11 +1,13 @@
 
+using System.Text.Json.Serialization;
+
 namespace HorseRacingPrediction.Contracts.Races;
 
-public sealed record DeclareEntryResultRequest(
-    int? FinishPosition,
-    string? OfficialTime,
-    string? MarginText,
-    string? LastThreeFurlongTime,
-    string? AbnormalResultCode,
-    decimal? PrizeMoney,
-    string? CornerPositions = null);
+public sealed record DeclareEntryResultRequest(DeclareEntryResultInputDto? Result)
+{
+    [JsonIgnore]
+    public string RaceId { get; init; } = string.Empty;
+
+    [JsonIgnore]
+    public string EntryId { get; init; } = string.Empty;
+}

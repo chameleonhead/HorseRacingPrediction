@@ -46,7 +46,8 @@
     "responseShape": "new CollectionTaskAcquireResult(CollectionTaskAcquireStatus.RepairHeld) | $\"/api/v2/internal/collection/tasks/{id}/leases/{Uri.EscapeDataString(lease.LeaseToken)}\",\r\n                new CollectionTaskAcquireResult(CollectionTaskAcquireStatus.Acquired, lease) | new CollectionTaskAcquireResult(await store.ClassifyAcquireFailureAsync(id, request.DispatchGeneration, token))",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/AcquireCollectionTaskEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/internal/collection/execution-leases",
@@ -79,7 +80,8 @@
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/AcquireNextExecutionEndpoint.cs",
     "handler": "Map lambda",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/admin/collection/migrations/race-detail",
@@ -99,7 +101,8 @@
     "responseShape": "report",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/ApplyRaceDetailMigrationEndpoint.cs",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/migrations/race-entry-owner-repair",
@@ -119,7 +122,8 @@
     "responseShape": "CollectionPlatformEndpointSupport.BuildRaceEntryOwnerMigrationProgress(candidates, batch)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/ApplyRaceEntryOwnerMigrationEndpoint.cs",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/tasks/{taskId:guid}",
@@ -150,7 +154,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CancelCollectionTaskEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/internal/collection/tasks/{id:guid}/attempts",
@@ -181,7 +186,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CompleteCollectionTaskAttemptEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/admin/collection/backfill-batches",
@@ -207,7 +213,8 @@
     "responseShape": "$\"/api/v2/admin/collection/backfill-batches/{Uri.EscapeDataString(batchId)}\", batch",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CreateBackfillBatchEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/admin/collection/recovery-batches",
@@ -238,7 +245,8 @@
     "responseShape": "CollectionFailureRecoveryResult",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CreateCollectionRecoveryBatchEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/admin/collection/definitions/{definition}/revisions",
@@ -269,7 +277,8 @@
     "responseShape": "new CollectionRevisionApplyResult(definition, request.Revision, affected)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CreateCollectionRevisionEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/admin/collection/task-batches",
@@ -320,7 +329,8 @@
     "responseShape": "CollectionTaskBatchSubmissionResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CreateCollectionTaskBatchEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/admin/collection/tasks",
@@ -375,7 +385,8 @@
     "responseShape": "CollectionTaskSubmissionResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CreateCollectionTaskEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/admin/collection/known-recovery-batches",
@@ -396,7 +407,8 @@
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CreateKnownRecoveryBatchEndpoint.cs",
     "handler": "Map lambda (service/logger are DI)",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/race-entry-owner-repair-batches",
@@ -422,7 +434,8 @@
     "responseShape": "value: new RaceEntryOwnerRepairReceipt(CollectionPlatformEndpointSupport.RaceEntryOwnerMigrationBatchId,\r\n                result.TargetCount, result.TasksCreated, result.Requests.Where(x => x.TaskId.HasValue).Select(x => x.TaskId!.Value).ToArray())",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CreateRaceEntryOwnerRepairBatchEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/admin/collection/recollection-batches",
@@ -459,7 +472,8 @@
     "responseShape": "CollectionRecollectionBatchResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/CreateRecollectionBatchEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/admin/collection/backfill-batches/{id}",
@@ -485,7 +499,8 @@
     "responseShape": "batch",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetBackfillBatchEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/operations/dashboard",
@@ -505,7 +520,8 @@
     "responseShape": "new CollectionOperationsDashboard(await progressTask,\r\n                    CollectionFailureGrouping.Build(await notificationsTask), await backfillsTask, JstTime.Now())",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetCollectionDashboardEndpoint.cs",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/operations/monitoring-findings",
@@ -525,7 +541,8 @@
     "responseShape": "await service.InspectAsync(JstTime.Now(), token)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetCollectionMonitoringFindingsEndpoint.cs",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/pipeline-state",
@@ -545,7 +562,8 @@
     "responseShape": "await store.GetPipelineStateAsync(token)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetCollectionPipelineEndpoint.cs",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/operations/progress",
@@ -565,7 +583,8 @@
     "responseShape": "await store.GetProgressAsync(token)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetCollectionProgressEndpoint.cs",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/resources/{type}/{provider}/{resourceId}/definitions/{definition}",
@@ -631,7 +650,8 @@
     "responseShape": "detail",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetCollectionResourceDetailEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/resources/{type}/{provider}/{resourceId}/definitions/{definition}/state",
@@ -672,7 +692,8 @@
     "responseShape": "state",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetCollectionResourceStateEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/execution-batches/{id:guid}",
@@ -698,7 +719,8 @@
     "responseShape": "batch",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetExecutionBatchEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/failure-notification-groups/{groupKey}",
@@ -739,7 +761,8 @@
     "responseShape": "result",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetFailureNotificationGroupEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/recovery-previews/known",
@@ -759,7 +782,8 @@
     "responseShape": "await service.PreviewKnownRecoveryAsync(JstTime.Now(), token)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetKnownRecoveryPreviewEndpoint.cs",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/migration-previews/owner-identity",
@@ -779,7 +803,8 @@
     "responseShape": "await service.PreviewOwnerIdentityMigrationAsync(token)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetOwnerIdentityMigrationPreviewEndpoint.cs",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/races/{raceId}/readiness",
@@ -805,7 +830,8 @@
     "responseShape": "await store.GetReadinessAsync(raceId, token)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetRaceCollectionReadinessEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/migrations/race-entry-owner-repair",
@@ -825,7 +851,8 @@
     "responseShape": "CollectionPlatformEndpointSupport\r\n                    .BuildRaceEntryOwnerMigrationProgress(candidates, batch)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetRaceEntryOwnerMigrationEndpoint.cs",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/recollection-batches",
@@ -856,7 +883,8 @@
     "responseShape": "await store.GetRevisionRecollectionProgressAsync(new(definition), revision, conditions, token)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetRevisionRecollectionProgressEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/operations/task-view-counts",
@@ -876,7 +904,8 @@
     "responseShape": "await store.GetTaskViewCountsAsync(token)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/GetTaskViewCountsEndpoint.cs",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/internal/collection/tasks/{id:guid}/leases/{leaseId}",
@@ -912,7 +941,8 @@
     "responseShape": "new { leaseId }",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/HeartbeatCollectionTaskLeaseEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/admin/collection/backfill-batches",
@@ -932,7 +962,8 @@
     "responseShape": "await store.GetBackfillBatchesAsync(token)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/ListBackfillBatchesEndpoint.cs",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/tasks",
@@ -1028,7 +1059,8 @@
     "responseShape": "await store.SearchTasksAsync(new(parsedStatuses, resourceType, provider,\r\n                    definitionId, lane, search, createdFrom, createdTo, errorSearch, page ?? 1,\r\n                    pageSize ?? limit ?? 50, actionableOnly ?? false, latestOnly ?? false), token)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/ListCollectionTasksEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/failure-notification-groups",
@@ -1054,7 +1086,8 @@
     "responseShape": "CollectionFailureGrouping.Build(notifications)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/ListFailureNotificationGroupsEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/failure-notifications",
@@ -1095,7 +1128,8 @@
     "responseShape": "await store.GetFailureNotificationsAsync(JstTime.Now(),\r\n                    Math.Clamp(limit ?? 100, 1, 1000), actionableOnly, unpublishedOnly,\r\n                    published, parsedState, token)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/ListFailureNotificationsEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/race-entry-owner-repair-candidates",
@@ -1121,7 +1155,8 @@
     "responseShape": "new RaceEntryOwnerRepairPreview(date, races.Count, candidates)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/ListRaceEntryOwnerRepairCandidatesEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/task-batch-previews",
@@ -1147,7 +1182,8 @@
     "responseShape": "await store.PreviewBulkRequestAsync(new(request.DefinitionId), request.RequestedRevision, targets, token)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/PreviewCollectionTaskBatchEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/admin/collection/migration-previews/race-detail",
@@ -1167,7 +1203,8 @@
     "responseShape": "await store.MergeLegacyRaceDetailsAsync(false, JstTime.Now(), token)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/PreviewRaceDetailMigrationEndpoint.cs",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/migration-previews/race-entry-owner-repair",
@@ -1187,7 +1224,8 @@
     "responseShape": "CollectionPlatformEndpointSupport.BuildRaceEntryOwnerMigrationProgress(candidates, batch)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/PreviewRaceEntryOwnerMigrationEndpoint.cs",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/recollection-previews",
@@ -1207,7 +1245,8 @@
     "responseShape": "new RacePeriodRecollectionPreview(request.From, request.To,\r\n                request.To.DayNumber - request.From.DayNumber + 1, request.Provider.Trim().ToUpperInvariant())",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/PreviewRacePeriodRecollectionEndpoint.cs",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/revision-impact-previews",
@@ -1233,7 +1272,8 @@
     "responseShape": "await store.PreviewRevisionImpactAsync(new(request.DefinitionId), request.Revision,\r\n                CollectionPlatformEndpointSupport.BuildImpact(request.Impact), conditions, token)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/PreviewRevisionImpactEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/admin/collection/backfill-batches/{id}/recovery-batches",
@@ -1259,7 +1299,8 @@
     "responseShape": "value: new BackfillHoleRecoveryResult(batch.Holes.Count, created)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/RecoverBackfillHolesEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/states",
@@ -1315,7 +1356,8 @@
     "responseShape": "await store.SearchStatesAsync(new(parsed, resourceType, provider,\r\n                    definitionId, search, page ?? 1, pageSize ?? 50), token)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/SearchCollectionStatesEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/collection/pipeline",
@@ -1341,7 +1383,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/SetCollectionPipelineEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/internal/collection/execution-batches/{id:guid}",
@@ -1378,7 +1421,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/TransitionCollectionExecutionEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/horses/{horseId}",
@@ -1409,7 +1453,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/CorrectHorseDataEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/horses/{horseId}/participations",
@@ -1450,7 +1495,8 @@
     "responseShape": "ParticipationHistoryResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/GetHorseParticipationsEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/horses/{horseId}",
@@ -1481,7 +1527,8 @@
     "responseShape": "ApiContracts.HorseReadDto",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/GetHorseProfileEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/horses/{horseId}/race-history",
@@ -1512,7 +1559,8 @@
     "responseShape": "ApiContracts.HorseRaceHistoryDto",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/GetHorseRaceHistoryEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/horses/{horseId}/weight-history",
@@ -1543,7 +1591,8 @@
     "responseShape": "HorseWeightHistoryResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/GetHorseWeightHistoryEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/horses/{horseId}/aliases",
@@ -1574,7 +1623,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/MergeHorseAliasEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/horses",
@@ -1600,7 +1650,8 @@
     "responseShape": "$\"/api/horses/{horseId.Value}\", new { HorseId = horseId.Value }",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/RegisterHorseEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/horses",
@@ -1626,7 +1677,8 @@
     "responseShape": "ToPagedResponse(\r\n                            sorted,\r\n                            page,\r\n                            pageSize,\r\n                            x => new HorseSummaryResponse(\r\n                                x.HorseId,\r\n                                x.RegisteredName,\r\n                                x.NormalizedName,\r\n                                x.SexCode,\r\n                                x.BirthDate,\r\n                                x.Aliases.Count))",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/SearchHorsesEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/horses/{horseId}",
@@ -1657,7 +1709,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/UpdateHorseProfileEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/identity/horse",
@@ -1683,7 +1736,8 @@
     "responseShape": "new ResolvedIdentity(await CollectionIdentityResolver.HorseAsync(db, request.Name, request.SourceIdentity, request.BirthDate, token))",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Identity/ResolveHorseIdentityEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/identity/race",
@@ -1709,7 +1763,8 @@
     "responseShape": "new HorseRacingPrediction.Contracts.ResolvedIdentity(await CollectionIdentityResolver.RaceAsync(db, request.Date, request.Course, request.Number, token))",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Identity/ResolveRaceIdentityEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/jockeys/{jockeyId}",
@@ -1740,7 +1795,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/CorrectJockeyDataEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/jockeys/{jockeyId}/participations",
@@ -1781,7 +1837,8 @@
     "responseShape": "ParticipationHistoryResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/GetJockeyParticipationsEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/jockeys/{jockeyId}",
@@ -1812,7 +1869,8 @@
     "responseShape": "ApiContracts.JockeyDto",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/GetJockeyProfileEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/jockeys/{jockeyId}/race-history",
@@ -1843,7 +1901,8 @@
     "responseShape": "ApiContracts.JockeyRaceHistoryDto",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/GetJockeyRaceHistoryEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/jockeys/{jockeyId}/aliases",
@@ -1874,7 +1933,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/MergeJockeyAliasEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/jockeys",
@@ -1900,7 +1960,8 @@
     "responseShape": "$\"/api/jockeys/{jockeyId.Value}\", new { JockeyId = jockeyId.Value }",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/RegisterJockeyEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/jockeys",
@@ -1926,7 +1987,8 @@
     "responseShape": "ToPagedResponse(\r\n                            sorted,\r\n                            page,\r\n                            pageSize,\r\n                            x => new JockeySummaryResponse(\r\n                                x.JockeyId,\r\n                                x.DisplayName,\r\n                                x.NormalizedName,\r\n                                x.AffiliationCode,\r\n                                x.Aliases.Count))",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/SearchJockeysEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/jockeys/{jockeyId}",
@@ -1957,7 +2019,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/UpdateJockeyProfileEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/races/{raceId}/ml-prediction",
@@ -1988,7 +2051,8 @@
     "responseShape": "ApiContracts.MlPredictionResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/MachineLearning/GetMlPredictionEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/ml/train",
@@ -2008,7 +2072,8 @@
     "responseShape": "new { TrainedRaceCount = finishedRaces.Count, IsModelTrained = predictor.IsModelTrained }",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/MachineLearning/TrainMlModelEndpoint.cs",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/memos/{memoId}/subjects",
@@ -2039,7 +2104,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Memos/ChangeMemoSubjectsEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/memos",
@@ -2065,7 +2131,8 @@
     "responseShape": "$\"/api/memos/{memoId.Value}\", new { MemoId = memoId.Value }",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Memos/CreateMemoEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/memos/{memoId}",
@@ -2091,7 +2158,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Memos/DeleteMemoEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/memos/by-subject/{subjectType}/{subjectId}",
@@ -2122,7 +2190,8 @@
     "responseShape": "response",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Memos/GetMemosBySubjectEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/memos/{memoId}",
@@ -2153,7 +2222,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Memos/UpdateMemoEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/admin/repairs/owner-identity/execute",
@@ -2179,7 +2249,8 @@
     "responseShape": "receipts",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Owners/ExecuteOwnerIdentityRecoveryEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/owners/{ownerId}",
@@ -2215,7 +2286,8 @@
     "responseShape": "new OwnerDetailResponse(owner, currentHorses, relatedTrainers, entries, mergeHistory, hasMoreParticipations, ownerTopHorses)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Owners/GetOwnerEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/owners/{ownerId}/merge",
@@ -2246,7 +2318,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Owners/MergeOwnerEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/admin/repairs/owner-identity",
@@ -2266,7 +2339,8 @@
     "responseShape": "result",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Owners/PreviewOwnerIdentityRecoveryEndpoint.cs",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/owners",
@@ -2292,7 +2366,8 @@
     "responseShape": "owners.OrderBy(x => x.DisplayName, StringComparer.Ordinal).ToList()",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Owners/SearchOwnersEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/owners/{ownerId}",
@@ -2323,7 +2398,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Owners/UpdateOwnerEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/predictions/{predictionTicketId}/betting-suggestions",
@@ -2354,7 +2430,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/AddBettingSuggestionEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/predictions/{predictionTicketId}/marks",
@@ -2385,7 +2462,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/AddPredictionMarkEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/predictions/{predictionTicketId}/rationales",
@@ -2416,7 +2494,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/AddPredictionRationaleEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/predictions/{predictionTicketId}",
@@ -2447,7 +2526,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/CorrectPredictionMetadataEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/predictions",
@@ -2473,7 +2553,8 @@
     "responseShape": "$\"/api/predictions/{predictionTicketId.Value}\", new { PredictionTicketId = predictionTicketId.Value }",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/CreatePredictionTicketEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/predictions/{predictionTicketId}/evaluate",
@@ -2504,7 +2585,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/EvaluatePredictionTicketEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/predictions/{predictionTicketId}/finalize",
@@ -2530,7 +2612,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/FinalizePredictionTicketEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/predictions/{predictionTicketId}",
@@ -2561,7 +2644,8 @@
     "responseShape": "PredictionTicketResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/GetPredictionTicketEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/predictions/{predictionTicketId}/recalculate-evaluation",
@@ -2592,7 +2676,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/RecalculatePredictionEvaluationEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/predictions",
@@ -2618,7 +2703,8 @@
     "responseShape": "ToPagedResponse(\r\n                            sorted,\r\n                            page,\r\n                            pageSize,\r\n                            x =>\r\n                            {\r\n                                races.TryGetValue(x.RaceId ?? string.Empty, out var race);\r\n                                var primaryMark = x.Marks.OrderBy(m => m.PredictedRank).FirstOrDefault();\r\n                                var primaryHorseId = primaryMark is not null && race is not null\r\n                                    ? race.Entries.FirstOrDefault(e => e.EntryId == primaryMark.EntryId)?.HorseId\r\n                                    : null;\r\n                                return new PredictionTicketSummaryResponse(\r\n                                x.PredictionTicketId,\r\n                                x.RaceId,\r\n                                x.PredictorType,\r\n                                x.PredictorId,\r\n                                x.ConfidenceScore,\r\n                                x.SummaryComment,\r\n                                x.PredictedAt,\r\n                                (ApiContracts.TicketStatus)(int)x.TicketStatus,\r\n                                (ApiContracts.EvaluationStatus)(int)x.EvaluationStatus,\r\n                                x.Marks.Count,\r\n                                race?.RaceName, race?.RaceDate, race?.RacecourseCode, race?.RaceNumber,\r\n                                primaryHorseId is null ? null : horseNames.GetValueOrDefault(primaryHorseId));\r\n                            })",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/SearchPredictionTicketsEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/predictions/{predictionTicketId}/withdraw",
@@ -2649,7 +2735,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Predictions/WithdrawPredictionTicketEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/internal/prediction-candidate-leases",
@@ -2682,7 +2769,8 @@
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/PredictionScheduling/AcquirePredictionCandidateLeasesEndpoint.cs",
     "handler": "Map lambda (IPredictionSchedule is DI)",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/internal/prediction-candidates",
@@ -2709,7 +2797,8 @@
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/PredictionScheduling/EnqueuePredictionCandidatesEndpoint.cs",
     "handler": "Map lambda (IPredictionSchedule is DI)",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/internal/prediction-candidates/{raceId}",
@@ -2747,7 +2836,8 @@
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/PredictionScheduling/TransitionPredictionCandidateEndpoint.cs",
     "handler": "Map lambda (IPredictionSchedule is DI)",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/admin/races/{raceId}/entry-repairs",
@@ -2780,7 +2870,8 @@
     "handler": "RaceEntryRepairOperations.ApplyAsync",
     "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/races/{raceId}/close",
@@ -2806,7 +2897,10 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/CloseRaceLifecycleEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": false,
+    "responseJsonPath": null,
+    "requestJsonPath": null
   },
   {
     "path": "/api/races/{raceId}",
@@ -2837,7 +2931,10 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/CorrectRaceDataEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true,
+    "responseJsonPath": null,
+    "requestJsonPath": "race"
   },
   {
     "path": "/api/races",
@@ -2849,21 +2946,29 @@
         "type": "CreateRaceRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "HorseRacingPrediction.Contracts.Races.CreateRaceResponse",
+        "status": 201
+      }
+    ],
     "successOutcomes": [
       {
         "status": 201,
-        "payloadExpression": "$\"/api/races/{raceId.Value}\", new { RaceId = raceId.Value }",
+        "payloadExpression": "CreateRaceResponse",
         "kind": "Created",
         "hasData": true
       }
     ],
     "family": "Races",
     "method": "POST",
-    "responseShape": "$\"/api/races/{raceId.Value}\", new { RaceId = raceId.Value }",
+    "responseShape": "CreateRaceResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/CreateRaceEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true,
+    "responseJsonPath": "raceId",
+    "requestJsonPath": "race"
   },
   {
     "path": "/api/v2/admin/races",
@@ -2875,33 +2980,45 @@
         "type": "PrepareHorseHistoryRaceRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "HorseRacingPrediction.Contracts.Races.CreateRaceFromScheduleResponse",
+        "status": 200
+      },
+      {
+        "type": "HorseRacingPrediction.Contracts.Races.CreateRaceFromScheduleResponse",
+        "status": 201
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "new { raceId = id }",
+        "payloadExpression": "CreateRaceFromScheduleResponse",
         "kind": "Ok",
         "hasData": true
       },
       {
         "status": 200,
-        "payloadExpression": "new { raceId = id }",
+        "payloadExpression": "CreateRaceFromScheduleResponse",
         "kind": "Ok",
         "hasData": true
       },
       {
         "status": 201,
-        "payloadExpression": "$\"/api/v2/admin/races/{Uri.EscapeDataString(id)}\", new { raceId = id }",
+        "payloadExpression": "CreateRaceFromScheduleResponse",
         "kind": "Created",
         "hasData": true
       }
     ],
     "family": "Races",
     "method": "POST",
-    "responseShape": "new { raceId = id } | $\"/api/v2/admin/races/{Uri.EscapeDataString(id)}\", new { raceId = id }",
+    "responseShape": "CreateRaceFromScheduleResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/CreateRaceFromScheduleEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true,
+    "responseJsonPath": "raceId",
+    "requestJsonPath": "schedule"
   },
   {
     "path": "/api/v2/admin/races/{raceId}/odds-snapshot-records",
@@ -2932,7 +3049,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/CreateRaceOddsSnapshotEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/races/{raceId}/entries/{entryId}/result",
@@ -2968,7 +3086,10 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/DeclareEntryResultEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true,
+    "responseJsonPath": null,
+    "requestJsonPath": "result"
   },
   {
     "path": "/api/races/{raceId}/payout",
@@ -2999,7 +3120,10 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/DeclarePayoutResultEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true,
+    "responseJsonPath": null,
+    "requestJsonPath": "payout"
   },
   {
     "path": "/api/races/result-bulk",
@@ -3013,14 +3137,14 @@
     ],
     "produces": [
       {
-        "type": "ApiContracts.DeclareRaceResultBulkResponse",
+        "type": "HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkResponse",
         "status": 200
       }
     ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "DeclareRaceResultBulkResponse (RaceResultBulkService.ApplyCollectedRaceResultBulkAsync)",
+        "payloadExpression": "DeclareRaceResultBulkResponse",
         "hasData": true,
         "kind": "Ok"
       }
@@ -3030,7 +3154,10 @@
     "responseShape": "DeclareRaceResultBulkResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/DeclareRaceResultBulkEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true,
+    "responseJsonPath": "result",
+    "requestJsonPath": "result"
   },
   {
     "path": "/api/races/{raceId}/result",
@@ -3061,7 +3188,10 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/DeclareRaceResultEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true,
+    "responseJsonPath": null,
+    "requestJsonPath": "result"
   },
   {
     "path": "/api/races/{raceId}/comparison",
@@ -3092,7 +3222,8 @@
     "responseShape": "PredictionComparisonViewReadModel",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/GetPredictionComparisonEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/races/{raceId}/entry-repair/assignment-fence-state",
@@ -3120,7 +3251,8 @@
     "handler": "RaceEntryRepairOperations.GetFenceAsync",
     "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/races/{raceId}",
@@ -3134,24 +3266,27 @@
     ],
     "produces": [
       {
-        "type": "RaceResponse",
+        "type": "HorseRacingPrediction.Contracts.Races.GetRaceResponse",
         "status": 200
       }
     ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "response",
+        "payloadExpression": "GetRaceResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Races",
     "method": "GET",
-    "responseShape": "RaceResponse",
+    "responseShape": "GetRaceResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/GetRaceEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false,
+    "responseJsonPath": "race",
+    "requestJsonPath": null
   },
   {
     "path": "/api/v2/admin/races/{raceId}/entry-repair/inspection",
@@ -3179,7 +3314,8 @@
     "handler": "RaceEntryRepairOperations.GetInspectionAsync",
     "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/races/{raceId}/entry-repair/hold-state",
@@ -3207,7 +3343,8 @@
     "handler": "RaceEntryRepairOperations.GetHoldAsync",
     "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/races/{raceId}/context",
@@ -3221,24 +3358,27 @@
     ],
     "produces": [
       {
-        "type": "ApiContracts.RacePredictionContextDto",
+        "type": "HorseRacingPrediction.Contracts.Races.GetRacePredictionContextResponse",
         "status": 200
       }
     ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "result",
+        "payloadExpression": "GetRacePredictionContextResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Races",
     "method": "GET",
-    "responseShape": "ApiContracts.RacePredictionContextDto",
+    "responseShape": "GetRacePredictionContextResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/GetRacePredictionContextEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false,
+    "responseJsonPath": "context",
+    "requestJsonPath": null
   },
   {
     "path": "/api/v2/admin/races/{raceId}/odds-snapshot-records",
@@ -3264,7 +3404,8 @@
     "responseShape": "model.OddsSnapshots",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/ListRaceOddsSnapshotsEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/races/{raceId}/reschedule",
@@ -3295,7 +3436,10 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/MarkRaceRescheduledEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true,
+    "responseJsonPath": null,
+    "requestJsonPath": "reschedule"
   },
   {
     "path": "/api/races/{raceId}/open-pre-race",
@@ -3321,7 +3465,10 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/OpenPreRaceEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": false,
+    "responseJsonPath": null,
+    "requestJsonPath": null
   },
   {
     "path": "/api/v2/admin/races/{raceId}/entry-repair-previews",
@@ -3354,7 +3501,8 @@
     "handler": "RaceEntryRepairOperations.PreviewAsync",
     "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/races/{raceId}/card/publish",
@@ -3385,7 +3533,10 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/PublishRaceCardEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true,
+    "responseJsonPath": null,
+    "requestJsonPath": "card"
   },
   {
     "path": "/api/races/{raceId}/track-condition",
@@ -3416,7 +3567,10 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/RecordTrackConditionEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true,
+    "responseJsonPath": null,
+    "requestJsonPath": "observation"
   },
   {
     "path": "/api/races/{raceId}/weather",
@@ -3447,7 +3601,10 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/RecordWeatherObservationEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true,
+    "responseJsonPath": null,
+    "requestJsonPath": "observation"
   },
   {
     "path": "/api/races/{raceId}/entries",
@@ -3464,21 +3621,29 @@
         "type": "RegisterEntryRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "HorseRacingPrediction.Contracts.Races.RegisterEntryResponse",
+        "status": 201
+      }
+    ],
     "successOutcomes": [
       {
         "status": 201,
-        "payloadExpression": "$\"/api/races/{raceId}/entries/{entryId}\", new { RaceId = raceId, EntryId = entryId }",
+        "payloadExpression": "RegisterEntryResponse",
         "kind": "Created",
         "hasData": true
       }
     ],
     "family": "Races",
     "method": "POST",
-    "responseShape": "$\"/api/races/{raceId}/entries/{entryId}\", new { RaceId = raceId, EntryId = entryId }",
+    "responseShape": "RegisterEntryResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/RegisterEntryEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true,
+    "responseJsonPath": "raceId, entryId",
+    "requestJsonPath": "entry"
   },
   {
     "path": "/api/v2/admin/races/{raceId}/entry-repair/hold",
@@ -3511,7 +3676,8 @@
     "handler": "RaceEntryRepairOperations.PatchHoldAsync",
     "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/races",
@@ -3523,21 +3689,29 @@
         "type": "SearchRacesRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "HorseRacingPrediction.Contracts.Races.SearchRacesResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "new PagedResponse<RaceSummaryResponse>(\r\n                            items,\r\n                            page,\r\n                            pageSize,\r\n                            totalCount,\r\n                            totalPages)",
+        "payloadExpression": "SearchRacesResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Races",
     "method": "GET",
-    "responseShape": "new PagedResponse<RaceSummaryResponse>(\r\n                            items,\r\n                            page,\r\n                            pageSize,\r\n                            totalCount,\r\n                            totalPages)",
+    "responseShape": "SearchRacesResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/SearchRacesEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false,
+    "responseJsonPath": "races, pagination",
+    "requestJsonPath": null
   },
   {
     "path": "/api/races/{raceId}/start",
@@ -3563,7 +3737,10 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/StartRaceEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": false,
+    "responseJsonPath": null,
+    "requestJsonPath": null
   },
   {
     "path": "/api/races/{raceId}/entries/{entryId}",
@@ -3585,21 +3762,29 @@
         "type": "UpdateEntryCollectedDataRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "HorseRacingPrediction.Contracts.Races.UpdateEntryCollectedDataResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "new { RaceId = raceId, EntryId = entryId }",
+        "payloadExpression": "UpdateEntryCollectedDataResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Races",
     "method": "PUT",
-    "responseShape": "new { RaceId = raceId, EntryId = entryId }",
+    "responseShape": "UpdateEntryCollectedDataResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/UpdateEntryCollectedDataEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true,
+    "responseJsonPath": "raceId, entryId",
+    "requestJsonPath": "entry"
   },
   {
     "path": "/api/v2/admin/races/{raceId}/entry-repair/hold",
@@ -3632,7 +3817,8 @@
     "handler": "RaceEntryRepairOperations.PutHoldAsync",
     "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/admin/repairs/20260913-jra-horse-identity/apply",
@@ -3658,7 +3844,8 @@
     "responseShape": "new ApplyHorseIdentityRepairResponse(HorseIdentityRepairId, applied,\r\n                            completed.Length, disabled, running)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Repairs/ApplyHorseIdentityRepairEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/admin/repairs/subject-name-normalization/apply",
@@ -3684,7 +3871,8 @@
     "responseShape": "new SubjectNameNormalizationApplyResult(request.Items.Count,\r\n                        results.Count(x => x.Status == \"Applied\"), results.Count(x => x.Status == \"Skipped\"),\r\n                        results.Count(x => x.Status == \"Failed\"), results)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Repairs/ApplySubjectNameNormalizationEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/admin/repairs/subject-identification/dismiss",
@@ -3710,7 +3898,8 @@
     "responseShape": "new DismissSubjectIdentificationFailuresResponse(\r\n                            result.SelectedCount, result.DismissedCount, result.AlreadyClosedCount)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Repairs/DismissSubjectIdentificationFailuresEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/admin/repairs/subject-identification/execute",
@@ -3742,7 +3931,8 @@
     "responseShape": "value: new ExecuteSubjectIdentificationRepairResponse(\r\n                                request.Items.Count, issueReceipts.Count(x => x.CreatedTask),\r\n                                issueReceipts.Count(x => !x.CreatedTask), issueReceipts.Where(x => x.TaskId.HasValue).Select(x => x.TaskId!.Value).ToArray()) | value: new ExecuteSubjectIdentificationRepairResponse(\r\n                            request.Items.Count, receipts.Count(x => x.CreatedTask), receipts.Count(x => !x.CreatedTask),\r\n                            receipts.Where(x => x.TaskId.HasValue).Select(x => x.TaskId!.Value).Distinct().ToArray(), merged, disabled, running)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Repairs/ExecuteSubjectIdentificationRepairEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/admin/repairs/20260913-jra-horse-identity",
@@ -3762,7 +3952,8 @@
     "responseShape": "await BuildHorseIdentityRepairPreviewAsync(db, collectionStore, token).ConfigureAwait(false)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Repairs/GetHorseIdentityRepairEndpoint.cs",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/admin/repairs/subject-identification",
@@ -3782,7 +3973,8 @@
     "responseShape": "new SubjectIdentificationRepairPreviewResponse(candidates)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Repairs/GetSubjectIdentificationRepairEndpoint.cs",
     "requestPresent": false,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/admin/repairs/subject-name-normalization",
@@ -3823,7 +4015,8 @@
     "responseShape": "new SubjectNameNormalizationPage(items, searchPage.TotalCount, actualPage, actualPageSize)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Repairs/GetSubjectNameNormalizationEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/subjects/{kind}/{subjectId}/profiles/current",
@@ -3854,7 +4047,8 @@
     "responseShape": "new JraSubjectProfileDto(kind, profile.Name, profile.SourceIdentity,\r\n                        profile.SourceUrl, profile.Fields, profile.AcquiredAt)",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Subjects/GetSubjectProfileEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/v2/admin/subjects/{kind}/{subjectId}/profile",
@@ -3890,7 +4084,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Subjects/PutSubjectProfileEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/trainers/{trainerId}",
@@ -3921,7 +4116,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/CorrectTrainerDataEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/trainers/{trainerId}/participations",
@@ -3962,7 +4158,8 @@
     "responseShape": "ParticipationHistoryResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/GetTrainerParticipationsEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/trainers/{trainerId}",
@@ -3993,7 +4190,8 @@
     "responseShape": "TrainerProfileResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/GetTrainerProfileEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/trainers/{trainerId}/aliases",
@@ -4024,7 +4222,8 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/MergeTrainerAliasEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/trainers",
@@ -4050,7 +4249,8 @@
     "responseShape": "$\"/api/trainers/{trainerId.Value}\", new { TrainerId = trainerId.Value }",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/RegisterTrainerEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": true
   },
   {
     "path": "/api/trainers",
@@ -4076,7 +4276,8 @@
     "responseShape": "ToPagedResponse(\r\n                            sorted,\r\n                            page,\r\n                            pageSize,\r\n                            x => new TrainerSummaryResponse(\r\n                                x.TrainerId,\r\n                                x.DisplayName,\r\n                                x.NormalizedName,\r\n                                x.AffiliationCode,\r\n                                x.Aliases.Count))",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/SearchTrainersEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": true
+    "responsePresent": true,
+    "requestBodyPresent": false
   },
   {
     "path": "/api/trainers/{trainerId}",
@@ -4107,6 +4308,7 @@
     "responseShape": null,
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/UpdateTrainerProfileEndpoint.cs",
     "requestPresent": true,
-    "responsePresent": false
+    "responsePresent": false,
+    "requestBodyPresent": true
   }
 ]

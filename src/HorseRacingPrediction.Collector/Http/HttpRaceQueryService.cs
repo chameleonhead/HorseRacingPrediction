@@ -32,10 +32,10 @@ public sealed class HttpRaceQueryService : IRaceQueryService
         response.EnsureSuccessStatusCode();
 
         var dto = await response.Content
-            .ReadFromJsonAsync<PagedResponseDto<RaceSummaryDto>>(JsonOptions, cancellationToken)
+            .ReadFromJsonAsync<SearchRacesResponse>(JsonOptions, cancellationToken)
             .ConfigureAwait(false);
 
-        return dto?.Items.Select(x => new RaceSearchSummaryDto(x.RaceId, x.RaceDate, x.RacecourseCode, x.RaceNumber)).ToList() ?? [];
+        return dto?.Races.Select(x => new RaceSearchSummaryDto(x.RaceId, x.RaceDate, x.RacecourseCode, x.RaceNumber)).ToList() ?? [];
     }
 
     public async Task<RacePredictionContextDto?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken = default)
@@ -45,7 +45,10 @@ public sealed class HttpRaceQueryService : IRaceQueryService
             return null;
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<RacePredictionContextDto>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        var result = await response.Content
+            .ReadFromJsonAsync<GetRacePredictionContextResponse>(JsonOptions, cancellationToken)
+            .ConfigureAwait(false);
+        return result?.Context;
     }
 
     public async Task<HorseDto?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)

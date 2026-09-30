@@ -24,11 +24,13 @@ $entries = @(1..14 | ForEach-Object {
        horseSourceIdentity = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud00202410$($_.ToString('D4'))/AB" }
 })
 $created = Post-LocalJson '/api/races/result-bulk' @{
-    raceDate = '2026-09-26'; racecourseCode = '中山'; raceNumber = 5; raceName = 'ローカル14頭補正検証';
-    gradeCode = 'G2'; entryCount = 14; isRaceCard = $true; entries = $entries
+    result = @{
+        raceDate = '2026-09-26'; racecourseCode = '中山'; raceNumber = 5; raceName = 'ローカル14頭補正検証';
+        gradeCode = 'G2'; entryCount = 14; isRaceCard = $true; entries = $entries
+    }
 }
-if (-not $created.corePersisted -or $created.errors.Count -ne 0) { throw ($created | ConvertTo-Json -Depth 8) }
-$raceId = $created.raceId
+if (-not $created.result.corePersisted -or $created.result.errors.Count -ne 0) { throw ($created | ConvertTo-Json -Depth 8) }
+$raceId = $created.result.raceId
 $repairPath = "/api/v2/admin/races/$raceId/entry-repair/inspection"
 $holdPath = "/api/v2/admin/races/$raceId/entry-repair/hold"
 $previewPath = "/api/v2/admin/races/$raceId/entry-repair-previews"
@@ -103,7 +105,7 @@ $fencedHeaders['X-Race-Assignment-Fingerprint'] = $acquired.task.entryAssignment
 Invoke-RestMethod -Method Post -Uri ($AlternateBaseUrl + "/api/v2/admin/races/$raceId/odds-snapshot-records") -Headers $fencedHeaders -ContentType 'application/json' -Body ($odds | ConvertTo-Json -Depth 5) | Out-Null
 Post-LocalJson "/api/v2/internal/collection/tasks/$taskId/attempts" @{ leaseToken = $acquired.task.leaseToken; result = 1 } | Out-Null
 $context = Invoke-RestMethod -Uri ($BaseUrl + "/api/races/$raceId/context") -Headers $headers
-if ($context.gradeCode -ne 'G3' -or @($context.entries | Where-Object { $_.ownerName }).Count -ne 14) { throw 'Grade or owner enrichment failed.' }
-[pscustomobject]@{ target = $BaseUrl; raceId = $raceId; entries = $context.entries.Count; owners = 14;
-    grade = $context.gradeCode; previewReadOnly = $true; crossProcessLock = $true; repairEventsAdded = 1; idempotent = $true;
+if ($context.context.gradeCode -ne 'G3' -or @($context.context.entries | Where-Object { $_.ownerName }).Count -ne 14) { throw 'Grade or owner enrichment failed.' }
+[pscustomobject]@{ target = $BaseUrl; raceId = $raceId; entries = $context.context.entries.Count; owners = 14;
+    grade = $context.context.gradeCode; previewReadOnly = $true; crossProcessLock = $true; repairEventsAdded = 1; idempotent = $true;
     durableHold = $true; backupVerified = $true; delayedOddsRejected = $true; currentWorkerWrite = $true; isolatedDirectory = [IO.Path]::GetDirectoryName($resolvedDatabase) }

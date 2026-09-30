@@ -190,7 +190,7 @@ public class HorseEndpointsTests
 
         await _client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 12, 28), "NAKAYAMA", 11, "有馬記念", raceId),
+            new CreateRaceRequest(new(new DateOnly(2025, 12, 28), "NAKAYAMA", 11, "有馬記念", raceId)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/horses",
@@ -198,11 +198,11 @@ public class HorseEndpointsTests
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
-            new PublishRaceCardRequest(16),
+            new PublishRaceCardRequest(new(16)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(
+            new RegisterEntryRequest(new(
                 horseId,
                 1,
                 null,
@@ -213,15 +213,15 @@ public class HorseEndpointsTests
                 4,
                 450.0m,
                 0.0m,
-                EntryId: entryId),
+                EntryId: entryId)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/result",
-            new DeclareRaceResultRequest("レースヒストリーテスト号", DateTimeOffset.UtcNow),
+            new DeclareRaceResultRequest(new("レースヒストリーテスト号", DateTimeOffset.UtcNow)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries/{entryId}/result",
-            new DeclareEntryResultRequest(1, "2:31.5", null, "34.0", null, 12000m),
+            new DeclareEntryResultRequest(new(1, "2:31.5", null, "34.0", null, 12000m)),
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/horses/{horseId}/race-history");

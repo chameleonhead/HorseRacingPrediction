@@ -25,13 +25,13 @@ public sealed class RaceBulkPersistenceCounterTests
         failure.FailNextCommit = true;
 
         var response = await http.PostAsJsonAsync("/api/races/result-bulk",
-            new DeclareRaceResultBulkRequest(new DateOnly(2026, 9, 16), $"FAIL-{Guid.NewGuid():N}", 1,
-                "commit failure"));
+            new DeclareRaceResultBulkRequest(new(new DateOnly(2026, 9, 16), $"FAIL-{Guid.NewGuid():N}", 1,
+                "commit failure")));
         var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>();
 
         response.EnsureSuccessStatusCode();
         Assert.IsNotNull(body);
-        Assert.IsNotEmpty(body.Errors);
+        Assert.IsNotEmpty(body.Result.Errors);
         Assert.AreEqual(0, CountEvents(app));
     }
 
@@ -64,8 +64,8 @@ public sealed class RaceBulkPersistenceCounterTests
         counter.Reset();
 
         var response = await http.PostAsJsonAsync("/api/races/result-bulk",
-            new DeclareRaceResultBulkRequest(date, $"COUNT-{key}", 1, "永続化計測", 18,
-                WinningHorseName: entries[0].HorseName, DeclaredAt: DateTimeOffset.UtcNow, Entries: entries));
+            new DeclareRaceResultBulkRequest(new(date, $"COUNT-{key}", 1, "永続化計測", 18,
+                WinningHorseName: entries[0].HorseName, DeclaredAt: DateTimeOffset.UtcNow, Entries: entries)));
 
         response.EnsureSuccessStatusCode();
         // Three subject set queries plus identity snapshots before/after locking and during preflight.

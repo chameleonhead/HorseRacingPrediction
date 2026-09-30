@@ -32,7 +32,7 @@ public sealed partial class JraRaceCardCollectionWorkflow
             DamsireName: x.DamsireName, CoatColor: x.CoatColor,
             HorseSourceIdentity: x.HorseSourceIdentity, JockeyProfileUrl: x.JockeyProfileUrl,
             TrainerProfileUrl: x.TrainerProfileUrl, ParticipationStatus: x.ParticipationStatus)).ToArray();
-        var saved = await _writeService.DeclareRaceResultBulkAsync(new(raceId.Date,
+        var saved = await _writeService.DeclareRaceResultBulkAsync(new(new DeclareRaceResultBulkInputDto(raceId.Date,
             RaceCourseNames.GetJraName(raceId.Course), raceId.Number, card.RaceName, EntryCount: entries.Length,
             GradeCode: card.GradeCode, DistanceMeters: card.CourseSpec?.DistanceMeters,
             SurfaceCode: card.CourseSpec is null ? null : string.Join("→", card.CourseSpec.Surfaces.Select(x => x == CourseSurface.Turf ? "芝" : "ダート")),
@@ -44,7 +44,7 @@ public sealed partial class JraRaceCardCollectionWorkflow
                 _ => null
             },
             StartTime: card.StartTime, CourseLayout: card.CourseSpec?.RawLayout,
-            Entries: entries, TargetRaceId: targetRaceId, RefreshExistingData: targetRaceId is not null, IsRaceCard: true), cancellationToken);
+            Entries: entries, TargetRaceId: targetRaceId, RefreshExistingData: targetRaceId is not null, IsRaceCard: true)), cancellationToken);
         var persistedRaceId = targetRaceId ?? saved.RaceId;
         await _writeService.RecordSourceCitationAsync([new CitationSubjectDto("Race", persistedRaceId)],
             card.Url, "JRA出馬表", cancellationToken);

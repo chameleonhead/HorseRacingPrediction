@@ -15,16 +15,18 @@ internal static class CorrectRaceDataEndpoint
                     [SwaggerOperation(Summary = "Correct race data", Description = "Corrects race metadata such as name, racecourse, grade, surface or distance")]
         async (string raceId, CorrectRaceDataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        var race = request?.Race;
+                        if (race is null) return Results.BadRequest(new[] { "Race is required." });
                         var command = new CorrectRaceDataCommand(
                             new RaceId(raceId),
-                            request.RaceName,
-                            request.RacecourseCode,
-                            request.RaceNumber,
-                            request.GradeCode,
-                            request.SurfaceCode,
-                            request.DistanceMeters,
-                            request.DirectionCode,
-                            request.Reason);
+                            race.RaceName,
+                            race.RacecourseCode,
+                            race.RaceNumber,
+                            race.GradeCode,
+                            race.SurfaceCode,
+                            race.DistanceMeters,
+                            race.DirectionCode,
+                            race.Reason);
 
                         var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                         return result.IsSuccess

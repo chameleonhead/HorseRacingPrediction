@@ -14,14 +14,16 @@ internal static class RecordTrackConditionEndpoint
                     [SwaggerOperation(Summary = "Record track condition", Description = "Records a track condition observation for a race")]
         async (string raceId, HorseRacingPrediction.Contracts.Races.RecordTrackConditionRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        var observation = request?.Observation;
+                        if (observation is null) return Results.BadRequest(new[] { "Observation is required." });
                         try
                         {
                             var command = new RecordTrackConditionObservationCommand(
                                 new RaceId(raceId),
-                                request.ObservationTime,
-                                request.TurfConditionCode,
-                                request.DirtConditionCode,
-                                request.GoingDescriptionText);
+                                observation.ObservationTime,
+                                observation.TurfConditionCode,
+                                observation.DirtConditionCode,
+                                observation.GoingDescriptionText);
 
                             var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                             return result.IsSuccess

@@ -110,16 +110,13 @@ internal static class SearchRacesEndpoint
                                 x.ReplacementRaceId))
                             .ToList();
 
-                        return Results.Ok(new PagedResponse<RaceSummaryDto>(
+                        return Results.Ok(new SearchRacesResponse(
                             items,
-                            page,
-                            pageSize,
-                            totalCount,
-                            totalPages));
+                            new PaginationDto(page, pageSize, totalCount, totalPages)));
                     })
                     .WithName("SearchRaces")
                     .WithTags("Race API")
-                    .Produces<PagedResponse<RaceSummaryDto>>(StatusCodes.Status200OK)
+                    .Produces<SearchRacesResponse>(StatusCodes.Status200OK)
                     .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest);
     }
 }

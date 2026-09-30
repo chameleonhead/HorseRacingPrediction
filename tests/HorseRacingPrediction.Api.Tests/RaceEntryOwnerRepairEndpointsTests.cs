@@ -23,21 +23,21 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
         await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", CollectionResourceType.Race,
             CollectionDefinitionRevisions.RaceDetail, "owner repair", false);
         var date = new DateOnly(2032, 9, 19);
-        var create = new DeclareRaceResultBulkRequest(date, "阪神", 11, "馬主補完検証",
+        var create = new DeclareRaceResultBulkRequest(new(date, "阪神", 11, "馬主補完検証",
             EntryCount: 1, Entries:
             [new(1, 1, "1:24.0", null, null, null, null, HorseName: "補完対象馬")],
-            WinningHorseName: "補完対象馬", DeclaredAt: DateTimeOffset.UtcNow);
+            WinningHorseName: "補完対象馬", DeclaredAt: DateTimeOffset.UtcNow));
         var createdResponse = await http.PostAsJsonAsync("/api/races/result-bulk", create);
         var created = await createdResponse.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>();
         Assert.IsNotNull(created);
-        Assert.IsEmpty(created.Errors, string.Join("; ", created.Errors));
+        Assert.IsEmpty(created.Result.Errors, string.Join("; ", created.Result.Errors));
 
         var oldDate = new DateOnly(2020, 1, 5);
-        var oldCreate = create with { RaceDate = oldDate, RaceNumber = 9, RaceName = "期間外検証" };
+        var oldCreate = create with { Result = create.Result! with { RaceDate = oldDate, RaceNumber = 9, RaceName = "期間外検証" } };
         var oldResponse = await http.PostAsJsonAsync("/api/races/result-bulk", oldCreate);
         var oldCreated = await oldResponse.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>();
         Assert.IsNotNull(oldCreated);
-        Assert.IsEmpty(oldCreated.Errors, string.Join("; ", oldCreated.Errors));
+        Assert.IsEmpty(oldCreated.Result.Errors, string.Join("; ", oldCreated.Result.Errors));
 
         var preview = await http.GetFromJsonAsync<RaceEntryOwnerRepairPreview>(
             $"/api/v2/admin/collection/race-entry-owner-repair-candidates?date={date:yyyy-MM-dd}");
@@ -55,8 +55,8 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
         var migrationPreview = await migrationPreviewResponse.Content
             .ReadFromJsonAsync<RaceEntryOwnerMigrationProgress>();
         Assert.IsNotNull(migrationPreview);
-        Assert.IsTrue(migrationPreview.Candidates.Any(x => x.RaceId == created.RaceId));
-        var outside = migrationPreview.Candidates.Single(x => x.RaceId == oldCreated.RaceId);
+        Assert.IsTrue(migrationPreview.Candidates.Any(x => x.RaceId == created.Result.RaceId));
+        var outside = migrationPreview.Candidates.Single(x => x.RaceId == oldCreated.Result.RaceId);
         Assert.AreEqual(RaceEntryOwnerRepairEligibility.OutsideCardLookupPeriod, outside.Eligibility);
         Assert.AreEqual(1, migrationPreview.Eligible);
         Assert.AreEqual(1, migrationPreview.OutsideCardLookupPeriod);
@@ -76,7 +76,7 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
         Assert.AreEqual(1, progress.Processing);
         Assert.AreEqual(0, progress.Eligible);
         Assert.AreEqual(RaceEntryOwnerRepairEligibility.ExistingRequest,
-            progress.Candidates.Single(x => x.RaceId == created.RaceId).Eligibility);
+            progress.Candidates.Single(x => x.RaceId == created.Result.RaceId).Eligibility);
         Assert.HasCount(1, (await store.GetTasksAsync()).Where(x => x.Resource.Id == preview.Candidates[0].ResourceId));
         Assert.IsFalse((await store.GetTasksAsync()).Any(x => x.Resource.Id == outside.ResourceId));
     }
@@ -89,33 +89,36 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
         using var http = client;
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var date = new DateOnly(2033, 9, 19);
-        var initial = new DeclareRaceResultBulkRequest(date, "阪神", 10, "後着補完検証",
+        var initial = new DeclareRaceResultBulkRequest(new(date, "阪神", 10, "後着補完検証",
             EntryCount: 1, Entries:
             [new(1, 1, "1:24.0", null, null, null, null, HorseName: "後着対象馬")],
-            WinningHorseName: "後着対象馬", DeclaredAt: DateTimeOffset.UtcNow);
+            WinningHorseName: "後着対象馬", DeclaredAt: DateTimeOffset.UtcNow));
         var initialResponse = await http.PostAsJsonAsync("/api/races/result-bulk", initial);
         var created = await initialResponse.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>();
         Assert.IsNotNull(created);
-        Assert.IsEmpty(created.Errors, string.Join("; ", created.Errors));
+        Assert.IsEmpty(created.Result.Errors, string.Join("; ", created.Result.Errors));
         var card = initial with
         {
-            TargetRaceId = created.RaceId,
-            RefreshExistingData = true,
-            IsRaceCard = true,
-            Entries = [new(1, null, null, null, null, null, null,
+            Result = initial.Result! with
+            {
+                TargetRaceId = created.Result.RaceId,
+                RefreshExistingData = true,
+                IsRaceCard = true,
+                Entries = [new(1, null, null, null, null, null, null,
                 HorseName: "後着対象馬", OwnerName: "補完 馬主")],
-            WinningHorseName = null,
-            DeclaredAt = null
+                WinningHorseName = null,
+                DeclaredAt = null
+            }
         };
 
         using var first = await http.PostAsJsonAsync("/api/races/result-bulk", card);
         using var replay = await http.PostAsJsonAsync("/api/races/result-bulk", card);
-        var race = await http.GetFromJsonAsync<HorseRacingPrediction.Contracts.Races.RaceDto>(
-            $"/api/races/{created.RaceId}");
+        var raceResponse = await http.GetFromJsonAsync<HorseRacingPrediction.Contracts.Races.GetRaceResponse>(
+            $"/api/races/{created.Result.RaceId}");
 
         Assert.AreEqual(HttpStatusCode.OK, first.StatusCode);
         Assert.AreEqual(HttpStatusCode.OK, replay.StatusCode);
-        Assert.IsNotNull(race);
-        Assert.AreEqual("補完 馬主", race.Entries.Single().OwnerName);
+        Assert.IsNotNull(raceResponse);
+        Assert.AreEqual("補完 馬主", raceResponse!.Race.Entries.Single().OwnerName);
     }
 }

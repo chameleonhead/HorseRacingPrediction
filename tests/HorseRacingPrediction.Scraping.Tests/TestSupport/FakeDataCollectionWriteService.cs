@@ -255,17 +255,17 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
     }
 
     public List<DeclareRaceResultBulkRequest> DeclareRaceResultBulkCalls { get; } = [];
-    public DeclareRaceResultBulkResponse? BulkWriteResponse { get; set; }
+    public DeclareRaceResultBulkResultDto? BulkWriteResponse { get; set; }
 
     /// <summary>
     /// 実際の /api/races/result-bulk エンドポイントと同様、レース確定宣言・各馬の成績・
     /// 天候・馬場状態・払戻は1件失敗しても他の項目の登録を継続し、失敗内容は
-    /// <see cref="DeclareRaceResultBulkResponse.Errors"/> に集約する挙動をインメモリで再現する。
+    /// <see cref="DeclareRaceResultBulkResultDto.Errors"/> に集約する挙動をインメモリで再現する。
     /// <see cref="FailForHorseNumber"/>・<see cref="FailDeclareRaceResult"/> による
     /// 部分失敗テストは、既存の個別Call記録（<see cref="DeclareRaceEntryResultCalls"/>等）
     /// を引き続き利用できるよう、この一括呼び出しの中でも同じリストに記録する。
     /// </summary>
-    public Task<DeclareRaceResultBulkResponse> DeclareRaceResultBulkAsync(
+    public Task<DeclareRaceResultBulkResultDto> DeclareRaceResultBulkAsync(
         DeclareRaceResultBulkRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -273,13 +273,15 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
         if (BulkWriteException is not null) throw BulkWriteException;
         if (BulkWriteResponse is not null) return Task.FromResult(BulkWriteResponse);
 
+        var input = request.Result ?? throw new InvalidOperationException("Bulk input is required.");
+
         var raceId = DeterministicIdGenerator.BuildRaceId(
-            request.RaceDate, request.RacecourseCode, request.RaceNumber);
-        UpsertRaceCalls.Add(new UpsertRaceCall(request.RaceDate.ToString("yyyy-MM-dd"), request.RacecourseCode, request.RaceNumber, request.RaceName, request.EntryCount));
+            input.RaceDate, input.RacecourseCode, input.RaceNumber);
+        UpsertRaceCalls.Add(new UpsertRaceCall(input.RaceDate.ToString("yyyy-MM-dd"), input.RacecourseCode, input.RaceNumber, input.RaceName, input.EntryCount));
 
         var errors = new List<string>();
 
-        if (!string.IsNullOrWhiteSpace(request.WinningHorseName))
+        if (!string.IsNullOrWhiteSpace(input.WinningHorseName))
         {
             if (FailDeclareRaceResult)
             {
@@ -287,13 +289,13 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
             }
             else
             {
-                DeclareRaceResultCalls.Add(new DeclareRaceResultCall(raceId, request.WinningHorseName));
+                DeclareRaceResultCalls.Add(new DeclareRaceResultCall(raceId, input.WinningHorseName));
             }
         }
 
-        if (request.Entries is not null)
+        if (input.Entries is not null)
         {
-            foreach (var entry in request.Entries)
+            foreach (var entry in input.Entries)
             {
                 if (FailForHorseNumber == entry.HorseNumber)
                 {
@@ -306,28 +308,28 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
             }
         }
 
-        if (request.Weather is not null)
+        if (input.Weather is not null)
         {
-            RecordWeatherObservationCalls.Add(new RecordWeatherObservationCall(raceId, request.Weather.WeatherText));
+            RecordWeatherObservationCalls.Add(new RecordWeatherObservationCall(raceId, input.Weather.WeatherText));
         }
 
-        if (request.TrackCondition is not null)
+        if (input.TrackCondition is not null)
         {
-            RecordTrackConditionObservationCalls.Add(new RecordTrackConditionObservationCall(raceId, request.TrackCondition.GoingDescriptionText));
+            RecordTrackConditionObservationCalls.Add(new RecordTrackConditionObservationCall(raceId, input.TrackCondition.GoingDescriptionText));
         }
 
-        if (request.Payouts is not null)
+        if (input.Payouts is not null)
         {
             DeclareRacePayoutsCalls.Add(new DeclareRacePayoutsCall(
                 raceId,
-                SerializePayouts(request.Payouts.WinPayouts),
-                SerializePayouts(request.Payouts.PlacePayouts),
-                SerializePayouts(request.Payouts.QuinellaPayouts),
-                SerializePayouts(request.Payouts.ExactaPayouts),
-                SerializePayouts(request.Payouts.TrifectaPayouts)));
+                SerializePayouts(input.Payouts.WinPayouts),
+                SerializePayouts(input.Payouts.PlacePayouts),
+                SerializePayouts(input.Payouts.QuinellaPayouts),
+                SerializePayouts(input.Payouts.ExactaPayouts),
+                SerializePayouts(input.Payouts.TrifectaPayouts)));
         }
 
-        return Task.FromResult(new DeclareRaceResultBulkResponse(raceId, errors));
+        return Task.FromResult(new DeclareRaceResultBulkResultDto(raceId, errors));
     }
 
     private static string? SerializePayouts(IReadOnlyList<PayoutEntryDto>? payouts) =>

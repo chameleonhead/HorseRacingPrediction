@@ -8,6 +8,7 @@ using HorseRacingPrediction.Contracts.Collection;
 using HorseRacingPrediction.Contracts.Common;
 using HorseRacingPrediction.Contracts.Horses;
 using HorseRacingPrediction.Contracts.Identity;
+using HorseRacingPrediction.Contracts.Jockeys;
 using HorseRacingPrediction.Contracts.Owners;
 using HorseRacingPrediction.Contracts.Races;
 using HorseRacingPrediction.Contracts.Subjects;
@@ -25,26 +26,28 @@ public sealed class SharedCollectionIdentityTests
         using var http = client;
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         const string source = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002022103875/DA";
-        var dirty = new DeclareRaceResultBulkRequest(new(2037, 9, 27), "中山", 11, "DOM re-extraction", EntryCount: 1, IsRaceCard: true,
-            Entries: [new(2, null, null, null, null, null, null, HorseName: "アイサンサン", JockeyName: "幸 英明 106 M", HorseSourceIdentity: source)]);
+        var dirty = new DeclareRaceResultBulkRequest(new(new(2037, 9, 27), "中山", 11, "DOM re-extraction", EntryCount: 1, IsRaceCard: true,
+            Entries: [new(2, null, null, null, null, null, null, HorseName: "アイサンサン", JockeyName: "幸 英明 106 M", HorseSourceIdentity: source)]));
         var first = await (await http.PostAsJsonAsync("/api/races/result-bulk", dirty)).Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>();
         Assert.IsNotNull(first);
-        Assert.IsTrue(first.CorePersisted, string.Join(";", first.Errors));
-        using var before = System.Text.Json.JsonDocument.Parse(await http.GetStringAsync($"/api/races/{first.RaceId}"));
-        var oldEntry = before.RootElement.GetProperty("entries")[0];
-        var clean = dirty with { Entries = [dirty.Entries![0] with { JockeyName = "幸 英明" }] };
+        Assert.IsTrue(first.Result.CorePersisted, string.Join(";", first.Result.Errors));
+        var before = await http.GetFromJsonAsync<GetRaceResponse>($"/api/races/{first.Result.RaceId}");
+        Assert.IsNotNull(before);
+        var oldEntry = before.Race.Entries[0];
+        var clean = dirty with { Result = dirty.Result! with { Entries = [dirty.Result!.Entries![0] with { JockeyName = "幸 英明" }] } };
         var second = await (await http.PostAsJsonAsync("/api/races/result-bulk", clean)).Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>();
         Assert.IsNotNull(second);
-        Assert.IsTrue(second.CorePersisted, string.Join(";", second.Errors));
-        Assert.AreEqual(first.RaceId, second.RaceId);
-        using var after = System.Text.Json.JsonDocument.Parse(await http.GetStringAsync($"/api/races/{first.RaceId}"));
-        var entry = after.RootElement.GetProperty("entries")[0];
-        Assert.AreEqual(oldEntry.GetProperty("entryId").GetString(), entry.GetProperty("entryId").GetString());
-        Assert.AreEqual(oldEntry.GetProperty("horseId").GetString(), entry.GetProperty("horseId").GetString());
-        Assert.AreEqual("幸 英明", entry.GetProperty("jockeyName").GetString());
-        Assert.AreNotEqual(oldEntry.GetProperty("jockeyId").GetString(), entry.GetProperty("jockeyId").GetString());
-        using var oldMaster = System.Text.Json.JsonDocument.Parse(await http.GetStringAsync($"/api/jockeys/{oldEntry.GetProperty("jockeyId").GetString()}"));
-        Assert.AreEqual("幸 英明 106 M", oldMaster.RootElement.GetProperty("displayName").GetString());
+        Assert.IsTrue(second.Result.CorePersisted, string.Join(";", second.Result.Errors));
+        Assert.AreEqual(first.Result.RaceId, second.Result.RaceId);
+        var after = await http.GetFromJsonAsync<GetRaceResponse>($"/api/races/{first.Result.RaceId}");
+        Assert.IsNotNull(after);
+        var entry = after.Race.Entries[0];
+        Assert.AreEqual(oldEntry.EntryId, entry.EntryId);
+        Assert.AreEqual(oldEntry.HorseId, entry.HorseId);
+        Assert.AreEqual("幸 英明", entry.JockeyName);
+        Assert.AreNotEqual(oldEntry.JockeyId, entry.JockeyId);
+        var oldMaster = await http.GetFromJsonAsync<JockeyDto>($"/api/jockeys/{oldEntry.JockeyId}");
+        Assert.AreEqual("幸 英明 106 M", oldMaster!.DisplayName);
     }
 
     [TestMethod]
@@ -60,21 +63,21 @@ public sealed class SharedCollectionIdentityTests
         const string name = "(株)回復確認ＲＡＣＩＮＧ";
         var oldId = DeterministicIdGenerator.BuildEntityId("owner", DeterministicIdGenerator.NormalizeKey(name));
         var target = OwnerIdentityContract.CreateId(name);
-        var card = new DeclareRaceResultBulkRequest(new(2037, 10, 2), "東京", 3, "recovery", EntryCount: 1, IsRaceCard: true,
-            Entries: [new(1, null, null, null, null, null, null, HorseName: "回復確認馬", OwnerName: name)]);
+        var card = new DeclareRaceResultBulkRequest(new(new(2037, 10, 2), "東京", 3, "recovery", EntryCount: 1, IsRaceCard: true,
+            Entries: [new(1, null, null, null, null, null, null, HorseName: "回復確認馬", OwnerName: name)]));
         var saved = await (await http.PostAsJsonAsync("/api/races/result-bulk", card)).Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>();
         Assert.IsNotNull(saved);
-        Assert.IsTrue(saved.CorePersisted, string.Join(";", saved.Errors));
+        Assert.IsTrue(saved.Result.CorePersisted, string.Join(";", saved.Result.Errors));
         var now = DateTimeOffset.UtcNow;
         var source = new ResourceKey(CollectionResourceType.Owner, "JRA", oldId);
         var original = await store.RequestAsync(source, definition, 1, CollectionReason.Discovery, now,
-            attributes: new Dictionary<string, string> { ["name"] = name, ["requestedByRaceId"] = saved.RaceId });
+            attributes: new Dictionary<string, string> { ["name"] = name, ["requestedByRaceId"] = saved.Result.RaceId });
         var lease = await store.AcquireAsync(original.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
         Assert.IsTrue(await store.CompleteAttemptAsync(lease.TaskId, lease.LeaseToken, DateTimeOffset.UtcNow,
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "OwnerNotRegistered")));
         var unrelated = await store.RequestAsync(new(CollectionResourceType.Owner, "JRA", "owner-" + Guid.NewGuid()), definition, 1,
-            CollectionReason.Discovery, now, attributes: new Dictionary<string, string> { ["name"] = name, ["requestedByRaceId"] = saved.RaceId });
+            CollectionReason.Discovery, now, attributes: new Dictionary<string, string> { ["name"] = name, ["requestedByRaceId"] = saved.Result.RaceId });
         var unrelatedLease = await store.AcquireAsync(unrelated.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(unrelatedLease);
         Assert.IsTrue(await store.CompleteAttemptAsync(unrelatedLease.TaskId, unrelatedLease.LeaseToken, DateTimeOffset.UtcNow,
@@ -119,7 +122,7 @@ public sealed class SharedCollectionIdentityTests
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var id = "race-" + Guid.NewGuid();
         var date = new DateOnly(2037, 9, 27);
-        (await http.PostAsJsonAsync("/api/races", new CreateRaceRequest(date, "TOKYO", 1, "旧ID", id))).EnsureSuccessStatusCode();
+        (await http.PostAsJsonAsync("/api/races", new CreateRaceRequest(new(date, "TOKYO", 1, "旧ID", id)))).EnsureSuccessStatusCode();
         foreach (var course in new[] { "東京", "Tokyo", "tokyo" })
         {
             var resolved = await http.PostAsJsonAsync("/api/identity/race", new ResolveRaceIdentityRequest(date, course, 1));
@@ -157,7 +160,7 @@ public sealed class SharedCollectionIdentityTests
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var date = new DateOnly(2037, 10, 1);
         foreach (var course in new[] { "東京", "TOKYO" })
-            (await http.PostAsJsonAsync("/api/races", new CreateRaceRequest(date, course, 2, "duplicate", "race-" + Guid.NewGuid()))).EnsureSuccessStatusCode();
+            (await http.PostAsJsonAsync("/api/races", new CreateRaceRequest(new(date, course, 2, "duplicate", "race-" + Guid.NewGuid())))).EnsureSuccessStatusCode();
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync("/api/identity/race", new ResolveRaceIdentityRequest(date, "Tokyo", 2))).StatusCode);
     }
 

@@ -23,14 +23,14 @@ public sealed class RaceCancellationTests
         await store.RegisterDefinitionAsync(new("owner-identity"), "Owner", CollectionResourceType.Owner, 1, "test", true);
         return (app, http);
     }
-    private static DeclareRaceResultBulkRequest Card(bool initiallyCancelled = true) => new(
+    private static DeclareRaceResultBulkRequest Card(bool initiallyCancelled = true) => new(new(
         new(2026, 9, 27), "中山", 1, "取消検証", EntryCount: 16, GradeCode: "Maiden", SurfaceCode: "Dirt",
         DistanceMeters: 1200, DirectionCode: "Right", IsRaceCard: true,
         Entries: Enumerable.Range(1, 16).Select(n => new RaceResultEntryBulkDto(
             initiallyCancelled && n == 6 ? null : n, null, null, null, null, null, null,
             HorseName: $"馬{n}", OwnerName: $"馬主{n}", GateNumber: (n + 1) / 2, AssignedWeight: 55,
             HorseSourceIdentity: $"https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud00202410{n:D4}/AB",
-            ParticipationStatus: initiallyCancelled && n == 6 ? RaceEntryParticipationStatus.Cancelled : RaceEntryParticipationStatus.Active)).ToArray());
+            ParticipationStatus: initiallyCancelled && n == 6 ? RaceEntryParticipationStatus.Cancelled : RaceEntryParticipationStatus.Active)).ToArray()));
 
     private static async Task<string> SaveAsync(HttpClient http, DeclareRaceResultBulkRequest card)
     {
@@ -38,9 +38,9 @@ public sealed class RaceCancellationTests
         response.EnsureSuccessStatusCode();
         var saved = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>();
         Assert.IsNotNull(saved);
-        Assert.IsEmpty(saved.Errors, string.Join(";", saved.Errors));
-        Assert.IsTrue(saved.CorePersisted);
-        return saved.RaceId;
+        Assert.IsEmpty(saved.Result.Errors, string.Join(";", saved.Result.Errors));
+        Assert.IsTrue(saved.Result.CorePersisted);
+        return saved.Result.RaceId;
     }
 
     [TestMethod]
@@ -58,8 +58,9 @@ public sealed class RaceCancellationTests
         var cancelled = context.Entries.Single(x => x.ParticipationStatus == RaceEntryParticipationStatus.Cancelled);
         Assert.IsNull(cancelled.HorseNumber);
         Assert.AreEqual("馬主6", cancelled.OwnerName);
-        var cardJson = await http.GetFromJsonAsync<System.Text.Json.JsonElement>($"/api/races/{raceId}");
-        Assert.AreEqual(16, cardJson.GetProperty("entries").GetArrayLength());
+        var cardResponse = await http.GetFromJsonAsync<GetRaceResponse>($"/api/races/{raceId}");
+        Assert.IsNotNull(cardResponse);
+        Assert.AreEqual(16, cardResponse.Race.Entries.Count);
         var ml = await query.GetMlPredictionAsync(raceId);
         Assert.IsNotNull(ml);
         Assert.HasCount(15, ml.Rankings);
@@ -94,10 +95,13 @@ public sealed class RaceCancellationTests
         await writer.FinalizePredictionTicketAsync(historicalTicket);
         var cancelledCard = initial with
         {
-            TargetRaceId = raceId,
-            RefreshExistingData = true,
-            Entries = initial.Entries!.Select(x => x.HorseNumber == 6
+            Result = initial.Result! with
+            {
+                TargetRaceId = raceId,
+                RefreshExistingData = true,
+                Entries = initial.Result.Entries!.Select(x => x.HorseNumber == 6
             ? x with { HorseNumber = null, ParticipationStatus = RaceEntryParticipationStatus.Cancelled } : x).ToArray()
+            }
         };
         await SaveAsync(http, cancelledCard);
         var after = (await query.GetRacePredictionContextAsync(raceId))!;
@@ -119,7 +123,7 @@ public sealed class RaceCancellationTests
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync($"/api/predictions/{ticket}/marks", new AddPredictionMarkRequest(before.Entries.First(x => x.HorseNumber == 1).EntryId, "▲", 3, 70, null))).StatusCode);
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsync($"/api/predictions/{ticket}/finalize", null)).StatusCode);
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync("/api/predictions", new CreatePredictionTicketRequest(raceId, "test", "test", .5m, null, EntryAssignmentFingerprint: before.EntryAssignmentFingerprint))).StatusCode);
-        await SaveAsync(http, initial with { Entries = initial.Entries!.Select(x => x with { ParticipationStatus = null }).ToArray() });
+        await SaveAsync(http, initial with { Result = initial.Result! with { Entries = initial.Result.Entries!.Select(x => x with { ParticipationStatus = null }).ToArray() } });
         var preserved = (await query.GetRacePredictionContextAsync(raceId))!.Entries.Single(x => x.EntryId == horse.EntryId);
         Assert.AreEqual(RaceEntryParticipationStatus.Cancelled, preserved.ParticipationStatus);
         Assert.AreEqual("馬主6", preserved.OwnerName);
@@ -136,7 +140,8 @@ public sealed class RaceCancellationTests
         await using var application = app;
         using var http = client;
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
-        var card = Card() with { Entries = Card().Entries!.Select(x => x with { HorseNumber = null, ParticipationStatus = RaceEntryParticipationStatus.Cancelled }).ToArray() };
+        var sourceCard = Card();
+        var card = sourceCard with { Result = sourceCard.Result! with { Entries = sourceCard.Result.Entries!.Select(x => x with { HorseNumber = null, ParticipationStatus = RaceEntryParticipationStatus.Cancelled }).ToArray() } };
         var raceId = await SaveAsync(http, card);
         var query = new HttpRaceQueryService(http);
         var result = await new ApiOnlyPredictionWorkflow(query, new HttpPredictionWriteService(http), NullLogger<ApiOnlyPredictionWorkflow>.Instance).RunAsync(raceId);
@@ -157,17 +162,20 @@ public sealed class RaceCancellationTests
         var card = Card();
         var invalid = card with
         {
-            Entries = card.Entries!.Select((x, i) => i == 5
+            Result = card.Result! with
+            {
+                Entries = card.Result.Entries!.Select((x, i) => i == 5
             ? missingIdentity ? x with { HorseNumber = 6, HorseSourceIdentity = null }
                 : x with { ParticipationStatus = (RaceEntryParticipationStatus)99 }
             : x).ToArray()
+            }
         };
         var response = await http.PostAsJsonAsync("/api/races/result-bulk", invalid);
         response.EnsureSuccessStatusCode();
         var rejected = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>();
         Assert.IsNotNull(rejected);
-        Assert.IsFalse(rejected.CorePersisted);
-        Assert.IsNotEmpty(rejected.Errors);
-        Assert.AreEqual(HttpStatusCode.NotFound, (await http.GetAsync($"/api/races/{rejected.RaceId}/context")).StatusCode);
+        Assert.IsFalse(rejected.Result.CorePersisted);
+        Assert.IsNotEmpty(rejected.Result.Errors);
+        Assert.AreEqual(HttpStatusCode.NotFound, (await http.GetAsync($"/api/races/{rejected.Result.RaceId}/context")).StatusCode);
     }
 }

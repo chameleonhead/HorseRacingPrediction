@@ -168,11 +168,11 @@ internal static class GetRaceEndpoint
                             readModel.StartTime, readModel.OverallPaceText, readModel.CornerPassagesText, readModel.CourseLayout,
                             readModel.ReplacementRaceId);
 
-                        return Results.Ok(response);
+                        return Results.Ok(new GetRaceResponse(response));
                     })
                     .WithName("GetRace")
                     .WithTags("Race API")
-                    .Produces<RaceDto>(StatusCodes.Status200OK)
+                    .Produces<GetRaceResponse>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

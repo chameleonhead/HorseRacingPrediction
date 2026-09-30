@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260930_refit-api-clients",
+  "taskId": "T3-A2",
+  "attemptId": "T3-A2",
+  "state": "completed",
+  "taskDifficulty": "high",
+  "acceptanceCriteria": [
+    "AC2",
+    "AC4",
+    "AC5"
+  ],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose worker model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime did not expose per-worker usage"
+  },
+  "scope": [
+    "tests/HorseRacingPrediction.Api.Tests"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review usage and active time were not exposed"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "effort telemetry was not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable per-task elapsed effort telemetry was not exposed"
+  },
+  "startRevision": "c4fd22b6",
+  "endRevisionOrPatch": "working-tree:T3-A2 explicit API test adapters",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Lead review confirmed assertions remained and corrected one positional mapping ambiguity (the baseline 11th RegisterEntryRequest argument is RunningStyleCode). History retained: the first adapted build had 104 caller errors; the first full run was 375 passed/8 failed/1 skipped, all stale adapters for wrapped race/context/bulk JSON, pagination fakes, and Schedule input. Focused corrections preserved assertions; full Release rerun passed 384/0/1. Post-format full rerun also passed 384/0/1; no tests were deleted or skipped.",
+    "promoted": false,
+    "escapedDefects": 0,
+    "retries": 1,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

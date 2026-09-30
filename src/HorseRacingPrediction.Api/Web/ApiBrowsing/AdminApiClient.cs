@@ -55,11 +55,22 @@ public sealed partial class AdminApiClient
     // 参照系
     // ------------------------------------------------------------------ //
 
-    public Task<PagedResponse<RaceSummaryDto>?> SearchRacesAsync(SearchRacesRequest request, CancellationToken cancellationToken = default)
-        => GetJsonAsync<PagedResponse<RaceSummaryDto>>($"/api/races?{BuildQueryString(request)}", cancellationToken);
+    public async Task<PagedResponse<RaceSummaryDto>?> SearchRacesAsync(SearchRacesRequest request, CancellationToken cancellationToken = default)
+    {
+        var response = await GetJsonAsync<SearchRacesResponse>(
+            $"/api/races?{BuildQueryString(request)}", cancellationToken).ConfigureAwait(false);
+        return response is null
+            ? null
+            : new PagedResponse<RaceSummaryDto>(response.Races, response.Pagination.Page,
+                response.Pagination.PageSize, response.Pagination.TotalCount, response.Pagination.TotalPages);
+    }
 
-    public Task<RaceDto?> GetRaceAsync(string raceId, CancellationToken cancellationToken = default)
-        => GetJsonAsync<RaceDto>($"/api/races/{Uri.EscapeDataString(raceId)}", cancellationToken);
+    public async Task<RaceDto?> GetRaceAsync(string raceId, CancellationToken cancellationToken = default)
+    {
+        var response = await GetJsonAsync<GetRaceResponse>(
+            $"/api/races/{Uri.EscapeDataString(raceId)}", cancellationToken).ConfigureAwait(false);
+        return response?.Race;
+    }
 
 
     public Task<PagedResponse<HorseSummaryDto>?> SearchHorsesAsync(SearchHorsesRequest request, CancellationToken cancellationToken = default)

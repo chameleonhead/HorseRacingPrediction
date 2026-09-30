@@ -33,12 +33,12 @@ public sealed class HorseIdentityRepairEndpointsTests
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/horses",
             new RegisterHorseRequest(name, name, null, null, HorseId: targetId))).StatusCode);
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/races",
-            new CreateRaceRequest(new DateOnly(2026, 9, 20), "TOKYO", 1, "事前補正", raceId))).StatusCode);
+            new CreateRaceRequest(new(new DateOnly(2026, 9, 20), "TOKYO", 1, "事前補正", raceId)))).StatusCode);
         Assert.AreEqual(HttpStatusCode.OK, (await http.PostAsJsonAsync($"/api/races/{raceId}/card/publish",
-            new { EntryCount = 1 })).StatusCode);
+            new PublishRaceCardRequest(new(1)))).StatusCode);
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(targetId, 1, null, null, 1, 55, "M", 3, null, null,
-                HorseName: name))).StatusCode);
+            new RegisterEntryRequest(new(targetId, 1, null, null, 1, 55, "M", 3, null, null,
+                HorseName: name)))).StatusCode);
         var issueId = Guid.NewGuid();
         using (var db = application.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext())
         {
@@ -100,12 +100,12 @@ public sealed class HorseIdentityRepairEndpointsTests
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/horses",
             new RegisterHorseRequest(name, name, null, null, HorseId: targetId))).StatusCode);
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/races",
-            new CreateRaceRequest(new DateOnly(2026, 9, 20), "TOKYO", 2, "一括検証", raceId))).StatusCode);
+            new CreateRaceRequest(new(new DateOnly(2026, 9, 20), "TOKYO", 2, "一括検証", raceId)))).StatusCode);
         Assert.AreEqual(HttpStatusCode.OK, (await http.PostAsJsonAsync($"/api/races/{raceId}/card/publish",
-            new { EntryCount = 1 })).StatusCode);
+            new PublishRaceCardRequest(new(1)))).StatusCode);
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(targetId, 1, null, null, 1, 55, "M", 3, null, null,
-                HorseName: name))).StatusCode);
+            new RegisterEntryRequest(new(targetId, 1, null, null, 1, 55, "M", 3, null, null,
+                HorseName: name)))).StatusCode);
         var validIssueId = Guid.NewGuid();
         var invalidIssueId = Guid.NewGuid();
         using (var db = application.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext())
@@ -141,15 +141,15 @@ public sealed class HorseIdentityRepairEndpointsTests
             Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/horses",
                 new RegisterHorseRequest(name, name, null, null, HorseId: id))).StatusCode);
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/races",
-            new CreateRaceRequest(new DateOnly(2026, 9, 20), "TOKYO", 3, "変更検証", raceId))).StatusCode);
+            new CreateRaceRequest(new(new DateOnly(2026, 9, 20), "TOKYO", 3, "変更検証", raceId)))).StatusCode);
         Assert.AreEqual(HttpStatusCode.OK, (await http.PostAsJsonAsync($"/api/races/{raceId}/card/publish",
-            new { EntryCount = 2 })).StatusCode);
+            new PublishRaceCardRequest(new(2)))).StatusCode);
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(firstId, 1, null, null, 1, 55, "M", 3, null, null,
-                HorseName: firstName))).StatusCode);
+            new RegisterEntryRequest(new(firstId, 1, null, null, 1, 55, "M", 3, null, null,
+                HorseName: firstName)))).StatusCode);
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(secondId, 2, null, null, 2, 55, "M", 3, null, null,
-                HorseName: secondName))).StatusCode);
+            new RegisterEntryRequest(new(secondId, 2, null, null, 2, 55, "M", 3, null, null,
+                HorseName: secondName)))).StatusCode);
         var issueId = Guid.NewGuid();
         using (var db = application.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext())
         {
@@ -357,12 +357,12 @@ public sealed class HorseIdentityRepairEndpointsTests
         await http.PostAsJsonAsync("/api/horses", new RegisterHorseRequest(name, name, null, null, HorseId: sourceId));
         await http.PostAsJsonAsync("/api/horses", new RegisterHorseRequest(name, name, null, null, HorseId: targetId));
         await http.PostAsJsonAsync("/api/races",
-            new CreateRaceRequest(new DateOnly(2026, 9, 14), "TOKYO", 2, "統合再収集", raceId));
-        await http.PostAsJsonAsync($"/api/races/{raceId}/card/publish", new { EntryCount = 1 });
+            new CreateRaceRequest(new(new DateOnly(2026, 9, 14), "TOKYO", 2, "統合再収集", raceId)));
+        await http.PostAsJsonAsync($"/api/races/{raceId}/card/publish", new PublishRaceCardRequest(new(1)));
         var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, targetId);
         (await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(targetId, 1, null, null, 1, 55, "M", 3, null, null,
-                EntryId: entryId, HorseName: name, HorseSourceIdentity: sourceUrl))).EnsureSuccessStatusCode();
+            new RegisterEntryRequest(new(targetId, 1, null, null, 1, 55, "M", 3, null, null,
+                EntryId: entryId, HorseName: name, HorseSourceIdentity: sourceUrl)))).EnsureSuccessStatusCode();
         // The identity repair endpoint consumes persisted evidence, not a new entry rebind.
         using (var repairDb = application.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext())
         {
@@ -595,13 +595,13 @@ public sealed class HorseIdentityRepairEndpointsTests
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/horses",
             new RegisterHorseRequest(name, name, null, null, HorseId: targetId))).StatusCode);
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/races",
-            new CreateRaceRequest(new DateOnly(2026, 9, 13), "TOKYO", 1, "修復テスト", raceId))).StatusCode);
+            new CreateRaceRequest(new(new DateOnly(2026, 9, 13), "TOKYO", 1, "修復テスト", raceId)))).StatusCode);
         Assert.AreEqual(HttpStatusCode.OK, (await http.PostAsJsonAsync($"/api/races/{raceId}/card/publish",
-            new { EntryCount = 1 })).StatusCode);
+            new PublishRaceCardRequest(new(1)))).StatusCode);
         var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, targetId);
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(targetId, 1, null, null, 1, 55, "M", 3, null, null,
-                EntryId: entryId, HorseName: name, HorseSourceIdentity: sourceUrl))).StatusCode);
+            new RegisterEntryRequest(new(targetId, 1, null, null, 1, 55, "M", 3, null, null,
+                EntryId: entryId, HorseName: name, HorseSourceIdentity: sourceUrl)))).StatusCode);
         using (var repairDb = application.Services
                    .GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext())
         {

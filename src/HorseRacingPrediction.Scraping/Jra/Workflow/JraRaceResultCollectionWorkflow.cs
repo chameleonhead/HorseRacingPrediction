@@ -193,18 +193,18 @@ public sealed class JraRaceResultCollectionWorkflow
 
         var weather = string.IsNullOrWhiteSpace(resultPage.WeatherText)
             ? null
-            : new RecordWeatherObservationRequest(
+            : new RecordWeatherObservationInputDto(
                 HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(), WeatherCode: null, resultPage.WeatherText,
                 TemperatureCelsius: null, HumidityPercent: null, WindDirectionCode: null, WindSpeedMeterPerSecond: null);
 
         var trackCondition = string.IsNullOrWhiteSpace(resultPage.TrackConditionText)
             ? null
-            : new RecordTrackConditionRequest(
+            : new RecordTrackConditionInputDto(
                 HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(), TurfConditionCode: null, DirtConditionCode: null, resultPage.TrackConditionText);
 
         var payouts = resultPage.Payouts is null || winningEntry is null
             ? null
-            : new DeclarePayoutResultRequest(
+            : new DeclarePayoutResultInputDto(
                 HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(),
                 ToPayoutEntries(resultPage.Payouts.WinPayouts),
                 ToPayoutEntries(resultPage.Payouts.PlacePayouts),
@@ -215,7 +215,7 @@ public sealed class JraRaceResultCollectionWorkflow
                 ToPayoutEntries(resultPage.Payouts.WidePayoutsOrEmpty),
                 ToPayoutEntries(resultPage.Payouts.TrioPayoutsOrEmpty));
 
-        var request = new DeclareRaceResultBulkRequest(
+        var request = new DeclareRaceResultBulkRequest(new DeclareRaceResultBulkInputDto(
             RaceDate: raceId.Date,
             RacecourseCode: racecourseName,
             RaceNumber: raceId.Number,
@@ -242,9 +242,9 @@ public sealed class JraRaceResultCollectionWorkflow
             OverallPaceText: resultPage.OverallPaceText,
             CornerPassagesText: resultPage.CornerPassages is null ? null : string.Join("\n", resultPage.CornerPassages.Select(x => $"{x.CornerNumber}: {x.OrderRaw}")),
             CourseLayout: resultPage.CourseSpec?.RawLayout, SourceHorseId: sourceHorseId, StartTime: resultPage.StartTime,
-            StewardReportText: resultPage.StewardReportText);
+            StewardReportText: resultPage.StewardReportText));
 
-        DeclareRaceResultBulkResponse outcome;
+        DeclareRaceResultBulkResultDto outcome;
         try
         {
             outcome = await _writeService.DeclareRaceResultBulkAsync(request, cancellationToken);

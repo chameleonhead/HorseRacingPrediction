@@ -30,38 +30,41 @@ public sealed class CollectedRaceIdentityGuardTests
         var date = new DateOnly(2036, 9, 19);
         const string course = "東京";
         const int raceNumber = 7;
-        var first = new DeclareRaceResultBulkRequest(date, course, raceNumber, "主体固定検証",
+        var first = new DeclareRaceResultBulkRequest(new(date, course, raceNumber, "主体固定検証",
             EntryCount: 2, IsRaceCard: true,
             Entries:
             [
                 Entry(1, "固定馬A", SourceIdentity("100001")),
                 Entry(2, "固定馬B", SourceIdentity("100002")),
-            ]);
+            ]));
         var initialResponse = await http.PostAsJsonAsync("/api/races/result-bulk", first, JsonOptions);
         var initialBody = await ReadBodyAsync(initialResponse);
         Assert.AreEqual(HttpStatusCode.OK, initialResponse.StatusCode);
-        Assert.IsTrue(initialBody.CorePersisted);
+        Assert.IsTrue(initialBody.Result.CorePersisted);
 
-        var beforeEntries = await GetEntriesAsync(http, initialBody.RaceId);
+        var beforeEntries = await GetEntriesAsync(http, initialBody.Result.RaceId);
         var eventsBefore = CountStoredEvents(app);
         var swapped = first with
         {
-            TargetRaceId = refresh ? initialBody.RaceId : null,
-            RefreshExistingData = refresh,
-            Entries =
-            [
-                Entry(1, "固定馬B", SourceIdentity("100002")),
-                Entry(2, "固定馬A", SourceIdentity("100001")),
-            ],
+            Result = first.Result! with
+            {
+                TargetRaceId = refresh ? initialBody.Result.RaceId : null,
+                RefreshExistingData = refresh,
+                Entries =
+                [
+                    Entry(1, "固定馬B", SourceIdentity("100002")),
+                    Entry(2, "固定馬A", SourceIdentity("100001")),
+                ],
+            },
         };
 
         var swappedResponse = await http.PostAsJsonAsync("/api/races/result-bulk", swapped, JsonOptions);
         var swappedBody = await ReadBodyAsync(swappedResponse);
         Assert.AreEqual(HttpStatusCode.OK, swappedResponse.StatusCode);
-        Assert.IsTrue(swappedBody.CorePersisted,
+        Assert.IsTrue(swappedBody.Result.CorePersisted,
             await swappedResponse.Content.ReadAsStringAsync());
         Assert.IsTrue(CountStoredEvents(app) > eventsBefore);
-        var afterEntries = await GetEntriesAsync(http, initialBody.RaceId);
+        var afterEntries = await GetEntriesAsync(http, initialBody.Result.RaceId);
         Assert.AreEqual(beforeEntries.Count, afterEntries.Count);
         foreach (var (horseId, before) in beforeEntries)
             Assert.AreEqual(before.EntryId, afterEntries[horseId].EntryId);
@@ -75,22 +78,22 @@ public sealed class CollectedRaceIdentityGuardTests
         var (app, client) = await CreateApplicationAsync();
         await using var application = app;
         using var http = client;
-        var first = new DeclareRaceResultBulkRequest(new DateOnly(2036, 9, 18), "東京", 6,
+        var first = new DeclareRaceResultBulkRequest(new(new DateOnly(2036, 9, 18), "東京", 6,
             "未確定馬番", EntryCount: 2, IsRaceCard: true,
-            Entries: [Entry(null, "木曜馬A", SourceIdentity("130001")), Entry(null, "木曜馬B", SourceIdentity("130002"))]);
+            Entries: [Entry(null, "木曜馬A", SourceIdentity("130001")), Entry(null, "木曜馬B", SourceIdentity("130002"))]));
         using var initial = await http.PostAsJsonAsync("/api/races/result-bulk", first, JsonOptions);
         var initialBody = await ReadBodyAsync(initial);
-        Assert.IsTrue(initialBody.CorePersisted, string.Join(" | ", initialBody.Errors));
-        var before = await GetEntriesAsync(http, initialBody.RaceId);
+        Assert.IsTrue(initialBody.Result.CorePersisted, string.Join(" | ", initialBody.Result.Errors));
+        var before = await GetEntriesAsync(http, initialBody.Result.RaceId);
         Assert.IsTrue(before.Values.All(x => x.HorseNumber is null));
 
         using var confirmed = await http.PostAsJsonAsync("/api/races/result-bulk", first with
         {
-            Entries = [Entry(2, "木曜馬A", SourceIdentity("130001")), Entry(1, "木曜馬B", SourceIdentity("130002"))],
+            Result = first.Result! with { Entries = [Entry(2, "木曜馬A", SourceIdentity("130001")), Entry(1, "木曜馬B", SourceIdentity("130002"))] },
         }, JsonOptions);
         var confirmedBody = await ReadBodyAsync(confirmed);
-        Assert.IsTrue(confirmedBody.CorePersisted, string.Join(" | ", confirmedBody.Errors));
-        var after = await GetEntriesAsync(http, initialBody.RaceId);
+        Assert.IsTrue(confirmedBody.Result.CorePersisted, string.Join(" | ", confirmedBody.Result.Errors));
+        var after = await GetEntriesAsync(http, initialBody.Result.RaceId);
         Assert.AreEqual(before.Count, after.Count);
         foreach (var (horseId, old) in before)
             Assert.AreEqual(old.EntryId, after[horseId].EntryId);
@@ -106,29 +109,29 @@ public sealed class CollectedRaceIdentityGuardTests
         using var http = client;
         var date = new DateOnly(2036, 9, 20);
         var course = $"IDENTITY-NAME-{Guid.NewGuid():N}";
-        var first = new DeclareRaceResultBulkRequest(date, course, 8, "主体名一致検証",
+        var first = new DeclareRaceResultBulkRequest(new(date, course, 8, "主体名一致検証",
             EntryCount: 1, IsRaceCard: true,
-            Entries: [Entry(1, "同名馬", SourceIdentity("110001"))]);
+            Entries: [Entry(1, "同名馬", SourceIdentity("110001"))]));
         var initial = await http.PostAsJsonAsync("/api/races/result-bulk", first, JsonOptions);
         var initialBody = await ReadBodyAsync(initial);
-        var beforeContext = await GetContextJsonAsync(http, initialBody.RaceId);
+        var beforeContext = await GetContextJsonAsync(http, initialBody.Result.RaceId);
         var eventsBefore = CountStoredEvents(app);
         var tasksBefore = await CountTasksAsync(app);
 
         var changedSource = first with
         {
-            Entries = [Entry(1, "同名馬", SourceIdentity("110002"))],
+            Result = first.Result! with { Entries = [Entry(1, "同名馬", SourceIdentity("110002"))] },
         };
         var response = await http.PostAsJsonAsync("/api/races/result-bulk", changedSource, JsonOptions);
         var body = await ReadBodyAsync(response);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        Assert.IsFalse(body.CorePersisted);
-        Assert.IsTrue(body.Outcomes!.Any(x => x.ErrorCode is "RaceEntryIdentityMismatch" or "InvalidHorseNumber"),
-            string.Join(" | ", body.Errors));
+        Assert.IsFalse(body.Result.CorePersisted);
+        Assert.IsTrue(body.Result.Outcomes!.Any(x => x.ErrorCode is "RaceEntryIdentityMismatch" or "InvalidHorseNumber"),
+            string.Join(" | ", body.Result.Errors));
         Assert.AreEqual(eventsBefore, CountStoredEvents(app));
         Assert.AreEqual(tasksBefore, await CountTasksAsync(app));
-        Assert.AreEqual(beforeContext, await GetContextJsonAsync(http, initialBody.RaceId));
+        Assert.AreEqual(beforeContext, await GetContextJsonAsync(http, initialBody.Result.RaceId));
     }
 
     [TestMethod]
@@ -137,9 +140,9 @@ public sealed class CollectedRaceIdentityGuardTests
         var (app, client) = await CreateApplicationAsync();
         await using var application = app;
         using var http = client;
-        var request = new DeclareRaceResultBulkRequest(new DateOnly(2036, 9, 21),
+        var request = new DeclareRaceResultBulkRequest(new(new DateOnly(2036, 9, 21),
             $"IDENTITY-INVALID-{Guid.NewGuid():N}", 9, "不正主体検証", EntryCount: 1, IsRaceCard: true,
-            Entries: [Entry(1, "不正主体馬", "https://example.invalid/not-a-jra-identity")]);
+            Entries: [Entry(1, "不正主体馬", "https://example.invalid/not-a-jra-identity")]));
         var eventsBefore = CountStoredEvents(app);
         var tasksBefore = await CountTasksAsync(app);
 
@@ -147,8 +150,8 @@ public sealed class CollectedRaceIdentityGuardTests
         var body = await ReadBodyAsync(response);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        Assert.IsFalse(body.CorePersisted);
-        Assert.IsTrue(body.Outcomes!.Any(x => x.ErrorCode == "InvalidHorseSourceIdentity"));
+        Assert.IsFalse(body.Result.CorePersisted);
+        Assert.IsTrue(body.Result.Outcomes!.Any(x => x.ErrorCode == "InvalidHorseSourceIdentity"));
         Assert.AreEqual(eventsBefore, CountStoredEvents(app));
         Assert.AreEqual(tasksBefore, await CountTasksAsync(app));
     }
@@ -161,22 +164,25 @@ public sealed class CollectedRaceIdentityGuardTests
         using var http = client;
         var date = new DateOnly(2036, 9, 22);
         var course = $"IDENTITY-PREFLIGHT-{Guid.NewGuid():N}";
-        var first = new DeclareRaceResultBulkRequest(date, course, 10, "全体事前判定",
+        var first = new DeclareRaceResultBulkRequest(new(date, course, 10, "全体事前判定",
             EntryCount: 1, IsRaceCard: true,
-            Entries: [Entry(1, "既存主体馬", SourceIdentity("120001"))]);
+            Entries: [Entry(1, "既存主体馬", SourceIdentity("120001"))]));
         var initial = await http.PostAsJsonAsync("/api/races/result-bulk", first, JsonOptions);
         var initialBody = await ReadBodyAsync(initial);
-        var beforeContext = await GetContextJsonAsync(http, initialBody.RaceId);
+        var beforeContext = await GetContextJsonAsync(http, initialBody.Result.RaceId);
         var eventsBefore = CountStoredEvents(app);
         var tasksBefore = await CountTasksAsync(app);
         var newHorse = "事前判定新規馬";
         var conflicting = first with
         {
-            Entries =
-            [
-                Entry(2, newHorse, SourceIdentity("120002")),
-                Entry(1, "既存主体馬", SourceIdentity("120003")),
-            ],
+            Result = first.Result! with
+            {
+                Entries =
+                [
+                    Entry(2, newHorse, SourceIdentity("120002")),
+                    Entry(1, "既存主体馬", SourceIdentity("120003")),
+                ],
+            },
         };
 
         var response = await http.PostAsJsonAsync("/api/races/result-bulk", conflicting, JsonOptions);
@@ -186,12 +192,12 @@ public sealed class CollectedRaceIdentityGuardTests
         var newHorseResponse = await http.GetAsync($"/api/horses/{newHorseId}");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        Assert.IsFalse(body.CorePersisted);
-        Assert.IsTrue(body.Outcomes!.Any(x => x.ErrorCode is "RaceEntryIdentityMismatch" or "InvalidHorseNumber"),
-            string.Join(" | ", body.Errors));
+        Assert.IsFalse(body.Result.CorePersisted);
+        Assert.IsTrue(body.Result.Outcomes!.Any(x => x.ErrorCode is "RaceEntryIdentityMismatch" or "InvalidHorseNumber"),
+            string.Join(" | ", body.Result.Errors));
         Assert.AreEqual(eventsBefore, CountStoredEvents(app));
         Assert.AreEqual(tasksBefore, await CountTasksAsync(app));
-        Assert.AreEqual(beforeContext, await GetContextJsonAsync(http, initialBody.RaceId));
+        Assert.AreEqual(beforeContext, await GetContextJsonAsync(http, initialBody.Result.RaceId));
         Assert.AreEqual(HttpStatusCode.NotFound, newHorseResponse.StatusCode);
     }
 
@@ -205,19 +211,22 @@ public sealed class CollectedRaceIdentityGuardTests
         var (app, client) = await CreateApplicationAsync();
         await using var application = app;
         using var http = client;
-        var card = new DeclareRaceResultBulkRequest(new DateOnly(2036, 9, 18), "東京", 5,
+        var card = new DeclareRaceResultBulkRequest(new(new DateOnly(2036, 9, 18), "東京", 5,
             "履歴識別", EntryCount: 1, IsRaceCard: true,
-            Entries: [Entry(1, "同名馬", SourceIdentity("140001"))]);
+            Entries: [Entry(1, "同名馬", SourceIdentity("140001"))]));
         using var initial = await http.PostAsJsonAsync("/api/races/result-bulk", card, JsonOptions);
         var body = await ReadBodyAsync(initial);
-        Assert.IsTrue(body.CorePersisted);
+        Assert.IsTrue(body.Result.CorePersisted);
         var eventsBefore = CountStoredEvents(app);
         using var response = await http.PostAsJsonAsync("/api/races/result-bulk", card with
         {
-            TargetRaceId = body.RaceId,
-            RefreshExistingData = true,
-            SourceHorseId = HorseId("同名馬", "140001"),
-            Entries = [Entry(1, "同名馬", SourceIdentity("140002"))],
+            Result = card.Result! with
+            {
+                TargetRaceId = body.Result.RaceId,
+                RefreshExistingData = true,
+                SourceHorseId = HorseId("同名馬", "140001"),
+                Entries = [Entry(1, "同名馬", SourceIdentity("140002"))],
+            },
         }, JsonOptions);
         Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
         Assert.AreEqual(eventsBefore, CountStoredEvents(app));
@@ -234,7 +243,7 @@ public sealed class CollectedRaceIdentityGuardTests
         using var response = await client.GetAsync($"/api/races/{raceId}/context");
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        return document.RootElement.GetProperty("entries").EnumerateArray().ToDictionary(
+        return document.RootElement.GetProperty("context").GetProperty("entries").EnumerateArray().ToDictionary(
             x => x.GetProperty("horseId").GetString()!,
             x => (x.GetProperty("entryId").GetString()!,
                 x.GetProperty("horseNumber").ValueKind == JsonValueKind.Null

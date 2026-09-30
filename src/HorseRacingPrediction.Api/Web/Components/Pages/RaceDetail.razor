@@ -246,9 +246,9 @@ else
         correcting = true;
         try
         {
-            var result = await Api.CorrectRaceDataAsync(RaceId, new CorrectRaceDataRequest(
+            var result = await Api.CorrectRaceDataAsync(RaceId, new CorrectRaceDataRequest(new CorrectRaceDataInputDto(
                 correctRaceName, correctRacecourseCode, correctRaceNumber, correctGradeCode,
-                correctSurfaceCode, correctDistanceMeters, correctDirectionCode, correctReason));
+                correctSurfaceCode, correctDistanceMeters, correctDirectionCode, correctReason)));
             correctErrors = result.Success ? Array.Empty<string>() : result.Errors;
             correctArmed = false;
             if (result.Success)

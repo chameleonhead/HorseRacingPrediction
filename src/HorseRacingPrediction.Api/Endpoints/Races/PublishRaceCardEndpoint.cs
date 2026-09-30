@@ -15,9 +15,11 @@ internal static class PublishRaceCardEndpoint
                     [SwaggerOperation(Summary = "Publish race card", Description = "Moves lifecycle from Draft to CardPublished")]
         async (string raceId, PublishRaceCardRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        var card = request?.Card;
+                        if (card is null) return Results.BadRequest(new[] { "Card is required." });
                         try
                         {
-                            var command = new PublishRaceCardCommand(new RaceId(raceId), request.EntryCount);
+                            var command = new PublishRaceCardCommand(new RaceId(raceId), card.EntryCount);
                             var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                             return result.IsSuccess
                                 ? Results.Ok()

@@ -15,7 +15,7 @@ namespace HorseRacingPrediction.Api.Endpoints.Races;
 
 internal static partial class RaceResultBulkService
 {
-    internal static async Task<IResult> RefreshCollectedRaceAsync(DeclareRaceResultBulkRequest request,
+    internal static async Task<IResult> RefreshCollectedRaceAsync(DeclareRaceResultBulkInputDto request,
         ICommandBus commands, IQueryProcessor queries, IDbContextProvider<EventStoreDbContext> dbProvider, CancellationToken token)
     {
         var id = request.TargetRaceId;
@@ -69,7 +69,7 @@ internal static partial class RaceResultBulkService
                 }
             }
             var entryId = old?.EntryId ?? DeterministicIdGenerator.BuildRaceEntryId(id, horseId);
-            var registration = new RegisterEntryRequest(horseId, source.HorseNumber, jockeyId, trainerId,
+            var registration = new RegisterEntryInputDto(horseId, source.HorseNumber, jockeyId, trainerId,
                 source.GateNumber, source.AssignedWeight, source.SexCode, source.Age, source.BodyWeight, source.BodyWeightChange,
                 EntryId: entryId, HorseName: source.HorseName, JockeyName: source.JockeyName,
                 TrainerName: source.TrainerName, OwnerName: source.OwnerName);
@@ -111,7 +111,7 @@ internal static partial class RaceResultBulkService
             request.StartTime, request.OverallPaceText, request.CornerPassagesText, request.CourseLayout,
             request.StewardReportText);
         var outcome = await commands.PublishAsync(new RefreshCollectedRaceCommand(new RaceId(id), data), token);
-        return outcome.IsSuccess ? Results.Ok(new DeclareRaceResultBulkResponse(id, [], CorePersisted: true))
+        return outcome.IsSuccess ? Results.Ok(new DeclareRaceResultBulkResponse(new DeclareRaceResultBulkResultDto(id, [], CorePersisted: true)))
             : Results.BadRequest(new[] { "再取得情報の保存に失敗しました。" });
     }
 

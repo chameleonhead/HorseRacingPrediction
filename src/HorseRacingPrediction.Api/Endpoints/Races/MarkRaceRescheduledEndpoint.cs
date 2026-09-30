@@ -14,9 +14,11 @@ internal static class MarkRaceRescheduledEndpoint
                     async (string raceId, MarkRaceRescheduledRequest request, ICommandBus commandBus,
                         CancellationToken cancellationToken) =>
                     {
+                        var reschedule = request?.Reschedule;
+                        if (reschedule is null) return Results.BadRequest(new[] { "Reschedule is required." });
                         try
                         {
-                            var command = new MarkRaceRescheduledCommand(new RaceId(raceId), request.ReplacementRaceId);
+                            var command = new MarkRaceRescheduledCommand(new RaceId(raceId), reschedule.ReplacementRaceId);
                             var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                             return result.IsSuccess ? Results.Ok() : Results.BadRequest(new[] { "Command execution failed." });
                         }

@@ -15,18 +15,20 @@ internal static class DeclareEntryResultEndpoint
                     [SwaggerOperation(Summary = "Declare entry result", Description = "Declares finish result for a specific entry after race result is declared")]
         async (string raceId, string entryId, DeclareEntryResultRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        var resultData = request?.Result;
+                        if (resultData is null) return Results.BadRequest(new[] { "Result is required." });
                         try
                         {
                             var command = new DeclareEntryResultCommand(
                                 new RaceId(raceId),
                                 entryId,
-                                request.FinishPosition,
-                                request.OfficialTime,
-                                request.MarginText,
-                                request.LastThreeFurlongTime,
-                                request.AbnormalResultCode,
-                                request.PrizeMoney,
-                                request.CornerPositions);
+                                resultData.FinishPosition,
+                                resultData.OfficialTime,
+                                resultData.MarginText,
+                                resultData.LastThreeFurlongTime,
+                                resultData.AbnormalResultCode,
+                                resultData.PrizeMoney,
+                                resultData.CornerPositions);
 
                             var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                             return result.IsSuccess

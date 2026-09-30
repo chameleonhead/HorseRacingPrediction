@@ -1,7 +1,10 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace HorseRacingPrediction.Contracts.Races;
 
-public sealed record DeclareRaceResultRequest(
-    [property: Required, StringLength(128, MinimumLength = 1)] string WinningHorseName,
-    DateTimeOffset? DeclaredAt);
+public sealed record DeclareRaceResultRequest(DeclareRaceResultInputDto? Result)
+{
+    [JsonIgnore]
+    public string RaceId { get; init; } = string.Empty;
+}

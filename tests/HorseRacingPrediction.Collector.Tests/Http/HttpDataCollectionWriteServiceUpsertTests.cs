@@ -6,12 +6,32 @@ using System.Text.Json;
 
 using HorseRacingPrediction.Contracts.Common;
 using HorseRacingPrediction.Contracts.Identity;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Collector.Tests.Http;
 
 [TestClass]
 public sealed class HttpDataCollectionWriteServiceUpsertTests
 {
+    [TestMethod]
+    public async Task BulkWrite_NullSuccessResponseUsesExistingFallback_AndNonSuccessStillThrows()
+    {
+        var successHandler = new FixedResponseHandler(HttpStatusCode.OK, "null");
+        using var successClient = new HttpClient(successHandler) { BaseAddress = new Uri("https://example.invalid") };
+        var successService = new HttpDataCollectionWriteService(successClient, new AgentAcquisitionStatusRecorder());
+
+        var result = await successService.DeclareRaceResultBulkAsync(null!);
+
+        Assert.AreEqual(string.Empty, result.RaceId);
+        Assert.HasCount(0, result.Errors);
+
+        var failureHandler = new FixedResponseHandler(HttpStatusCode.Conflict, "{\"code\":\"identity-conflict\"}");
+        using var failureClient = new HttpClient(failureHandler) { BaseAddress = new Uri("https://example.invalid") };
+        var failureService = new HttpDataCollectionWriteService(failureClient, new AgentAcquisitionStatusRecorder());
+        await Assert.ThrowsExactlyAsync<HttpRequestException>(
+            () => failureService.DeclareRaceResultBulkAsync(null!));
+    }
+
     [TestMethod]
     public async Task SubjectUpserts_SendOnePutAndNoExistenceGet()
     {
@@ -64,6 +84,16 @@ public sealed class HttpDataCollectionWriteServiceUpsertTests
                     ? JsonContent.Create(new ResolvedIdentityDto("horse-legacy")) : null
             });
         }
+    }
+
+    private sealed class FixedResponseHandler(HttpStatusCode statusCode, string body) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+            => Task.FromResult(new HttpResponseMessage(statusCode)
+            {
+                Content = new StringContent(body)
+            });
     }
 
     [TestMethod]

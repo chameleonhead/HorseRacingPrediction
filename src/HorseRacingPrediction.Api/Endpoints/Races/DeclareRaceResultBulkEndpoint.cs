@@ -19,8 +19,9 @@ internal static class DeclareRaceResultBulkEndpoint
                     [SwaggerOperation(Summary = "Declare race result in bulk", Description = "Creates/updates the race and declares result, entry results, weather, track condition and payouts in a single call")]
         async (HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkRequest request, ICommandBus commandBus, IQueryProcessor queryProcessor, IDbContextProvider<EventStoreDbContext> dbContextProvider, CollectionPlatformStore collectionStore, CancellationToken cancellationToken) =>
                     {
-                        if (request is null) return Results.BadRequest(new[] { "Request is required." });
-                        return await ApplyCollectedRaceResultBulkAsync(request, commandBus, queryProcessor,
+                        var result = request?.Result;
+                        if (result is null) return Results.BadRequest(new[] { "Request is required." });
+                        return await ApplyCollectedRaceResultBulkAsync(result, commandBus, queryProcessor,
                             dbContextProvider, collectionStore, cancellationToken).ConfigureAwait(false);
 
                     })

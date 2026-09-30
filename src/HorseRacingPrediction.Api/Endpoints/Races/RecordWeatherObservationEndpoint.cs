@@ -14,17 +14,19 @@ internal static class RecordWeatherObservationEndpoint
                     [SwaggerOperation(Summary = "Record weather observation", Description = "Records a weather observation for a race")]
         async (string raceId, HorseRacingPrediction.Contracts.Races.RecordWeatherObservationRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        var observation = request?.Observation;
+                        if (observation is null) return Results.BadRequest(new[] { "Observation is required." });
                         try
                         {
                             var command = new RecordWeatherObservationCommand(
                                 new RaceId(raceId),
-                                request.ObservationTime,
-                                request.WeatherCode,
-                                request.WeatherText,
-                                request.TemperatureCelsius,
-                                request.HumidityPercent,
-                                request.WindDirectionCode,
-                                request.WindSpeedMeterPerSecond);
+                                observation.ObservationTime,
+                                observation.WeatherCode,
+                                observation.WeatherText,
+                                observation.TemperatureCelsius,
+                                observation.HumidityPercent,
+                                observation.WindDirectionCode,
+                                observation.WindSpeedMeterPerSecond);
 
                             var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                             return result.IsSuccess

@@ -62,7 +62,7 @@ public sealed class RaceOddsSnapshotApiTests
         {
             var horseId = $"horse-00000000-0000-0000-0000-00000000002{number}";
             using var assigned = await client.PostAsJsonAsync($"/api/races/{raceId}/entries",
-                new RegisterEntryRequest(horseId, number, null, null, frame, null, null, null, null, null));
+                new RegisterEntryRequest(new(horseId, number, null, null, frame, null, null, null, null, null)));
             assigned.EnsureSuccessStatusCode();
         }
         var fence = await GetFenceAsync(client, raceId);
@@ -172,15 +172,15 @@ public sealed class RaceOddsSnapshotApiTests
         var (app, client) = await TestApplicationFactory.CreateAsync();
         await using var lifetime = app;
         client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
-        var initialCard = new DeclareRaceResultBulkRequest(new DateOnly(2036, 9, 12), "東京", 2,
+        var initialCard = new DeclareRaceResultBulkRequest(new(new DateOnly(2036, 9, 12), "東京", 2,
             "odds swap", EntryCount: 2, IsRaceCard: true,
-            Entries: [BulkEntry(1, "オッズ馬A", "210001"), BulkEntry(2, "オッズ馬B", "210002")]);
+            Entries: [BulkEntry(1, "オッズ馬A", "210001"), BulkEntry(2, "オッズ馬B", "210002")]));
         using var initial = await client.PostAsJsonAsync("/api/races/result-bulk", initialCard);
         initial.EnsureSuccessStatusCode();
         var initialBody = await initial.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>();
         Assert.IsNotNull(initialBody);
-        Assert.IsTrue(initialBody.CorePersisted, string.Join(" | ", initialBody.Errors));
-        var raceId = initialBody.RaceId;
+        Assert.IsTrue(initialBody.Result.CorePersisted, string.Join(" | ", initialBody.Result.Errors));
+        var raceId = initialBody.Result.RaceId;
         var firstHorse = DeterministicIdGenerator.BuildHorseId("オッズ馬A", SourceIdentity("210001"));
         var secondHorse = DeterministicIdGenerator.BuildHorseId("オッズ馬B", SourceIdentity("210002"));
         var beforeFence = await GetFenceAsync(client, raceId);
@@ -191,12 +191,12 @@ public sealed class RaceOddsSnapshotApiTests
 
         using var swapped = await client.PostAsJsonAsync("/api/races/result-bulk", initialCard with
         {
-            Entries = [BulkEntry(2, "オッズ馬A", "210001"), BulkEntry(1, "オッズ馬B", "210002")],
+            Result = initialCard.Result! with { Entries = [BulkEntry(2, "オッズ馬A", "210001"), BulkEntry(1, "オッズ馬B", "210002")] },
         });
         swapped.EnsureSuccessStatusCode();
         var swappedBody = await swapped.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>();
         Assert.IsNotNull(swappedBody);
-        Assert.IsTrue(swappedBody.CorePersisted, string.Join(" | ", swappedBody.Errors));
+        Assert.IsTrue(swappedBody.Result.CorePersisted, string.Join(" | ", swappedBody.Result.Errors));
         var afterFence = await GetFenceAsync(client, raceId);
         Assert.AreNotEqual(beforeFence.Fingerprint, afterFence.Fingerprint);
 
@@ -246,7 +246,7 @@ public sealed class RaceOddsSnapshotApiTests
         params (int? Number, string HorseId)[] entries)
     {
         using var created = await client.PostAsJsonAsync("/api/races",
-            new CreateRaceRequest(new(2026, 9, 12), "東京", raceNumber, "odds", raceId));
+            new CreateRaceRequest(new(new(2026, 9, 12), "東京", raceNumber, "odds", raceId)));
         created.EnsureSuccessStatusCode();
         foreach (var (_, horseId) in entries)
         {
@@ -255,7 +255,7 @@ public sealed class RaceOddsSnapshotApiTests
             horse.EnsureSuccessStatusCode();
         }
         using var published = await client.PostAsJsonAsync($"/api/races/{raceId}/card/publish",
-            new PublishRaceCardRequest(entries.Length));
+            new PublishRaceCardRequest(new(entries.Length)));
         published.EnsureSuccessStatusCode();
         foreach (var (number, horseId) in entries)
             await RegisterEntryAsync(client, raceId, horseId, number);
@@ -271,8 +271,8 @@ public sealed class RaceOddsSnapshotApiTests
     private static async Task RegisterEntryAsync(HttpClient client, string raceId, string horseId, int? number)
     {
         using var registered = await client.PostAsJsonAsync($"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(horseId, number, null, null, null, null, null, null, null, null,
-                EntryId: DeterministicIdGenerator.BuildRaceEntryId(raceId, horseId)));
+            new RegisterEntryRequest(new(horseId, number, null, null, null, null, null, null, null, null,
+                EntryId: DeterministicIdGenerator.BuildRaceEntryId(raceId, horseId))));
         registered.EnsureSuccessStatusCode();
     }
 

@@ -40,7 +40,7 @@ public sealed class SharedOwnerIdentityTests
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
         Assert.IsNotNull(body);
-        Assert.IsTrue(body.CorePersisted, string.Join(";", body.Errors));
+        Assert.IsTrue(body.Result.CorePersisted, string.Join(";", body.Result.Errors));
 
         var tasks = await OwnerTasksAsync(http);
         Assert.HasCount(2, tasks);
@@ -103,7 +103,7 @@ public sealed class SharedOwnerIdentityTests
         var verifier = new OwnerIdentityApiClient(http);
         Assert.IsTrue(await verifier.ExistsAsync(target.OwnerId, CancellationToken.None));
         Assert.IsFalse(await verifier.ExistsAsync(source.OwnerId, CancellationToken.None));
-        Assert.AreNotEqual(first.RaceId, second.RaceId);
+        Assert.AreNotEqual(first.Result.RaceId, second.Result.RaceId);
     }
 
     private static async Task<(WebApplication App, HttpClient Client)> CreateAsync()
@@ -119,13 +119,13 @@ public sealed class SharedOwnerIdentityTests
     }
 
     private static DeclareRaceResultBulkRequest Card(string course, IReadOnlyList<string> owners) =>
-        new(new(2036, 9, 27), course, 1, "馬主主体ID検証", EntryCount: owners.Count,
+        new(new(new(2036, 9, 27), course, 1, "馬主主体ID検証", EntryCount: owners.Count,
             IsRaceCard: true,
             Entries: owners.Select((owner, index) => new RaceResultEntryBulkDto(index + 1, null, null, null,
                 null, null, null, HorseName: $"検証馬{course}-{index}", JockeyName: $"騎手{course}-{index}",
                 TrainerName: $"調教師{course}-{index}", OwnerName: owner,
                 HorseSourceIdentity: $"https://www.jra.go.jp/JRADB/accessU.html?CNAME=owner-{course}-{index}"))
-                .ToArray());
+                .ToArray()));
 
     private static async Task<DeclareRaceResultBulkResponse> SaveCardAsync(HttpClient http, string course,
         IReadOnlyList<string> owners)
@@ -134,7 +134,7 @@ public sealed class SharedOwnerIdentityTests
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
         Assert.IsNotNull(body);
-        Assert.IsTrue(body.CorePersisted, string.Join(";", body.Errors));
+        Assert.IsTrue(body.Result.CorePersisted, string.Join(";", body.Result.Errors));
         return body;
     }
 

@@ -14,6 +14,8 @@ internal static class DeclarePayoutResultEndpoint
                     [SwaggerOperation(Summary = "Declare payout result", Description = "Declares payout information for win/place/quinella/exacta/trifecta bets")]
         async (string raceId, HorseRacingPrediction.Contracts.Races.DeclarePayoutResultRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        var payout = request?.Payout;
+                        if (payout is null) return Results.BadRequest(new[] { "Payout is required." });
                         try
                         {
                             static IReadOnlyList<PayoutEntry>? ToPayoutEntries(IReadOnlyList<HorseRacingPrediction.Contracts.Races.PayoutEntryDto>? dtos) =>
@@ -21,12 +23,12 @@ internal static class DeclarePayoutResultEndpoint
 
                             var command = new DeclarePayoutResultCommand(
                                 new RaceId(raceId),
-                                request.DeclaredAt,
-                                ToPayoutEntries(request.WinPayouts),
-                                ToPayoutEntries(request.PlacePayouts),
-                                ToPayoutEntries(request.QuinellaPayouts),
-                                ToPayoutEntries(request.ExactaPayouts),
-                                ToPayoutEntries(request.TrifectaPayouts));
+                                payout.DeclaredAt,
+                                ToPayoutEntries(payout.WinPayouts),
+                                ToPayoutEntries(payout.PlacePayouts),
+                                ToPayoutEntries(payout.QuinellaPayouts),
+                                ToPayoutEntries(payout.ExactaPayouts),
+                                ToPayoutEntries(payout.TrifectaPayouts));
 
                             var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                             return result.IsSuccess

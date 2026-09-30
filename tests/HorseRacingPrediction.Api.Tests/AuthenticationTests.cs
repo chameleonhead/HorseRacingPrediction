@@ -38,7 +38,7 @@ public class AuthenticationTests
 
         var response = await client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId),
+            new CreateRaceRequest(new(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId)),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -53,7 +53,7 @@ public class AuthenticationTests
 
         var response = await client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId),
+            new CreateRaceRequest(new(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId)),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -68,7 +68,7 @@ public class AuthenticationTests
 
         var response = await client.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId),
+            new CreateRaceRequest(new(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId)),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
@@ -83,7 +83,7 @@ public class AuthenticationTests
         var raceId = $"race-{Guid.NewGuid()}";
         await authClient.PostAsJsonAsync(
             "/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId),
+            new CreateRaceRequest(new(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId)),
             JsonOptions);
 
         // Then GET without API key

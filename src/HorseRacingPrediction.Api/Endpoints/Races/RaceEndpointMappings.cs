@@ -19,7 +19,7 @@ namespace HorseRacingPrediction.Api.Endpoints.Races;
 internal static class RaceEndpointMappings
 {
     internal static async Task EnsureRelatedSubjectsAsync(
-        RegisterEntryRequest request,
+        RegisterEntryInputDto request,
         ICommandBus commandBus,
         IDbContextProvider<EventStoreDbContext> dbContextProvider,
         CancellationToken cancellationToken)

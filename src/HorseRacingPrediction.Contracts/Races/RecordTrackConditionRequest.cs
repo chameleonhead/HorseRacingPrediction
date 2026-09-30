@@ -1,9 +1,10 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace HorseRacingPrediction.Contracts.Races;
 
-public sealed record RecordTrackConditionRequest(
-    [property: Required] DateTimeOffset ObservationTime,
-    string? TurfConditionCode,
-    string? DirtConditionCode,
-    string? GoingDescriptionText);
+public sealed record RecordTrackConditionRequest(RecordTrackConditionInputDto? Observation)
+{
+    [JsonIgnore]
+    public string RaceId { get; init; } = string.Empty;
+}

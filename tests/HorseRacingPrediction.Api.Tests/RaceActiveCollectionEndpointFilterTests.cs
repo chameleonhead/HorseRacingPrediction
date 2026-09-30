@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 
 using HorseRacingPrediction.Contracts.Collection;
 using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Races;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -20,7 +21,7 @@ public sealed class RaceActiveCollectionEndpointFilterTests
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var date = new DateOnly(2026, 9, 26);
         var raceId = DeterministicIdGenerator.BuildRaceId(date, "中山", 5);
-        (await http.PostAsJsonAsync("/api/races", new { raceId, raceDate = date, racecourseCode = "中山", raceNumber = 5, raceName = "lease検証" })).EnsureSuccessStatusCode();
+        (await http.PostAsJsonAsync("/api/races", new CreateRaceRequest(new(date, "中山", 5, "lease検証", raceId)))).EnsureSuccessStatusCode();
         var store = app.Services.GetRequiredService<CollectionPlatformStore>();
         var definition = new CollectionDefinitionId("race-detail");
         await store.RegisterDefinitionAsync(definition, "detail", CollectionResourceType.Race, 4, "test", true);
@@ -28,7 +29,7 @@ public sealed class RaceActiveCollectionEndpointFilterTests
         var receipt = await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "20260926:Nakayama:5"), definition, 4,
             CollectionReason.Initial, now, effectiveDate: date);
         var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
-        var weather = new { observedAt = now, conditionCode = "SUNNY" };
+        var weather = new RecordWeatherObservationRequest(new(now, "SUNNY", null, null, null, null, null));
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync($"/api/races/{raceId}/weather", weather)).StatusCode);
         var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
@@ -54,7 +55,7 @@ public sealed class RaceActiveCollectionEndpointFilterTests
         await store.RequestAsync(race, definition, 1, CollectionReason.Initial, DateTimeOffset.UtcNow);
 
         var response = await client.PostAsJsonAsync(
-            "/api/races/race-filter-test/card/publish", new { EntryCount = 1 });
+            "/api/races/race-filter-test/card/publish", new PublishRaceCardRequest(new(1)));
 
         Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
     }
@@ -74,7 +75,7 @@ public sealed class RaceActiveCollectionEndpointFilterTests
             CollectionReason.Initial, DateTimeOffset.UtcNow);
 
         var response = await client.PostAsJsonAsync(
-            "/api/races/race-filter-spoof/card/publish", new { EntryCount = 1 });
+            "/api/races/race-filter-spoof/card/publish", new PublishRaceCardRequest(new(1)));
 
         Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
     }
@@ -93,7 +94,8 @@ public sealed class RaceActiveCollectionEndpointFilterTests
             CollectionReason.Initial, DateTimeOffset.UtcNow);
 
         var response = await client.PostAsJsonAsync("/api/races/result-bulk",
-            new { TargetRaceId = "race-filter-body", RefreshExistingData = true });
+            new DeclareRaceResultBulkRequest(new(new DateOnly(2026, 9, 26), "中山", 5, "lease-filter-test",
+                TargetRaceId: "race-filter-body", RefreshExistingData: true)));
 
         Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
     }

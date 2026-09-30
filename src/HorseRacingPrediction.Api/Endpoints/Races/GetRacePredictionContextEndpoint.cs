@@ -28,12 +28,12 @@ internal static class GetRacePredictionContextEndpoint
 
                         var result = ToAgentRacePredictionContext(readModel);
                         result.EntryAssignmentFingerprint = await coordinator.AssignmentFingerprintAsync(raceId, cancellationToken);
-                        return Results.Ok(result);
+                        return Results.Ok(new HorseRacingPrediction.Contracts.Races.GetRacePredictionContextResponse(result));
                     })
                     .AddEndpointFilter<RacePredictionReadEndpointFilter>()
                     .WithName("GetRacePredictionContext")
                     .WithTags("Race API")
-                    .Produces<HorseRacingPrediction.Contracts.Races.RacePredictionContextDto>(StatusCodes.Status200OK)
+                    .Produces<HorseRacingPrediction.Contracts.Races.GetRacePredictionContextResponse>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

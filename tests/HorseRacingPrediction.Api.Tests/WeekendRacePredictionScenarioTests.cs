@@ -112,47 +112,47 @@ public class WeekendRacePredictionScenarioTests
 
         // --- レースを作成する（Draft 状態） ---
         var createRace = await _client.PostAsJsonAsync("/api/races",
-            new CreateRaceRequest(new DateOnly(2025, 6, 1), "TOKYO", 11, "東京優駿（日本ダービー）", raceId),
+            new CreateRaceRequest(new(new DateOnly(2025, 6, 1), "TOKYO", 11, "東京優駿（日本ダービー）", raceId)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, createRace.StatusCode, "レース作成に失敗");
 
         // Draft 状態を確認
         var raceAfterCreate = await _client.GetAsync($"/api/races/{raceId}");
         Assert.AreEqual(HttpStatusCode.OK, raceAfterCreate.StatusCode);
-        var raceDraft = await raceAfterCreate.Content.ReadFromJsonAsync<RaceDto>(JsonOptions);
+        var raceDraft = await raceAfterCreate.Content.ReadFromJsonAsync<GetRaceResponse>(JsonOptions);
         Assert.IsNotNull(raceDraft);
-        Assert.AreEqual(RaceStatus.Draft, raceDraft.Status, "レース作成直後は Draft であるべき");
+        Assert.AreEqual(RaceStatus.Draft, raceDraft.Race.Status, "レース作成直後は Draft であるべき");
 
         // --- 出馬表を公開する（CardPublished 状態に遷移） ---
         // 木曜日: 出馬表公開。まだ枠順は未確定なので GateNumber は null にして登録する。
         var publishCard = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
-            new PublishRaceCardRequest(18),
+            new PublishRaceCardRequest(new(18)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, publishCard.StatusCode, "出馬表公開に失敗");
 
         // CardPublished 状態を確認
         var raceAfterPublish = await _client.GetAsync($"/api/races/{raceId}");
-        var racePublished = await raceAfterPublish.Content.ReadFromJsonAsync<RaceDto>(JsonOptions);
+        var racePublished = await raceAfterPublish.Content.ReadFromJsonAsync<GetRaceResponse>(JsonOptions);
         Assert.IsNotNull(racePublished);
-        Assert.AreEqual(RaceStatus.CardPublished, racePublished.Status, "出馬表公開後は CardPublished であるべき");
+        Assert.AreEqual(RaceStatus.CardPublished, racePublished.Race.Status, "出馬表公開後は CardPublished であるべき");
 
         // --- 出走馬を登録する（枠番は未確定のため null） ---
         var entry1Response = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(horse1Id, 1, jockey1Id, trainerId, null, 57.0m, "M", 3, 468.0m, 0.0m, entry1Id),
+            new RegisterEntryRequest(new(horse1Id, 1, jockey1Id, trainerId, null, 57.0m, "M", 3, 468.0m, 0.0m, RunningStyleCode: entry1Id)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, entry1Response.StatusCode, "エントリー1の登録に失敗");
 
         var entry2Response = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(horse2Id, 2, jockey2Id, trainerId, null, 57.0m, "M", 3, 472.0m, 2.0m, entry2Id),
+            new RegisterEntryRequest(new(horse2Id, 2, jockey2Id, trainerId, null, 57.0m, "M", 3, 472.0m, 2.0m, RunningStyleCode: entry2Id)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, entry2Response.StatusCode, "エントリー2の登録に失敗");
 
         var entry3Response = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(horse3Id, 3, jockey3Id, trainerId, null, 57.0m, "M", 3, 460.0m, -4.0m, entry3Id),
+            new RegisterEntryRequest(new(horse3Id, 3, jockey3Id, trainerId, null, 57.0m, "M", 3, 460.0m, -4.0m, RunningStyleCode: entry3Id)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, entry3Response.StatusCode, "エントリー3の登録に失敗");
 
@@ -198,19 +198,19 @@ public class WeekendRacePredictionScenarioTests
 
         var gateEntry1Response = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(horse1Id, 4, jockey1Id, trainerId, 2, 57.0m, "M", 3, 468.0m, 0.0m, entry1WithGate),
+            new RegisterEntryRequest(new(horse1Id, 4, jockey1Id, trainerId, 2, 57.0m, "M", 3, 468.0m, 0.0m, RunningStyleCode: entry1WithGate)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, gateEntry1Response.StatusCode, "枠番付きエントリー1の登録に失敗");
 
         var gateEntry2Response = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(horse2Id, 7, jockey2Id, trainerId, 4, 57.0m, "M", 3, 472.0m, 2.0m, entry2WithGate),
+            new RegisterEntryRequest(new(horse2Id, 7, jockey2Id, trainerId, 4, 57.0m, "M", 3, 472.0m, 2.0m, RunningStyleCode: entry2WithGate)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, gateEntry2Response.StatusCode, "枠番付きエントリー2の登録に失敗");
 
         var gateEntry3Response = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(horse3Id, 11, jockey3Id, trainerId, 6, 57.0m, "M", 3, 460.0m, -4.0m, entry3WithGate),
+            new RegisterEntryRequest(new(horse3Id, 11, jockey3Id, trainerId, 6, 57.0m, "M", 3, 460.0m, -4.0m, RunningStyleCode: entry3WithGate)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, gateEntry3Response.StatusCode, "枠番付きエントリー3の登録に失敗");
 
@@ -312,25 +312,25 @@ public class WeekendRacePredictionScenarioTests
         // --- 天気を観測する（土曜朝） ---
         var satWeather = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/weather",
-            new RecordWeatherObservationRequest(
+            new RecordWeatherObservationRequest(new(
                 saturdayObservationTime,
                 WeatherCode: "CLOUDY",
                 WeatherText: "曇り",
                 TemperatureCelsius: 19.5m,
                 HumidityPercent: 68.0m,
                 WindDirectionCode: "SW",
-                WindSpeedMeterPerSecond: 4.1m),
+                WindSpeedMeterPerSecond: 4.1m)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, satWeather.StatusCode, "土曜天気観測に失敗");
 
         // --- 馬場状態を観測する（土曜朝） ---
         var satTrack = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/track-condition",
-            new RecordTrackConditionRequest(
+            new RecordTrackConditionRequest(new(
                 saturdayObservationTime,
                 TurfConditionCode: "GOOD",
                 DirtConditionCode: null,
-                GoingDescriptionText: "良"),
+                GoingDescriptionText: "良")),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, satTrack.StatusCode, "土曜馬場状態観測に失敗");
 
@@ -361,25 +361,25 @@ public class WeekendRacePredictionScenarioTests
         // --- 天気を観測する（日曜朝） ---
         var sunWeather = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/weather",
-            new RecordWeatherObservationRequest(
+            new RecordWeatherObservationRequest(new(
                 DateTimeOffset.UtcNow,
                 WeatherCode: "SUNNY",
                 WeatherText: "晴れ",
                 TemperatureCelsius: 23.0m,
                 HumidityPercent: 55.0m,
                 WindDirectionCode: "S",
-                WindSpeedMeterPerSecond: 2.5m),
+                WindSpeedMeterPerSecond: 2.5m)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, sunWeather.StatusCode, "日曜天気観測に失敗");
 
         // --- 馬場状態を観測する（日曜朝） ---
         var sunTrack = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/track-condition",
-            new RecordTrackConditionRequest(
+            new RecordTrackConditionRequest(new(
                 DateTimeOffset.UtcNow,
                 TurfConditionCode: "GOOD",
                 DirtConditionCode: null,
-                GoingDescriptionText: "良"),
+                GoingDescriptionText: "良")),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, sunTrack.StatusCode, "日曜馬場状態観測に失敗");
 
@@ -389,9 +389,9 @@ public class WeekendRacePredictionScenarioTests
         Assert.AreEqual(HttpStatusCode.OK, openPreRace.StatusCode, "PreRaceOpen 遷移に失敗");
 
         var racePreRace = await (await _client.GetAsync($"/api/races/{raceId}"))
-            .Content.ReadFromJsonAsync<RaceDto>(JsonOptions);
+            .Content.ReadFromJsonAsync<GetRaceResponse>(JsonOptions);
         Assert.IsNotNull(racePreRace);
-        Assert.AreEqual(RaceStatus.PreRaceOpen, racePreRace.Status, "PreRaceOpen 状態になるべき");
+        Assert.AreEqual(RaceStatus.PreRaceOpen, racePreRace.Race.Status, "PreRaceOpen 状態になるべき");
 
         // --- レース開始（InProgress 状態に遷移） ---
         var startRace = await _client.PostAsJsonAsync(
@@ -399,47 +399,47 @@ public class WeekendRacePredictionScenarioTests
         Assert.AreEqual(HttpStatusCode.OK, startRace.StatusCode, "レース開始に失敗");
 
         var raceInProgress = await (await _client.GetAsync($"/api/races/{raceId}"))
-            .Content.ReadFromJsonAsync<RaceDto>(JsonOptions);
+            .Content.ReadFromJsonAsync<GetRaceResponse>(JsonOptions);
         Assert.IsNotNull(raceInProgress);
-        Assert.AreEqual(RaceStatus.InProgress, raceInProgress.Status, "InProgress 状態になるべき");
+        Assert.AreEqual(RaceStatus.InProgress, raceInProgress.Race.Status, "InProgress 状態になるべき");
 
         // --- レース結果を宣言する ---
         var declaredAt = DateTimeOffset.UtcNow;
         var declareResult = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/result",
-            new DeclareRaceResultRequest("サニーブレイズ", declaredAt),
+            new DeclareRaceResultRequest(new("サニーブレイズ", declaredAt)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, declareResult.StatusCode, "レース結果宣言に失敗");
 
         var raceResult = await (await _client.GetAsync($"/api/races/{raceId}"))
-            .Content.ReadFromJsonAsync<RaceDto>(JsonOptions);
+            .Content.ReadFromJsonAsync<GetRaceResponse>(JsonOptions);
         Assert.IsNotNull(raceResult);
-        Assert.AreEqual(RaceStatus.ResultDeclared, raceResult.Status, "ResultDeclared 状態になるべき");
-        Assert.AreEqual("サニーブレイズ", raceResult.WinningHorseName, "優勝馬名が一致すべき");
+        Assert.AreEqual(RaceStatus.ResultDeclared, raceResult.Race.Status, "ResultDeclared 状態になるべき");
+        Assert.AreEqual("サニーブレイズ", raceResult.Race.WinningHorseName, "優勝馬名が一致すべき");
 
         // --- 各馬のエントリー結果を宣言する ---
         var entryResult1 = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries/{entry1WithGate}/result",
-            new DeclareEntryResultRequest(1, "2:23.4", null, "34.8", null, null),
+            new DeclareEntryResultRequest(new(1, "2:23.4", null, "34.8", null, null)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, entryResult1.StatusCode, "エントリー1の結果宣言に失敗");
 
         var entryResult2 = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries/{entry2WithGate}/result",
-            new DeclareEntryResultRequest(3, "2:23.9", "3/4", "35.1", null, null),
+            new DeclareEntryResultRequest(new(3, "2:23.9", "3/4", "35.1", null, null)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, entryResult2.StatusCode, "エントリー2の結果宣言に失敗");
 
         var entryResult3 = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries/{entry3WithGate}/result",
-            new DeclareEntryResultRequest(5, "2:24.2", "1.3/4", "35.4", null, null),
+            new DeclareEntryResultRequest(new(5, "2:24.2", "1.3/4", "35.4", null, null)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, entryResult3.StatusCode, "エントリー3の結果宣言に失敗");
 
         // --- 払戻結果を宣言する ---
         var declarePayout = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/payout",
-            new DeclarePayoutResultRequest(
+            new DeclarePayoutResultRequest(new(
                 DeclaredAt: declaredAt,
                 WinPayouts: new[] { new PayoutEntryDto("4", 320m) },
                 PlacePayouts: new[]
@@ -450,7 +450,7 @@ public class WeekendRacePredictionScenarioTests
                 },
                 QuinellaPayouts: new[] { new PayoutEntryDto("4-7", 1420m) },
                 ExactaPayouts: new[] { new PayoutEntryDto("4-7", 2380m) },
-                TrifectaPayouts: null),
+                TrifectaPayouts: null)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, declarePayout.StatusCode, "払戻結果宣言に失敗");
 
@@ -460,9 +460,9 @@ public class WeekendRacePredictionScenarioTests
         Assert.AreEqual(HttpStatusCode.OK, closeRace.StatusCode, "レースクローズに失敗");
 
         var raceClosed = await (await _client.GetAsync($"/api/races/{raceId}"))
-            .Content.ReadFromJsonAsync<RaceDto>(JsonOptions);
+            .Content.ReadFromJsonAsync<GetRaceResponse>(JsonOptions);
         Assert.IsNotNull(raceClosed);
-        Assert.AreEqual(RaceStatus.Closed, raceClosed.Status, "Closed 状態になるべき");
+        Assert.AreEqual(RaceStatus.Closed, raceClosed.Race.Status, "Closed 状態になるべき");
 
         // ═══════════════════════════════════════════════════
         // 【事後】予想評価

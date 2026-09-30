@@ -9,12 +9,13 @@ namespace HorseRacingPrediction.Api.Endpoints.Races;
 internal static partial class RaceResultBulkService
 {
     internal static IResult CollectedIdentityRejection(string raceId, string code) =>
-        Results.Ok(new HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkResponse(raceId, [code],
-            [new("Entry", "HorseIdentity", "Rejected", code, "Horse identity could not be resolved safely; no data was written.")],
-            CorePersisted: false));
+        Results.Ok(new HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkResponse(
+            new HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkResultDto(raceId, [code],
+                [new("Entry", "HorseIdentity", "Rejected", code, "Horse identity could not be resolved safely; no data was written.")],
+                CorePersisted: false)));
 
     // Validate the entire envelope before creating any related subject. Collection cannot repair identity.
-    internal static IResult? ValidateCollectedEntryIdentities(HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkRequest request,
+    internal static IResult? ValidateCollectedEntryIdentities(HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkInputDto request,
         RacePredictionContextReadModel? existing, string raceId,
         IReadOnlyDictionary<HorseRacingPrediction.Contracts.Races.RaceResultEntryBulkDto, string>? resolved = null)
     {
@@ -68,12 +69,13 @@ internal static partial class RaceResultBulkService
         if (effectiveNumbers.Distinct().Count() != effectiveNumbers.Length)
             failures.Add(new("Entry", "HorseNumber", "Rejected", "InvalidHorseNumber", "Effective horse numbers must be unique; no data was written."));
         return failures.Count == 0 ? null : Results.Ok(new HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkResponse(
-            raceId, failures.Select(item => $"{item.ErrorCode}: {item.Key} — {item.Message}").ToArray(),
-            failures, CorePersisted: false));
+            new HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkResultDto(
+                raceId, failures.Select(item => $"{item.ErrorCode}: {item.Key} — {item.Message}").ToArray(),
+                failures, CorePersisted: false)));
     }
 
     internal static async Task<Dictionary<HorseRacingPrediction.Contracts.Races.RaceResultEntryBulkDto, string>> ResolveCollectedHorseIdentitiesAsync(
-        HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkRequest request, HorseRacingPrediction.Infrastructure.Persistence.EventStoreDbContext db, CancellationToken token)
+        HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkInputDto request, HorseRacingPrediction.Infrastructure.Persistence.EventStoreDbContext db, CancellationToken token)
     {
         var resolved = new Dictionary<HorseRacingPrediction.Contracts.Races.RaceResultEntryBulkDto, string>();
         var horses = await CollectionIdentityResolver.LoadHorsesAsync(db, token);

@@ -16,12 +16,14 @@ internal static class DeclareRaceResultEndpoint
                     [SwaggerOperation(Summary = "Declare race result", Description = "Declares result and moves lifecycle to ResultDeclared")]
         async (string raceId, DeclareRaceResultRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        var resultData = request?.Result;
+                        if (resultData is null) return Results.BadRequest(new[] { "Result is required." });
                         try
                         {
                             var command = new DeclareRaceResultCommand(
                                 new RaceId(raceId),
-                                request.WinningHorseName,
-                                request.DeclaredAt ?? HorseRacingPrediction.Contracts.Common.Time.JstTime.Now());
+                                resultData.WinningHorseName,
+                                resultData.DeclaredAt ?? HorseRacingPrediction.Contracts.Common.Time.JstTime.Now());
 
                             var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                             return result.IsSuccess

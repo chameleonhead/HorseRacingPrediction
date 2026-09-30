@@ -28,7 +28,7 @@ namespace HorseRacingPrediction.Api.Endpoints.Races;
 internal static partial class RaceResultBulkService
 {
     internal static async Task<IResult> ApplyCollectedRaceResultBulkAsync(
-        DeclareRaceResultBulkRequest request,
+        DeclareRaceResultBulkInputDto request,
         ICommandBus commandBus,
         IQueryProcessor queryProcessor,
         IDbContextProvider<EventStoreDbContext> dbContextProvider,
@@ -114,7 +114,7 @@ internal static partial class RaceResultBulkService
             const string message = "Race-card requests must not contain result data.";
             errors.Add($"出馬表登録エラー: {message}");
             MarkAcceptedOutcomesFailed(outcomes, "RaceCardContainsResultData", message);
-            return Results.Ok(new DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes));
+            return Results.Ok(new DeclareRaceResultBulkResponse(new DeclareRaceResultBulkResultDto(raceIdValue, errors, outcomes)));
         }
 
         var gradeCode = ResolveCollectedGradeCode(request.GradeCode, request.RaceName, existing?.RaceName);
@@ -147,7 +147,7 @@ internal static partial class RaceResultBulkService
         {
             errors.Add($"レース一括登録エラー: {ex.Message}");
             MarkAcceptedOutcomesFailed(outcomes, "RaceBulkValidationFailed", ex.Message);
-            return Results.Ok(new DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes));
+            return Results.Ok(new DeclareRaceResultBulkResponse(new DeclareRaceResultBulkResultDto(raceIdValue, errors, outcomes)));
         }
 
         try
@@ -162,7 +162,7 @@ internal static partial class RaceResultBulkService
         {
             errors.Add($"関連主体登録エラー: {ex.Message}");
             MarkAcceptedOutcomesFailed(outcomes, "RelatedSubjectUpsertFailed", ex.Message);
-            return Results.Ok(new DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes));
+            return Results.Ok(new DeclareRaceResultBulkResponse(new DeclareRaceResultBulkResultDto(raceIdValue, errors, outcomes)));
         }
 
         try
@@ -204,11 +204,11 @@ internal static partial class RaceResultBulkService
             MarkAcceptedOutcomesFailed(outcomes, "RaceBulkCommandFailed", ex.Message);
         }
 
-        return Results.Ok(new DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes,
-            corePersisted, relatedErrors));
+        return Results.Ok(new DeclareRaceResultBulkResponse(new DeclareRaceResultBulkResultDto(raceIdValue,
+            errors, outcomes, corePersisted, relatedErrors)));
     }
 
-    internal static bool HasRaceResultEvidence(DeclareRaceResultBulkRequest request)
+    internal static bool HasRaceResultEvidence(DeclareRaceResultBulkInputDto request)
         => !string.IsNullOrWhiteSpace(request.WinningHorseName)
            || request.DeclaredAt is not null
            || request.Payouts is not null

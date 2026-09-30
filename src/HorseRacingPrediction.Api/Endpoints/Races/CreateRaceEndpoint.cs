@@ -15,23 +15,25 @@ internal static class CreateRaceEndpoint
                     [SwaggerOperation(Summary = "Create race", Description = "Creates a race aggregate in Draft state")]
         async (CreateRaceRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        var race = request?.Race;
+                        if (race is null) return Results.BadRequest(new[] { "Race is required." });
                         try
                         {
-                            var raceId = string.IsNullOrWhiteSpace(request.RaceId) ? RaceId.New : new RaceId(request.RaceId);
+                            var raceId = string.IsNullOrWhiteSpace(race.RaceId) ? RaceId.New : new RaceId(race.RaceId);
                             var command = new CreateRaceCommand(
                                 raceId,
-                                request.RaceDate,
-                                request.RacecourseCode,
-                                request.RaceNumber,
-                                request.RaceName,
-                                gradeCode: request.GradeCode,
-                                surfaceCode: request.SurfaceCode,
-                                distanceMeters: request.DistanceMeters,
-                                directionCode: request.DirectionCode);
+                                race.RaceDate,
+                                race.RacecourseCode,
+                                race.RaceNumber,
+                                race.RaceName,
+                                gradeCode: race.GradeCode,
+                                surfaceCode: race.SurfaceCode,
+                                distanceMeters: race.DistanceMeters,
+                                directionCode: race.DirectionCode);
 
                             var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                             return result.IsSuccess
-                                ? Results.Created($"/api/races/{raceId.Value}", new { RaceId = raceId.Value })
+                                ? Results.Created($"/api/races/{raceId.Value}", new CreateRaceResponse(raceId.Value))
                                 : Results.BadRequest(new[] { "Command execution failed." });
                         }
                         catch (InvalidOperationException ex) when (string.Equals(ex.Message, "Race is already created.", StringComparison.Ordinal))
@@ -41,7 +43,7 @@ internal static class CreateRaceEndpoint
                     })
                     .WithName("CreateRace")
                     .WithTags("Race API")
-                    .Produces(StatusCodes.Status201Created)
+                    .Produces<CreateRaceResponse>(StatusCodes.Status201Created)
                     .Produces<IEnumerable<string>>(StatusCodes.Status409Conflict)
                     .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
                     .Produces(StatusCodes.Status401Unauthorized);

@@ -88,7 +88,7 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
         context.HttpContext.Request.Path.StartsWithSegments("/api/races")
         || context.HttpContext.Request.Path.StartsWithSegments("/api/admin/races")
         || context.HttpContext.Request.Path.StartsWithSegments("/api/v2/admin/races")
-        || context.Arguments.Any(x => x is PrepareHorseHistoryRaceRequest);
+        || context.Arguments.Any(x => x is CreateRaceFromScheduleRequest);
 
     private async Task<HashSet<string>> ResolveKeysAsync(EndpointFilterInvocationContext context, CancellationToken token)
     {
@@ -101,14 +101,15 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
         foreach (var route in context.HttpContext.Request.RouteValues.Values) AddText(route?.ToString());
         foreach (var argument in context.Arguments.Where(x => x is not null))
         {
-            var type = argument!.GetType();
-            if (type.Namespace?.Contains("Contracts", StringComparison.Ordinal) == true)
-                AddText(JsonSerializer.Serialize(argument, type));
-            if (type.GetProperty("RaceDate")?.GetValue(argument) is DateOnly date
-                && type.GetProperty("RacecourseCode")?.GetValue(argument) is string course
-                && type.GetProperty("RaceNumber")?.GetValue(argument) is int number)
+            var contractInput = GetContractInput(argument!);
+            var type = contractInput?.GetType() ?? argument!.GetType();
+            if (argument!.GetType().Namespace?.Contains("Contracts", StringComparison.Ordinal) == true)
+                AddText(JsonSerializer.Serialize(argument, argument.GetType()));
+            if (type.GetProperty("RaceDate")?.GetValue(contractInput) is DateOnly date
+                && type.GetProperty("RacecourseCode")?.GetValue(contractInput) is string course
+                && type.GetProperty("RaceNumber")?.GetValue(contractInput) is int number)
                 keys.Add(DeterministicIdGenerator.BuildRaceId(date, course, number));
-            if (argument is DeclareRaceResultBulkRequest bulk)
+            if (contractInput is DeclareRaceResultBulkInputDto bulk)
                 foreach (var entry in bulk.Entries ?? [])
                 {
                     if (!string.IsNullOrWhiteSpace(entry.HorseName))
@@ -118,7 +119,7 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
                     if (!string.IsNullOrWhiteSpace(entry.TrainerName))
                         keys.Add(DeterministicIdGenerator.BuildEntityId("trainer", DeterministicIdGenerator.NormalizeKey(JraSubjectNameNormalizer.CanonicalizeDisplayName("Trainer", entry.TrainerName))));
                 }
-            if (argument is PrepareHorseHistoryRaceRequest history)
+            if (argument is CreateRaceFromScheduleRequest { Schedule: { } history })
             {
                 keys.Add(DeterministicIdGenerator.BuildRaceId(history.RaceDate, history.Course, history.RaceNumber));
             }
@@ -126,18 +127,22 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
         using var db = provider.CreateContext();
         // Canonical scope locks serialize alternate spellings before their persisted IDs are resolved.
         keys.Add("identity-resolution");
-        var horseIdentities = context.Arguments.OfType<DeclareRaceResultBulkRequest>().Any()
+        var bulkInputs = context.Arguments.Where(x => x is not null).Select(x => GetContractInput(x!))
+            .OfType<DeclareRaceResultBulkInputDto>().ToArray();
+        var horseIdentities = bulkInputs.Length > 0
             ? await CollectionIdentityResolver.LoadHorsesAsync(db, token) : [];
         foreach (var argument in context.Arguments.Where(x => x is not null))
         {
-            var type = argument!.GetType();
-            if (type.GetProperty("RaceDate")?.GetValue(argument) is DateOnly date
-                && type.GetProperty("RacecourseCode")?.GetValue(argument) is string course
-                && type.GetProperty("RaceNumber")?.GetValue(argument) is int number
-                && string.IsNullOrWhiteSpace(type.GetProperty("RaceId")?.GetValue(argument)?.ToString())
-                && string.IsNullOrWhiteSpace(type.GetProperty("TargetRaceId")?.GetValue(argument)?.ToString()))
+            var contractInput = GetContractInput(argument!);
+            if (contractInput is null) continue;
+            var type = contractInput.GetType();
+            if (type.GetProperty("RaceDate")?.GetValue(contractInput) is DateOnly date
+                && type.GetProperty("RacecourseCode")?.GetValue(contractInput) is string course
+                && type.GetProperty("RaceNumber")?.GetValue(contractInput) is int number
+                && string.IsNullOrWhiteSpace(type.GetProperty("RaceId")?.GetValue(contractInput)?.ToString())
+                && string.IsNullOrWhiteSpace(type.GetProperty("TargetRaceId")?.GetValue(contractInput)?.ToString()))
                 keys.Add(await CollectionIdentityResolver.RaceAsync(db, date, course, number, token));
-            if (argument is DeclareRaceResultBulkRequest bulk)
+            if (contractInput is DeclareRaceResultBulkInputDto bulk)
                 foreach (var entry in bulk.Entries ?? [])
                     if (!string.IsNullOrWhiteSpace(entry.HorseName)
                         && (string.IsNullOrWhiteSpace(entry.HorseSourceIdentity) || JraSourceIdentity.TryNormalizeHorse(entry.HorseSourceIdentity, out _)))
@@ -180,4 +185,22 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
         }
         return keys;
     }
+
+    private static object? GetContractInput(object argument) => argument switch
+    {
+        CreateRaceRequest { Race: { } input } => input,
+        CreateRaceFromScheduleRequest { Schedule: { } input } => input,
+        CorrectRaceDataRequest { Race: { } input } => input,
+        RegisterEntryRequest { Entry: { } input } => input,
+        UpdateEntryCollectedDataRequest { Entry: { } input } => input,
+        DeclareEntryResultRequest { Result: { } input } => input,
+        DeclareRaceResultRequest { Result: { } input } => input,
+        DeclarePayoutResultRequest { Payout: { } input } => input,
+        DeclareRaceResultBulkRequest { Result: { } input } => input,
+        MarkRaceRescheduledRequest { Reschedule: { } input } => input,
+        PublishRaceCardRequest { Card: { } input } => input,
+        RecordWeatherObservationRequest { Observation: { } input } => input,
+        RecordTrackConditionRequest { Observation: { } input } => input,
+        _ => argument
+    };
 }

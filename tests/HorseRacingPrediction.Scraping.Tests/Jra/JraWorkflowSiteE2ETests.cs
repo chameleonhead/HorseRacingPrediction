@@ -131,7 +131,7 @@ public sealed class JraWorkflowSiteE2ETests
         var result = await resultWorkflow.CollectAsync(raceId, cts.Token);
 
         Assert.AreEqual(raceId, result.RaceId);
-        var payout = _writeService.DeclareRaceResultBulkCalls.Single().Payouts;
+        var payout = _writeService.DeclareRaceResultBulkCalls.Single().Result!.Payouts;
         Assert.IsNotNull(payout, "JRA公式結果ページに払戻があるレースの払戻が抽出されませんでした。");
         var actual = payout!;
         var trifectas = actual.TrifectaPayouts;

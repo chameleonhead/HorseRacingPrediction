@@ -51,7 +51,7 @@ public sealed class JraRaceResultCollectionWorkflowTests
             new RaceResultEntry(ResultStatus.Finished, 1, 1, "テスト馬", "騎手", TimeSpan.FromSeconds(90)));
         var (session, _, writer) = CreateContext(new Dictionary<RaceId, IJraPage> { [TestRaceId] = page });
         await using var scope = session;
-        writer.BulkWriteResponse = new DeclareRaceResultBulkResponse("domain-race", ["rejected"],
+        writer.BulkWriteResponse = new DeclareRaceResultBulkResultDto("domain-race", ["rejected"],
             [new("Entry", "HorseNumber=1", "Rejected", errorCode)], CorePersisted: false);
 
         var result = await new JraRaceResultCollectionWorkflow(session, writer).CollectAsync(TestRaceId);
@@ -67,7 +67,7 @@ public sealed class JraRaceResultCollectionWorkflowTests
             new RaceResultEntry(ResultStatus.Finished, 1, 1, "テスト馬", "騎手", TimeSpan.FromSeconds(90)));
         var (session, _, writer) = CreateContext(new Dictionary<RaceId, IJraPage> { [TestRaceId] = page });
         await using var scope = session;
-        writer.BulkWriteResponse = new DeclareRaceResultBulkResponse("domain-race", ["identity rejected"],
+        writer.BulkWriteResponse = new DeclareRaceResultBulkResultDto("domain-race", ["identity rejected"],
             [new("Entry", "HorseNumber=1", "Rejected", "InvalidHorseNumber")],
             CorePersisted: false, RelatedErrors: ["projection failed"]);
 
@@ -142,15 +142,15 @@ public sealed class JraRaceResultCollectionWorkflowTests
         Assert.HasCount(1, writeService.DeclareRaceResultCalls);
         Assert.AreEqual(expectedRaceId, writeService.DeclareRaceResultCalls[0].RaceId);
         Assert.AreEqual("テストホースA", writeService.DeclareRaceResultCalls[0].WinningHorseName);
-        Assert.AreEqual("直", writeService.DeclareRaceResultBulkCalls.Single().DirectionCode);
-        Assert.AreEqual("G3", writeService.DeclareRaceResultBulkCalls.Single().GradeCode);
-        Assert.AreEqual(41_000_000m, writeService.DeclareRaceResultBulkCalls.Single().Entries![0].PrizeMoney);
-        Assert.AreEqual(567_000m, writeService.DeclareRaceResultBulkCalls.Single().Entries![0].AdditionalPrizeMoney);
+        Assert.AreEqual("直", writeService.DeclareRaceResultBulkCalls.Single().Result!.DirectionCode);
+        Assert.AreEqual("G3", writeService.DeclareRaceResultBulkCalls.Single().Result!.GradeCode);
+        Assert.AreEqual(41_000_000m, writeService.DeclareRaceResultBulkCalls.Single().Result!.Entries![0].PrizeMoney);
+        Assert.AreEqual(567_000m, writeService.DeclareRaceResultBulkCalls.Single().Result!.Entries![0].AdditionalPrizeMoney);
         Assert.AreEqual("https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud102024102539/E3",
-            writeService.DeclareRaceResultBulkCalls.Single().Entries![0].HorseSourceIdentity);
+            writeService.DeclareRaceResultBulkCalls.Single().Result!.Entries![0].HorseSourceIdentity);
         Assert.AreEqual("https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud102024102539/E3",
             result.Entries!.Single(x => x.HorseNumber == 3).HorseSourceIdentity);
-        Assert.AreEqual("枠内駐立不良。", writeService.DeclareRaceResultBulkCalls.Single().StewardReportText);
+        Assert.AreEqual("枠内駐立不良。", writeService.DeclareRaceResultBulkCalls.Single().Result!.StewardReportText);
 
         Assert.HasCount(3, writeService.DeclareRaceEntryResultCalls);
 

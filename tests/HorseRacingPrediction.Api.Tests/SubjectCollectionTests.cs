@@ -53,8 +53,9 @@ public sealed class SubjectCollectionTests
         (await client.PutAsJsonAsync($"/api/v2/admin/subjects/Trainer/{trainerId}/profile", profile)).EnsureSuccessStatusCode();
         Assert.AreEqual("美浦", (await client.GetFromJsonAsync<TrainerDto>($"/api/trainers/{trainerId}"))!.AffiliationCode);
         var raceId = "race-" + Guid.NewGuid(); var date = new DateOnly(2026, 9, 6);
-        (await client.PostAsJsonAsync("/api/races", new { raceId, raceDate = date, racecourseCode = "NAKAYAMA", raceNumber = 6, raceName = "旧名" })).EnsureSuccessStatusCode();
-        var response = await client.PostAsJsonAsync("/api/v2/admin/races", new PrepareHorseHistoryRaceRequest(date, "中山", 6, "メイクデビュー中山"));
+        (await client.PostAsJsonAsync("/api/races", new CreateRaceRequest(new(date, "NAKAYAMA", 6, "旧名", raceId)))).EnsureSuccessStatusCode();
+        var response = await client.PostAsJsonAsync("/api/v2/admin/races",
+            new CreateRaceFromScheduleRequest(new(date, "中山", 6, "メイクデビュー中山")));
         response.EnsureSuccessStatusCode();
         Assert.AreEqual(raceId, (await response.Content.ReadFromJsonAsync<RaceIdentity>())!.RaceId);
     }
@@ -92,19 +93,20 @@ public sealed class SubjectCollectionTests
         var horseId = DeterministicIdGenerator.BuildHorseId("履歴の馬");
         (await client.PostAsJsonAsync("/api/horses", new RegisterHorseRequest("履歴の馬", "履歴の馬", null, null, horseId))).EnsureSuccessStatusCode();
         var date = new DateOnly(2026, 9, 6);
-        var prepare = await client.PostAsJsonAsync("/api/v2/admin/races", new PrepareHorseHistoryRaceRequest(date, "中山", 6, "メイクデビュー中山"));
+        var prepare = await client.PostAsJsonAsync("/api/v2/admin/races",
+            new CreateRaceFromScheduleRequest(new(date, "中山", 6, "メイクデビュー中山")));
         prepare.EnsureSuccessStatusCode();
         var raceId = (await prepare.Content.ReadFromJsonAsync<RaceIdentity>())!.RaceId;
-        var request = new DeclareRaceResultBulkRequest(date, "中山", 6, "メイクデビュー中山", EntryCount: 1,
+        var request = new DeclareRaceResultBulkRequest(new(date, "中山", 6, "メイクデビュー中山", EntryCount: 1,
             Entries: [new(8, 1, "1:53.9", null, "37.6", null, 7800000, HorseName: "履歴の馬")],
-            TargetRaceId: raceId, RefreshExistingData: true, SourceHorseId: horseId);
+            TargetRaceId: raceId, RefreshExistingData: true, SourceHorseId: horseId));
         var result = await client.PostAsJsonAsync("/api/races/result-bulk", request);
         result.EnsureSuccessStatusCode();
-        Assert.IsTrue((await result.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>())!.CorePersisted);
-        var race = (await client.GetFromJsonAsync<RaceDto>($"/api/races/{raceId}"))!;
+        Assert.IsTrue((await result.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>())!.Result.CorePersisted);
+        var race = (await client.GetFromJsonAsync<GetRaceResponse>($"/api/races/{raceId}"))!.Race;
         Assert.AreEqual(horseId, race.Entries.Single().HorseId);
         Assert.AreEqual(1, race.EntryResults.Count);
-        Assert.AreEqual(HttpStatusCode.Conflict, (await client.PostAsJsonAsync("/api/races/result-bulk", request with { SourceHorseId = "horse-" + Guid.NewGuid() })).StatusCode);
+        Assert.AreEqual(HttpStatusCode.Conflict, (await client.PostAsJsonAsync("/api/races/result-bulk", request with { Result = request.Result! with { SourceHorseId = "horse-" + Guid.NewGuid() } })).StatusCode);
     }
 
     private sealed record RaceIdentity(string RaceId);

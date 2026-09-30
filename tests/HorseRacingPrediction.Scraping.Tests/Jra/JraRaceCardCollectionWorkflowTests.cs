@@ -91,9 +91,9 @@ public sealed class JraRaceCardCollectionWorkflowTests
         await new JraRaceCardCollectionWorkflow(session, writer).RefreshPageAsync(card, null);
 
         var saved = writer.DeclareRaceResultBulkCalls.Single();
-        Assert.IsNull(saved.Entries![0].HorseNumber);
-        Assert.AreEqual(2, saved.Entries[1].HorseNumber);
-        Assert.IsNull(saved.Entries[0].GateNumber);
+        Assert.IsNull(saved.Result!.Entries![0].HorseNumber);
+        Assert.AreEqual(2, saved.Result.Entries[1].HorseNumber);
+        Assert.IsNull(saved.Result.Entries[0].GateNumber);
     }
 
     [TestMethod]
@@ -115,13 +115,13 @@ public sealed class JraRaceCardCollectionWorkflowTests
         Assert.HasCount(1, navigator.RequestedRaceCards);
         Assert.AreEqual(race.Id, navigator.RequestedRaceCards.Single());
         var request = writer.DeclareRaceResultBulkCalls.Single();
-        Assert.AreEqual("manual-race", request.TargetRaceId);
-        Assert.IsTrue(request.RefreshExistingData);
-        Assert.IsTrue(request.IsRaceCard);
-        Assert.AreEqual("G3", request.GradeCode);
-        Assert.AreEqual("直", request.DirectionCode);
-        Assert.AreEqual(new TimeOnly(10, 0), request.StartTime);
-        var savedEntry = request.Entries!.Single();
+        Assert.AreEqual("manual-race", request.Result!.TargetRaceId);
+        Assert.IsTrue(request.Result.RefreshExistingData);
+        Assert.IsTrue(request.Result.IsRaceCard);
+        Assert.AreEqual("G3", request.Result.GradeCode);
+        Assert.AreEqual("直", request.Result.DirectionCode);
+        Assert.AreEqual(new TimeOnly(10, 0), request.Result.StartTime);
+        var savedEntry = request.Result.Entries!.Single();
         Assert.AreEqual("F", savedEntry.SexCode);
         Assert.AreEqual(2, savedEntry.Age);
         Assert.AreEqual("馬主", savedEntry.OwnerName);

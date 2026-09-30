@@ -141,13 +141,13 @@ public class PredictionEndpointsTests
     private static async Task<(string RaceId, string[] Entries)> CreateActiveEntriesAsync()
     {
         var raceId = $"race-{Guid.NewGuid()}";
-        (await _client.PostAsJsonAsync("/api/races", new CreateRaceRequest(new(2026, 9, 27), "中山", 1, "予想検証", raceId))).EnsureSuccessStatusCode();
-        (await _client.PostAsJsonAsync($"/api/races/{raceId}/card/publish", new PublishRaceCardRequest(2))).EnsureSuccessStatusCode();
+        (await _client.PostAsJsonAsync("/api/races", new CreateRaceRequest(new(new(2026, 9, 27), "中山", 1, "予想検証", raceId)))).EnsureSuccessStatusCode();
+        (await _client.PostAsJsonAsync($"/api/races/{raceId}/card/publish", new PublishRaceCardRequest(new(2)))).EnsureSuccessStatusCode();
         var ids = new List<string>();
         for (var number = 1; number <= 2; number++)
         {
-            var response = await _client.PostAsJsonAsync($"/api/races/{raceId}/entries", new RegisterEntryRequest(
-                $"horse-{Guid.NewGuid()}", number, null, null, 1, 55, null, null, null, null, HorseName: $"検証馬{number}"));
+            var response = await _client.PostAsJsonAsync($"/api/races/{raceId}/entries", new RegisterEntryRequest(new(
+                $"horse-{Guid.NewGuid()}", number, null, null, 1, 55, null, null, null, null, HorseName: $"検証馬{number}")));
             response.EnsureSuccessStatusCode();
             var saved = await response.Content.ReadFromJsonAsync<JsonElement>();
             ids.Add(saved.GetProperty("entryId").GetString()!);

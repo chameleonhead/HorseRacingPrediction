@@ -38,13 +38,13 @@ public sealed class RaceAssignmentRepairTests
         using var http = client;
         var raceId = await SeedAsync(app, http, 6);
         string Source(int n) => $"https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud00202410{n:D4}/AB";
-        var initial = new DeclareRaceResultBulkRequest(new(2026, 9, 26), "中山", 5, "循環入替検証", EntryCount: count, IsRaceCard: true,
+        var initial = new DeclareRaceResultBulkRequest(new(new(2026, 9, 26), "中山", 5, "循環入替検証", EntryCount: count, IsRaceCard: true,
             Entries: Enumerable.Range(1, count).Select(n => new RaceResultEntryBulkDto(n, null, null, null, null, null, null,
-                HorseName: $"循環馬{n}", HorseSourceIdentity: Source(n), JockeyName: "同一騎手", AssignedWeight: 54 + n % 3, BodyWeight: 450 + n)).ToArray());
+                HorseName: $"循環馬{n}", HorseSourceIdentity: Source(n), JockeyName: "同一騎手", AssignedWeight: 54 + n % 3, BodyWeight: 450 + n)).ToArray()));
         var created = await (await http.PostAsJsonAsync("/api/races/result-bulk", initial)).Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>();
         Assert.IsNotNull(created);
-        Assert.IsEmpty(created.Errors, string.Join(";", created.Errors));
-        raceId = created.RaceId;
+        Assert.IsEmpty(created.Result.Errors, string.Join(";", created.Result.Errors));
+        raceId = created.Result.RaceId;
         var inspection = await http.GetFromJsonAsync<JsonElement>($"/api/v2/admin/races/{raceId}/entry-repair/inspection");
         var manifest = Manifest(inspection.GetProperty("version").GetInt32()) with
         { GradeCode = "G3", Horses = Enumerable.Range(1, count).Select(n => new RaceEntryRepairHorse(Source(n), n % count + 1, (n % count) / 2 + 1, $"所有者{n}")).ToArray() };
@@ -237,12 +237,14 @@ public sealed class RaceAssignmentRepairTests
         Assert.AreEqual(before + 1, await db.Set<EventEntity>().CountAsync());
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.GetAsync($"/api/races/{raceId}/context")).StatusCode);
         await ReleaseAndFinishAsync(app, http, raceId, request, applied);
-        var context = await http.GetFromJsonAsync<JsonElement>($"/api/races/{raceId}/context");
-        var entries = context.GetProperty("entries").EnumerateArray().ToArray();
-        Assert.AreEqual(DeterministicIdGenerator.BuildHorseId("", HorseB), entries.Single(x => x.GetProperty("horseNumber").GetInt32() == 1).GetProperty("horseId").GetString());
-        Assert.AreEqual("馬主B", entries.Single(x => x.GetProperty("horseNumber").GetInt32() == 1).GetProperty("ownerName").GetString());
+        var contextEnvelope = await http.GetFromJsonAsync<GetRacePredictionContextResponse>($"/api/races/{raceId}/context");
+        Assert.IsNotNull(contextEnvelope);
+        var context = contextEnvelope.Context;
+        var entries = context.Entries;
+        Assert.AreEqual(DeterministicIdGenerator.BuildHorseId("", HorseB), entries.Single(x => x.HorseNumber == 1).HorseId);
+        Assert.AreEqual("馬主B", entries.Single(x => x.HorseNumber == 1).OwnerName);
         Assert.AreEqual(await app.Services.GetRequiredService<RaceWriteCoordinator>().AssignmentFingerprintAsync(raceId, CancellationToken.None),
-            context.GetProperty("entryAssignmentFingerprint").GetString());
+            context.EntryAssignmentFingerprint);
         var stalePrediction = await http.PostAsJsonAsync("/api/predictions", new
         { raceId, predictorType = "Human", predictorId = "local-test", confidenceScore = 0.5m, summaryComment = "old context" });
         Assert.AreEqual(HttpStatusCode.Conflict, stalePrediction.StatusCode);
@@ -414,14 +416,14 @@ public sealed class RaceAssignmentRepairTests
         await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", CollectionResourceType.Horse, 3, "repair test", true);
         await store.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", CollectionResourceType.Jockey, 3, "repair test", true);
         if (!http.DefaultRequestHeaders.Contains("X-Api-Key")) http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
-        var request = new DeclareRaceResultBulkRequest(new DateOnly(2026, 9, 26), "中山", raceNumber, "ローカル補正検証",
+        var request = new DeclareRaceResultBulkRequest(new(new DateOnly(2026, 9, 26), "中山", raceNumber, "ローカル補正検証",
             EntryCount: 2, IsRaceCard: true, Entries:
             [new(1, null, null, null, null, null, null, HorseName: "テストA", HorseSourceIdentity: HorseA, JockeyName: "騎手A", BodyWeight: 470),
-             new(2, null, null, null, null, null, null, HorseName: "テストB", HorseSourceIdentity: HorseB, JockeyName: "騎手B", BodyWeight: 480)]);
+             new(2, null, null, null, null, null, null, HorseName: "テストB", HorseSourceIdentity: HorseB, JockeyName: "騎手B", BodyWeight: 480)]));
         var response = await http.PostAsJsonAsync("/api/races/result-bulk", request);
         var result = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>();
         Assert.IsNotNull(result, await response.Content.ReadAsStringAsync());
-        Assert.IsEmpty(result.Errors, string.Join("; ", result.Errors));
-        return result.RaceId;
+        Assert.IsEmpty(result.Result.Errors, string.Join("; ", result.Result.Errors));
+        return result.Result.RaceId;
     }
 }
