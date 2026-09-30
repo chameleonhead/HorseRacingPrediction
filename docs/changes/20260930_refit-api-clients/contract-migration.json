@@ -3,7 +3,7 @@
   "changeId": "20260930_refit-api-clients",
   "taskId": "T2",
   "attemptId": "T2-A2",
-  "status": "53 semantic renames and resource namespace/folder plus one-type-per-file layout complete; approved natural DTO merges pending",
+  "status": "53 semantic renames, resource namespace/folder, one-type-per-file layout, and profile/alias merges complete; memo/weather merges pending",
   "tool": "Roslynator DotNet CLI 1.0.0 rename-symbol",
   "selection": "INamedTypeSymbol in HorseRacingPrediction.Contracts assembly, exact old name; no JSON properties/values or domain/persistence symbols",
   "verification": "Semantic actual apply with target inventory; independent declaration-body/XML-doc/using-scope comparison; Contracts tests; full non-External solution tests; Release build; format verification",
@@ -433,6 +433,19 @@
     "SubjectNameNormalizationApplyResult -> SubjectNameNormalizationApplyResultDto",
     "SubjectNameNormalizationItemResult -> SubjectNameNormalizationItemResultDto",
     "AliasResponse -> AliasDto"
+  ],
+  "completedNaturalMerges": [
+    "HorseProfileResponse -> Horses.HorseDto",
+    "JockeyProfileResponse -> Jockeys.JockeyDto",
+    "TrainerProfileResponse -> Trainers.TrainerDto",
+    "HorseAliasEntry + JockeyAliasEntry + TrainerAliasEntry -> Common.AliasDto (SourceName remains nullable)"
+  ],
+  "remainingNaturalMerges": [
+    "MemoSnapshot -> MemoDto",
+    "MemoSubjectSnapshot -> MemoSubjectDto",
+    "MemoLinkSnapshot -> MemoLinkDto",
+    "WeatherObservationSnapshot -> Races.RaceWeatherObservationDto",
+    "TrackConditionSnapshot -> Races.RaceTrackConditionDto"
   ],
   "excludedFirstStage": [
     "Namespace/folder movement",

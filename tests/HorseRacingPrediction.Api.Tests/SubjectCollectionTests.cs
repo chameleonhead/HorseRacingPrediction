@@ -29,7 +29,7 @@ public sealed class SubjectCollectionTests
         (await client.PutAsJsonAsync(path, next)).EnsureSuccessStatusCode();
         var saved = (await client.GetFromJsonAsync<JraSubjectProfileDto>($"/api/v2/admin/subjects/Horse/{id}/profiles/current"))!;
         Assert.AreEqual("鹿毛", saved.Fields["毛色"]); Assert.AreEqual("父馬", saved.Fields["父"]);
-        var horse = (await client.GetFromJsonAsync<HorseProfileResponse>($"/api/horses/{id}"))!;
+        var horse = (await client.GetFromJsonAsync<HorseDto>($"/api/horses/{id}"))!;
         Assert.AreEqual("新馬主", horse.OwnerName);
         Assert.AreEqual("新生産者", horse.BreederName);
         Assert.AreEqual("父馬", horse.SireName);
@@ -51,7 +51,7 @@ public sealed class SubjectCollectionTests
         var profile = new JraSubjectProfileDto("Trainer", "中舘 英二", "trainer-key", "https://www.jra.go.jp/JRADB/accessC.html",
             new() { ["生年月日"] = "1965年7月22日", ["所属"] = "美浦", ["免許取得年"] = "2015年" }, DateTimeOffset.UtcNow);
         (await client.PutAsJsonAsync($"/api/v2/admin/subjects/Trainer/{trainerId}/profile", profile)).EnsureSuccessStatusCode();
-        Assert.AreEqual("美浦", (await client.GetFromJsonAsync<TrainerProfileResponse>($"/api/trainers/{trainerId}"))!.AffiliationCode);
+        Assert.AreEqual("美浦", (await client.GetFromJsonAsync<TrainerDto>($"/api/trainers/{trainerId}"))!.AffiliationCode);
         var raceId = "race-" + Guid.NewGuid(); var date = new DateOnly(2026, 9, 6);
         (await client.PostAsJsonAsync("/api/races", new { raceId, raceDate = date, racecourseCode = "NAKAYAMA", raceNumber = 6, raceName = "旧名" })).EnsureSuccessStatusCode();
         var response = await client.PostAsJsonAsync("/api/v2/admin/races", new PrepareHorseHistoryRaceRequest(date, "中山", 6, "メイクデビュー中山"));

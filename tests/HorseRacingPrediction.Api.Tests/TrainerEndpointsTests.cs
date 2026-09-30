@@ -55,7 +55,7 @@ public class TrainerEndpointsTests
         var response = await _client.GetAsync($"/api/trainers/{trainerId}");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        var profile = await response.Content.ReadFromJsonAsync<TrainerProfileResponse>(JsonOptions);
+        var profile = await response.Content.ReadFromJsonAsync<TrainerDto>(JsonOptions);
         Assert.IsNotNull(profile);
         Assert.AreEqual(trainerId, profile.TrainerId);
         Assert.AreEqual("国枝栄", profile.DisplayName);
@@ -114,7 +114,7 @@ public class TrainerEndpointsTests
         var trainerId = $"trainer-{Guid.NewGuid()}";
         var response = await _client.PutAsJsonAsync($"/api/trainers/{trainerId}",
             new UpdateTrainerProfileRequest("新規調教師", "新規調教師", "JRA"), JsonOptions);
-        var profile = await _client.GetFromJsonAsync<TrainerProfileResponse>($"/api/trainers/{trainerId}", JsonOptions);
+        var profile = await _client.GetFromJsonAsync<TrainerDto>($"/api/trainers/{trainerId}", JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsNotNull(profile);

@@ -57,7 +57,7 @@ public class HorseEndpointsTests
         var response = await _client.GetAsync($"/api/horses/{horseId}");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        var profile = await response.Content.ReadFromJsonAsync<HorseProfileResponse>(JsonOptions);
+        var profile = await response.Content.ReadFromJsonAsync<HorseDto>(JsonOptions);
         Assert.IsNotNull(profile);
         Assert.AreEqual(horseId, profile.HorseId);
         Assert.AreEqual("オルフェーヴル", profile.RegisteredName);
@@ -116,7 +116,7 @@ public class HorseEndpointsTests
         var horseId = $"horse-{Guid.NewGuid()}";
         var response = await _client.PutAsJsonAsync($"/api/horses/{horseId}",
             new UpdateHorseProfileRequest("新規馬", "新規馬", "F", null), JsonOptions);
-        var profile = await _client.GetFromJsonAsync<HorseProfileResponse>($"/api/horses/{horseId}", JsonOptions);
+        var profile = await _client.GetFromJsonAsync<HorseDto>($"/api/horses/{horseId}", JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsNotNull(profile);
@@ -132,7 +132,7 @@ public class HorseEndpointsTests
         var responses = await Task.WhenAll(
             _client.PutAsJsonAsync($"/api/horses/{horseId}", request, JsonOptions),
             _client.PutAsJsonAsync($"/api/horses/{horseId}", request, JsonOptions));
-        var profile = await _client.GetFromJsonAsync<HorseProfileResponse>($"/api/horses/{horseId}", JsonOptions);
+        var profile = await _client.GetFromJsonAsync<HorseDto>($"/api/horses/{horseId}", JsonOptions);
 
         Assert.IsTrue(responses.All(response => response.StatusCode == HttpStatusCode.OK));
         Assert.IsNotNull(profile);

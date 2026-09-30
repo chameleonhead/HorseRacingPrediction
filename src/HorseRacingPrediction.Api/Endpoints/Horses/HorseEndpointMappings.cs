@@ -38,7 +38,7 @@ internal static class HorseEndpointMappings
             DamName = model.DamName,
             DamsireName = model.DamsireName,
             CoatColor = model.CoatColor,
-            Aliases = model.Aliases.Select(x => new HorseRacingPrediction.Contracts.Common.HorseAliasEntry(x.AliasType, x.AliasValue, x.SourceName, x.IsPrimary)).ToList()
+            Aliases = model.Aliases.Select(x => new HorseRacingPrediction.Contracts.Common.AliasDto(x.AliasType, x.AliasValue, x.SourceName, x.IsPrimary)).ToList()
         };
 
     internal static HorseRacingPrediction.Contracts.Horses.HorseRaceHistoryDto ToAgentHorseRaceHistory(HorseRacingPrediction.Application.Queries.ReadModels.HorseRaceHistoryReadModel model)

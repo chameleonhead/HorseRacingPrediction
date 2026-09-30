@@ -104,7 +104,7 @@ else
     [SupplyParameterFromQuery(Name = "historyRacecourse")] public string? HistoryRacecourseQuery { get; set; }
 
     private bool loading;
-    private TrainerProfileResponse? trainer;
+    private TrainerDto? trainer;
     private IReadOnlyList<ParticipationHistoryEntryDto> historyEntries = Array.Empty<ParticipationHistoryEntryDto>();
     private IReadOnlyList<RelationshipSummaryDto> relationships = Array.Empty<RelationshipSummaryDto>();
     private const int historyBatchSize = 10;

@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260930_refit-api-clients",
+  "taskId": "T2",
+  "attemptId": "T2-A4",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC2", "AC4", "AC5", "AC6"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "not exposed"
+  },
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "not exposed"},
+  "scope": [
+    "src",
+    "tools/HorseRacingPrediction.CollectionInitializer",
+    "tests",
+    "docs/28-api-client-design.md",
+    "docs/changes/20260930_refit-api-clients/README.md",
+    "docs/changes/20260930_refit-api-clients/contract-migration.json",
+    "docs/changes/20260930_refit-api-clients/agent-audits/T2-A2.json",
+    "docs/changes/20260930_refit-api-clients/agent-audits/T2-A3.json",
+    "docs/changes/20260930_refit-api-clients/agent-audits/T2-A4.json",
+    "docs/changes/20260930_refit-api-clients/agent-audits/history/T2-A1.json"
+  ],
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "review usage and active time were not exposed"},
+  "overhead": {"availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "effort telemetry was not captured"},
+  "elapsed": {"minutes": null, "availability": "unavailable", "reason": "elapsed-time telemetry was unavailable"},
+  "startRevision": "5c3a066c",
+  "endRevisionOrPatch": "working-tree patch: T2-A4 profile and alias natural merges",
+  "outcome": {
+    "reviewMode": "ac-group",
+    "reviewPasses": 1,
+    "qualityPassed": true,
+    "decision": "accept",
+    "verificationPassed": true,
+    "scopePassed": true,
+    "promoted": false,
+    "escalations": 0,
+    "leadCorrections": 0,
+    "retries": 0,
+    "independentChallenge": "Lead review confirmed the 12 horse profile fields, all jockey/trainer fields, nullable AliasDto.SourceName, alias/list order, and unchanged Application alias models. Contracts serialization tests passed on legacy profile JSON; 142 Contracts files remain.",
+    "escapedDefects": 0,
+    "detailReviewReason": null
+  }
+}

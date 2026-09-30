@@ -16,5 +16,5 @@ public sealed class HorseDto
     public string? DamName { get; set; }
     public string? DamsireName { get; set; }
     public string? CoatColor { get; set; }
-    public List<HorseAliasEntry> Aliases { get; set; } = [];
+    public List<AliasDto> Aliases { get; set; } = [];
 }

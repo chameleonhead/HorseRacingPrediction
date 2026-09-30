@@ -55,7 +55,7 @@ public class JockeyEndpointsTests
         var response = await _client.GetAsync($"/api/jockeys/{jockeyId}");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        var profile = await response.Content.ReadFromJsonAsync<JockeyProfileResponse>(JsonOptions);
+        var profile = await response.Content.ReadFromJsonAsync<JockeyDto>(JsonOptions);
         Assert.IsNotNull(profile);
         Assert.AreEqual(jockeyId, profile.JockeyId);
         Assert.AreEqual("川田将雅", profile.DisplayName);
@@ -114,7 +114,7 @@ public class JockeyEndpointsTests
         var jockeyId = $"jockey-{Guid.NewGuid()}";
         var response = await _client.PutAsJsonAsync($"/api/jockeys/{jockeyId}",
             new UpdateJockeyProfileRequest("新規騎手", "新規騎手", "JRA"), JsonOptions);
-        var profile = await _client.GetFromJsonAsync<JockeyProfileResponse>($"/api/jockeys/{jockeyId}", JsonOptions);
+        var profile = await _client.GetFromJsonAsync<JockeyDto>($"/api/jockeys/{jockeyId}", JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsNotNull(profile);

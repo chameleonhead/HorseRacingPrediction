@@ -98,7 +98,7 @@ else
     [Parameter] public string HorseId { get; set; } = string.Empty;
 
     private bool loading;
-    private HorseProfileResponse? horse;
+    private HorseDto? horse;
     private IReadOnlyList<ParticipationHistoryEntryDto> historyEntries = Array.Empty<ParticipationHistoryEntryDto>();
     private IReadOnlyList<RelationshipSummaryDto> relationships = Array.Empty<RelationshipSummaryDto>();
     private bool historyHasMore;

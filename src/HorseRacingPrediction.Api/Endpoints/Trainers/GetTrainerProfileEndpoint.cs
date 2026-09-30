@@ -21,20 +21,22 @@ internal static class GetTrainerProfileEndpoint
                         if (readModel is null || string.IsNullOrEmpty(readModel.TrainerId))
                             return Results.NotFound();
 
-                        var response = new TrainerProfileResponse(
-                            readModel.TrainerId,
-                            readModel.DisplayName,
-                            readModel.NormalizedName,
-                            readModel.AffiliationCode,
-                            readModel.Aliases
+                        var response = new TrainerDto
+                        {
+                            TrainerId = readModel.TrainerId,
+                            DisplayName = readModel.DisplayName,
+                            NormalizedName = readModel.NormalizedName,
+                            AffiliationCode = readModel.AffiliationCode,
+                            Aliases = readModel.Aliases
                                 .Select(a => new AliasDto(a.AliasType, a.AliasValue, a.SourceName, a.IsPrimary))
-                                .ToList());
+                                .ToList()
+                        };
 
                         return Results.Ok(response);
                     })
                     .WithName("GetTrainerProfile")
                     .WithTags("Trainer API")
-                    .Produces<TrainerProfileResponse>(StatusCodes.Status200OK)
+                    .Produces<TrainerDto>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

@@ -31,7 +31,7 @@ internal static class JockeyEndpointMappings
             DisplayName = model.DisplayName,
             NormalizedName = model.NormalizedName,
             AffiliationCode = model.AffiliationCode,
-            Aliases = model.Aliases.Select(x => new HorseRacingPrediction.Contracts.Common.JockeyAliasEntry(x.AliasType, x.AliasValue, x.SourceName, x.IsPrimary)).ToList()
+            Aliases = model.Aliases.Select(x => new HorseRacingPrediction.Contracts.Common.AliasDto(x.AliasType, x.AliasValue, x.SourceName, x.IsPrimary)).ToList()
         };
 
     internal static HorseRacingPrediction.Contracts.Jockeys.JockeyRaceHistoryDto ToAgentJockeyRaceHistory(HorseRacingPrediction.Application.Queries.ReadModels.JockeyRaceHistoryReadModel model)

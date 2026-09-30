@@ -82,7 +82,7 @@ public sealed class SubjectNameNormalizationEndpointsTests
         var secondResponse = await _client.PostAsJsonAsync(
             "/api/admin/repairs/subject-name-normalization/apply", request);
         var second = await secondResponse.Content.ReadFromJsonAsync<SubjectNameNormalizationApplyResultDto>();
-        var profile = await _client.GetFromJsonAsync<TrainerProfileResponse>($"/api/trainers/{trainerId}");
+        var profile = await _client.GetFromJsonAsync<TrainerDto>($"/api/trainers/{trainerId}");
 
         Assert.AreEqual(HttpStatusCode.OK, firstResponse.StatusCode);
         Assert.AreEqual(1, first!.AppliedCount);

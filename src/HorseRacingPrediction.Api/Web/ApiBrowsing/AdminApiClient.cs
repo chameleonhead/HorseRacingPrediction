@@ -65,8 +65,8 @@ public sealed partial class AdminApiClient
     public Task<PagedResponse<HorseSummaryDto>?> SearchHorsesAsync(SearchHorsesRequest request, CancellationToken cancellationToken = default)
         => GetJsonAsync<PagedResponse<HorseSummaryDto>>($"/api/horses?{BuildQueryString(request)}", cancellationToken);
 
-    public Task<HorseProfileResponse?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)
-        => GetJsonAsync<HorseProfileResponse>($"/api/horses/{Uri.EscapeDataString(horseId)}", cancellationToken);
+    public Task<HorseDto?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)
+        => GetJsonAsync<HorseDto>($"/api/horses/{Uri.EscapeDataString(horseId)}", cancellationToken);
 
     public Task<HorseRacingPrediction.Contracts.Horses.HorseRaceHistoryDto?> GetHorseRaceHistoryAsync(
         string horseId,
@@ -81,8 +81,8 @@ public sealed partial class AdminApiClient
     public Task<PagedResponse<JockeySummaryDto>?> SearchJockeysAsync(SearchJockeysRequest request, CancellationToken cancellationToken = default)
         => GetJsonAsync<PagedResponse<JockeySummaryDto>>($"/api/jockeys?{BuildQueryString(request)}", cancellationToken);
 
-    public Task<JockeyProfileResponse?> GetJockeyAsync(string jockeyId, CancellationToken cancellationToken = default)
-        => GetJsonAsync<JockeyProfileResponse>($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", cancellationToken);
+    public Task<JockeyDto?> GetJockeyAsync(string jockeyId, CancellationToken cancellationToken = default)
+        => GetJsonAsync<JockeyDto>($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", cancellationToken);
 
     public Task<HorseRacingPrediction.Contracts.Jockeys.JockeyRaceHistoryDto?> GetJockeyRaceHistoryAsync(
         string jockeyId,
@@ -97,8 +97,8 @@ public sealed partial class AdminApiClient
     public Task<PagedResponse<TrainerSummaryDto>?> SearchTrainersAsync(SearchTrainersRequest request, CancellationToken cancellationToken = default)
         => GetJsonAsync<PagedResponse<TrainerSummaryDto>>($"/api/trainers?{BuildQueryString(request)}", cancellationToken);
 
-    public Task<TrainerProfileResponse?> GetTrainerAsync(string trainerId, CancellationToken cancellationToken = default)
-        => GetJsonAsync<TrainerProfileResponse>($"/api/trainers/{Uri.EscapeDataString(trainerId)}", cancellationToken);
+    public Task<TrainerDto?> GetTrainerAsync(string trainerId, CancellationToken cancellationToken = default)
+        => GetJsonAsync<TrainerDto>($"/api/trainers/{Uri.EscapeDataString(trainerId)}", cancellationToken);
 
     public Task<ParticipationHistoryDto?> GetTrainerParticipationsAsync(string trainerId, int? take = null, int? skip = null, CancellationToken cancellationToken = default)
         => GetJsonAsync<ParticipationHistoryDto>(AppendQueryString($"/api/trainers/{Uri.EscapeDataString(trainerId)}/participations", new { take, skip }), cancellationToken);

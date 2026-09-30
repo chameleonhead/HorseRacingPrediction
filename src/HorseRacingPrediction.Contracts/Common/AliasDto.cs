@@ -4,5 +4,5 @@ namespace HorseRacingPrediction.Contracts.Common;
 public sealed record AliasDto(
     string AliasType,
     string AliasValue,
-    string SourceName,
+    string? SourceName,
     bool IsPrimary);
