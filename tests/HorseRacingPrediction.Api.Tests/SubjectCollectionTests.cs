@@ -96,7 +96,7 @@ public sealed class SubjectCollectionTests
         var result = await client.PostAsJsonAsync("/api/races/result-bulk", request);
         result.EnsureSuccessStatusCode();
         Assert.IsTrue((await result.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>())!.CorePersisted);
-        var race = (await client.GetFromJsonAsync<RaceResponse>($"/api/races/{raceId}"))!;
+        var race = (await client.GetFromJsonAsync<RaceDto>($"/api/races/{raceId}"))!;
         Assert.AreEqual(horseId, race.Entries.Single().HorseId);
         Assert.AreEqual(1, race.EntryResults.Count);
         Assert.AreEqual(HttpStatusCode.Conflict, (await client.PostAsJsonAsync("/api/races/result-bulk", request with { SourceHorseId = "horse-" + Guid.NewGuid() })).StatusCode);

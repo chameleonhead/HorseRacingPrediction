@@ -21,7 +21,7 @@ internal static class GetJockeyParticipationsEndpoint
                     })
                     .WithName("GetJockeyParticipations")
                     .WithTags("Jockey API")
-                    .Produces<ParticipationHistoryResponse>(StatusCodes.Status200OK)
+                    .Produces<ParticipationHistoryDto>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

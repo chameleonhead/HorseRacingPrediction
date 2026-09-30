@@ -120,7 +120,7 @@ public sealed class RaceCancellationTests
         var preserved = (await query.GetRacePredictionContextAsync(raceId))!.Entries.Single(x => x.EntryId == horse.EntryId);
         Assert.AreEqual(RaceEntryParticipationStatus.Cancelled, preserved.ParticipationStatus);
         Assert.AreEqual("馬主6", preserved.OwnerName);
-        var history = await http.GetFromJsonAsync<PredictionTicketResponse>($"/api/predictions/{historicalTicket}");
+        var history = await http.GetFromJsonAsync<PredictionTicketDto>($"/api/predictions/{historicalTicket}");
         Assert.AreEqual(TicketStatus.Finalized, history!.TicketStatus);
         Assert.HasCount(1, history.Marks);
         Assert.AreEqual(horse.EntryId, history.Marks.Single().EntryId);

@@ -44,7 +44,7 @@ public sealed class ComponentRenderingTests
         using var context = CreateContext();
         var relationships = new[]
         {
-            new RelationshipSummaryResponse("horse", "horse-1", "テストホース", "騎乗馬", 12, new DateOnly(2026, 8, 30), 12_345_678m, 4)
+            new RelationshipSummaryDto("horse", "horse-1", "テストホース", "騎乗馬", 12, new DateOnly(2026, 8, 30), 12_345_678m, 4)
         };
 
         var cut = context.Render<RaceOpsRelationshipGrid>(parameters => parameters

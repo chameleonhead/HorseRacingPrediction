@@ -28,7 +28,7 @@ internal static class GetPredictionTicketEndpoint
                             new ReadModelByIdQuery<RacePredictionContextReadModel>(readModel.RaceId), cancellationToken).ConfigureAwait(false);
                         var horseNames = await dbContext.Horses.AsNoTracking().ToDictionaryAsync(x => x.HorseId, x => x.RegisteredName, cancellationToken).ConfigureAwait(false);
                         var entries = race?.Entries.ToDictionary(x => x.EntryId, x => x.HorseId, StringComparer.Ordinal) ?? [];
-                        var response = new PredictionTicketResponse(
+                        var response = new PredictionTicketDto(
                             readModel.PredictionTicketId,
                             readModel.RaceId,
                             readModel.PredictorType,
@@ -37,7 +37,7 @@ internal static class GetPredictionTicketEndpoint
                             readModel.SummaryComment,
                             readModel.PredictedAt,
                             readModel.Marks
-                                .Select(x => new PredictionMarkResponse(x.EntryId, x.MarkCode, x.PredictedRank, x.Score, x.Comment,
+                                .Select(x => new PredictionMarkDto(x.EntryId, x.MarkCode, x.PredictedRank, x.Score, x.Comment,
                                     entries.GetValueOrDefault(x.EntryId),
                                     entries.TryGetValue(x.EntryId, out var horseId) ? horseNames.GetValueOrDefault(horseId) : null))
                                 .ToList(),
@@ -49,7 +49,7 @@ internal static class GetPredictionTicketEndpoint
                     })
                     .WithName("GetPredictionTicket")
                     .WithTags("Prediction API")
-                    .Produces<PredictionTicketResponse>(StatusCodes.Status200OK)
+                    .Produces<PredictionTicketDto>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

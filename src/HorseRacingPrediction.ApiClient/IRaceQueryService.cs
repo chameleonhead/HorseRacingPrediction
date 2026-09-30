@@ -17,7 +17,7 @@ public interface IRaceQueryService
     Task<RacePredictionContextDto?> GetRacePredictionContextAsync(
         string raceId, CancellationToken cancellationToken = default);
 
-    Task<HorseReadDto?> GetHorseAsync(
+    Task<HorseDto?> GetHorseAsync(
         string horseId, CancellationToken cancellationToken = default);
 
     Task<JockeyDto?> GetJockeyAsync(
@@ -36,10 +36,10 @@ public interface IRaceQueryService
     Task<JockeyRaceHistoryDto?> GetJockeyRaceHistoryAsync(
         string jockeyId, CancellationToken cancellationToken = default);
 
-    Task<MlPredictionResponse?> GetMlPredictionAsync(
+    Task<MlPredictionDto?> GetMlPredictionAsync(
         string raceId, CancellationToken cancellationToken = default);
 
     /// <summary>指定した予測票 ID の確定済み予測票（印・スコア・コメント）を取得する。</summary>
-    Task<PredictionTicketSummaryReadModel?> GetPredictionTicketAsync(
+    Task<PredictionTicketWithMarksDto?> GetPredictionTicketAsync(
         string predictionTicketId, CancellationToken cancellationToken = default);
 }

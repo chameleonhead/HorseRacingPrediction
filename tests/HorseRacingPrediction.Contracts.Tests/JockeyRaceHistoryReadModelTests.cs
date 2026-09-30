@@ -49,7 +49,7 @@ public sealed class JockeyRaceHistoryReadModelTests
     [TestMethod]
     public void RecentWinRate_LimitsToTwentyMostRecentEntriesByRaceDate()
     {
-        var entries = new List<JockeyRaceHistoryEntry>();
+        var entries = new List<JockeyRaceHistoryEntryDto>();
         for (var i = 0; i < 20; i++)
         {
             entries.Add(CreateEntry(raceDate: new DateOnly(2026, 1, 1).AddDays(i), finishPosition: 1, index: i));
@@ -116,10 +116,10 @@ public sealed class JockeyRaceHistoryReadModelTests
         Assert.AreEqual(0d, model.GetHorseComboWinRate("horse-unknown"));
     }
 
-    private static JockeyRaceHistoryDto CreateModel(params JockeyRaceHistoryEntry[] entries)
+    private static JockeyRaceHistoryDto CreateModel(params JockeyRaceHistoryEntryDto[] entries)
         => new() { JockeyId = "jockey-1", Entries = entries.ToList() };
 
-    private static JockeyRaceHistoryEntry CreateEntry(
+    private static JockeyRaceHistoryEntryDto CreateEntry(
         DateOnly? raceDate = null,
         string? surfaceCode = null,
         int? distanceMeters = null,

@@ -119,12 +119,12 @@ internal static class RaceEndpointMappings
             SurfaceCode = model.SurfaceCode,
             DistanceMeters = model.DistanceMeters,
             DirectionCode = model.DirectionCode,
-            Entries = model.Entries.Select(x => new ApiContracts.RacePredictionContextEntry(x.EntryId, x.HorseId, x.HorseNumber, x.JockeyId, x.TrainerId, x.GateNumber, x.AssignedWeight, x.SexCode, x.Age, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode, x.OwnerName, (ApiContracts.RaceEntryParticipationStatus)x.ParticipationStatus)).ToList(),
+            Entries = model.Entries.Select(x => new ApiContracts.RacePredictionContextEntryDto(x.EntryId, x.HorseId, x.HorseNumber, x.JockeyId, x.TrainerId, x.GateNumber, x.AssignedWeight, x.SexCode, x.Age, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode, x.OwnerName, (ApiContracts.RaceEntryParticipationStatus)x.ParticipationStatus)).ToList(),
             WeatherObservations = model.WeatherObservations.Select(x => new ApiContracts.WeatherObservationSnapshot(x.ObservationTime, x.WeatherCode, x.WeatherText, x.TemperatureCelsius, x.HumidityPercent, x.WindDirectionCode, x.WindSpeedMeterPerSecond)).ToList(),
             TrackConditionObservations = model.TrackConditionObservations.Select(x => new ApiContracts.TrackConditionSnapshot(x.ObservationTime, x.TurfConditionCode, x.DirtConditionCode, x.GoingDescriptionText)).ToList()
         };
 
-    internal static RaceEntryResponse ToRaceEntryResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int? horseNumber, int? gateNumber, string? horseName, string? ownerName, string? ownerId)
+    internal static RaceEntryDto ToRaceEntryResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int? horseNumber, int? gateNumber, string? horseName, string? ownerName, string? ownerId)
         => new(
             entryResult.EntryId,
             horseId ?? string.Empty,
@@ -144,7 +144,7 @@ internal static class RaceEndpointMappings
             ownerName,
             ownerId);
 
-    internal static RaceEntryResponse ToRaceEntryResponse(
+    internal static RaceEntryDto ToRaceEntryResponse(
         HorseRacingPrediction.Application.Queries.ReadModels.RacePredictionContextEntry entry,
         string? horseName,
         string? jockeyName,
@@ -172,7 +172,7 @@ internal static class RaceEndpointMappings
             ownerId,
             (ApiContracts.RaceEntryParticipationStatus)entry.ParticipationStatus);
 
-    internal static RaceWeatherObservationResponse ToRaceWeatherObservationResponse(
+    internal static RaceWeatherObservationDto ToRaceWeatherObservationResponse(
         HorseRacingPrediction.Application.Queries.ReadModels.WeatherObservationSnapshot observation)
         => new(
             observation.ObservationTime,
@@ -183,7 +183,7 @@ internal static class RaceEndpointMappings
             observation.WindDirectionCode,
             observation.WindSpeedMeterPerSecond);
 
-    internal static RaceTrackConditionResponse ToRaceTrackConditionResponse(
+    internal static RaceTrackConditionDto ToRaceTrackConditionResponse(
         HorseRacingPrediction.Application.Queries.ReadModels.TrackConditionSnapshot condition)
         => new(
             condition.ObservationTime,
@@ -191,7 +191,7 @@ internal static class RaceEndpointMappings
             condition.DirtConditionCode,
             condition.GoingDescriptionText);
 
-    internal static RaceEntryResultResponse ToRaceEntryResultResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int? horseNumber, string? horseName)
+    internal static RaceEntryResultDto ToRaceEntryResultResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int? horseNumber, string? horseName)
         => new(
             entryResult.EntryId,
             horseId ?? string.Empty,
@@ -242,7 +242,7 @@ internal static class RaceEndpointMappings
             ? trainerName
             : null;
 
-    internal static RacePayoutResultResponse ToRacePayoutResultResponse(AppReadModels.PayoutResultSnapshot payoutResult)
+    internal static RacePayoutResultDto ToRacePayoutResultResponse(AppReadModels.PayoutResultSnapshot payoutResult)
         => new(
             payoutResult.DeclaredAt,
             payoutResult.WinPayouts.Select(ToRacePayoutEntryResponse).ToList(),
@@ -254,10 +254,10 @@ internal static class RaceEndpointMappings
             payoutResult.WidePayouts?.Select(ToRacePayoutEntryResponse).ToList(),
             payoutResult.TrioPayouts?.Select(ToRacePayoutEntryResponse).ToList());
 
-    internal static RacePayoutEntryResponse ToRacePayoutEntryResponse(AppReadModels.PayoutEntrySnapshot payout)
+    internal static RacePayoutEntryDto ToRacePayoutEntryResponse(AppReadModels.PayoutEntrySnapshot payout)
         => new(payout.Combination, payout.Amount);
 
-    internal static RaceOddsResponse BuildUnavailableOddsResponse()
+    internal static RaceOddsDto BuildUnavailableOddsResponse()
         => new(
             false,
             "保存済みオッズはまだ API ReadModel に保持されていません。",

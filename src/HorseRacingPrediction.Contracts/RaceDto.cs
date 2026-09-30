@@ -1,6 +1,6 @@
 namespace HorseRacingPrediction.Contracts;
 
-public sealed record RaceResponse(
+public sealed record RaceDto(
     string RaceId,
     DateOnly? RaceDate,
     string? RacecourseCode,
@@ -14,15 +14,15 @@ public sealed record RaceResponse(
     int? DistanceMeters,
     string? DirectionCode,
     int? EntryCount,
-    IReadOnlyList<RaceEntryResponse> Entries,
-    IReadOnlyList<RaceWeatherObservationResponse> WeatherObservations,
-    IReadOnlyList<RaceTrackConditionResponse> TrackConditionObservations,
-    RaceOddsResponse? Odds,
+    IReadOnlyList<RaceEntryDto> Entries,
+    IReadOnlyList<RaceWeatherObservationDto> WeatherObservations,
+    IReadOnlyList<RaceTrackConditionDto> TrackConditionObservations,
+    RaceOddsDto? Odds,
     string? WinningHorseName,
     string? WinningHorseId,
     string? StewardReportText,
     DateTimeOffset? ResultDeclaredAt,
-    IReadOnlyList<RaceEntryResultResponse> EntryResults,
-    RacePayoutResultResponse? PayoutResult,
+    IReadOnlyList<RaceEntryResultDto> EntryResults,
+    RacePayoutResultDto? PayoutResult,
     TimeOnly? StartTime = null, string? OverallPaceText = null, string? CornerPassagesText = null,
     string? CourseLayout = null, string? ReplacementRaceId = null);

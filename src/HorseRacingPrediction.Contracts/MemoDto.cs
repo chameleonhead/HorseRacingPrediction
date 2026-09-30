@@ -1,6 +1,6 @@
 namespace HorseRacingPrediction.Contracts;
 
-public sealed record MemoResponse(
+public sealed record MemoDto(
     string MemoId,
     string? AuthorId,
     string MemoType,

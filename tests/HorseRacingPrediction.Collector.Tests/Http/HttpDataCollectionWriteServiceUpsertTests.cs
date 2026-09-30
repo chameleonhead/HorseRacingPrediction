@@ -59,7 +59,7 @@ public sealed class HttpDataCollectionWriteServiceUpsertTests
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = request.RequestUri.AbsolutePath == "/api/identity/horse"
-                    ? JsonContent.Create(new ResolvedIdentity("horse-legacy")) : null
+                    ? JsonContent.Create(new ResolvedIdentityDto("horse-legacy")) : null
             });
         }
     }
@@ -124,7 +124,7 @@ public sealed class HttpDataCollectionWriteServiceUpsertTests
         {
             var path = request.RequestUri!.AbsolutePath;
             if (path == "/api/identity/horse")
-                return new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new ResolvedIdentity(horseId)) };
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new ResolvedIdentityDto(horseId)) };
             if (request.Method != HttpMethod.Get)
             {
                 Writes.Add((path, await request.Content!.ReadAsStringAsync(cancellationToken)));

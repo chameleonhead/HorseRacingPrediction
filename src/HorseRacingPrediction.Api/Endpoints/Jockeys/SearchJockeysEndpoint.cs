@@ -70,7 +70,7 @@ internal static class SearchJockeysEndpoint
                             sorted,
                             page,
                             pageSize,
-                            x => new JockeySummaryResponse(
+                            x => new JockeySummaryDto(
                                 x.JockeyId,
                                 x.DisplayName,
                                 x.NormalizedName,
@@ -79,7 +79,7 @@ internal static class SearchJockeysEndpoint
                     })
                     .WithName("SearchJockeys")
                     .WithTags("Jockey API")
-                    .Produces<PagedResponse<JockeySummaryResponse>>(StatusCodes.Status200OK)
+                    .Produces<PagedResponse<JockeySummaryDto>>(StatusCodes.Status200OK)
                     .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest);
     }
 }

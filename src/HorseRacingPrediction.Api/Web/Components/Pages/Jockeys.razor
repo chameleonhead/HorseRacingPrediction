@@ -35,7 +35,7 @@ else
     private int page = 1;
     private const int pageSize = 50;
     private bool loading;
-    private PagedResponse<JockeySummaryResponse>? result;
+    private PagedResponse<JockeySummaryDto>? result;
 
     protected override async Task OnInitializedAsync()
     {
@@ -65,7 +65,7 @@ else
     private void OpenJockey(string id) => Navigation.NavigateTo(JockeyUrl(id));
     private void OpenJockeyFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenJockey(id); }
     private static string JockeyUrl(string id) => $"/jockeys/{Uri.EscapeDataString(id)}";
-    private static string JockeyMetadata(JockeySummaryResponse jockey) => $"所属 {jockey.AffiliationCode ?? "—"} · 別名 {jockey.AliasCount} 件";
+    private static string JockeyMetadata(JockeySummaryDto jockey) => $"所属 {jockey.AffiliationCode ?? "—"} · 別名 {jockey.AliasCount} 件";
     private async Task ClearFiltersAsync() { query = null; affiliationCode = null; page = 1; await LoadAsync(); }
     private List<RaceOpsFilterChip> BuildFilterChips()
     {

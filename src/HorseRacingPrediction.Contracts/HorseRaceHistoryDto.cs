@@ -3,7 +3,7 @@ namespace HorseRacingPrediction.Contracts;
 public sealed class HorseRaceHistoryDto
 {
     public string HorseId { get; set; } = string.Empty;
-    public List<HorseRaceHistoryEntry> Entries { get; set; } = [];
+    public List<HorseRaceHistoryEntryDto> Entries { get; set; } = [];
 
     public int TotalRaceCount => Entries.Count;
     public double WinRate => Rate(x => x.FinishPosition == 1);
@@ -68,9 +68,9 @@ public sealed class HorseRaceHistoryDto
         return Math.Max(0d, 10d - stdDev);
     }
 
-    private double Rate(Func<HorseRaceHistoryEntry, bool> predicate) => Rate(Entries, predicate);
+    private double Rate(Func<HorseRaceHistoryEntryDto, bool> predicate) => Rate(Entries, predicate);
 
-    private static double Rate(IEnumerable<HorseRaceHistoryEntry> source, Func<HorseRaceHistoryEntry, bool> predicate)
+    private static double Rate(IEnumerable<HorseRaceHistoryEntryDto> source, Func<HorseRaceHistoryEntryDto, bool> predicate)
     {
         var list = source.ToList();
         return list.Count == 0 ? 0d : (double)list.Count(predicate) / list.Count;
@@ -106,7 +106,7 @@ public sealed class HorseRaceHistoryDto
         return parts.Length > 0 && int.TryParse(parts[^1], out var pos) ? pos : 0;
     }
 
-    private static double SuitabilityScore(IReadOnlyCollection<HorseRaceHistoryEntry> entries)
+    private static double SuitabilityScore(IReadOnlyCollection<HorseRaceHistoryEntryDto> entries)
     {
         if (entries.Count == 0)
             return 50d;

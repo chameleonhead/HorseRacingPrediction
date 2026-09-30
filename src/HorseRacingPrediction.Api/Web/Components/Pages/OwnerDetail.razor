@@ -141,17 +141,17 @@ else
     [SupplyParameterFromQuery(Name = "historyTo")] public DateOnly? HistoryToQuery { get; set; }
     [SupplyParameterFromQuery(Name = "historyRacecourse")] public string? HistoryRacecourseQuery { get; set; }
     private bool loading;
-    private OwnerDetailResponse? owner;
-    private IReadOnlyList<ParticipationHistoryEntryResponse> historyEntries = Array.Empty<ParticipationHistoryEntryResponse>();
+    private OwnerDetailDto? owner;
+    private IReadOnlyList<ParticipationHistoryEntryDto> historyEntries = Array.Empty<ParticipationHistoryEntryDto>();
     private const int historyBatchSize = 10;
     private string historySearch = string.Empty;
     private string historySearchInput = string.Empty;
     private DateOnly? historyFrom, historyFromInput, historyTo, historyToInput;
     private string historyRacecourse = string.Empty, historyRacecourseInput = string.Empty;
     private int historyPage = 1;
-    private IEnumerable<ParticipationHistoryEntryResponse> MatchingHistory => historyEntries.Where(x => (string.IsNullOrWhiteSpace(historySearch) || $"{x.HorseName} {x.RaceName}".Contains(historySearch, StringComparison.OrdinalIgnoreCase)) && (!historyFrom.HasValue || x.RaceDate >= historyFrom) && (!historyTo.HasValue || x.RaceDate <= historyTo) && (string.IsNullOrWhiteSpace(historyRacecourse) || string.Equals(x.RacecourseCode, historyRacecourse, StringComparison.OrdinalIgnoreCase)));
+    private IEnumerable<ParticipationHistoryEntryDto> MatchingHistory => historyEntries.Where(x => (string.IsNullOrWhiteSpace(historySearch) || $"{x.HorseName} {x.RaceName}".Contains(historySearch, StringComparison.OrdinalIgnoreCase)) && (!historyFrom.HasValue || x.RaceDate >= historyFrom) && (!historyTo.HasValue || x.RaceDate <= historyTo) && (string.IsNullOrWhiteSpace(historyRacecourse) || string.Equals(x.RacecourseCode, historyRacecourse, StringComparison.OrdinalIgnoreCase)));
     private int FilteredHistoryCount => MatchingHistory.Count();
-    private IEnumerable<ParticipationHistoryEntryResponse> FilteredHistory => MatchingHistory.Skip((historyPage - 1) * historyBatchSize).Take(historyBatchSize);
+    private IEnumerable<ParticipationHistoryEntryDto> FilteredHistory => MatchingHistory.Skip((historyPage - 1) * historyBatchSize).Take(historyBatchSize);
     private string? sourceOwnerId;
     private string? mergeReason;
     private bool showMergeDialog;
@@ -162,9 +162,9 @@ else
     private bool searchedMergeCandidates;
     private int mergePage = 1;
     private const int mergePageSize = 50;
-    private IReadOnlyList<OwnerSummaryResponse> mergeCandidates = [];
-    private OwnerSummaryResponse? selectedMergeCandidate;
-    private IEnumerable<OwnerSummaryResponse> PagedMergeCandidates => mergeCandidates.Skip((mergePage - 1) * mergePageSize).Take(mergePageSize);
+    private IReadOnlyList<OwnerSummaryDto> mergeCandidates = [];
+    private OwnerSummaryDto? selectedMergeCandidate;
+    private IEnumerable<OwnerSummaryDto> PagedMergeCandidates => mergeCandidates.Skip((mergePage - 1) * mergePageSize).Take(mergePageSize);
     private IReadOnlyList<string> mergeErrors = [];
     private bool restoreMergeFocus;
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -188,7 +188,7 @@ else
             }
             else
             {
-                historyEntries = Array.Empty<ParticipationHistoryEntryResponse>();
+                historyEntries = Array.Empty<ParticipationHistoryEntryDto>();
             }
         }
         finally { loading = false; }
@@ -230,7 +230,7 @@ else
         }
         finally { searchingMergeCandidates = false; }
     }
-    private void SelectMergeCandidate(OwnerSummaryResponse candidate)
+    private void SelectMergeCandidate(OwnerSummaryDto candidate)
     {
         selectedMergeCandidate = candidate;
         sourceOwnerId = candidate.OwnerId;
@@ -250,6 +250,6 @@ else
     {
         if (args.Key == "Escape") CloseMerge();
     }
-    private static string ObjectUrl(RelatedObjectResponse item) => item.ObjectType == "Horse" ? $"/horses/{Uri.EscapeDataString(item.ObjectId)}" : $"/trainers/{Uri.EscapeDataString(item.ObjectId)}";
-    private static string OwnerRelationshipUrl(RelationshipSummaryResponse item) => $"/horses/{Uri.EscapeDataString(item.ObjectId)}";
+    private static string ObjectUrl(RelatedObjectDto item) => item.ObjectType == "Horse" ? $"/horses/{Uri.EscapeDataString(item.ObjectId)}" : $"/trainers/{Uri.EscapeDataString(item.ObjectId)}";
+    private static string OwnerRelationshipUrl(RelationshipSummaryDto item) => $"/horses/{Uri.EscapeDataString(item.ObjectId)}";
 }

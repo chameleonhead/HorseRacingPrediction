@@ -51,8 +51,8 @@ else
     [Parameter] public string PredictionTicketId { get; set; } = string.Empty;
 
     private bool loading;
-    private PredictionTicketResponse? prediction;
-    private PredictionMarkResponse? PrimaryMark => prediction?.Marks.OrderBy(x => x.PredictedRank).FirstOrDefault();
+    private PredictionTicketDto? prediction;
+    private PredictionMarkDto? PrimaryMark => prediction?.Marks.OrderBy(x => x.PredictedRank).FirstOrDefault();
 
     protected override async Task OnParametersSetAsync() => await LoadAsync();
 
@@ -71,7 +71,7 @@ else
 
     private static string RaceUrl(string id) => $"/races/{Uri.EscapeDataString(id)}";
     private static string HorseUrl(string id) => $"/horses/{Uri.EscapeDataString(id)}";
-    private static string RaceDisplayName(PredictionTicketResponse value)
+    private static string RaceDisplayName(PredictionTicketDto value)
     {
         var display = string.Join(" ", new[] { value.RacecourseCode, value.RaceNumber is null ? null : $"{value.RaceNumber}R", value.RaceName }.Where(x => !string.IsNullOrWhiteSpace(x)));
         return string.IsNullOrWhiteSpace(display) ? "対象レース" : display;

@@ -1,6 +1,6 @@
 namespace HorseRacingPrediction.Contracts;
 
-public sealed record RaceEntryResponse(
+public sealed record RaceEntryDto(
     string EntryId,
     string HorseId,
     string? HorseName,

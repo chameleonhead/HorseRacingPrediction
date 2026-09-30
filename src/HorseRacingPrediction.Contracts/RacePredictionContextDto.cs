@@ -13,7 +13,7 @@ public sealed class RacePredictionContextDto
     public string? SurfaceCode { get; set; }
     public int? DistanceMeters { get; set; }
     public string? DirectionCode { get; set; }
-    public List<RacePredictionContextEntry> Entries { get; set; } = [];
+    public List<RacePredictionContextEntryDto> Entries { get; set; } = [];
     public List<WeatherObservationSnapshot> WeatherObservations { get; set; } = [];
     public List<TrackConditionSnapshot> TrackConditionObservations { get; set; } = [];
 

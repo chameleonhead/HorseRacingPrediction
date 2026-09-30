@@ -52,7 +52,7 @@ public class PredictionEndpointsTests
         var response = await _client.GetAsync($"/api/predictions/{ticketId}");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        var ticket = await response.Content.ReadFromJsonAsync<PredictionTicketResponse>(JsonOptions);
+        var ticket = await response.Content.ReadFromJsonAsync<PredictionTicketDto>(JsonOptions);
         Assert.IsNotNull(ticket);
         Assert.AreEqual(ticketId, ticket.PredictionTicketId);
         Assert.AreEqual("race-abc", ticket.RaceId);
@@ -80,7 +80,7 @@ public class PredictionEndpointsTests
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<PredictionTicketSummaryResponse>>(JsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<PagedResponse<PredictionTicketSummaryDto>>(JsonOptions);
         Assert.IsNotNull(result);
         Assert.AreEqual(2, result.TotalCount);
         Assert.AreEqual(2, result.TotalPages);
@@ -127,7 +127,7 @@ public class PredictionEndpointsTests
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/predictions/{ticketId}");
-        var ticket = await response.Content.ReadFromJsonAsync<PredictionTicketResponse>(JsonOptions);
+        var ticket = await response.Content.ReadFromJsonAsync<PredictionTicketDto>(JsonOptions);
 
         Assert.IsNotNull(ticket);
         Assert.AreEqual(raceId, ticket.RaceId);

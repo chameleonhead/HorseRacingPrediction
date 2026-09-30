@@ -1,10 +1,10 @@
 namespace HorseRacingPrediction.Contracts;
 
-public sealed record HorseWeightHistoryResponse(
+public sealed record HorseWeightHistoryDto(
     string HorseId,
-    IReadOnlyList<HorseWeightEntryResponse> WeightHistory);
+    IReadOnlyList<HorseWeightEntryDto> WeightHistory);
 
-public sealed record HorseWeightEntryResponse(
+public sealed record HorseWeightEntryDto(
     string RaceId,
     string EntryId,
     DateTimeOffset RecordedAt,

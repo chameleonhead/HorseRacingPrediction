@@ -81,7 +81,7 @@ public class HorseEndpointsTests
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<HorseSummaryResponse>>(JsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<PagedResponse<HorseSummaryDto>>(JsonOptions);
         Assert.IsNotNull(result);
         Assert.AreEqual(2, result.TotalCount);
         Assert.AreEqual(2, result.TotalPages);
@@ -233,7 +233,7 @@ public class HorseEndpointsTests
 
         var participationResponse = await _client.GetAsync($"/api/horses/{horseId}/participations");
         Assert.AreEqual(HttpStatusCode.OK, participationResponse.StatusCode);
-        var participations = await participationResponse.Content.ReadFromJsonAsync<ParticipationHistoryResponse>(JsonOptions);
+        var participations = await participationResponse.Content.ReadFromJsonAsync<ParticipationHistoryDto>(JsonOptions);
         Assert.IsNotNull(participations);
         Assert.AreEqual("Horse", participations.SubjectType);
         Assert.AreEqual("レースヒストリーテスト号", participations.Entries.Single().HorseName);
@@ -276,7 +276,7 @@ public class HorseEndpointsTests
 
         Assert.AreEqual(HttpStatusCode.OK, canonicalResponse.StatusCode);
         Assert.AreEqual(HttpStatusCode.OK, legacyResponse.StatusCode);
-        var detail = await canonicalResponse.Content.ReadFromJsonAsync<OwnerDetailResponse>(JsonOptions);
+        var detail = await canonicalResponse.Content.ReadFromJsonAsync<OwnerDetailDto>(JsonOptions);
         Assert.AreEqual(canonical, detail!.Summary.OwnerId);
     }
 
@@ -286,13 +286,13 @@ public class HorseEndpointsTests
         var key = Guid.NewGuid().ToString("N");
         await _client.PostAsJsonAsync("/api/horses", new RegisterHorseRequest($"OwnerHorseA-{key}", $"owner-horse-a-{key}", "M", null, $"horse-{Guid.NewGuid()}", $"統合先馬主{key}"), JsonOptions);
         await _client.PostAsJsonAsync("/api/horses", new RegisterHorseRequest($"OwnerHorseB-{key}", $"owner-horse-b-{key}", "F", null, $"horse-{Guid.NewGuid()}", $"統合元馬主{key}"), JsonOptions);
-        var owners = await _client.GetFromJsonAsync<IReadOnlyList<OwnerSummaryResponse>>($"/api/owners?query={key}", JsonOptions);
+        var owners = await _client.GetFromJsonAsync<IReadOnlyList<OwnerSummaryDto>>($"/api/owners?query={key}", JsonOptions);
         Assert.IsNotNull(owners);
         var target = owners.Single(x => x.DisplayName.StartsWith("統合先馬主", StringComparison.Ordinal));
         var source = owners.Single(x => x.DisplayName.StartsWith("統合元馬主", StringComparison.Ordinal));
 
         var merge = await _client.PostAsJsonAsync($"/api/owners/{target.OwnerId}/merge", new MergeOwnerRequest(source.OwnerId, "表記が同一人物と確認できたため"), JsonOptions);
-        var detail = await _client.GetFromJsonAsync<OwnerDetailResponse>($"/api/owners/{target.OwnerId}", JsonOptions);
+        var detail = await _client.GetFromJsonAsync<OwnerDetailDto>($"/api/owners/{target.OwnerId}", JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.NoContent, merge.StatusCode);
         Assert.IsNotNull(detail);
@@ -308,7 +308,7 @@ public class HorseEndpointsTests
             "/api/horses",
             new RegisterHorseRequest($"OwnerEditHorse-{key}", $"owner-edit-horse-{key}", "M", null, $"horse-{Guid.NewGuid()}", $"更新前馬主{key}"),
             JsonOptions);
-        var owners = await _client.GetFromJsonAsync<IReadOnlyList<OwnerSummaryResponse>>($"/api/owners?query={key}", JsonOptions);
+        var owners = await _client.GetFromJsonAsync<IReadOnlyList<OwnerSummaryDto>>($"/api/owners?query={key}", JsonOptions);
         Assert.IsNotNull(owners);
         var owner = owners.Single();
 
@@ -316,7 +316,7 @@ public class HorseEndpointsTests
             $"/api/owners/{owner.OwnerId}",
             new UpdateOwnerRequest($"更新後馬主{key}", "公式表記の訂正", [$"登録表記馬主{key}"]),
             JsonOptions);
-        var detail = await _client.GetFromJsonAsync<OwnerDetailResponse>($"/api/owners/{owner.OwnerId}", JsonOptions);
+        var detail = await _client.GetFromJsonAsync<OwnerDetailDto>($"/api/owners/{owner.OwnerId}", JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.NoContent, update.StatusCode);
         Assert.IsNotNull(detail);

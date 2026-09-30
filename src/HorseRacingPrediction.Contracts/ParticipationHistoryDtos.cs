@@ -1,13 +1,13 @@
 namespace HorseRacingPrediction.Contracts;
 
-public sealed record ParticipationHistoryResponse(
+public sealed record ParticipationHistoryDto(
     string SubjectType,
     string SubjectId,
-    IReadOnlyList<ParticipationHistoryEntryResponse> Entries,
-    IReadOnlyList<RelationshipSummaryResponse> Relationships,
+    IReadOnlyList<ParticipationHistoryEntryDto> Entries,
+    IReadOnlyList<RelationshipSummaryDto> Relationships,
     bool HasMore = false);
 
-public sealed record ParticipationHistoryEntryResponse(
+public sealed record ParticipationHistoryEntryDto(
     string RaceId,
     DateOnly? RaceDate,
     string? RacecourseCode,
@@ -23,7 +23,7 @@ public sealed record ParticipationHistoryEntryResponse(
     int? FinishPosition,
     decimal? PrizeMoney);
 
-public sealed record RelationshipSummaryResponse(
+public sealed record RelationshipSummaryDto(
     string ObjectType,
     string ObjectId,
     string DisplayName,

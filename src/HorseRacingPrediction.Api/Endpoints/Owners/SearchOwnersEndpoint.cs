@@ -23,6 +23,6 @@ internal static class SearchOwnersEndpoint
                     })
                     .WithName("SearchOwners")
                     .WithTags("Owner API")
-                    .Produces<IReadOnlyList<OwnerSummaryResponse>>();
+                    .Produces<IReadOnlyList<OwnerSummaryDto>>();
     }
 }

@@ -56,7 +56,7 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetHorseProfile_ExistingHorse_ReturnsMarkdown()
     {
-        _fakeService.HorseModel = new HorseReadDto();
+        _fakeService.HorseModel = new HorseDto();
         _fakeService.HorseModel.SetTestData("horse-001", "イクイノックス", "イクイノックス");
 
         var result = await _sut.GetHorseProfile("horse-001");
@@ -225,11 +225,11 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetMlPrediction_ExistingPrediction_ReturnsMarkdown()
     {
-        _fakeService.MlPrediction = new MlPredictionResponse(
+        _fakeService.MlPrediction = new MlPredictionDto(
             "race-001",
             [
-                new MlHorsePrediction("entry-1", "horse-1", 1, 0.812f, 1),
-                new MlHorsePrediction("entry-2", "horse-2", 2, 0.701f, 2)
+                new MlHorsePredictionDto("entry-1", "horse-1", 1, 0.812f, 1),
+                new MlHorsePredictionDto("entry-2", "horse-2", 2, 0.701f, 2)
             ]);
 
         var result = await _sut.GetMlPrediction("race-001");
@@ -257,7 +257,7 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetPredictionTicket_ExistingTicket_ReturnsMarkdown()
     {
-        _fakeService.PredictionTicket = new PredictionTicketSummaryReadModel(
+        _fakeService.PredictionTicket = new PredictionTicketWithMarksDto(
             "prediction-001",
             "race-001",
             "ApiOnlyPredictor",
@@ -266,8 +266,8 @@ public class RaceQueryToolsTests
             "上位馬中心の堅い決着",
             DateTimeOffset.Parse("2026-07-09T00:00:00Z"),
             [
-                new PredictionMarkEntry("entry-01", "◎", 1, 90m, "ML予測1位"),
-                new PredictionMarkEntry("entry-02", "○", 2, 85m, "ML予測2位")
+                new PredictionMarkEntryDto("entry-01", "◎", 1, 90m, "ML予測1位"),
+                new PredictionMarkEntryDto("entry-02", "○", 2, 85m, "ML予測2位")
             ]);
 
         var result = await _sut.GetPredictionTicket("prediction-001");
@@ -296,13 +296,13 @@ public class RaceQueryToolsTests
     {
         public List<RaceSearchSummaryDto> RegisteredRaces { get; } = [];
         public RacePredictionContextDto? RaceContext { get; set; }
-        public HorseReadDto? HorseModel { get; set; }
+        public HorseDto? HorseModel { get; set; }
         public JockeyDto? JockeyModel { get; set; }
         public MemoBySubjectDto? MemoBySubjectModel { get; set; }
         public HorseRaceHistoryDto? HorseHistoryModel { get; set; }
         public JockeyRaceHistoryDto? JockeyHistoryModel { get; set; }
-        public MlPredictionResponse? MlPrediction { get; set; }
-        public PredictionTicketSummaryReadModel? PredictionTicket { get; set; }
+        public MlPredictionDto? MlPrediction { get; set; }
+        public PredictionTicketWithMarksDto? PredictionTicket { get; set; }
 
         public Task<IReadOnlyList<RaceSearchSummaryDto>> SearchRegisteredRacesAsync(DateOnly raceDate, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<RaceSearchSummaryDto>>(RegisteredRaces.Where(x => x.RaceDate == raceDate).ToList());
@@ -310,7 +310,7 @@ public class RaceQueryToolsTests
         public Task<RacePredictionContextDto?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken = default)
             => Task.FromResult(RaceContext);
 
-        public Task<HorseReadDto?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)
+        public Task<HorseDto?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)
             => Task.FromResult(HorseModel);
 
         public Task<JockeyDto?> GetJockeyAsync(string jockeyId, CancellationToken cancellationToken = default)
@@ -325,10 +325,10 @@ public class RaceQueryToolsTests
         public Task<JockeyRaceHistoryDto?> GetJockeyRaceHistoryAsync(string jockeyId, CancellationToken cancellationToken = default)
             => Task.FromResult(JockeyHistoryModel);
 
-        public Task<MlPredictionResponse?> GetMlPredictionAsync(string raceId, CancellationToken cancellationToken = default)
+        public Task<MlPredictionDto?> GetMlPredictionAsync(string raceId, CancellationToken cancellationToken = default)
             => Task.FromResult(MlPrediction);
 
-        public Task<PredictionTicketSummaryReadModel?> GetPredictionTicketAsync(string predictionTicketId, CancellationToken cancellationToken = default)
+        public Task<PredictionTicketWithMarksDto?> GetPredictionTicketAsync(string predictionTicketId, CancellationToken cancellationToken = default)
             => Task.FromResult(PredictionTicket);
     }
 }
@@ -361,17 +361,17 @@ internal static class ReadModelTestExtensions
     }
 
     public static void SetTestData(
-        this HorseReadDto model,
+        this HorseDto model,
         string horseId, string registeredName, string normalizedName)
     {
-        typeof(HorseReadDto)
-            .GetProperty(nameof(HorseReadDto.HorseId))!
+        typeof(HorseDto)
+            .GetProperty(nameof(HorseDto.HorseId))!
             .SetValue(model, horseId);
-        typeof(HorseReadDto)
-            .GetProperty(nameof(HorseReadDto.RegisteredName))!
+        typeof(HorseDto)
+            .GetProperty(nameof(HorseDto.RegisteredName))!
             .SetValue(model, registeredName);
-        typeof(HorseReadDto)
-            .GetProperty(nameof(HorseReadDto.NormalizedName))!
+        typeof(HorseDto)
+            .GetProperty(nameof(HorseDto.NormalizedName))!
             .SetValue(model, normalizedName);
     }
 

@@ -36,7 +36,7 @@ internal static class GetHorseProfileEndpoint
                     })
                     .WithName("GetHorseProfile")
                     .WithTags("Horse API")
-                    .Produces<ApiContracts.HorseReadDto>(StatusCodes.Status200OK)
+                    .Produces<ApiContracts.HorseDto>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

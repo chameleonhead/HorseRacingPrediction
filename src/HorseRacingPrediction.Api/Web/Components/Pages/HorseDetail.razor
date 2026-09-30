@@ -97,8 +97,8 @@ else
 
     private bool loading;
     private HorseProfileResponse? horse;
-    private IReadOnlyList<ParticipationHistoryEntryResponse> historyEntries = Array.Empty<ParticipationHistoryEntryResponse>();
-    private IReadOnlyList<RelationshipSummaryResponse> relationships = Array.Empty<RelationshipSummaryResponse>();
+    private IReadOnlyList<ParticipationHistoryEntryDto> historyEntries = Array.Empty<ParticipationHistoryEntryDto>();
+    private IReadOnlyList<RelationshipSummaryDto> relationships = Array.Empty<RelationshipSummaryDto>();
     private bool historyHasMore;
     private bool loadingMore;
     private const int historyBatchSize = 100;
@@ -142,8 +142,8 @@ else
             await Task.WhenAll(profileTask, historyTask);
             horse = await profileTask;
             var history = await historyTask;
-            historyEntries = history?.Entries ?? Array.Empty<ParticipationHistoryEntryResponse>();
-            relationships = history?.Relationships ?? Array.Empty<RelationshipSummaryResponse>();
+            historyEntries = history?.Entries ?? Array.Empty<ParticipationHistoryEntryDto>();
+            relationships = history?.Relationships ?? Array.Empty<RelationshipSummaryDto>();
             historyHasMore = history?.HasMore ?? false;
             if (horse is not null)
             {
@@ -186,7 +186,7 @@ else
 
     private static string FormatFinish(int? position) => position is null ? "結果 —" : $"{position}着";
 
-    private static string RelationshipUrl(RelationshipSummaryResponse relationship) => relationship.ObjectType switch
+    private static string RelationshipUrl(RelationshipSummaryDto relationship) => relationship.ObjectType switch
     {
         "Jockey" => $"/jockeys/{Uri.EscapeDataString(relationship.ObjectId)}",
         "Trainer" => $"/trainers/{Uri.EscapeDataString(relationship.ObjectId)}",

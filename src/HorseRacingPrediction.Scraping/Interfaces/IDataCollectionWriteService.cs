@@ -201,7 +201,7 @@ public interface IDataCollectionWriteService
     /// 記録自体の失敗は本体の収集処理を失敗させない（実装側で握りつぶす）。
     /// </summary>
     Task RecordSourceCitationAsync(
-        IReadOnlyList<CitationSubject> subjects,
+        IReadOnlyList<CitationSubjectDto> subjects,
         string sourceUrl,
         string? title = null,
         CancellationToken cancellationToken = default)

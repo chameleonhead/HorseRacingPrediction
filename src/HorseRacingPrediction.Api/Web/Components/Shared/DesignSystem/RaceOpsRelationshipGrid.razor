@@ -23,7 +23,7 @@
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
     [Parameter] public string ParticipationUnit { get; set; } = "戦";
     [Parameter] public bool Ranked { get; set; }
-    [Parameter, EditorRequired] public IEnumerable<RelationshipSummaryResponse> Items { get; set; } = Array.Empty<RelationshipSummaryResponse>();
-    [Parameter, EditorRequired] public Func<RelationshipSummaryResponse, string> Url { get; set; } = default!;
+    [Parameter, EditorRequired] public IEnumerable<RelationshipSummaryDto> Items { get; set; } = Array.Empty<RelationshipSummaryDto>();
+    [Parameter, EditorRequired] public Func<RelationshipSummaryDto, string> Url { get; set; } = default!;
     private static string FormatPrizeMoney(decimal value) => value <= 0 ? "賞金 —" : $"{value:N0}円";
 }

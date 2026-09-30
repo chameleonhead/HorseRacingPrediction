@@ -1,6 +1,6 @@
 namespace HorseRacingPrediction.Contracts;
 
-public sealed record PredictionTicketSummaryReadModel(
+public sealed record PredictionTicketWithMarksDto(
     string PredictionTicketId,
     string? RaceId,
     string? PredictorType,
@@ -8,4 +8,4 @@ public sealed record PredictionTicketSummaryReadModel(
     decimal ConfidenceScore,
     string? SummaryComment,
     DateTimeOffset? PredictedAt,
-    IReadOnlyList<PredictionMarkEntry> Marks);
+    IReadOnlyList<PredictionMarkEntryDto> Marks);

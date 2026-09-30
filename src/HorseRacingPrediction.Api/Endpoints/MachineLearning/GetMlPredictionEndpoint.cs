@@ -33,9 +33,9 @@ internal static class GetMlPredictionEndpoint
                                 new ReadModelByIdQuery<AppReadModels.JockeyRaceHistoryReadModel>(jockeyId), ct).ConfigureAwait(false),
                             cancellationToken).ConfigureAwait(false);
 
-                        var response = new ApiContracts.MlPredictionResponse(
+                        var response = new ApiContracts.MlPredictionDto(
                             result.RaceId,
-                            result.Rankings.Select(r => new ApiContracts.MlHorsePrediction(
+                            result.Rankings.Select(r => new ApiContracts.MlHorsePredictionDto(
                                 r.EntryId, r.HorseId, r.HorseNumber, r.PredictedScore, r.PredictedRank)).ToList());
 
                         return Results.Ok(response);
@@ -43,7 +43,7 @@ internal static class GetMlPredictionEndpoint
                     .AddEndpointFilter<RacePredictionReadEndpointFilter>()
                     .WithName("GetMlPrediction")
                     .WithTags("Race API")
-                    .Produces<ApiContracts.MlPredictionResponse>(StatusCodes.Status200OK)
+                    .Produces<ApiContracts.MlPredictionDto>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

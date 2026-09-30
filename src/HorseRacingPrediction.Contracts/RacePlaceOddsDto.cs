@@ -1,7 +1,7 @@
 namespace HorseRacingPrediction.Contracts;
 
-public sealed record RaceWinOddsResponse(
+public sealed record RacePlaceOddsDto(
     int HorseNumber,
     string? HorseName,
-    decimal? Odds,
-    int? Popularity);
+    decimal? OddsMin,
+    decimal? OddsMax);

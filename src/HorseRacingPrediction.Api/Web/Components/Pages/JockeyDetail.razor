@@ -101,8 +101,8 @@ else
 
     private bool loading;
     private JockeyProfileResponse? jockey;
-    private IReadOnlyList<ParticipationHistoryEntryResponse> historyEntries = Array.Empty<ParticipationHistoryEntryResponse>();
-    private IReadOnlyList<RelationshipSummaryResponse> relationships = Array.Empty<RelationshipSummaryResponse>();
+    private IReadOnlyList<ParticipationHistoryEntryDto> historyEntries = Array.Empty<ParticipationHistoryEntryDto>();
+    private IReadOnlyList<RelationshipSummaryDto> relationships = Array.Empty<RelationshipSummaryDto>();
     private const int historyBatchSize = 10;
     private string historySearch = string.Empty;
     private string historySearchInput = string.Empty;
@@ -113,14 +113,14 @@ else
     private string historyRacecourse = string.Empty;
     private string historyRacecourseInput = string.Empty;
     private int historyPage = 1;
-    private IEnumerable<ParticipationHistoryEntryResponse> MatchingHistory => historyEntries.Where(x =>
+    private IEnumerable<ParticipationHistoryEntryDto> MatchingHistory => historyEntries.Where(x =>
         (string.IsNullOrWhiteSpace(historySearch) || $"{x.HorseName} {x.RaceName}".Contains(historySearch, StringComparison.OrdinalIgnoreCase))
         && (!historyFrom.HasValue || x.RaceDate >= historyFrom)
         && (!historyTo.HasValue || x.RaceDate <= historyTo)
         && (string.IsNullOrWhiteSpace(historyRacecourse) || string.Equals(x.RacecourseCode, historyRacecourse, StringComparison.OrdinalIgnoreCase)));
     private int FilteredHistoryCount => MatchingHistory.Count();
-    private IEnumerable<ParticipationHistoryEntryResponse> FilteredHistory => MatchingHistory.Skip((historyPage - 1) * historyBatchSize).Take(historyBatchSize);
-    private IEnumerable<RelationshipSummaryResponse> TopHorses => relationships.Where(x => x.ObjectType == "Horse").OrderByDescending(x => x.PrizeMoneyTotal).ThenByDescending(x => x.ParticipationCount).Take(5);
+    private IEnumerable<ParticipationHistoryEntryDto> FilteredHistory => MatchingHistory.Skip((historyPage - 1) * historyBatchSize).Take(historyBatchSize);
+    private IEnumerable<RelationshipSummaryDto> TopHorses => relationships.Where(x => x.ObjectType == "Horse").OrderByDescending(x => x.PrizeMoneyTotal).ThenByDescending(x => x.ParticipationCount).Take(5);
 
     private string? editDisplayName;
     private string? editNormalizedName;
@@ -165,8 +165,8 @@ else
             await Task.WhenAll(profileTask, historyTask);
             jockey = await profileTask;
             var history = await historyTask;
-            historyEntries = history?.Entries ?? Array.Empty<ParticipationHistoryEntryResponse>();
-            relationships = history?.Relationships ?? Array.Empty<RelationshipSummaryResponse>();
+            historyEntries = history?.Entries ?? Array.Empty<ParticipationHistoryEntryDto>();
+            relationships = history?.Relationships ?? Array.Empty<RelationshipSummaryDto>();
             if (jockey is not null)
             {
                 editDisplayName = jockey.DisplayName;
@@ -200,7 +200,7 @@ else
 
     private static string FormatFinish(int? position) => position is null ? "結果 —" : $"{position}着";
 
-    private static string RelationshipUrl(RelationshipSummaryResponse relationship) => relationship.ObjectType switch
+    private static string RelationshipUrl(RelationshipSummaryDto relationship) => relationship.ObjectType switch
     {
         "Horse" => $"/horses/{Uri.EscapeDataString(relationship.ObjectId)}",
         "Trainer" => $"/trainers/{Uri.EscapeDataString(relationship.ObjectId)}",

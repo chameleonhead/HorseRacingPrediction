@@ -36,7 +36,7 @@ internal static class GetOwnerEndpoint
                             resultByRace.TryGetValue(x.race.RaceId, out var result);
                             var entryResult = result?.EntryResults.FirstOrDefault(y => y.EntryId == x.entry.EntryId);
                             var horseName = horses.FirstOrDefault(y => y.HorseId == x.entry.HorseId)?.RegisteredName ?? x.entry.HorseId;
-                            return new ParticipationHistoryEntryResponse(x.race.RaceId, x.race.RaceDate, x.race.RacecourseCode, x.race.RaceNumber, x.race.RaceName,
+                            return new ParticipationHistoryEntryDto(x.race.RaceId, x.race.RaceDate, x.race.RacecourseCode, x.race.RaceNumber, x.race.RaceName,
                                 x.entry.HorseId, horseName, x.entry.JockeyId, x.entry.JockeyId is null ? null : jockeys.GetValueOrDefault(x.entry.JockeyId, x.entry.JockeyId),
                                 x.entry.TrainerId, x.entry.TrainerId is null ? null : trainers.GetValueOrDefault(x.entry.TrainerId, x.entry.TrainerId), x.entry.OwnerName,
                                 entryResult?.FinishPosition, entryResult?.PrizeMoney);
@@ -49,22 +49,22 @@ internal static class GetOwnerEndpoint
                             .OrderByDescending(x => allEntries.Where(y => y.HorseId == x.HorseId).Select(y => y.RaceDate).DefaultIfEmpty().Max())
                             .ThenBy(x => x.RegisteredName)
                             .Select(x =>
-                            new RelatedObjectResponse("Horse", x.HorseId, x.RegisteredName, allEntries.Count(y => y.HorseId == x.HorseId))).ToList();
+                            new RelatedObjectDto("Horse", x.HorseId, x.RegisteredName, allEntries.Count(y => y.HorseId == x.HorseId))).ToList();
                         var relatedTrainers = allEntries.Where(x => x.TrainerId is not null).GroupBy(x => (x.TrainerId, x.TrainerName)).Select(x =>
-                            new RelatedObjectResponse("Trainer", x.Key.TrainerId!, x.Key.TrainerName!, x.Count())).OrderByDescending(x => x.RelationshipCount).ToList();
+                            new RelatedObjectDto("Trainer", x.Key.TrainerId!, x.Key.TrainerName!, x.Count())).OrderByDescending(x => x.RelationshipCount).ToList();
                         var mergeAudits = await dbContext.OwnerMergeAudits.AsNoTracking().Where(x => x.TargetOwnerId == ownerId)
                             .ToListAsync(cancellationToken).ConfigureAwait(false);
-                        var mergeHistory = mergeAudits.OrderByDescending(x => x.CreatedAt).Select(x => new OwnerMergeAuditResponse(
+                        var mergeHistory = mergeAudits.OrderByDescending(x => x.CreatedAt).Select(x => new OwnerMergeAuditDto(
                             x.SourceOwnerId, x.TargetOwnerId, x.SourceNames.Split('\n', StringSplitOptions.RemoveEmptyEntries), x.ActorId, x.Reason, x.CreatedAt)).ToList();
                         var ownerTopHorses = EntriesInLastThreeYears(allEntries)
                             .GroupBy(x => (x.HorseId, x.HorseName))
-                            .Select(x => new RelationshipSummaryResponse("Horse", x.Key.HorseId, x.Key.HorseName, "所有した馬", x.Count(), x.Max(y => y.RaceDate), x.Sum(y => y.PrizeMoney ?? 0m), x.Count(y => y.FinishPosition == 1)))
+                            .Select(x => new RelationshipSummaryDto("Horse", x.Key.HorseId, x.Key.HorseName, "所有した馬", x.Count(), x.Max(y => y.RaceDate), x.Sum(y => y.PrizeMoney ?? 0m), x.Count(y => y.FinishPosition == 1)))
                             .OrderByDescending(x => x.PrizeMoneyTotal).ThenByDescending(x => x.ParticipationCount).Take(5).ToList();
-                        return Results.Ok(new OwnerDetailResponse(owner, currentHorses, relatedTrainers, entries, mergeHistory, hasMoreParticipations, ownerTopHorses));
+                        return Results.Ok(new OwnerDetailDto(owner, currentHorses, relatedTrainers, entries, mergeHistory, hasMoreParticipations, ownerTopHorses));
                     })
                     .WithName("GetOwner")
                     .WithTags("Owner API")
-                    .Produces<OwnerDetailResponse>()
+                    .Produces<OwnerDetailDto>()
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

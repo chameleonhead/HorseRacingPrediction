@@ -36,6 +36,6 @@ internal static class JockeyEndpointMappings
         => new()
         {
             JockeyId = model.JockeyId,
-            Entries = model.Entries.Select(x => new ApiContracts.JockeyRaceHistoryEntry(x.RaceId, x.EntryId, x.HorseId, x.RaceDate, x.RacecourseCode, x.SurfaceCode, x.DistanceMeters, x.DirectionCode, x.GradeCode, x.FinishPosition, x.PrizeMoney)).ToList()
+            Entries = model.Entries.Select(x => new ApiContracts.JockeyRaceHistoryEntryDto(x.RaceId, x.EntryId, x.HorseId, x.RaceDate, x.RacecourseCode, x.SurfaceCode, x.DistanceMeters, x.DirectionCode, x.GradeCode, x.FinishPosition, x.PrizeMoney)).ToList()
         };
 }

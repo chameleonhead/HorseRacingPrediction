@@ -70,7 +70,7 @@ internal static class SearchTrainersEndpoint
                             sorted,
                             page,
                             pageSize,
-                            x => new TrainerSummaryResponse(
+                            x => new TrainerSummaryDto(
                                 x.TrainerId,
                                 x.DisplayName,
                                 x.NormalizedName,
@@ -79,7 +79,7 @@ internal static class SearchTrainersEndpoint
                     })
                     .WithName("SearchTrainers")
                     .WithTags("Trainer API")
-                    .Produces<PagedResponse<TrainerSummaryResponse>>(StatusCodes.Status200OK)
+                    .Produces<PagedResponse<TrainerSummaryDto>>(StatusCodes.Status200OK)
                     .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest);
     }
 }

@@ -36,7 +36,7 @@ internal static class GetTrainerParticipationsEndpoint
                         {
                             resultByRace.TryGetValue(x.race.RaceId, out var raceResult);
                             var entryResult = raceResult?.EntryResults.FirstOrDefault(y => y.EntryId == x.entry.EntryId);
-                            return new ParticipationHistoryEntryResponse(
+                            return new ParticipationHistoryEntryDto(
                                 x.race.RaceId, x.race.RaceDate, x.race.RacecourseCode, x.race.RaceNumber, x.race.RaceName,
                                 x.entry.HorseId, horses.GetValueOrDefault(x.entry.HorseId, x.entry.HorseId),
                                 x.entry.JockeyId, x.entry.JockeyId is null ? null : jockeys.GetValueOrDefault(x.entry.JockeyId, x.entry.JockeyId),
@@ -50,16 +50,16 @@ internal static class GetTrainerParticipationsEndpoint
 
                         var relationshipEntries = EntriesInLastThreeYears(allEntries);
                         var relationships = relationshipEntries.GroupBy(x => (x.HorseId, x.HorseName)).Select(x =>
-                                new RelationshipSummaryResponse("Horse", x.Key.HorseId, x.Key.HorseName, "管理した馬", x.Count(), x.Max(y => y.RaceDate), x.Sum(y => y.PrizeMoney ?? 0m), x.Count(y => y.FinishPosition == 1)))
+                                new RelationshipSummaryDto("Horse", x.Key.HorseId, x.Key.HorseName, "管理した馬", x.Count(), x.Max(y => y.RaceDate), x.Sum(y => y.PrizeMoney ?? 0m), x.Count(y => y.FinishPosition == 1)))
                             .Concat(relationshipEntries.Where(x => x.JockeyId is not null).GroupBy(x => (x.JockeyId, x.JockeyName)).Select(x =>
-                                new RelationshipSummaryResponse("Jockey", x.Key.JockeyId!, x.Key.JockeyName!, "騎乗した騎手", x.Count(), x.Max(y => y.RaceDate))))
+                                new RelationshipSummaryDto("Jockey", x.Key.JockeyId!, x.Key.JockeyName!, "騎乗した騎手", x.Count(), x.Max(y => y.RaceDate))))
                             .OrderByDescending(x => x.ParticipationCount).ToList();
 
-                        return Results.Ok(new ParticipationHistoryResponse("Trainer", trainerId, entries, relationships, hasMore));
+                        return Results.Ok(new ParticipationHistoryDto("Trainer", trainerId, entries, relationships, hasMore));
                     })
                     .WithName("GetTrainerParticipations")
                     .WithTags("Trainer API")
-                    .Produces<ParticipationHistoryResponse>(StatusCodes.Status200OK)
+                    .Produces<ParticipationHistoryDto>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

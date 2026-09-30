@@ -6,7 +6,7 @@ namespace HorseRacingPrediction.Api.Endpoints.Jockeys;
 
 internal static class JockeyParticipationHistoryService
 {
-    internal static async Task<ParticipationHistoryResponse> BuildParticipationHistoryAsync(
+    internal static async Task<ParticipationHistoryDto> BuildParticipationHistoryAsync(
         string subjectType,
         string subjectId,
         EventStoreDbContext dbContext,
@@ -29,7 +29,7 @@ internal static class JockeyParticipationHistoryService
         {
             resultByRace.TryGetValue(x.race.RaceId, out var raceResult);
             var entryResult = raceResult?.EntryResults.FirstOrDefault(y => y.EntryId == x.entry.EntryId);
-            return new ParticipationHistoryEntryResponse(
+            return new ParticipationHistoryEntryDto(
                 x.race.RaceId, x.race.RaceDate, x.race.RacecourseCode, x.race.RaceNumber, x.race.RaceName,
                 x.entry.HorseId, horses.GetValueOrDefault(x.entry.HorseId, x.entry.HorseId),
                 x.entry.JockeyId, x.entry.JockeyId is null ? null : jockeys.GetValueOrDefault(x.entry.JockeyId, x.entry.JockeyId),
@@ -43,20 +43,20 @@ internal static class JockeyParticipationHistoryService
         var hasMore = offset + entries.Count < allEntries.Count;
 
         var relationshipEntries = subjectType == "Horse" ? allEntries : EntriesInLastThreeYears(allEntries);
-        IEnumerable<RelationshipSummaryResponse> relationships = subjectType == "Horse"
+        IEnumerable<RelationshipSummaryDto> relationships = subjectType == "Horse"
             ? allEntries.Where(x => x.JockeyId is not null).GroupBy(x => (x.JockeyId, x.JockeyName)).Select(x =>
-                    new RelationshipSummaryResponse("Jockey", x.Key.JockeyId!, x.Key.JockeyName!, "騎乗した騎手", x.Count(), x.Max(y => y.RaceDate)))
+                    new RelationshipSummaryDto("Jockey", x.Key.JockeyId!, x.Key.JockeyName!, "騎乗した騎手", x.Count(), x.Max(y => y.RaceDate)))
                 .Concat(allEntries.Where(x => x.TrainerId is not null).GroupBy(x => (x.TrainerId, x.TrainerName)).Select(x =>
-                    new RelationshipSummaryResponse("Trainer", x.Key.TrainerId!, x.Key.TrainerName!, "レース時点の調教師", x.Count(), x.Max(y => y.RaceDate))))
+                    new RelationshipSummaryDto("Trainer", x.Key.TrainerId!, x.Key.TrainerName!, "レース時点の調教師", x.Count(), x.Max(y => y.RaceDate))))
             : relationshipEntries.GroupBy(x => (x.HorseId, x.HorseName)).Select(x =>
-                    new RelationshipSummaryResponse("Horse", x.Key.HorseId, x.Key.HorseName, "騎乗した馬", x.Count(), x.Max(y => y.RaceDate), x.Sum(y => y.PrizeMoney ?? 0m), x.Count(y => y.FinishPosition == 1)))
+                    new RelationshipSummaryDto("Horse", x.Key.HorseId, x.Key.HorseName, "騎乗した馬", x.Count(), x.Max(y => y.RaceDate), x.Sum(y => y.PrizeMoney ?? 0m), x.Count(y => y.FinishPosition == 1)))
                 .Concat(relationshipEntries.Where(x => x.TrainerId is not null).GroupBy(x => (x.TrainerId, x.TrainerName)).Select(x =>
-                    new RelationshipSummaryResponse("Trainer", x.Key.TrainerId!, x.Key.TrainerName!, "同じ出走の調教師", x.Count(), x.Max(y => y.RaceDate))));
+                    new RelationshipSummaryDto("Trainer", x.Key.TrainerId!, x.Key.TrainerName!, "同じ出走の調教師", x.Count(), x.Max(y => y.RaceDate))));
 
-        return new ParticipationHistoryResponse(subjectType, subjectId, entries, relationships.OrderByDescending(x => x.ParticipationCount).ToList(), hasMore);
+        return new ParticipationHistoryDto(subjectType, subjectId, entries, relationships.OrderByDescending(x => x.ParticipationCount).ToList(), hasMore);
     }
 
-    internal static IReadOnlyList<ParticipationHistoryEntryResponse> EntriesInLastThreeYears(IReadOnlyList<ParticipationHistoryEntryResponse> entries)
+    internal static IReadOnlyList<ParticipationHistoryEntryDto> EntriesInLastThreeYears(IReadOnlyList<ParticipationHistoryEntryDto> entries)
     {
         var latestDate = entries.Where(x => x.RaceDate.HasValue).Select(x => x.RaceDate!.Value).DefaultIfEmpty().Max();
         if (latestDate == default) return entries;

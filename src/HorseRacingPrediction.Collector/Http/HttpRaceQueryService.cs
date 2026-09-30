@@ -41,14 +41,14 @@ public sealed class HttpRaceQueryService : IRaceQueryService
         return await response.Content.ReadFromJsonAsync<RacePredictionContextDto>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<HorseReadDto?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)
+    public async Task<HorseDto?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync($"/api/horses/{Uri.EscapeDataString(horseId)}", cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<HorseReadDto>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        return await response.Content.ReadFromJsonAsync<HorseDto>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<JockeyDto?> GetJockeyAsync(string jockeyId, CancellationToken cancellationToken = default)
@@ -119,7 +119,7 @@ public sealed class HttpRaceQueryService : IRaceQueryService
         return await response.Content.ReadFromJsonAsync<JockeyRaceHistoryDto>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<MlPredictionResponse?> GetMlPredictionAsync(string raceId, CancellationToken cancellationToken = default)
+    public async Task<MlPredictionDto?> GetMlPredictionAsync(string raceId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync($"/api/races/{Uri.EscapeDataString(raceId)}/ml-prediction", cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -130,9 +130,9 @@ public sealed class HttpRaceQueryService : IRaceQueryService
         if (dto is null || string.IsNullOrWhiteSpace(dto.RaceId))
             return null;
 
-        return new MlPredictionResponse(
+        return new MlPredictionDto(
             dto.RaceId,
-            dto.Rankings.Select(x => new MlHorsePrediction(
+            dto.Rankings.Select(x => new HorseRacingPrediction.Contracts.MlHorsePredictionDto(
                 x.EntryId,
                 x.HorseId,
                 x.HorseNumber,
@@ -140,7 +140,7 @@ public sealed class HttpRaceQueryService : IRaceQueryService
                 x.PredictedRank)).ToList());
     }
 
-    public async Task<PredictionTicketSummaryReadModel?> GetPredictionTicketAsync(string predictionTicketId, CancellationToken cancellationToken = default)
+    public async Task<PredictionTicketWithMarksDto?> GetPredictionTicketAsync(string predictionTicketId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync($"/api/predictions/{Uri.EscapeDataString(predictionTicketId)}", cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -151,7 +151,7 @@ public sealed class HttpRaceQueryService : IRaceQueryService
         if (dto is null || string.IsNullOrWhiteSpace(dto.PredictionTicketId))
             return null;
 
-        return new PredictionTicketSummaryReadModel(
+        return new PredictionTicketWithMarksDto(
             dto.PredictionTicketId,
             dto.RaceId,
             dto.PredictorType,
@@ -159,7 +159,7 @@ public sealed class HttpRaceQueryService : IRaceQueryService
             dto.ConfidenceScore,
             dto.SummaryComment,
             dto.PredictedAt,
-            dto.Marks.Select(x => new PredictionMarkEntry(
+            dto.Marks.Select(x => new PredictionMarkEntryDto(
                 x.EntryId, x.MarkCode, x.PredictedRank, x.Score, x.Comment)).ToList());
     }
 

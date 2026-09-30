@@ -74,7 +74,7 @@ else
     private int page = 1;
     private const int pageSize = 50;
     private bool loading;
-    private PagedResponse<RaceSummaryResponse>? result;
+    private PagedResponse<RaceSummaryDto>? result;
     private string ActivePreset => StandardPeriodPresets.FirstOrDefault(x => IsPresetActive(x.Id))?.Id ?? "custom";
     private IReadOnlyList<PeriodPreset> PeriodPresets => ActivePreset == "custom"
         ? [.. StandardPeriodPresets, new("custom", "指定期間")]

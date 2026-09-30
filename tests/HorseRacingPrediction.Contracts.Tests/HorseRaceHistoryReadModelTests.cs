@@ -248,10 +248,10 @@ public sealed class HorseRaceHistoryReadModelTests
         Assert.AreEqual(12, model.GetDaysFromLastRace(new DateOnly(2026, 6, 1)));
     }
 
-    private static HorseRaceHistoryDto CreateModel(params HorseRaceHistoryEntry[] entries)
+    private static HorseRaceHistoryDto CreateModel(params HorseRaceHistoryEntryDto[] entries)
         => new() { HorseId = "horse-1", Entries = entries.ToList() };
 
-    private static HorseRaceHistoryEntry CreateEntry(
+    private static HorseRaceHistoryEntryDto CreateEntry(
         DateOnly? raceDate = null,
         string? surfaceCode = null,
         int? distanceMeters = null,

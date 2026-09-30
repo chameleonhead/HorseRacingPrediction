@@ -209,7 +209,7 @@ else
     [Parameter] public string RaceId { get; set; } = string.Empty;
 
     private bool loading;
-    private RaceResponse? race;
+    private RaceDto? race;
 
     private string? correctRaceName;
     private string? correctRacecourseCode;
@@ -296,7 +296,7 @@ else
         return $"{surface}{direction} {distance}";
     }
 
-    private static string FormatWeatherAndTrack(RaceResponse race)
+    private static string FormatWeatherAndTrack(RaceDto race)
     {
         var weather = race.WeatherObservations.Count == 0
             ? "未取得"
@@ -309,7 +309,7 @@ else
         return $"{weather}・{track}";
     }
 
-    private static string FormatTrackCondition(RaceTrackConditionResponse observation) =>
+    private static string FormatTrackCondition(RaceTrackConditionDto observation) =>
         observation.GoingDescriptionText ?? observation.TurfConditionCode ?? observation.DirtConditionCode ?? "取得済み";
 
     private static string FormatOddsRange(decimal? min, decimal? max)

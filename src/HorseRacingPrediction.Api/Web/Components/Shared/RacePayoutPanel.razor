@@ -11,8 +11,8 @@
     </dl>
 </section>
 @code {
-    [Parameter,EditorRequired] public RacePayoutResultResponse Payouts {get;set;}=default!;
-    private (string Name,IReadOnlyList<RacePayoutEntryResponse> Values)[] Groups =>
+    [Parameter,EditorRequired] public RacePayoutResultDto Payouts {get;set;}=default!;
+    private (string Name,IReadOnlyList<RacePayoutEntryDto> Values)[] Groups =>
     [ ("単勝",Payouts.WinPayouts),("複勝",Payouts.PlacePayouts),("枠連",Payouts.BracketQuinellaPayouts??[]),
       ("馬連",Payouts.QuinellaPayouts),("ワイド",Payouts.WidePayouts??[]),("馬単",Payouts.ExactaPayouts),
       ("3連複",Payouts.TrioPayouts??[]),("3連単",Payouts.TrifectaPayouts) ];

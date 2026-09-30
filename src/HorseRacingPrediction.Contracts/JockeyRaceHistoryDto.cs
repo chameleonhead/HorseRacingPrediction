@@ -3,7 +3,7 @@ namespace HorseRacingPrediction.Contracts;
 public sealed class JockeyRaceHistoryDto
 {
     public string JockeyId { get; set; } = string.Empty;
-    public List<JockeyRaceHistoryEntry> Entries { get; set; } = [];
+    public List<JockeyRaceHistoryEntryDto> Entries { get; set; } = [];
 
     public int TotalRaceCount => Entries.Count;
     public double WinRate => Rate(Entries, x => x.FinishPosition == 1);
@@ -31,6 +31,6 @@ public sealed class JockeyRaceHistoryDto
         return Rate(filtered, x => x.FinishPosition == 1);
     }
 
-    private static double Rate(IReadOnlyCollection<JockeyRaceHistoryEntry> source, Func<JockeyRaceHistoryEntry, bool> predicate)
+    private static double Rate(IReadOnlyCollection<JockeyRaceHistoryEntryDto> source, Func<JockeyRaceHistoryEntryDto, bool> predicate)
         => source.Count == 0 ? 0d : (double)source.Count(predicate) / source.Count;
 }

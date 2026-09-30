@@ -34,10 +34,10 @@ else
 @code {
     private string? query;
     private bool loading;
-    private IReadOnlyList<OwnerSummaryResponse> items = [];
+    private IReadOnlyList<OwnerSummaryDto> items = [];
     private int page = 1;
     private const int pageSize = 50;
-    private IEnumerable<OwnerSummaryResponse> PagedItems => items.Skip((page - 1) * pageSize).Take(pageSize);
+    private IEnumerable<OwnerSummaryDto> PagedItems => items.Skip((page - 1) * pageSize).Take(pageSize);
 
     protected override async Task OnInitializedAsync()
     {
@@ -82,5 +82,5 @@ else
         Navigation.NavigateTo(uri, replace: true);
     }
     private static string OwnerUrl(string id) => $"/owners/{Uri.EscapeDataString(id)}";
-    private static string DisplayMetadata(OwnerSummaryResponse owner) => $"現在の所有馬 {owner.CurrentHorseCount} 頭 ・ 出走 {owner.ParticipationCount} 戦 ・ 最終出走 {(owner.LastParticipationDate?.ToString("yyyy/MM/dd") ?? "—")}";
+    private static string DisplayMetadata(OwnerSummaryDto owner) => $"現在の所有馬 {owner.CurrentHorseCount} 頭 ・ 出走 {owner.ParticipationCount} 戦 ・ 最終出走 {(owner.LastParticipationDate?.ToString("yyyy/MM/dd") ?? "—")}";
 }

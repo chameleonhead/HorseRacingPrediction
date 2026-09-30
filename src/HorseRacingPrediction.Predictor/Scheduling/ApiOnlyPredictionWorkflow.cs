@@ -91,7 +91,7 @@ public sealed class ApiOnlyPredictionWorkflow
 
     private static List<ApiOnlyPredictionRanking> BuildRankings(
         RacePredictionContextDto context,
-        MlPredictionResponse? mlPrediction)
+        MlPredictionDto? mlPrediction)
     {
         var entriesById = context.Entries
             .Where(x => x.ParticipationStatus == RaceEntryParticipationStatus.Active && !string.IsNullOrWhiteSpace(x.EntryId))

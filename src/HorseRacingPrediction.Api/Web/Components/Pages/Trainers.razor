@@ -35,7 +35,7 @@ else
     private int page = 1;
     private const int pageSize = 50;
     private bool loading;
-    private PagedResponse<TrainerSummaryResponse>? result;
+    private PagedResponse<TrainerSummaryDto>? result;
 
     protected override async Task OnInitializedAsync()
     {
@@ -65,7 +65,7 @@ else
     private void OpenTrainer(string id) => Navigation.NavigateTo(TrainerUrl(id));
     private void OpenTrainerFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenTrainer(id); }
     private static string TrainerUrl(string id) => $"/trainers/{Uri.EscapeDataString(id)}";
-    private static string TrainerMetadata(TrainerSummaryResponse trainer) => $"所属 {trainer.AffiliationCode ?? "—"} · 別名 {trainer.AliasCount} 件";
+    private static string TrainerMetadata(TrainerSummaryDto trainer) => $"所属 {trainer.AffiliationCode ?? "—"} · 別名 {trainer.AliasCount} 件";
     private async Task ClearFiltersAsync() { query = null; affiliationCode = null; page = 1; await LoadAsync(); }
     private List<RaceOpsFilterChip> BuildFilterChips()
     {

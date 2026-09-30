@@ -40,7 +40,7 @@ else
     private int page = 1;
     private const int pageSize = 50;
     private bool loading;
-    private PagedResponse<PredictionTicketSummaryResponse>? result;
+    private PagedResponse<PredictionTicketSummaryDto>? result;
 
     protected override async Task OnInitializedAsync()
     {
@@ -68,7 +68,7 @@ else
     }
     private static string? ParseText(IDictionary<string, Microsoft.Extensions.Primitives.StringValues> q, string key) => q.TryGetValue(key, out var value) ? value.ToString() : null;
     private static string PredictionUrl(string id) => $"/predictions/{Uri.EscapeDataString(id)}";
-    private static string RaceDisplayName(PredictionTicketSummaryResponse value) => string.Join(" ", new[] { value.RacecourseCode, value.RaceNumber is null ? null : $"{value.RaceNumber}R", value.RaceName }.Where(x => !string.IsNullOrWhiteSpace(x)));
+    private static string RaceDisplayName(PredictionTicketSummaryDto value) => string.Join(" ", new[] { value.RacecourseCode, value.RaceNumber is null ? null : $"{value.RaceNumber}R", value.RaceName }.Where(x => !string.IsNullOrWhiteSpace(x)));
     private static string TicketStatusLabel(TicketStatus value) => value switch { TicketStatus.Draft => "作成中", TicketStatus.Finalized => "確定", TicketStatus.Withdrawn => "取下げ", _ => value.ToString() };
     private static string TicketStatusTone(TicketStatus value) => value == TicketStatus.Finalized ? "success" : value == TicketStatus.Withdrawn ? "neutral" : "info";
     private static string EvaluationStatusLabel(EvaluationStatus value) => value switch { EvaluationStatus.Ready => "評価済み", EvaluationStatus.RecalculationRequired => "再評価待ち", EvaluationStatus.Failed => "評価失敗", _ => value.ToString() };

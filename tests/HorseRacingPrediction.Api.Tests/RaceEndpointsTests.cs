@@ -79,7 +79,7 @@ public class RaceEndpointsTests
         var response = await _client.GetAsync($"/api/races/{raceId}");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        var race = await response.Content.ReadFromJsonAsync<RaceResponse>(JsonOptions);
+        var race = await response.Content.ReadFromJsonAsync<RaceDto>(JsonOptions);
         Assert.IsNotNull(race);
         Assert.AreEqual(raceId, race.RaceId);
         Assert.AreEqual("TOKYO", race.RacecourseCode);
@@ -102,7 +102,7 @@ public class RaceEndpointsTests
             new MarkRaceRescheduledRequest(replacementId), JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        var source = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{sourceId}", JsonOptions);
+        var source = await _client.GetFromJsonAsync<RaceDto>($"/api/races/{sourceId}", JsonOptions);
         Assert.IsNotNull(source);
         Assert.AreEqual(RaceStatus.Rescheduled, source.Status);
         Assert.AreEqual(replacementId, source.ReplacementRaceId);
@@ -121,7 +121,7 @@ public class RaceEndpointsTests
             DirectionCode: "右");
 
         var createResponse = await _client.PostAsJsonAsync("/api/races", request, JsonOptions);
-        var race = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{raceId}", JsonOptions);
+        var race = await _client.GetFromJsonAsync<RaceDto>($"/api/races/{raceId}", JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.Created, createResponse.StatusCode);
         Assert.IsNotNull(race);
@@ -144,7 +144,7 @@ public class RaceEndpointsTests
 
         var response = await _client.PostAsJsonAsync("/api/races/result-bulk",
             new DeclareRaceResultBulkRequest(date, course, raceNumber, raceName), JsonOptions);
-        var race = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{raceId}", JsonOptions);
+        var race = await _client.GetFromJsonAsync<RaceDto>($"/api/races/{raceId}", JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsNotNull(race);
@@ -176,7 +176,7 @@ public class RaceEndpointsTests
         Assert.AreEqual(HttpStatusCode.OK, first.StatusCode, await first.Content.ReadAsStringAsync());
         Assert.IsNotNull(firstBody);
         Assert.IsEmpty(firstBody.Errors, string.Join(" | ", firstBody.Errors));
-        var race = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{raceId}", JsonOptions);
+        var race = await _client.GetFromJsonAsync<RaceDto>($"/api/races/{raceId}", JsonOptions);
         var eventsAfterFirst = CountStoredEvents();
         var replay = await _client.PostAsJsonAsync("/api/races/result-bulk", request, JsonOptions);
         var eventsAfterReplay = CountStoredEvents();
@@ -225,7 +225,7 @@ public class RaceEndpointsTests
         Assert.IsNotNull(body);
         Assert.IsEmpty(body.Errors, string.Join(" | ", body.Errors));
         Assert.IsTrue(body.CorePersisted);
-        var race = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{body.RaceId}", JsonOptions);
+        var race = await _client.GetFromJsonAsync<RaceDto>($"/api/races/{body.RaceId}", JsonOptions);
         Assert.IsNotNull(race);
         Assert.IsEmpty(race.EntryResults);
         var entry = race.Entries.Single();
@@ -314,7 +314,7 @@ public class RaceEndpointsTests
             TargetRaceId: initialBody.RaceId, RefreshExistingData: true, IsRaceCard: true);
         var refreshResponse = await _client.PostAsJsonAsync("/api/races/result-bulk", refresh, JsonOptions);
         var refreshBody = await refreshResponse.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
-        var race = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{initialBody.RaceId}", JsonOptions);
+        var race = await _client.GetFromJsonAsync<RaceDto>($"/api/races/{initialBody.RaceId}", JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, refreshResponse.StatusCode);
         Assert.IsNotNull(race);
@@ -404,7 +404,7 @@ public class RaceEndpointsTests
             new RegisterEntryRequest(horseId, 1, null, null, null, null, null, null, null, null),
             JsonOptions);
 
-        var race = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{raceId}", JsonOptions);
+        var race = await _client.GetFromJsonAsync<RaceDto>($"/api/races/{raceId}", JsonOptions);
 
         Assert.IsNotNull(race);
         Assert.AreEqual(1, race.Entries.Count);
@@ -436,7 +436,7 @@ public class RaceEndpointsTests
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<RaceSummaryResponse>>(JsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<PagedResponse<RaceSummaryDto>>(JsonOptions);
         Assert.IsNotNull(result);
         Assert.AreEqual(2, result.TotalCount);
         Assert.AreEqual(2, result.TotalPages);
@@ -475,14 +475,14 @@ public class RaceEndpointsTests
                 var getResponse = await secondClient.GetAsync($"/api/races/{raceId}");
                 Assert.AreEqual(HttpStatusCode.OK, getResponse.StatusCode);
 
-                var race = await getResponse.Content.ReadFromJsonAsync<RaceResponse>(JsonOptions);
+                var race = await getResponse.Content.ReadFromJsonAsync<RaceDto>(JsonOptions);
                 Assert.IsNotNull(race);
                 Assert.AreEqual(raceId, race.RaceId);
 
                 var searchResponse = await secondClient.GetAsync($"/api/races?raceId={raceId}");
                 Assert.AreEqual(HttpStatusCode.OK, searchResponse.StatusCode);
 
-                var result = await searchResponse.Content.ReadFromJsonAsync<PagedResponse<RaceSummaryResponse>>(JsonOptions);
+                var result = await searchResponse.Content.ReadFromJsonAsync<PagedResponse<RaceSummaryDto>>(JsonOptions);
                 Assert.IsNotNull(result);
                 Assert.AreEqual(1, result.TotalCount);
                 Assert.AreEqual(raceId, result.Items[0].RaceId);
@@ -837,7 +837,7 @@ public class RaceEndpointsTests
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
-        var race = await response.Content.ReadFromJsonAsync<RaceResponse>(JsonOptions);
+        var race = await response.Content.ReadFromJsonAsync<RaceDto>(JsonOptions);
         Assert.IsNotNull(race);
         Assert.AreEqual(1, race.Entries.Count);
         Assert.AreEqual(entryId, race.Entries[0].EntryId);

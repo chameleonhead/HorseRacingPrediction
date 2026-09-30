@@ -11,7 +11,7 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | In progress | T2の契約型移行と後続のRequest/Response、Refit、Factory、未導入DI拡張を実施中 |
+| Code | In progress | T2の第1段階として37件のContracts型をRoslynatorで意味的に改名し、Razor参照を補正済み。資源別namespace・全型1ファイル化・統合は継続中。後続のRequest/Response、Refit、Factory、未導入DI拡張も未完了 |
 | Verification | In progress | T1の135業務route shape inventoryを完了。Refit probeは進行中。実装回帰と新HTTP契約検証は未完了 |
 | Deployment/operation | Not applicable | 新クライアントの稼働ホストへの導入・デプロイは対象外 |
 
@@ -36,7 +36,7 @@
 3. 内部モデルをそのまま共有ライブラリへ移さず、wire DTOとマッピングを作る。永続型・実行型の名前/配置を維持し、ApiClient/Contractsからサーバープロジェクトへの参照を禁止する。
 4. 単一`IApiClientFactory.Create<TApi>()`で登録済みAPIだけを生成する。`AddHorseRacingApiClient`で共通HttpClient設定を用意し、IHttpClientBuilderでhandlerを追加可能にする。APIキーは任意、絶対BaseAddress/Timeout/header設定を検証。秘密を記録しない。自動retryなし。
 5. 公開操作は入力がある場合だけ専用Requestを受ける。戻りデータありはApiResponse<専用Response>、なしはIApiResponse。空Request/Response/JSONは作らず、既存の204を含む成功status/Location・エラー・認証は維持。DTOラップのJSON構造変更を許容し、業務値/null/enum/日時/既定値は維持する。
-6. Roslynの意味解析とRenameで型名/参照を変更し、型単位のnamespace移動とalias追従をツール化する。manifest、dry-run、衝突検出を設ける。Razor・文字列参照は検索とbuildで補完する。
+6. 公開済みRoslynator CLIの意味解析Renameで型名/参照を先に変更する。manifest、dry-run、衝突確認を残し、namespace配置、統合、alias/Razor・文字列参照などの規約例外はその後個別修正して検索とbuildで検証する。自作移行ツールは開発しない（再開時の利用者指示）。
 7. Refit 16.3.0を維持。既存抽象サービスとHTTP実装を維持し、導入は別途とする。
 
 2026-09-30追加指示（最新の訂正を反映）: 入力と戻りデータが両方ある操作だけRequest/Responseを対とする。片側がなければ対応する型は不要で空オブジェクトは禁止。ResponseにRaceの項目を直接置かずRaceDtoを持たせる。データの塊は必ずDto。直下項目の可否は都度判断する。これに伴い、当初の「HTTP JSON形状不変」制約を撤回する。OpenAPI変更許容の明示回答に整合する。最新訂正を含め2026-09-30の「不明点はありますか？なければ実装をお願いします。」により設計全体を承認。その後の「統合が自然な場合は統合してください」に従い、同じ意味/データ/制約の型は統合を認め、対応表・既存利用者検証へ含める。利用者による明示変更として承認範囲へ反映。
@@ -86,7 +86,7 @@
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State | Routing | Audit | Result metrics |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | 全API棚卸し（AC1/AC6） | inventory explorer | requested gpt-6-luna/high | - | route-inventory.md; http-contract-inventory.md/.json | endpoint宣言と登録/route検索照合、handler input/result対照 | 136 routes (135 business); request 116/19; response data 94/41; corrected DI/delegate cases cross-checked; Lead accepted inventory as T3 baseline (counts do not prove wrappers) | Verified | 境界の明確な調査 | read-only research | unavailable; retries 0; corrections 1; reviews 1 |
-| T2 | Roslyn移行ツール、全共有DTO分類/改名/参照追従（AC2/4/5/6） | contract-migration worker | requested gpt-6-luna/high | 設計承認 | tools/ContractMigration; src; tests; docs/changes/20260930_refit-api-clients/contract-migration.json | tool fixture、Contracts tests、solution build | Tool Release build/self-test passed; independent full-solution dry-run exposed VF001; focused code/manifest correction is in place but rerun is paused; no production apply | In progress | 意味判断はLead、確定規則下の移行を直列実行 | T2-A1 | unavailable; retries 0; corrections 1; reviews 1 |
+| T2 | 既存ツールで共有型を改名し、規約例外を個別修正（AC2/4/5/6） | rename_tool_inventory / contract-migration worker | requested gpt-6-luna/high | 設計承認 | src; tests; docs/28-api-client-design.md; docs/changes/20260930_refit-api-clients/README.md; docs/changes/20260930_refit-api-clients/contract-migration.json; docs/changes/20260930_refit-api-clients/agent-audits/T2-A2.json; docs/changes/20260930_refit-api-clients/agent-audits/history/T2-A1.json | CLI target/collision inventory + actual apply、Contracts tests、solution build、format | 37型のsemantic renameとRazor 17ファイル/67参照を完了。dry-runはRoslynatorのNullReferenceExceptionで失敗し、実適用は隔離fixtureで確認後に実施。資源namespace/1型1ファイル/統合は継続 | In progress | 意味判断はLead、確定規則下の移行を直列実行 | T2-A2 | unavailable; retries 1; corrections 0; reviews 1 |
 | T3 | 入力/戻りの有無に応じた操作別Request/Response、DTO、サーバー/既存利用者mapping（AC2/4/5） | wire-contract worker | gpt-6-luna/high予定 | T2 | Contracts、Api境界mapping、関連test、既存利用者のRequest組立/Response取出し | 新契約HTTP試験、旧→新データ保存性、既存利用者回帰 | 未着手 | Dependent | 内部実行型を維持し独立比較 | dispatch時作成 | unavailable; retries 0; corrections 0; reviews 0 |
 | T4 | 全Refitインターフェース、Factory、DI（AC1/3/4/5） | api-client worker | gpt-6-luna/high予定 | T3 | ApiClient、新ApiClient.Tests、slnへのtest追加 | 全route送信、DI/Factory/error/cancel tests | 未着手 | Dependent | 凍結済みHTTP契約を実装 | dispatch時作成 | unavailable; retries 0; corrections 0; reviews 0 |
 | T5 | 独立HTTP往復/全回帰と局所修正（AC1-6） | verification worker | gpt-6-luna/high予定 | T4 | tests、直列の限定修正、検証記録 | TestServer、全solution test/build/format | 未着手 | Dependent | Leadが契約逸脱を判定し局所修正はworkerへ戻す | dispatch時作成 | unavailable; retries 0; corrections 0; reviews 0 |
@@ -111,7 +111,7 @@ T1のroute・HTTP shape inventoryを独立確認しLeadが受入。T7は6 probe 
 
 | ID | Gate / evidence | State | Closure evidence |
 | --- | --- | --- | --- |
-| VF001 | Independent `dotnet run --no-build -c Release --project tools/ContractMigration/ContractMigration.csproj -- dry-run HorseRacingPrediction.sln docs/changes/20260930_refit-api-clients/contract-migration.json` terminated with `InvalidCastException` (`QualifiedNameSyntax` → `SimpleNameSyntax`) in `SemanticTypeRewriter.VisitClassDeclaration` via `CSharpSyntaxRewriter.VisitMemberAccessExpression`. No production apply occurred. | Open | Correct the syntax visitor and generic FQN representation, then pass the same full-solution dry-run with zero unresolved targets/collisions. |
+| VF001 | The abandoned `tools/ContractMigration` attempt is retained only in `agent-audits/history/T2-A1.json`. During resumed work, published Roslynator 1.0.0 `rename-symbol --dry-run` repeatedly terminated in `MSBuildWorkspace.TryApplyChanges` with `NullReferenceException` (full solution, filtered/project, VS MSBuild, and isolated fixture); it made no source writes. | Closed with documented limitation | No custom tool was repaired or added. Actual-mode was verified on an isolated fixture, then applied to 37 pre-inventoried Contracts symbols with exact assembly predicate and `--on-error abort`; target collisions were zero. Contracts tests, solution build, format, source review passed. `--dry-run` remains a known Roslynator environment defect. |
 
 ```powershell
 dotnet restore HorseRacingPrediction.sln
@@ -126,7 +126,17 @@ API実HTTPfixtureはTestApplicationFactory/TestServerを利用し、外部デー
 
 ## Next action and remaining work
 
-設計承認済み。T2はVF001とgeneric target表記をfocused correctionした後、元の全solution dry-run gateを再実行する。T7は独立probeとして並列実施し、T4の実装方式を反証する。T2-T7と全ACは未完了。意図的な未コミットは本変更記録、route台帳、正規設計、architecture更新のみ。設計段階で実装完了を主張しない。
+### 2026-09-30 restart: published rename tool first
+
+利用者は「まず項目の名前変更をツールを使って実行し、最後規約に合わないものを個別に修正する」方式を明示した。Decision 6とT2の実施方式をこの指示で更新する。自作移行ツールの開発は再開せず、公開済みRoslynator CLI `rename-symbol`による型のsemantic renameを先行し、namespace配置、同義型統合、Razor等の未追従箇所を後から個別修正する。Roslynator 1.0.0の`--dry-run`は`MSBuildWorkspace.TryApplyChanges`内でNullReferenceExceptionとなったため、成功扱いしない。実適用前にContracts assemblyの対象宣言数・target衝突を独立棚卸しし、隔離fixtureでactual-modeを検証後、実適用と差分/buildで確認した。37件の意味的改名、Razor 17ファイル/67参照補正、Contracts tests 43/43、Release solution build、format verifyを完了。namespace配置、全Contracts型の1型1ファイル化、同義型統合は継続中。HTTPの新Request/Response構造は引き続きT3で扱う。受け入れ基準と未導入境界は維持する。
+
+再開時点 `51d4f310` はclean。記録にある `tools/ContractMigration`、`contract-migration.json`、Refit probe sourceは現在のcheckoutに存在しない。以前の検証記述は履歴であり、現在の実行可能な成果物の証拠として扱わない。VF001の自作ツールは採用を撤回し、代替CLIでのdry-run/apply/buildを新しいclosure evidenceとして残す。
+
+旧attempt `agent-audits/history/T2-A1.json` は失敗した方式の履歴として内容を変えず保持し、現在のT2の成果へ合算しない。read-onlyの既存tool調査と型分類調査はrequested Luna/high、observed model/usageは未確認。再開時の文書validator `scripts/validate_change_records.py` はこのcheckoutに存在せず、使用可能な `scripts/audit_agent_execution.py` と記録の整合確認を行う。
+
+Pre-implementation review (restart): Leadは契約判断・統合受入を保持し、機械的実行はLuna/highへ直列委譲する。改名段階では業務値、JSON property名、内部/永続モデル、runtime登録を変更しない。同名のDomain型とContracts型は区別する。公開済みCLIは作業用ディレクトリへ導入し、リポジトリへ新規tool projectを追加しない。例外の修正も同じwrite ownerが実施し、dry-runと適用の後に関連test、solution build、CI format、旧名検索で検証する。
+
+第1 checkpointではRoslynator actual-modeで37 Contracts型のsemantic renameとRazor補正を完了。次は資源別namespace化、全型1ファイル化、承認済み同義型統合と回帰検証。T2-T6と全ACは未完了。T7の過去検証結果は記録のみ存在し、T4で再現可能な実HTTP試験を実施する。再開時の意図的な未コミットは本記録の方式更新のみ。
 
 ## API contract inventory
 

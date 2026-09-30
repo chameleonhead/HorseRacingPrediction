@@ -79,7 +79,7 @@ internal static class SearchHorsesEndpoint
                             sorted,
                             page,
                             pageSize,
-                            x => new HorseSummaryResponse(
+                            x => new HorseSummaryDto(
                                 x.HorseId,
                                 x.RegisteredName,
                                 x.NormalizedName,
@@ -89,7 +89,7 @@ internal static class SearchHorsesEndpoint
                     })
                     .WithName("SearchHorses")
                     .WithTags("Horse API")
-                    .Produces<PagedResponse<HorseSummaryResponse>>(StatusCodes.Status200OK)
+                    .Produces<PagedResponse<HorseSummaryDto>>(StatusCodes.Status200OK)
                     .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest);
     }
 }

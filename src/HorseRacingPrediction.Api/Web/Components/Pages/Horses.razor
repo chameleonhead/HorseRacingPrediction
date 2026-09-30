@@ -39,7 +39,7 @@ else
     private int page = 1;
     private const int pageSize = 50;
     private bool loading;
-    private PagedResponse<HorseSummaryResponse>? result;
+    private PagedResponse<HorseSummaryDto>? result;
 
     protected override async Task OnInitializedAsync()
     {
@@ -73,7 +73,7 @@ else
     private void OpenHorse(string id) => Navigation.NavigateTo(HorseUrl(id));
     private void OpenHorseFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenHorse(id); }
     private static string HorseUrl(string id) => $"/horses/{Uri.EscapeDataString(id)}";
-    private static string HorseMetadata(HorseSummaryResponse horse) => $"性 {horse.SexCode ?? "—"} · 生年月日 {(horse.BirthDate?.ToString("yyyy/MM/dd") ?? "—")} · 別名 {horse.AliasCount} 件";
+    private static string HorseMetadata(HorseSummaryDto horse) => $"性 {horse.SexCode ?? "—"} · 生年月日 {(horse.BirthDate?.ToString("yyyy/MM/dd") ?? "—")} · 別名 {horse.AliasCount} 件";
     private static string SexLabel(string code) => code switch { "M" => "牡", "F" => "牝", "G" => "セン", _ => code };
     private async Task ClearFiltersAsync() { query = null; sexCode = null; minAge = null; maxAge = null; page = 1; await LoadAsync(); }
     private List<RaceOpsFilterChip> BuildFilterChips()

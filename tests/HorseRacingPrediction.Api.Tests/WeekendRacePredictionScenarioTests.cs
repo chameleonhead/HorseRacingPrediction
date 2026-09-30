@@ -112,7 +112,7 @@ public class WeekendRacePredictionScenarioTests
         // Draft 状態を確認
         var raceAfterCreate = await _client.GetAsync($"/api/races/{raceId}");
         Assert.AreEqual(HttpStatusCode.OK, raceAfterCreate.StatusCode);
-        var raceDraft = await raceAfterCreate.Content.ReadFromJsonAsync<RaceResponse>(JsonOptions);
+        var raceDraft = await raceAfterCreate.Content.ReadFromJsonAsync<RaceDto>(JsonOptions);
         Assert.IsNotNull(raceDraft);
         Assert.AreEqual(RaceStatus.Draft, raceDraft.Status, "レース作成直後は Draft であるべき");
 
@@ -126,7 +126,7 @@ public class WeekendRacePredictionScenarioTests
 
         // CardPublished 状態を確認
         var raceAfterPublish = await _client.GetAsync($"/api/races/{raceId}");
-        var racePublished = await raceAfterPublish.Content.ReadFromJsonAsync<RaceResponse>(JsonOptions);
+        var racePublished = await raceAfterPublish.Content.ReadFromJsonAsync<RaceDto>(JsonOptions);
         Assert.IsNotNull(racePublished);
         Assert.AreEqual(RaceStatus.CardPublished, racePublished.Status, "出馬表公開後は CardPublished であるべき");
 
@@ -281,14 +281,14 @@ public class WeekendRacePredictionScenarioTests
         // 金曜時点での予想チケット内容を確認する
         var ticketAfterFriday = await _client.GetAsync($"/api/predictions/{ticketId}");
         Assert.AreEqual(HttpStatusCode.OK, ticketAfterFriday.StatusCode);
-        var ticketFriday = await ticketAfterFriday.Content.ReadFromJsonAsync<PredictionTicketResponse>(JsonOptions);
+        var ticketFriday = await ticketAfterFriday.Content.ReadFromJsonAsync<PredictionTicketDto>(JsonOptions);
         Assert.IsNotNull(ticketFriday);
         Assert.AreEqual(raceId, ticketFriday.RaceId);
         Assert.AreEqual(3, ticketFriday.Marks.Count, "3頭分の印が登録されているべき");
         Assert.AreEqual(0.82m, ticketFriday.ConfidenceScore);
         Assert.AreEqual("東京優駿（日本ダービー）", ticketFriday.RaceName);
 
-        var namedSearch = await _client.GetFromJsonAsync<PagedResponse<PredictionTicketSummaryResponse>>(
+        var namedSearch = await _client.GetFromJsonAsync<PagedResponse<PredictionTicketSummaryDto>>(
             "/api/predictions?query=%E6%9D%B1%E4%BA%AC%E5%84%AA%E9%A7%BF&page=1&pageSize=20",
             JsonOptions);
         Assert.IsNotNull(namedSearch);
@@ -382,7 +382,7 @@ public class WeekendRacePredictionScenarioTests
         Assert.AreEqual(HttpStatusCode.OK, openPreRace.StatusCode, "PreRaceOpen 遷移に失敗");
 
         var racePreRace = await (await _client.GetAsync($"/api/races/{raceId}"))
-            .Content.ReadFromJsonAsync<RaceResponse>(JsonOptions);
+            .Content.ReadFromJsonAsync<RaceDto>(JsonOptions);
         Assert.IsNotNull(racePreRace);
         Assert.AreEqual(RaceStatus.PreRaceOpen, racePreRace.Status, "PreRaceOpen 状態になるべき");
 
@@ -392,7 +392,7 @@ public class WeekendRacePredictionScenarioTests
         Assert.AreEqual(HttpStatusCode.OK, startRace.StatusCode, "レース開始に失敗");
 
         var raceInProgress = await (await _client.GetAsync($"/api/races/{raceId}"))
-            .Content.ReadFromJsonAsync<RaceResponse>(JsonOptions);
+            .Content.ReadFromJsonAsync<RaceDto>(JsonOptions);
         Assert.IsNotNull(raceInProgress);
         Assert.AreEqual(RaceStatus.InProgress, raceInProgress.Status, "InProgress 状態になるべき");
 
@@ -405,7 +405,7 @@ public class WeekendRacePredictionScenarioTests
         Assert.AreEqual(HttpStatusCode.OK, declareResult.StatusCode, "レース結果宣言に失敗");
 
         var raceResult = await (await _client.GetAsync($"/api/races/{raceId}"))
-            .Content.ReadFromJsonAsync<RaceResponse>(JsonOptions);
+            .Content.ReadFromJsonAsync<RaceDto>(JsonOptions);
         Assert.IsNotNull(raceResult);
         Assert.AreEqual(RaceStatus.ResultDeclared, raceResult.Status, "ResultDeclared 状態になるべき");
         Assert.AreEqual("サニーブレイズ", raceResult.WinningHorseName, "優勝馬名が一致すべき");
@@ -453,7 +453,7 @@ public class WeekendRacePredictionScenarioTests
         Assert.AreEqual(HttpStatusCode.OK, closeRace.StatusCode, "レースクローズに失敗");
 
         var raceClosed = await (await _client.GetAsync($"/api/races/{raceId}"))
-            .Content.ReadFromJsonAsync<RaceResponse>(JsonOptions);
+            .Content.ReadFromJsonAsync<RaceDto>(JsonOptions);
         Assert.IsNotNull(raceClosed);
         Assert.AreEqual(RaceStatus.Closed, raceClosed.Status, "Closed 状態になるべき");
 

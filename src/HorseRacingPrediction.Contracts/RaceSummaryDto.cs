@@ -2,7 +2,7 @@ using HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.Contracts;
 
-public sealed record RaceSummaryResponse(
+public sealed record RaceSummaryDto(
     string RaceId,
     DateOnly? RaceDate,
     string? RacecourseCode,

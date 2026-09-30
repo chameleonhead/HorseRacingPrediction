@@ -102,7 +102,7 @@ public sealed class JraRaceResultCollectionWorkflow
         // 成功した時点で記録する（登録の成否とは独立）。同一レースを複数回取得しても
         // メモとして複数件蓄積されるだけで、既存の引用元を上書きしない。
         await _writeService.RecordSourceCitationAsync(
-            [new CitationSubject("Race", dataCollectionRaceId)],
+            [new CitationSubjectDto("Race", dataCollectionRaceId)],
             resultPage.Url,
             "JRAレース結果",
             cancellationToken);

@@ -102,7 +102,7 @@ internal static class SearchPredictionTicketsEndpoint
                                 var primaryHorseId = primaryMark is not null && race is not null
                                     ? race.Entries.FirstOrDefault(e => e.EntryId == primaryMark.EntryId)?.HorseId
                                     : null;
-                                return new PredictionTicketSummaryResponse(
+                                return new PredictionTicketSummaryDto(
                                 x.PredictionTicketId,
                                 x.RaceId,
                                 x.PredictorType,
@@ -119,7 +119,7 @@ internal static class SearchPredictionTicketsEndpoint
                     })
                     .WithName("SearchPredictionTickets")
                     .WithTags("Prediction API")
-                    .Produces<PagedResponse<PredictionTicketSummaryResponse>>(StatusCodes.Status200OK)
+                    .Produces<PagedResponse<PredictionTicketSummaryDto>>(StatusCodes.Status200OK)
                     .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest);
     }
 }

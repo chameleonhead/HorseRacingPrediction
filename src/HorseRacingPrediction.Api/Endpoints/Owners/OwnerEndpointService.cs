@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.Api.Endpoints.Owners;
 
 internal static class OwnerEndpointService
 {
-    internal static async Task<List<OwnerSummaryResponse>> BuildOwnersAsync(EventStoreDbContext dbContext, CancellationToken cancellationToken)
+    internal static async Task<List<OwnerSummaryDto>> BuildOwnersAsync(EventStoreDbContext dbContext, CancellationToken cancellationToken)
     {
         var horses = await dbContext.Horses.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
         var contexts = await dbContext.RacePredictionContexts.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -28,7 +28,7 @@ internal static class OwnerEndpointService
                     .Distinct(StringComparer.Ordinal).OrderBy(x => x).ToList();
                 var displayName = displayNames.GetValueOrDefault(group.Key) ?? variants.OrderByDescending(name => currentNames.Count(x => x == name)).ThenByDescending(name => group.Count(x => x == name)).First();
                 var groupParticipations = participations.Where(x => OwnerGroupKey(x.OwnerName!) == group.Key).ToList();
-                return new OwnerSummaryResponse(
+                return new OwnerSummaryDto(
                     group.Key, displayName, variants,
                     horses.Count(x => x.OwnerName is not null && OwnerGroupKey(x.OwnerName) == group.Key),
                     groupParticipations.Count,

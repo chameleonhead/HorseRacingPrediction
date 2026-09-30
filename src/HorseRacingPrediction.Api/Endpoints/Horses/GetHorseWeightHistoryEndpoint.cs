@@ -20,11 +20,11 @@ internal static class GetHorseWeightHistoryEndpoint
                         if (readModel is null || string.IsNullOrEmpty(readModel.HorseId))
                             return Results.NotFound();
 
-                        var response = new HorseWeightHistoryResponse(
+                        var response = new HorseWeightHistoryDto(
                             readModel.HorseId,
                             readModel.WeightHistory
                                 .OrderByDescending(w => w.RecordedAt)
-                                .Select(w => new HorseWeightEntryResponse(w.RaceId, w.EntryId, w.RecordedAt, w.DeclaredWeight, w.DeclaredWeightDiff))
+                                .Select(w => new HorseWeightEntryDto(w.RaceId, w.EntryId, w.RecordedAt, w.DeclaredWeight, w.DeclaredWeightDiff))
                                 .ToList());
 
                         return Results.Ok(response);
@@ -32,7 +32,7 @@ internal static class GetHorseWeightHistoryEndpoint
                     .AddEndpointFilter<RacePredictionReadEndpointFilter>()
                     .WithName("GetHorseWeightHistory")
                     .WithTags("Horse API")
-                    .Produces<HorseWeightHistoryResponse>(StatusCodes.Status200OK)
+                    .Produces<HorseWeightHistoryDto>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

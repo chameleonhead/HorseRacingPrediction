@@ -1,0 +1,459 @@
+{
+  "schemaVersion": 1,
+  "changeId": "20260930_refit-api-clients",
+  "taskId": "T2",
+  "attemptId": "T2-A2",
+  "status": "First semantic rename slice complete; namespace and one-type-per-file cleanup pending",
+  "tool": "Roslynator DotNet CLI 1.0.0 rename-symbol",
+  "selection": "INamedTypeSymbol in HorseRacingPrediction.Contracts assembly, exact old name; no JSON properties/values or domain/persistence symbols",
+  "verification": "Per-mapping semantic dry-run and apply; Contracts tests; Release solution build; CI format verification; old-name inventory",
+  "mappings": [
+    {
+      "oldName": "HorseReadDto",
+      "newName": "HorseDto",
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.HorseReadDto",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.HorseDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "state": "semantic rename applied",
+      "dryRunMatches": 1,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "PredictionTicketSummaryReadModel",
+      "newName": "PredictionTicketWithMarksDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.PredictionTicketSummaryReadModel",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.PredictionTicketWithMarksDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "RaceResponse",
+      "newName": "RaceDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.RaceResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.RaceDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "RaceSummaryResponse",
+      "newName": "RaceSummaryDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.RaceSummaryResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.RaceSummaryDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "RaceEntryResponse",
+      "newName": "RaceEntryDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.RaceEntryResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.RaceEntryDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "RaceEntryResultResponse",
+      "newName": "RaceEntryResultDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.RaceEntryResultResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.RaceEntryResultDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "RaceWeatherObservationResponse",
+      "newName": "RaceWeatherObservationDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.RaceWeatherObservationResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.RaceWeatherObservationDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "RaceTrackConditionResponse",
+      "newName": "RaceTrackConditionDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.RaceTrackConditionResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.RaceTrackConditionDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "RaceOddsResponse",
+      "newName": "RaceOddsDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.RaceOddsResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.RaceOddsDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "RaceWinOddsResponse",
+      "newName": "RaceWinOddsDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.RaceWinOddsResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.RaceWinOddsDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "RacePlaceOddsResponse",
+      "newName": "RacePlaceOddsDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.RacePlaceOddsResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.RacePlaceOddsDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "RacePayoutResultResponse",
+      "newName": "RacePayoutResultDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.RacePayoutResultResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.RacePayoutResultDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "RacePayoutEntryResponse",
+      "newName": "RacePayoutEntryDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.RacePayoutEntryResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.RacePayoutEntryDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "RacePredictionContextEntry",
+      "newName": "RacePredictionContextEntryDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.RacePredictionContextEntry",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.RacePredictionContextEntryDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "HorseSummaryResponse",
+      "newName": "HorseSummaryDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.HorseSummaryResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.HorseSummaryDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "JockeySummaryResponse",
+      "newName": "JockeySummaryDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.JockeySummaryResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.JockeySummaryDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "TrainerSummaryResponse",
+      "newName": "TrainerSummaryDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.TrainerSummaryResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.TrainerSummaryDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "PredictionTicketResponse",
+      "newName": "PredictionTicketDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.PredictionTicketResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.PredictionTicketDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "PredictionTicketSummaryResponse",
+      "newName": "PredictionTicketSummaryDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.PredictionTicketSummaryResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.PredictionTicketSummaryDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "PredictionMarkResponse",
+      "newName": "PredictionMarkDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.PredictionMarkResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.PredictionMarkDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "PredictionMarkEntry",
+      "newName": "PredictionMarkEntryDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.PredictionMarkEntry",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.PredictionMarkEntryDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "HorseRaceHistoryEntry",
+      "newName": "HorseRaceHistoryEntryDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.HorseRaceHistoryEntry",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.HorseRaceHistoryEntryDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "JockeyRaceHistoryEntry",
+      "newName": "JockeyRaceHistoryEntryDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.JockeyRaceHistoryEntry",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.JockeyRaceHistoryEntryDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "HorseWeightHistoryResponse",
+      "newName": "HorseWeightHistoryDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.HorseWeightHistoryResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.HorseWeightHistoryDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "HorseWeightEntryResponse",
+      "newName": "HorseWeightEntryDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.HorseWeightEntryResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.HorseWeightEntryDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "ParticipationHistoryResponse",
+      "newName": "ParticipationHistoryDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.ParticipationHistoryResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.ParticipationHistoryDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "ParticipationHistoryEntryResponse",
+      "newName": "ParticipationHistoryEntryDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.ParticipationHistoryEntryResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.ParticipationHistoryEntryDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "RelationshipSummaryResponse",
+      "newName": "RelationshipSummaryDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.RelationshipSummaryResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.RelationshipSummaryDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "OwnerSummaryResponse",
+      "newName": "OwnerSummaryDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.OwnerSummaryResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.OwnerSummaryDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "OwnerDetailResponse",
+      "newName": "OwnerDetailDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.OwnerDetailResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.OwnerDetailDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "OwnerMergeAuditResponse",
+      "newName": "OwnerMergeAuditDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.OwnerMergeAuditResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.OwnerMergeAuditDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "RelatedObjectResponse",
+      "newName": "RelatedObjectDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.RelatedObjectResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.RelatedObjectDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "MemoResponse",
+      "newName": "MemoDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.MemoResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.MemoDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "MlPredictionResponse",
+      "newName": "MlPredictionDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.MlPredictionResponse",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.MlPredictionDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "MlHorsePrediction",
+      "newName": "MlHorsePredictionDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.MlHorsePrediction",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.MlHorsePredictionDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "ResolvedIdentity",
+      "newName": "ResolvedIdentityDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.ResolvedIdentity",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.ResolvedIdentityDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    },
+    {
+      "oldName": "CitationSubject",
+      "newName": "CitationSubjectDto",
+      "state": "semantic rename applied",
+      "dryRunMatches": null,
+      "sourceFullyQualifiedName": "HorseRacingPrediction.Contracts.CitationSubject",
+      "targetFullyQualifiedName": "HorseRacingPrediction.Contracts.CitationSubjectDto",
+      "expectedSourceSymbols": 1,
+      "sameNamespaceTargetCollisions": 0,
+      "actualApplyCount": 1
+    }
+  ],
+  "excludedFirstStage": [
+    "Namespace/folder movement",
+    "Convention exceptions and same-meaning DTO consolidation",
+    "Request/Response wire-shape changes",
+    "Domain, persistence, event, and runtime identifiers"
+  ],
+  "previewBehavior": "Roslynator dry-run selected exact source symbol then failed in MSBuildWorkspace.TryApplyChanges (reproduced against full solution, filtered/project and VS MSBuild, and isolated fixture); no source writes. Actual mode succeeded on fixture and full solution. Target/collision inventory was recorded before production apply. Dry-run is not claimed as passing.",
+  "preApplyInventory": "CodeGraph source exploration and current Contracts source declaration scan: every frozen old type matched one declaration in the Contracts assembly; the remaining 36 target type names matched zero declarations in that assembly before batch apply. Same-short-name symbols in other assemblies are excluded by the Roslynator match predicate.",
+  "toolApply": {
+    "command": "C:/Users/yuto.nagano/.codex/tmp/refit-rename-tools/roslynator.exe rename-symbol",
+    "version": "Roslynator DotNet CLI 1.0.0 (Roslyn 5.0.0)",
+    "selection": "Exact Contracts assembly symbol predicate; --scope type --on-error abort; 1 first symbol + 36-symbol switch batch",
+    "exitCode": 0,
+    "appliedCount": 37,
+    "dryRunExit": "failed: NullReferenceException in MSBuildWorkspace.TryApplyChanges; zero source writes",
+    "fixture": "Actual-mode single-symbol rename on disposable fixture succeeded and build passed before production apply"
+  },
+  "razorRepair": {
+    "files": 17,
+    "references": 67,
+    "oldContractsNamesRemaining": 0
+  },
+  "fileRenames": {
+    "sourceFiles": 30,
+    "status": "renamed to simple type names; grouped files retained temporarily for T2 stage 2 split"
+  },
+  "referenceReview": {
+    "internalOldNameReferences": 21,
+    "classification": "intentional Application/MachineLearning read-model identifiers and tests",
+    "contractSurfaceChanges": "No JSON property/default/value, Domain/Application model, persistence, DI, runtime-registration changes",
+    "razorResiduals": 0,
+    "shadowingCorrection": "Qualified Contracts.MlHorsePredictionDto construction in HttpRaceQueryService to preserve same-namespace internal response reader"
+  },
+  "verificationResults": {
+    "contractsTests": "passed: 43/43",
+    "solutionBuild": "passed: 0 errors, 1 existing nullable warning in CollectionAdministrationComponentTests.cs:444",
+    "format": "passed: dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes",
+    "codeGraphSync": "passed after coherent edit",
+    "diffCheck": "pending checkpoint"
+  }
+}

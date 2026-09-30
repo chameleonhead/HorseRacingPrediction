@@ -47,7 +47,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
                 throw new SubjectIdentityResolutionException(code!, horse.Name, response.StatusCode);
         }
         response.EnsureSuccessStatusCode();
-        return (await response.Content.ReadFromJsonAsync<ResolvedIdentity>(cancellationToken: token).ConfigureAwait(false))?.Id
+        return (await response.Content.ReadFromJsonAsync<ResolvedIdentityDto>(cancellationToken: token).ConfigureAwait(false))?.Id
             ?? throw new InvalidOperationException("Identity resolution returned no identity.");
     }
 
@@ -783,7 +783,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
     }
 
     public async Task RecordSourceCitationAsync(
-        IReadOnlyList<CitationSubject> subjects,
+        IReadOnlyList<CitationSubjectDto> subjects,
         string sourceUrl,
         string? title = null,
         CancellationToken cancellationToken = default)

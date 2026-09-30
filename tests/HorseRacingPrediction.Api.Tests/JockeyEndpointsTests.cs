@@ -81,7 +81,7 @@ public class JockeyEndpointsTests
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<JockeySummaryResponse>>(JsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<PagedResponse<JockeySummaryDto>>(JsonOptions);
         Assert.IsNotNull(result);
         Assert.AreEqual(2, result.TotalCount);
         Assert.AreEqual(2, result.TotalPages);

@@ -137,7 +137,7 @@ internal static class GetRaceEndpoint
                             winningHorseName = ResolveHorseName(horseNamesById, winningHorseId);
                         }
 
-                        var response = new RaceResponse(
+                        var response = new RaceDto(
                             readModel.RaceId,
                             readModel.RaceDate,
                             readModel.RacecourseCode,
@@ -171,7 +171,7 @@ internal static class GetRaceEndpoint
                     })
                     .WithName("GetRace")
                     .WithTags("Race API")
-                    .Produces<RaceResponse>(StatusCodes.Status200OK)
+                    .Produces<RaceDto>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

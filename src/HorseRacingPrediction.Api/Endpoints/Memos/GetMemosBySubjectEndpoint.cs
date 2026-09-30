@@ -25,7 +25,7 @@ internal static class GetMemosBySubjectEndpoint
                         if (readModel is null || string.IsNullOrEmpty(readModel.SubjectKey))
                             return Results.NotFound();
 
-                        var response = readModel.Memos.Select(m => new MemoResponse(
+                        var response = readModel.Memos.Select(m => new MemoDto(
                             m.MemoId, m.AuthorId, m.MemoType, m.Content, m.CreatedAt,
                             m.Subjects.Select(s => new MemoSubjectDto(s.SubjectType, s.SubjectId)).ToList(),
                             m.Links.Select(l => new MemoLinkDto(l.LinkId, l.LinkType, l.Title, l.Url, l.StorageKey)).ToList()))
@@ -35,7 +35,7 @@ internal static class GetMemosBySubjectEndpoint
                     })
                     .WithName("GetMemosBySubject")
                     .WithTags("Memo API")
-                    .Produces<IReadOnlyList<MemoResponse>>(StatusCodes.Status200OK)
+                    .Produces<IReadOnlyList<MemoDto>>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

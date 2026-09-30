@@ -95,7 +95,7 @@ internal static class SearchRacesEndpoint
                         var items = filtered
                             .Skip((page - 1) * pageSize)
                             .Take(pageSize)
-                            .Select(x => new RaceSummaryResponse(
+                            .Select(x => new RaceSummaryDto(
                                 x.RaceId,
                                 x.RaceDate,
                                 x.RacecourseCode,
@@ -108,7 +108,7 @@ internal static class SearchRacesEndpoint
                                 x.ReplacementRaceId))
                             .ToList();
 
-                        return Results.Ok(new PagedResponse<RaceSummaryResponse>(
+                        return Results.Ok(new PagedResponse<RaceSummaryDto>(
                             items,
                             page,
                             pageSize,
@@ -117,7 +117,7 @@ internal static class SearchRacesEndpoint
                     })
                     .WithName("SearchRaces")
                     .WithTags("Race API")
-                    .Produces<PagedResponse<RaceSummaryResponse>>(StatusCodes.Status200OK)
+                    .Produces<PagedResponse<RaceSummaryDto>>(StatusCodes.Status200OK)
                     .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest);
     }
 }

@@ -36,8 +36,8 @@ internal static class EndpointQueryUtilities
         return new PagedResponse<TResponse>(items, page, pageSize, totalCount, totalPages);
     }
 
-    internal static IReadOnlyList<ParticipationHistoryEntryResponse> EntriesInLastThreeYears(
-        IReadOnlyList<ParticipationHistoryEntryResponse> entries)
+    internal static IReadOnlyList<ParticipationHistoryEntryDto> EntriesInLastThreeYears(
+        IReadOnlyList<ParticipationHistoryEntryDto> entries)
     {
         var latestDate = entries.Where(x => x.RaceDate.HasValue).Select(x => x.RaceDate!.Value).DefaultIfEmpty().Max();
         if (latestDate == default) return entries;

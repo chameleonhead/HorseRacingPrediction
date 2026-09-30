@@ -652,7 +652,7 @@ public sealed class HorseIdentityRepairEndpointsTests
                 CollectionReason.ManualRefresh, DateTimeOffset.UtcNow));
         var oldProfile = await http.GetAsync($"/api/horses/{sourceId}");
         Assert.AreEqual(HttpStatusCode.OK, oldProfile.StatusCode);
-        var resolved = await oldProfile.Content.ReadFromJsonAsync<HorseRacingPrediction.Contracts.HorseReadDto>();
+        var resolved = await oldProfile.Content.ReadFromJsonAsync<HorseRacingPrediction.Contracts.HorseDto>();
         Assert.AreEqual(targetId, resolved!.HorseId);
 
         var second = await http.PostAsJsonAsync("/api/admin/repairs/20260913-jra-horse-identity/apply",

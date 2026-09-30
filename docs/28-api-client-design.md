@@ -63,15 +63,13 @@ using var response = await races.GetRaceAsync(new GetRaceRequest(raceId), cancel
 
 ## ツールによる移行
 
-推奨はRoslynで型を認識した一括変更。最初に旧完全修飾名→新完全修飾名・配置先のmanifestを出し、重複・未分類を検出する。
+2026-09-30の再開指示により、自作移行ツール方式は採用を撤回した。公開済みRoslynator CLIの`rename-symbol`で改名を先に実行し、規約に合わない箇所を後から個別に修正する。
 
-1. MSBuildWorkspaceでsolutionを読み、manifestの旧完全修飾名をContracts compilationのsymbolへ対応付ける。
-2. 実装した移行ツールはRoslynの意味モデルで型参照symbolを識別し、構文rewriterで宣言名、namespace配置、完全修飾名、alias参照を更新する。API別分割は単一namespaceのRenameでは実現しないため、各型を個別に新配置へ移す。曖昧な名前の文字列置換は行わない。
-3. dry-runで差分を確認してから適用する。ツールは専用の`tools/ContractMigration`へ置き、manifestを変更記録へ残す。再実行時は既に移行済みの項目を検出し、衝突時に停止する。
-4. Razor、文字列内の型名、コード生成入力、ドキュメントはRoslynだけでは網羅を保証できない。rgで旧名・旧namespaceを照合し、Razor buildと全solution buildで確認する。歴史文書は書き換えない。
-5. Request/Responseの新設とJSONの包み直しは意味のある契約変更として別工程で行う。単純Renameへ混ぜない。format、新契約HTTPテスト、業務データ保存性、既存利用者の回帰テスト、差分確認を行う。
-
-IDEで作業する場合はVisual Studio/Riderの型Renameとnamespace調整リファクタリングも候補。ただし今回の大量の分類移動ではmanifest付きRoslynツールの方が変更対象を再現・レビューしやすい。正規表現だけの全置換はalias、同名型、文字列を区別できないため主方式にしない。
+1. 旧完全修飾名→新完全修飾名と配置先をmanifestへ記録し、未分類と衝突を確認する。
+2. solutionを対象にContracts assemblyと完全修飾名で型symbolを限定して`rename-symbol --scope type --on-error abort`を実行する。同名の内部型を対象に含めない。実環境のRoslynator 1.0.0では`--dry-run`が`MSBuildWorkspace.TryApplyChanges`のNullReferenceExceptionで失敗した。実適用前に宣言・衝突を独立棚卸しし、actual-modeを隔離fixtureで検証した後に実適用する。新しい移行ツールは作らない。
+3. 型名の変更後、すべてのContracts型を所有資源の`HorseRacingPrediction.Contracts.{Resource}`へ配置し、`Common.Time`を除く共通型は`Common`へ置く。すべてのトップレベル型は型名と同じファイル名の1型1ファイルにする。API別namespace配置、自然な同義型統合、ファイル配置を個別修正する。Razor、文字列内の型名、aliasは検索とRazor/solution buildで補完する。歴史文書は書き換えない。
+4. Request/Responseの新設とJSONの包み直しは後続工程で行う。命名変更の工程では業務値とJSON property名を維持する。後続工程では新契約HTTPテスト、業務データ保存性、既存利用者の回帰テストを実施する。
+5. 各工程で差分、旧名残存、関連build/test、CI formatを確認し、対応表と検証結果を変更記録に残す。
 
 参考：[Roslyn Rename API](https://learn.microsoft.com/en-us/dotnet/api/microsoft.codeanalysis.rename.renamer.renamesymbolasync)、[Refit公式](https://github.com/reactiveui/refit)。実装時は参照済み16.3.0の同梱APIを基準にする。
 

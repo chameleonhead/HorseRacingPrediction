@@ -22,7 +22,7 @@ internal static class HorseEndpointMappings
             _ => null
         };
 
-    internal static ApiContracts.HorseReadDto ToAgentHorse(HorseRacingPrediction.Application.Queries.ReadModels.HorseReadModel model)
+    internal static ApiContracts.HorseDto ToAgentHorse(HorseRacingPrediction.Application.Queries.ReadModels.HorseReadModel model)
         => new()
         {
             HorseId = model.HorseId,
@@ -43,6 +43,6 @@ internal static class HorseEndpointMappings
         => new()
         {
             HorseId = model.HorseId,
-            Entries = model.Entries.Select(x => new ApiContracts.HorseRaceHistoryEntry(x.RaceId, x.EntryId, x.RaceDate, x.RacecourseCode, x.SurfaceCode, x.DistanceMeters, x.DirectionCode, x.GradeCode, x.GateNumber, x.AssignedWeight, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode, x.JockeyId, x.TrainerId, x.FinishPosition, x.LastThreeFurlongTime, x.CornerPositions, x.PrizeMoney)).ToList()
+            Entries = model.Entries.Select(x => new ApiContracts.HorseRaceHistoryEntryDto(x.RaceId, x.EntryId, x.RaceDate, x.RacecourseCode, x.SurfaceCode, x.DistanceMeters, x.DirectionCode, x.GradeCode, x.GateNumber, x.AssignedWeight, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode, x.JockeyId, x.TrainerId, x.FinishPosition, x.LastThreeFurlongTime, x.CornerPositions, x.PrizeMoney)).ToList()
         };
 }

@@ -1,6 +1,6 @@
 namespace HorseRacingPrediction.Contracts;
 
-public sealed class HorseReadDto
+public sealed class HorseDto
 {
     public string HorseId { get; set; } = string.Empty;
     public string RegisteredName { get; set; } = string.Empty;

@@ -25,7 +25,7 @@ else
 
 @code {
     [Parameter] public string OwnerId { get; set; } = string.Empty;
-    private OwnerDetailResponse? owner;
+    private OwnerDetailDto? owner;
     private bool loading, saving;
     private string? displayName, nameVariantsText, reason;
     private IReadOnlyList<string> errors = [];

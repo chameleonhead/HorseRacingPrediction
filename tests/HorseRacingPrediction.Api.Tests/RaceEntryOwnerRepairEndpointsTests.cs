@@ -108,7 +108,7 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
 
         using var first = await http.PostAsJsonAsync("/api/races/result-bulk", card);
         using var replay = await http.PostAsJsonAsync("/api/races/result-bulk", card);
-        var race = await http.GetFromJsonAsync<HorseRacingPrediction.Contracts.RaceResponse>(
+        var race = await http.GetFromJsonAsync<HorseRacingPrediction.Contracts.RaceDto>(
             $"/api/races/{created.RaceId}");
 
         Assert.AreEqual(HttpStatusCode.OK, first.StatusCode);

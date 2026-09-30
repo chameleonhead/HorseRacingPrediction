@@ -1,6 +1,6 @@
 namespace HorseRacingPrediction.Contracts;
 
-public sealed record RaceWeatherObservationResponse(
+public sealed record RaceWeatherObservationDto(
     DateTimeOffset ObservationTime,
     string? WeatherCode,
     string? WeatherText,

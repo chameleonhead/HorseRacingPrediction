@@ -81,7 +81,7 @@ public class TrainerEndpointsTests
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<TrainerSummaryResponse>>(JsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<PagedResponse<TrainerSummaryDto>>(JsonOptions);
         Assert.IsNotNull(result);
         Assert.AreEqual(2, result.TotalCount);
         Assert.AreEqual(2, result.TotalPages);

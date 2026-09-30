@@ -1,7 +1,7 @@
 namespace HorseRacingPrediction.Contracts;
 
-public sealed record JockeySummaryResponse(
-    string JockeyId,
+public sealed record TrainerSummaryDto(
+    string TrainerId,
     string DisplayName,
     string NormalizedName,
     string? AffiliationCode,

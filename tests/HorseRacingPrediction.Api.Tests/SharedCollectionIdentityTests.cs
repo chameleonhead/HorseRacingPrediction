@@ -117,7 +117,7 @@ public sealed class SharedCollectionIdentityTests
         {
             var resolved = await http.PostAsJsonAsync("/api/identity/race", new ResolveRaceIdentityRequest(date, course, 1));
             resolved.EnsureSuccessStatusCode();
-            Assert.AreEqual(id, (await resolved.Content.ReadFromJsonAsync<ResolvedIdentity>())!.Id);
+            Assert.AreEqual(id, (await resolved.Content.ReadFromJsonAsync<ResolvedIdentityDto>())!.Id);
         }
         var store = app.Services.GetRequiredService<CollectionPlatformStore>();
         await store.RegisterDefinitionAsync(new("race-detail"), "Race", CollectionResourceType.Race, CollectionDefinitionRevisions.RaceDetail, "test", true);
@@ -167,11 +167,11 @@ public sealed class SharedCollectionIdentityTests
         Assert.AreEqual(DeterministicIdGenerator.BuildHorseId(raw), DeterministicIdGenerator.BuildHorseId("ABC"));
         var resolved = await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("ABC", BirthDate: new(2024, 1, 1)));
         resolved.EnsureSuccessStatusCode();
-        Assert.AreEqual(legacy, (await resolved.Content.ReadFromJsonAsync<ResolvedIdentity>())!.Id);
+        Assert.AreEqual(legacy, (await resolved.Content.ReadFromJsonAsync<ResolvedIdentityDto>())!.Id);
         (await http.PutAsJsonAsync($"/api/horses/{legacy}", new UpdateHorseProfileRequest("ABC", "ABC", "M", new(2024, 1, 1)))).EnsureSuccessStatusCode();
         var afterNameCorrection = await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("ABC"));
         afterNameCorrection.EnsureSuccessStatusCode();
-        Assert.AreEqual(legacy, (await afterNameCorrection.Content.ReadFromJsonAsync<ResolvedIdentity>())!.Id);
+        Assert.AreEqual(legacy, (await afterNameCorrection.Content.ReadFromJsonAsync<ResolvedIdentityDto>())!.Id);
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("ABC", BirthDate: new(2023, 1, 1)))).StatusCode);
         Assert.AreEqual(HttpStatusCode.UnprocessableEntity, (await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("ABC", "https://www.jra.go.jp/JRADB/accessU.html?CNAME=other"))).StatusCode);
         (await http.PostAsJsonAsync("/api/horses", new RegisterHorseRequest("ABC", "ABC", "M", new(2020, 1, 1), DeterministicIdGenerator.BuildHorseId("ABC")))).EnsureSuccessStatusCode();
@@ -201,7 +201,7 @@ public sealed class SharedCollectionIdentityTests
         (await http.PutAsJsonAsync(path, profile with { SourceIdentity = source + "&extra=1" })).EnsureSuccessStatusCode();
         var resolved = await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("サンプル", source));
         resolved.EnsureSuccessStatusCode();
-        Assert.AreEqual(id, (await resolved.Content.ReadFromJsonAsync<ResolvedIdentity>())!.Id);
+        Assert.AreEqual(id, (await resolved.Content.ReadFromJsonAsync<ResolvedIdentityDto>())!.Id);
         Assert.AreEqual(HttpStatusCode.UnprocessableEntity, (await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("サンプル"))).StatusCode);
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PutAsJsonAsync(path, profile with { SourceIdentity = source.Replace("123456", "654321"), SourceUrl = source.Replace("123456", "654321") })).StatusCode);
         Assert.AreEqual(HttpStatusCode.BadRequest, (await http.PutAsJsonAsync(path, profile with { SourceUrl = source.Replace("www.jra.go.jp", "example.com") })).StatusCode);

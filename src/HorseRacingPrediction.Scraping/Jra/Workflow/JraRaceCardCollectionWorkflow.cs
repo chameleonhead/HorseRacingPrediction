@@ -168,7 +168,7 @@ public sealed partial class JraRaceCardCollectionWorkflow
             cancellationToken: cancellationToken);
 
         await _writeService.RecordSourceCitationAsync(
-            [new CitationSubject("Race", raceId)],
+            [new CitationSubjectDto("Race", raceId)],
             card.Url,
             "JRA出馬表",
             cancellationToken);

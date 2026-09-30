@@ -102,7 +102,7 @@
 
     private bool loading;
     private bool saving;
-    private IReadOnlyList<MemoResponse> memos = Array.Empty<MemoResponse>();
+    private IReadOnlyList<MemoDto> memos = Array.Empty<MemoDto>();
     private IReadOnlyList<string> errors = Array.Empty<string>();
 
     private string? newMemoType;
@@ -166,7 +166,7 @@
         }
     }
 
-    private void StartEdit(MemoResponse memo)
+    private void StartEdit(MemoDto memo)
     {
         editingMemoId = memo.MemoId;
         editMemoType = memo.MemoType;
