@@ -3,7 +3,7 @@
   "changeId": "20261002_race-card-equipment-only-number",
   "taskId": "T1",
   "attemptId": "T1-A1",
-  "state": "active",
+  "state": "completed",
   "taskDifficulty": "low",
   "acceptanceCriteria": ["AC1", "AC2", "AC3"],
   "route": {
@@ -11,7 +11,7 @@
     "requestedModel": "gpt-6-luna",
     "observedModel": null,
     "observationSource": null,
-    "modelTelemetryReason": "runtime has not reported observed worker model"
+    "modelTelemetryReason": "collaboration runtime did not expose observed worker model"
   },
   "usage": {
     "availability": "unavailable",
@@ -23,38 +23,38 @@
     "tests/HorseRacingPrediction.Scraping.Tests/Parsing/RaceCardPublicationTests.cs"
   ],
   "review": {
-    "usageAvailability": null,
+    "usageAvailability": "unavailable",
     "totalTokens": null,
     "activeMinutes": null,
-    "reason": null
+    "reason": "runtime did not expose review usage or active time"
   },
   "overhead": {
-    "availability": null,
+    "availability": "unavailable",
     "preparationMinutes": null,
     "integrationMinutes": null,
     "auditMinutes": null,
-    "reason": null
+    "reason": "active effort telemetry was not captured"
   },
   "elapsed": {
-    "availability": null,
+    "availability": "unavailable",
     "minutes": null,
-    "reason": null
+    "reason": "runtime did not expose reliable worker elapsed effort"
   },
   "startRevision": "bc31dd0a12faaa40c9fb44e91652db3326c9728d",
-  "endRevisionOrPatch": null,
+  "endRevisionOrPatch": "439ecbec",
   "outcome": {
-    "verificationPassed": null,
-    "qualityPassed": null,
-    "scopePassed": null,
-    "independentChallenge": null,
-    "retries": null,
-    "leadCorrections": null,
-    "reviewPasses": null,
-    "promoted": null,
-    "escapedDefects": null,
-    "escalations": null,
-    "reviewMode": null,
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Lead reran CI-equivalent non-External solution tests and reviewed unknown-value and explicit-number counterexamples",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
     "detailReviewReason": null,
-    "decision": null
+    "decision": "accept"
   }
 }
