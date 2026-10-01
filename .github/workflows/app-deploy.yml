@@ -287,15 +287,15 @@ jobs:
           base="https://${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}/api/v2/admin/collection"
           # Preserve an operator/incident pause; resume only after successful deployment checks.
           pipeline="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/pipeline-state")"
-          jq -e '.isPaused == true' <<<"$pipeline" >/dev/null
+          jq -e '.pipeline.isPaused == true' <<<"$pipeline" >/dev/null
           case "$ORIGINAL_WAS_PAUSED" in true|false) ;; *) exit 1 ;; esac
           running="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/tasks?status=Running&limit=1")"
-          jq -e '.items | type == "array" and length == 0' <<<"$running" >/dev/null
+          jq -e '.page.items | type == "array" and length == 0' <<<"$running" >/dev/null
           if [ "$ORIGINAL_WAS_PAUSED" = "false" ]; then
             # A task may have failed while draining under our deployment pause.
             # Conservatively require no actionable failures (including older ones).
             failures="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/failure-notifications?view=Actionable&limit=1")"
-            if ! jq -e 'type == "array" and length == 0' <<<"$failures" >/dev/null; then
+            if ! jq -e '.notifications | type == "array" and length == 0' <<<"$failures" >/dev/null; then
               echo "Actionable failures remain; pipeline stays paused for explicit recovery" >&2
               exit 1
             fi
@@ -344,7 +344,7 @@ jobs:
         run: |
           base="$API_BASE_URL/api/v2/admin/collection"
           pipeline="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/pipeline-state")"
-          was_paused="$(jq -er '.isPaused | if type == "boolean" then tostring else error("Invalid pipeline state") end' <<<"$pipeline")"
+          was_paused="$(jq -er '.pipeline.isPaused | if type == "boolean" then tostring else error("Invalid pipeline state") end' <<<"$pipeline")"
           echo "was_paused=$was_paused" >> "$GITHUB_OUTPUT"
           if [ "$was_paused" = "false" ]; then
             curl --fail --silent --show-error -X PUT \
@@ -354,7 +354,7 @@ jobs:
           drained=false
           for attempt in $(seq 1 60); do
             running="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/tasks?status=Running&limit=1")"
-            count="$(jq -er '.items | if type == "array" then length else error("Invalid task list") end' <<<"$running")"
+            count="$(jq -er '.page.items | if type == "array" then length else error("Invalid task list") end' <<<"$running")"
             if [ "$count" = "0" ]; then
               drained=true
               break

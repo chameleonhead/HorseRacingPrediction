@@ -3555,10 +3555,7 @@ public sealed partial class CollectionPlatformStore
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
         var offset = Math.Min((long)(page - 1) * pageSize, int.MaxValue);
-        var group = CollectionFailureGrouping.Build(match.Notifications).Single() with
-        {
-            NotificationIds = [],
-        };
+        var group = CollectionFailureGrouping.Build(match.Notifications).Single();
         return new(group, targets.Count, page, pageSize, search,
             targets.Skip((int)offset).Take(pageSize).ToList());
 

@@ -21,7 +21,12 @@ sleep() { :; }
 curl() {
   local url="${@: -1}"
   case "$url" in
-    */pipeline-state) if [ "$TEST_CASE" = get-failure ]; then return 22; fi; echo '{"isPaused":true}' ;;
+    */pipeline-state)
+      if [ "$TEST_CASE" = get-failure ]; then return 22; fi
+      if [ "$TEST_CASE" = invalid-state ]; then echo '{"pipeline":{"isPaused":"invalid"}}'
+      elif [ "$TEST_PHASE" = guard ] && [ "$TEST_CASE" != paused ]; then echo '{"pipeline":{"isPaused":false}}'
+      else echo '{"pipeline":{"isPaused":true}}'
+      fi ;;
     */api/admin/collection/pipeline) if [ "$TEST_CASE" = get-failure ]; then return 22; fi; echo '{}' ;;
     */pipeline)
       if [[ " $* " != *" -X PUT "* ]]; then return 90; fi
@@ -33,44 +38,49 @@ curl() {
         return 90
       fi ;;
     */tasks\?*)
-      if [[ "$url" == *status=Running* ]]; then echo '{"items":[]}'; else echo '[]'; fi ;;
-    */failure-notifications\?*) if [ "$TEST_CASE" = new-failure ]; then echo '[{}]'; else echo '[]'; fi ;;
+      if [[ "$url" == *status=Running* ]]; then
+        if [ "$TEST_CASE" = invalid-tasks ]; then echo '{"page":{"items":"invalid"}}'
+        elif [ "$TEST_CASE" = not-drained ]; then echo '{"page":{"items":[{}]}}'
+        else echo '{"page":{"items":[]}}'
+        fi
+      else echo '{"page":{"items":[]}}'; fi ;;
+    */failure-notifications\?*) if [ "$TEST_CASE" = new-failure ]; then echo '{"notifications":[{}]}'; else echo '{"notifications":[]}'; fi ;;
     *) return 90 ;;
   esac
 }
 jq() {
-  # Stub jq outcomes; test the actual workflow shell's fail-closed control flow.
   local filter="${@: -1}"
-  if [[ "$filter" == *'isPaused == true'* ]]; then
-    if [ "$TEST_CASE" = invalid-state ]; then return 1; fi
+  local input
+  input=$(cat)
+  if [[ "$filter" == *'.pipeline.isPaused == true'* ]]; then
+    [ "$input" = '{"pipeline":{"isPaused":true}}' ] || return 1
     echo true
-  elif [[ "$filter" == *isPaused* ]]; then
-    case "$TEST_CASE" in
-      invalid-state) return 5 ;;
-      paused) echo true ;;
-      *) echo false ;;
+  elif [[ "$filter" == *'.pipeline.isPaused |'* ]]; then
+    case "$input" in
+      '{"pipeline":{"isPaused":true}}') echo true ;;
+      '{"pipeline":{"isPaused":false}}') echo false ;;
+      *) return 5 ;;
     esac
-  elif [[ "$filter" == *'.items | type == "array" and length == 0'* ]]; then
-    local input
-    input=$(cat)
-    if [ "$input" != '{"items":[]}' ] || [ "$TEST_CASE" = not-drained ]; then return 1; fi
+  elif [[ "$filter" == *'.page.items | type == "array" and length == 0'* ]]; then
+    [ "$input" = '{"page":{"items":[]}}' ] || return 1
     echo true
-  elif [[ "$filter" == *'type == "array" and length == 0'* ]]; then
-    local input
-    input=$(cat)
-    if [ "$input" = '[{}]' ]; then return 1; fi
-    if [ "$TEST_CASE" = not-drained ]; then return 1; fi
+  elif [[ "$filter" == *'.page.items | if type == "array" then length'* ]]; then
+    case "$input" in
+      '{"page":{"items":[]}}') echo 0 ;;
+      '{"page":{"items":[{}]}}') echo 1 ;;
+      *) return 5 ;;
+    esac
+  elif [[ "$filter" == *'.notifications | type == "array" and length == 0'* ]]; then
+    [ "$input" = '{"notifications":[]}' ] || return 1
     echo true
-  elif [[ "$filter" == *'.items | if type == "array" then length'* ]]; then
-    if [ "$TEST_CASE" = invalid-tasks ]; then return 5; fi
-    if [ "$TEST_CASE" = not-drained ]; then echo 1; else echo 0; fi
-  else echo 0
+  else
+    return 99
   fi
 }
 '@
 $cases = @('running', 'paused', 'get-failure', 'invalid-state', 'invalid-original', 'not-drained', 'new-failure')
 foreach ($case in $cases) {
-    $payload = "export TEST_CASE='$case'`n$mocks`n$script"
+    $payload = "export TEST_CASE='$case' TEST_PHASE='restore'`n$mocks`n$script"
     $output = $payload | & $Bash --noprofile --norc -s 2>&1
     $code = $LASTEXITCODE
     $resumed = ($output -join "`n") -match 'RESUMED'
@@ -82,7 +92,7 @@ $guard = [regex]::Match($workflow, '(?s)- id: collection-guard.*?        run: \|
 if (-not $guard.Success) { throw 'Guard step not found' }
 $guardScript = ($guard.Groups['script'].Value -split '\r?\n' | ForEach-Object { $_ -replace '^          ', '' }) -join "`n"
 foreach ($case in @('running', 'paused', 'get-failure', 'invalid-state', 'pause-failure', 'invalid-tasks', 'not-drained')) {
-    $output = "export TEST_CASE='$case'`n$mocks`n$guardScript" | & $Bash --noprofile --norc -s 2>&1
+    $output = "export TEST_CASE='$case' TEST_PHASE='guard'`n$mocks`n$guardScript" | & $Bash --noprofile --norc -s 2>&1
     $code = $LASTEXITCODE
     if (($code -eq 0) -ne ($case -in @('running', 'paused'))) { throw "Incorrect guard exit: $case ($code)" }
     if (($output -join "`n") -match 'RESUMED') { throw 'Guard resumed collection' }
@@ -92,6 +102,9 @@ if ($script -notmatch '/api/v2/admin/collection' -or
     $script -notmatch '/pipeline-state' -or
     $script -notmatch '/failure-notifications\?view=Actionable&limit=1' -or
     $script -notmatch '"\$base/tasks\?status=Running&limit=1"' -or
+    $script -notmatch '\.pipeline\.isPaused' -or
+    $script -notmatch '\.page\.items' -or
+    $script -notmatch '\.notifications' -or
     $script -notmatch '-X PUT' -or $script -notmatch '\$base/pipeline' -or
     $script.Contains('/api/admin/collection') -or
     $script.Contains('/pipeline/resume')) {
@@ -103,7 +116,8 @@ if (-not $guardBase.Success -or
     $guardScript -notmatch '"\$base/tasks\?status=Running&limit=1"' -or
     $guardScript -notmatch '-X PUT' -or
     $guardScript -notmatch '"paused":true' -or
-    $guardScript -notmatch '\.items \| if type == "array" then length' -or
+    $guardScript -notmatch '\.pipeline\.isPaused' -or
+    $guardScript -notmatch '\.page\.items \| if type == "array" then length' -or
     $guardScript.Contains('/api/admin/collection') -or
     $guardScript.Contains('/pipeline/pause')) {
     throw 'Pre-deploy pause/drain must use the v2 routes, payload, and response shapes.'

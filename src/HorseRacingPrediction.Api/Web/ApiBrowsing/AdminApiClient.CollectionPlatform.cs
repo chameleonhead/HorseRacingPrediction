@@ -148,13 +148,26 @@ public sealed partial class AdminApiClient
                 new("NotificationIds", request.NotificationIds, RequestedRevision: request.RequestedRevision,
                     Lane: request.Lane, Priority: request.Priority)), "Recovery", token);
 
-    public Task<AdminApiResult<CollectionFailureRecoveryResult>> RecoverCollectionFailureGroupAsync(
+    public async Task<AdminApiResult<CollectionFailureRecoveryResult>> RecoverCollectionFailureGroupAsync(
         string groupKey, RecoverCollectionFailureGroupRequest request, CancellationToken token = default)
-        => SendCollectionPlatformAsync<CollectionFailureRecoveryResult>(HttpMethod.Post,
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
             $"{CollectionPlatformPath}/recovery-batches", new CreateCollectionRecoveryBatchRequest(
                 new("GroupKey", GroupKey: groupKey, ExpectedNotificationIds: request.ExpectedNotificationIds,
                     RequestedRevision: request.RequestedRevision, Lane: request.Lane, Priority: request.Priority)),
-            "Recovery", token);
+            JsonOptions, token).ConfigureAwait(false);
+        if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            return AdminApiResult<CollectionFailureRecoveryResult>.Fail(
+                ["対象が更新されたため、画面を更新してもう一度確認してください。"]);
+        if (!response.IsSuccessStatusCode)
+            return AdminApiResult<CollectionFailureRecoveryResult>.Fail(
+                await ReadErrorsAsync(response, token).ConfigureAwait(false));
+        var value = await ReadCollectionResponseAsync<CollectionFailureRecoveryResult>(
+            response, "Recovery", token).ConfigureAwait(false);
+        return value is null
+            ? AdminApiResult<CollectionFailureRecoveryResult>.Fail(["応答の解析に失敗しました。"])
+            : AdminApiResult<CollectionFailureRecoveryResult>.Ok(value);
+    }
 
     public Task<AdminApiResult<CreateBackfillBatchResponse>> CreateBackfillBatchAsync(
         CreateBackfillBatchRequest request, CancellationToken token = default)

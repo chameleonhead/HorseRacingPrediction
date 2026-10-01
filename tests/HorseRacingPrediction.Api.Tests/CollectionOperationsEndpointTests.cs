@@ -385,8 +385,9 @@ public sealed class CollectionOperationsEndpointTests
             using var client = app.GetTestClient();
             var groupsResponse = await client.GetFromJsonAsync<ListFailureNotificationGroupsResponse>(
                 "/api/v2/admin/collection/failure-notification-groups");
-            var groups = groupsResponse?.Groups;
-            var key = groups!.Single().GroupKey;
+            var group = groupsResponse!.Groups.Single();
+            var key = group.GroupKey;
+            var expectedNotificationIds = group.NotificationIds;
 
             var firstPageResponse = await client.GetFromJsonAsync<GetFailureNotificationGroupResponse>(
                 $"/api/v2/admin/collection/failure-notification-groups/{key}?page=1&pageSize=2");
@@ -398,9 +399,14 @@ public sealed class CollectionOperationsEndpointTests
             Assert.IsNotNull(firstPage);
             Assert.AreEqual(3, firstPage.TotalCount);
             Assert.HasCount(2, firstPage.Items);
+            CollectionAssert.AreEquivalent(expectedNotificationIds.ToArray(),
+                firstPage.Group.NotificationIds.ToArray());
             Assert.IsTrue(firstPage.Items.All(x => x.FinalUrl is not null));
             Assert.IsNotNull(searched);
             Assert.AreEqual(1, searched.TotalCount);
+            CollectionAssert.AreEquivalent(expectedNotificationIds.ToArray(),
+                searched.Group.NotificationIds.ToArray(),
+                "Search and paging must not narrow the optimistic-concurrency membership snapshot.");
             Assert.AreEqual("H002", searched.Items.Single().Resource.Id);
             Assert.AreEqual("https://explicit.example.test/H002", searched.Items.Single().RequestedUrl);
 
@@ -411,7 +417,7 @@ public sealed class CollectionOperationsEndpointTests
                 "Group recovery must reject membership drift between selection and execution.");
             var response = await client.PostAsJsonAsync("/api/v2/admin/collection/recovery-batches",
                 new CreateCollectionRecoveryBatchRequest(new CreateCollectionRecoveryBatchInputDto("GroupKey",
-                    GroupKey: key, ExpectedNotificationIds: groups!.Single().NotificationIds)));
+                    GroupKey: key, ExpectedNotificationIds: expectedNotificationIds)));
             Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
             var recoveryEnvelope = await response.Content.ReadFromJsonAsync<CreateCollectionRecoveryBatchResponse>();
             var recovery = recoveryEnvelope?.Recovery;

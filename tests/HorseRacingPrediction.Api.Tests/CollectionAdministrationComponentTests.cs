@@ -93,6 +93,52 @@ public sealed class CollectionAdministrationComponentTests
     }
 
     [TestMethod]
+    public async Task FailureGroupRecovery_SendsCompleteMembershipAndShowsReceipt()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var handler = new FailureGroupHandler();
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = context.Render<CollectionFailureGroupDetail>(parameters => parameters
+            .Add(x => x.GroupKey, FailureGroupHandler.GroupKey));
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "対象をまとめて再取得"));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Single(x => x.Markup.Contains(">対象をまとめて再取得</")).Instance.OnClick.InvokeAsync());
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Single(x => x.Markup.Contains(">再取得を依頼</")).Instance.OnClick.InvokeAsync());
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "新しいタスク 2 件を作成しました"));
+        CollectionAssert.AreEquivalent(handler.NotificationIds.ToArray(),
+            handler.ExpectedNotificationIds?.ToArray());
+    }
+
+    [TestMethod]
+    public async Task FailureGroupRecovery_MembershipConflictRequestsRefreshWithoutSuccessMessage()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var handler = new FailureGroupHandler { MembershipChanged = true };
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = context.Render<CollectionFailureGroupDetail>(parameters => parameters
+            .Add(x => x.GroupKey, FailureGroupHandler.GroupKey));
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "対象をまとめて再取得"));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Single(x => x.Markup.Contains(">対象をまとめて再取得</")).Instance.OnClick.InvokeAsync());
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Single(x => x.Markup.Contains(">再取得を依頼</")).Instance.OnClick.InvokeAsync());
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup,
+            "対象が更新されたため、画面を更新してもう一度確認してください"));
+        Assert.IsFalse(cut.Markup.Contains("新しいタスク", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public async Task ResourceSelection_LinksToIndependentDetailPage()
     {
         var (app, original) = await TestApplicationFactory.CreateAsync();
@@ -545,6 +591,64 @@ public sealed class CollectionAdministrationComponentTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken) => throw new HttpRequestException("offline");
+    }
+
+    private sealed class FailureGroupHandler : HttpMessageHandler
+    {
+        public const string GroupKey = "failure-group-component";
+        public IReadOnlyList<Guid> NotificationIds { get; } = [Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()];
+        public IReadOnlyList<Guid>? ExpectedNotificationIds { get; private set; }
+        public bool MembershipChanged { get; init; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (request.Method == HttpMethod.Get
+                && request.RequestUri!.AbsolutePath.EndsWith($"/failure-notification-groups/{GroupKey}"))
+            {
+                var now = DateTimeOffset.Parse("2026-10-02T10:00:00+09:00");
+                var definition = new CollectionDefinitionId("horse-profile");
+                var group = new CollectionFailureGroup(GroupKey, definition, CollectionTaskStatus.Failed,
+                    "HttpRequestException", "request failed", NotificationIds.Count, now, now,
+                    NotificationIds, []);
+                var items = NotificationIds.Take(2).Select((id, index) => new CollectionFailureTarget(id,
+                    Guid.NewGuid(), new(CollectionResourceType.Horse, "jra", $"H{index + 1:D3}"), definition,
+                    CollectionTaskStatus.Failed, "HttpRequestException", "request failed", 1, now,
+                    null, null, null, null, null, null)).ToArray();
+                return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = JsonContent.Create(new
+                    {
+                        page = new CollectionFailureGroupPage(group,
+                            NotificationIds.Count, 1, 50, (string?)null, items)
+                    })
+                };
+            }
+
+            if (request.Method == HttpMethod.Post
+                && request.RequestUri!.AbsolutePath.EndsWith("/recovery-batches"))
+            {
+                var envelope = await request.Content!.ReadFromJsonAsync<CreateCollectionRecoveryBatchRequest>(
+                    cancellationToken);
+                Assert.AreEqual("GroupKey", envelope?.Recovery?.SelectorType);
+                Assert.AreEqual(GroupKey, envelope?.Recovery?.GroupKey);
+                ExpectedNotificationIds = envelope?.Recovery?.ExpectedNotificationIds;
+                if (MembershipChanged)
+                    return new HttpResponseMessage(System.Net.HttpStatusCode.Conflict)
+                    {
+                        Content = JsonContent.Create(new { message = "Failure group membership changed." })
+                    };
+                return new HttpResponseMessage(System.Net.HttpStatusCode.Accepted)
+                {
+                    Content = JsonContent.Create(new
+                    {
+                        recovery = new CollectionFailureRecoveryResult(NotificationIds.Count, 2, 1, [Guid.NewGuid(), Guid.NewGuid()])
+                    })
+                };
+            }
+
+            return new HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
+        }
     }
 
     private static BunitContext CreateContext(IServiceProvider services, HttpClient http)
