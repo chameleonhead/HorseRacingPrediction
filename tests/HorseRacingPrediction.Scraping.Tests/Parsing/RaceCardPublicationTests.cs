@@ -69,6 +69,36 @@ public sealed class RaceCardPublicationTests
     }
 
     [TestMethod]
+    public async Task ParseHtml_BlinkerOnlyHorseNumberCell_RetainsEntryAsUnconfirmed()
+    {
+        var snapshot = await CaptureHtmlAsync(
+            HtmlRow("", "", "ブリンカー確定待ち馬", "000108", blinkerOnlyNumber: true));
+
+        var entry = Parse(snapshot).Entries.Single();
+
+        Assert.IsNull(entry.HorseNumber);
+        Assert.IsNull(entry.FrameNumber);
+        Assert.IsNotNull(entry.HorseSourceIdentity);
+    }
+
+    [TestMethod]
+    public async Task ParseHtml_CancelledAndExcludedHorseNumberCells_PreserveParticipationStates()
+    {
+        var snapshot = await CaptureHtmlAsync(
+            HtmlRow("", "取消", "取消馬", "000109")
+            + HtmlRow("", "除外", "除外馬", "000110"));
+
+        var entries = Parse(snapshot).Entries;
+
+        Assert.IsNull(entries[0].HorseNumber);
+        Assert.AreEqual(HorseRacingPrediction.Contracts.RaceEntryParticipationStatus.Cancelled,
+            entries[0].ParticipationStatus);
+        Assert.IsNull(entries[1].HorseNumber);
+        Assert.AreEqual(HorseRacingPrediction.Contracts.RaceEntryParticipationStatus.Excluded,
+            entries[1].ParticipationStatus);
+    }
+
+    [TestMethod]
     public async Task ParseHtml_SelectedRaceGradeWinsOverUnrelatedHeadingAndImage()
     {
         var snapshot = await CaptureHtmlAsync(
@@ -193,14 +223,17 @@ public sealed class RaceCardPublicationTests
     }
 
     private static string HtmlRow(string frame, string horseNumber, string horseName,
-        string sourceSuffix, bool numberAsAlt = false)
+        string sourceSuffix, bool numberAsAlt = false, bool blinkerOnlyNumber = false)
     {
-        var numberCell = numberAsAlt
+        var numberCell = blinkerOnlyNumber
+            ? "<td class=\"num\"><span class=\"horse_icon blinker\"><img alt=\"ブリンカー着用\"></span></td>"
+            : numberAsAlt
             ? $"<td><img alt=\"{horseNumber}\"></td>"
             : $"<td>{horseNumber}</td>";
+        var frameCell = blinkerOnlyNumber ? "<td class=\"waku\"></td>" : $"<td>{frame}</td>";
         return $"""
             <tr>
-              <td>{frame}</td>
+              {frameCell}
               {numberCell}
               <td>
                 <div class="name"><a href="/JRADB/accessU.html?CNAME=pw01dud002026{sourceSuffix}/00">{horseName}</a></div>

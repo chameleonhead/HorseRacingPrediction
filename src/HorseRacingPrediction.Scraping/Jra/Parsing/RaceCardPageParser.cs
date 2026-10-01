@@ -392,7 +392,8 @@ public sealed class RaceCardPageParser
 
             // A row position is never a horse number. Empty cells are classified only
             // after the entire card has been inspected, before any entry can be saved.
-            var numberText = table.GetCell(rowIndex, horseNumberIndex)?.Text.Trim() ?? string.Empty;
+            var horseNumberCell = table.GetCell(rowIndex, horseNumberIndex);
+            var numberText = horseNumberCell?.Text.Trim() ?? string.Empty;
             int? horseNumber = null;
             var participationStatus = RaceEntryParticipationStatus.Active;
             if (numberText.Length > 0)
@@ -402,6 +403,11 @@ public sealed class RaceCardPageParser
                     participationStatus = numberText == "取消"
                         ? RaceEntryParticipationStatus.Cancelled
                         : RaceEntryParticipationStatus.Excluded;
+                }
+                else if (IsBlinkerOnlyHorseNumber(horseNumberCell, numberText))
+                {
+                    // A blinker image's alt text is projected into an otherwise empty
+                    // cell. It describes equipment, not a published horse number.
                 }
                 else if (!Regex.IsMatch(numberText, @"^(?:馬番\s*)?[0-9]{1,2}$")
                     || !int.TryParse(Regex.Match(numberText, @"[0-9]+$").Value, out var parsedNumber)
@@ -482,6 +488,23 @@ public sealed class RaceCardPageParser
                 && string.IsNullOrWhiteSpace(x.HorseSourceIdentity)))
             throw new JraHorseSourceIdentityUnavailableException(url, raceId);
         return entries;
+    }
+
+    private static bool IsBlinkerOnlyHorseNumber(JraCellView? cell, string numberText)
+    {
+        if (numberText != "ブリンカー着用" || cell is null)
+        {
+            return false;
+        }
+
+        var hasBlinkerIcon = cell.Fragments.Any(fragment =>
+            fragment.ClassTokens.Contains("horse_icon", StringComparer.Ordinal) &&
+            fragment.ClassTokens.Contains("blinker", StringComparer.Ordinal));
+        var hasBlinkerAlt = cell.Fragments.Any(fragment =>
+            fragment.TagName.Equals("img", StringComparison.OrdinalIgnoreCase) &&
+            (fragment.Text == "ブリンカー着用" || fragment.AccessibleName == "ブリンカー着用"));
+
+        return hasBlinkerIcon && hasBlinkerAlt;
     }
 
     private static string? FindHorseSourceIdentity(JraCellView? cell, string pageUrl)
