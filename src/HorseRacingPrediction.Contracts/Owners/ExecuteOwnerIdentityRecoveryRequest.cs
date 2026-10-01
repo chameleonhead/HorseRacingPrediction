@@ -1,0 +1,3 @@
+namespace HorseRacingPrediction.Contracts.Owners;
+
+public sealed record ExecuteOwnerIdentityRecoveryRequest(IReadOnlyList<OwnerIdentityRecoverySelectionDto> Items);

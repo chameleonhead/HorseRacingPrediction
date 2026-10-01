@@ -52,12 +52,15 @@ public sealed class RaceBulkPersistenceCounterTests
             var horseName = $"計測馬-{key}-{number}";
             var jockeyName = $"計測騎手-{key}-{number}";
             var trainerName = $"計測調教師-{key}-{number}";
-            await http.PutAsJsonAsync($"/api/horses/{DeterministicIdGenerator.BuildEntityId("horse", DeterministicIdGenerator.NormalizeKey(horseName))}",
-                new UpdateHorseProfileRequest(horseName, horseName, "M", null));
-            await http.PutAsJsonAsync($"/api/jockeys/{DeterministicIdGenerator.BuildEntityId("jockey", DeterministicIdGenerator.NormalizeKey(jockeyName))}",
-                new UpdateJockeyProfileRequest(jockeyName, jockeyName, "JRA"));
-            await http.PutAsJsonAsync($"/api/trainers/{DeterministicIdGenerator.BuildEntityId("trainer", DeterministicIdGenerator.NormalizeKey(trainerName))}",
-                new UpdateTrainerProfileRequest(trainerName, trainerName, "JRA"));
+            var horseId = DeterministicIdGenerator.BuildEntityId("horse", DeterministicIdGenerator.NormalizeKey(horseName));
+            var jockeyId = DeterministicIdGenerator.BuildEntityId("jockey", DeterministicIdGenerator.NormalizeKey(jockeyName));
+            var trainerId = DeterministicIdGenerator.BuildEntityId("trainer", DeterministicIdGenerator.NormalizeKey(trainerName));
+            await http.PutAsJsonAsync($"/api/horses/{horseId}",
+                new UpdateHorseProfileRequest { HorseId = horseId, Horse = new(horseName, horseName, "M", null) });
+            await http.PutAsJsonAsync($"/api/jockeys/{jockeyId}",
+                new UpdateJockeyProfileRequest { JockeyId = jockeyId, Jockey = new(jockeyName, jockeyName, "JRA") });
+            await http.PutAsJsonAsync($"/api/trainers/{trainerId}",
+                new UpdateTrainerProfileRequest { TrainerId = trainerId, Trainer = new(trainerName, trainerName, "JRA") });
             entries.Add(new(number, number, null, null, null, null, null,
                 horseName, jockeyName, trainerName));
         }

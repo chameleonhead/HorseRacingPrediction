@@ -432,7 +432,7 @@ public class RaceEndpointsTests
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/horses",
-            new RegisterHorseRequest("テストホース", "テストホース", "M", null, horseId, "テスト馬主"),
+            SubjectRequestFactory.RegisterHorse("テストホース", "テストホース", "M", null, horseId, "テスト馬主"),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
@@ -632,7 +632,7 @@ public class RaceEndpointsTests
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/horses",
-            new RegisterHorseRequest("イクイノックス", "イクイノックス", "M", null, horseId),
+            SubjectRequestFactory.RegisterHorse("イクイノックス", "イクイノックス", "M", null, horseId),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
@@ -688,7 +688,7 @@ public class RaceEndpointsTests
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/horses",
-            new RegisterHorseRequest("イクイノックス", "イクイノックス", "M", null, horseId, "現在の馬主"),
+            SubjectRequestFactory.RegisterHorse("イクイノックス", "イクイノックス", "M", null, horseId, "現在の馬主"),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
@@ -730,7 +730,7 @@ public class RaceEndpointsTests
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/horses",
-            new RegisterHorseRequest("イクイノックス", "イクイノックス", "M", null, horseId),
+            SubjectRequestFactory.RegisterHorse("イクイノックス", "イクイノックス", "M", null, horseId),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
@@ -834,7 +834,7 @@ public class RaceEndpointsTests
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/horses",
-            new RegisterHorseRequest("イクイノックス", "イクイノックス", "M", null, horseId),
+            SubjectRequestFactory.RegisterHorse("イクイノックス", "イクイノックス", "M", null, horseId),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",

@@ -77,7 +77,7 @@ internal static class SearchHorsesEndpoint
                             });
                         }
 
-                        return Results.Ok(ToPagedResponse(
+                        var paged = ToPagedResponse(
                             sorted,
                             page,
                             pageSize,
@@ -87,11 +87,13 @@ internal static class SearchHorsesEndpoint
                                 x.NormalizedName,
                                 x.SexCode,
                                 x.BirthDate,
-                                x.Aliases.Count)));
+                                x.Aliases.Count));
+                        return Results.Ok(new SearchHorsesResponse(paged.Items,
+                            new HorseRacingPrediction.Contracts.Common.PaginationDto(paged.Page, paged.PageSize, paged.TotalCount, paged.TotalPages)));
                     })
                     .WithName("SearchHorses")
                     .WithTags("Horse API")
-                    .Produces<PagedResponse<HorseSummaryDto>>(StatusCodes.Status200OK)
+                    .Produces<SearchHorsesResponse>(StatusCodes.Status200OK)
                     .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest);
     }
 }

@@ -13,8 +13,9 @@ internal static class GetHorseWeightHistoryEndpoint
     {
         group.MapGet("/horses/{horseId}/weight-history",
                     [SwaggerOperation(Summary = "Get horse weight history", Description = "Returns horse body weight history across races")]
-        async (string horseId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async ([AsParameters] GetHorseWeightHistoryRequest request, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
                     {
+                        var horseId = request.HorseId;
                         var query = new ReadModelByIdQuery<HorseWeightHistoryReadModel>(horseId);
                         var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
 
@@ -28,12 +29,12 @@ internal static class GetHorseWeightHistoryEndpoint
                                 .Select(w => new HorseWeightEntryDto(w.RaceId, w.EntryId, w.RecordedAt, w.DeclaredWeight, w.DeclaredWeightDiff))
                                 .ToList());
 
-                        return Results.Ok(response);
+                        return Results.Ok(new GetHorseWeightHistoryResponse(response));
                     })
                     .AddEndpointFilter<RacePredictionReadEndpointFilter>()
                     .WithName("GetHorseWeightHistory")
                     .WithTags("Horse API")
-                    .Produces<HorseWeightHistoryDto>(StatusCodes.Status200OK)
+                    .Produces<GetHorseWeightHistoryResponse>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

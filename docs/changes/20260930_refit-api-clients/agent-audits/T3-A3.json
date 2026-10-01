@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260930_refit-api-clients",
+  "taskId": "T3-A3",
+  "attemptId": "T3-A3",
+  "state": "completed",
+  "taskDifficulty": "high",
+  "acceptanceCriteria": [
+    "AC2",
+    "AC4",
+    "AC5"
+  ],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose model telemetry"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime did not expose per-task usage"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.Contracts/{Horses,Jockeys,Trainers,Owners,Common}",
+    "src/HorseRacingPrediction.Contracts/Collection/CollectionRequestReceiptDto.cs",
+    "src/HorseRacingPrediction.Api/Endpoints/{Horses,Jockeys,Trainers,Owners}",
+    "src/HorseRacingPrediction.Api/Web/ApiBrowsing/AdminApiClient.cs",
+    "src/HorseRacingPrediction.Api/Web/Components/Pages/{Horse,Jockey,Trainer,Owner}{Detail,Edit}.razor",
+    "src/HorseRacingPrediction.Collector/Http/{HttpDataCollectionWriteService.cs,HttpRaceQueryService.cs}",
+    "tests/HorseRacingPrediction.Contracts.Tests/HorseJockeyTrainerOwnerEnvelopeSerializationTests.cs",
+    "tests/HorseRacingPrediction.Collector.Tests/Http/{HttpDataCollectionWriteServiceUpsertTests.cs,HttpRaceQueryServiceTests.cs}",
+    "docs/changes/20260930_refit-api-clients/http-contract-inventory.json",
+    "docs/changes/20260930_refit-api-clients/README.md"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review effort telemetry was not exposed"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "effort telemetry was not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable per-task elapsed effort telemetry was not exposed"
+  },
+  "startRevision": "working-tree:T3-A3 draft began before audit/task row was recorded",
+  "endRevisionOrPatch": "working-tree:T3-A3 H/J/T/O contracts and consumer mappings; final gates 2026-10-01",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "The draft preceded audit/README dispatch; timing remains explicit. Review corrected frozen operation/property names and restored three legacy-null existing-entry fields. The escaped R1 defect is attributed to T3-A1/VF003. Final gates and results are summarized in the change README.",
+    "promoted": false,
+    "escapedDefects": 0,
+    "retries": 0,
+    "leadCorrections": 3,
+    "reviewPasses": 3,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

@@ -1,4 +1,11 @@
+using System.Text.Json.Serialization;
 
 namespace HorseRacingPrediction.Contracts.Owners;
 
-public sealed record UpdateOwnerRequest(string DisplayName, string Reason, IReadOnlyList<string>? NameVariants = null);
+public sealed record UpdateOwnerRequest
+{
+    [JsonIgnore]
+    public string OwnerId { get; init; } = string.Empty;
+
+    public UpdateOwnerInputDto? Owner { get; init; }
+}

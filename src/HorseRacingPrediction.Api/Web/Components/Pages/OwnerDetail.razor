@@ -215,7 +215,7 @@ else
         merging = true;
         try
         {
-            var result = await Api.MergeOwnerAsync(OwnerId, new MergeOwnerRequest(sourceOwnerId ?? string.Empty, mergeReason ?? string.Empty));
+            var result = await Api.MergeOwnerAsync(OwnerId, new MergeOwnerRequest { OwnerId = OwnerId, Merge = new MergeOwnerInputDto(sourceOwnerId ?? string.Empty, mergeReason ?? string.Empty) });
             mergeErrors = result.Success ? [] : result.Errors;
             if (result.Success) { sourceOwnerId = null; selectedMergeCandidate = null; mergeReason = null; showMergeDialog = false; showMergeConfirmation = false; await OnParametersSetAsync(); }
         }

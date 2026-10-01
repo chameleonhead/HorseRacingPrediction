@@ -18,15 +18,17 @@ internal static class MergeOwnerEndpoint
         group.MapPost("/owners/{ownerId}/merge",
                     async (string ownerId, MergeOwnerRequest request, HttpContext httpContext, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
                     {
-                        if (string.IsNullOrWhiteSpace(request.SourceOwnerId) || string.IsNullOrWhiteSpace(request.Reason))
+                        if (request.Merge is null) return Results.BadRequest(new[] { "Merge payload is required." });
+                        var merge = request.Merge;
+                        if (string.IsNullOrWhiteSpace(merge.SourceOwnerId) || string.IsNullOrWhiteSpace(merge.Reason))
                             return Results.BadRequest(new[] { "統合元の馬主と理由は必須です。" });
-                        if (string.Equals(ownerId, request.SourceOwnerId, StringComparison.Ordinal))
+                        if (string.Equals(ownerId, merge.SourceOwnerId, StringComparison.Ordinal))
                             return Results.BadRequest(new[] { "同じ馬主には統合できません。" });
 
                         using var dbContext = dbContextProvider.CreateContext();
                         var owners = await BuildOwnersAsync(dbContext, cancellationToken).ConfigureAwait(false);
                         var target = owners.SingleOrDefault(x => x.OwnerId == ownerId);
-                        var source = owners.SingleOrDefault(x => x.OwnerId == request.SourceOwnerId);
+                        var source = owners.SingleOrDefault(x => x.OwnerId == merge.SourceOwnerId);
                         if (target is null || source is null) return Results.NotFound();
 
                         var actor = "Admin UI";
@@ -37,11 +39,11 @@ internal static class MergeOwnerEndpoint
                             var mapping = await dbContext.OwnerAliasMappings.SingleOrDefaultAsync(x => x.NormalizedAlias == normalized, cancellationToken).ConfigureAwait(false);
                             if (mapping is null)
                             {
-                                dbContext.OwnerAliasMappings.Add(new OwnerAliasMappingReadModel { NormalizedAlias = normalized, AliasName = alias, OwnerId = ownerId, ActorId = actor, Reason = request.Reason.Trim(), CreatedAt = now });
+                                dbContext.OwnerAliasMappings.Add(new OwnerAliasMappingReadModel { NormalizedAlias = normalized, AliasName = alias, OwnerId = ownerId, ActorId = actor, Reason = merge.Reason.Trim(), CreatedAt = now });
                             }
                             else
                             {
-                                mapping.OwnerId = ownerId; mapping.AliasName = alias; mapping.ActorId = actor; mapping.Reason = request.Reason.Trim(); mapping.CreatedAt = now;
+                                mapping.OwnerId = ownerId; mapping.AliasName = alias; mapping.ActorId = actor; mapping.Reason = merge.Reason.Trim(); mapping.CreatedAt = now;
                             }
                         }
                         dbContext.OwnerMergeAudits.Add(new OwnerMergeAuditReadModel
@@ -51,7 +53,7 @@ internal static class MergeOwnerEndpoint
                             TargetOwnerId = ownerId,
                             SourceNames = string.Join('\n', source.NameVariants),
                             ActorId = actor,
-                            Reason = request.Reason.Trim(),
+                            Reason = merge.Reason.Trim(),
                             CreatedAt = now
                         });
                         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

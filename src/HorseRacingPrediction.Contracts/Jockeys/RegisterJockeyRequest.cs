@@ -1,9 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace HorseRacingPrediction.Contracts.Jockeys;
 
-public sealed record RegisterJockeyRequest(
-    [property: Required, StringLength(128, MinimumLength = 1)] string DisplayName,
-    [property: Required, StringLength(128, MinimumLength = 1)] string NormalizedName,
-    string? AffiliationCode,
-    string? JockeyId = null);
+public sealed record RegisterJockeyRequest(RegisterJockeyInputDto? Jockey);

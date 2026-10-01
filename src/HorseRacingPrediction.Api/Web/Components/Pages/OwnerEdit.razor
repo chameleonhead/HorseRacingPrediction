@@ -41,7 +41,7 @@ else
         var variants = (nameVariantsText ?? string.Empty).Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.Ordinal).ToList();
         if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrWhiteSpace(reason) || variants.Count == 0) { errors = ["表示名、登録表記、訂正理由は必須です。"]; return; }
         saving = true;
-        try { var result = await Api.UpdateOwnerAsync(OwnerId, new UpdateOwnerRequest(displayName.Trim(), reason.Trim(), variants)); errors = result.Success ? [] : result.Errors; if (result.Success) Back(); }
+        try { var result = await Api.UpdateOwnerAsync(OwnerId, new UpdateOwnerRequest { OwnerId = OwnerId, Owner = new UpdateOwnerInputDto(displayName.Trim(), reason.Trim(), variants) }); errors = result.Success ? [] : result.Errors; if (result.Success) Back(); }
         finally { saving = false; }
     }
     private void Back() => Navigation.NavigateTo($"/owners/{Uri.EscapeDataString(OwnerId)}");

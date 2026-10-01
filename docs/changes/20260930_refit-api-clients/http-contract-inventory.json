@@ -1436,7 +1436,7 @@
       {
         "name": "request",
         "kind": "body",
-        "type": "CorrectHorseDataRequest"
+        "type": "HorseRacingPrediction.Contracts.Horses.CorrectHorseDataRequest"
       }
     ],
     "produces": [],
@@ -1454,145 +1454,140 @@
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/CorrectHorseDataEndpoint.cs",
     "requestPresent": true,
     "responsePresent": false,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestJsonPath": "horse"
   },
   {
     "path": "/api/horses/{horseId}/participations",
     "endpointFile": "GetHorseParticipationsEndpoint.cs",
     "handlerParameters": [
       {
-        "name": "horseId",
-        "kind": "path",
-        "type": "string"
-      },
-      {
-        "name": "take",
-        "kind": "query",
-        "type": "int?"
-      },
-      {
-        "name": "skip",
-        "kind": "query",
-        "type": "int?"
+        "name": "request",
+        "kind": "queryObject",
+        "type": "GetHorseParticipationsRequest"
       }
     ],
     "produces": [
       {
-        "type": "ParticipationHistoryResponse",
+        "type": "HorseRacingPrediction.Contracts.Horses.GetHorseParticipationsResponse",
         "status": 200
       }
     ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "await BuildParticipationHistoryAsync(\"Horse\", horseId, dbContext, take, skip, cancellationToken).ConfigureAwait(false)",
+        "payloadExpression": "GetHorseParticipationsResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Horses",
     "method": "GET",
-    "responseShape": "ParticipationHistoryResponse",
+    "responseShape": "GetHorseParticipationsResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/GetHorseParticipationsEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "responseJsonPath": "history"
   },
   {
     "path": "/api/horses/{horseId}",
     "endpointFile": "GetHorseProfileEndpoint.cs",
     "handlerParameters": [
       {
-        "name": "horseId",
-        "kind": "path",
-        "type": "string"
+        "name": "request",
+        "kind": "queryObject",
+        "type": "GetHorseProfileRequest"
       }
     ],
     "produces": [
       {
-        "type": "ApiContracts.HorseReadDto",
+        "type": "HorseRacingPrediction.Contracts.Horses.GetHorseProfileResponse",
         "status": 200
       }
     ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "ToAgentHorse(readModel)",
+        "payloadExpression": "GetHorseProfileResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Horses",
     "method": "GET",
-    "responseShape": "ApiContracts.HorseReadDto",
+    "responseShape": "GetHorseProfileResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/GetHorseProfileEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "responseJsonPath": "horse"
   },
   {
     "path": "/api/horses/{horseId}/race-history",
     "endpointFile": "GetHorseRaceHistoryEndpoint.cs",
     "handlerParameters": [
       {
-        "name": "horseId",
-        "kind": "path",
-        "type": "string"
+        "name": "request",
+        "kind": "queryObject",
+        "type": "GetHorseRaceHistoryRequest"
       }
     ],
     "produces": [
       {
-        "type": "ApiContracts.HorseRaceHistoryDto",
+        "type": "HorseRacingPrediction.Contracts.Horses.GetHorseRaceHistoryResponse",
         "status": 200
       }
     ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "ToAgentHorseRaceHistory(readModel)",
+        "payloadExpression": "GetHorseRaceHistoryResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Horses",
     "method": "GET",
-    "responseShape": "ApiContracts.HorseRaceHistoryDto",
+    "responseShape": "GetHorseRaceHistoryResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/GetHorseRaceHistoryEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "responseJsonPath": "history"
   },
   {
     "path": "/api/horses/{horseId}/weight-history",
     "endpointFile": "GetHorseWeightHistoryEndpoint.cs",
     "handlerParameters": [
       {
-        "name": "horseId",
-        "kind": "path",
-        "type": "string"
+        "name": "request",
+        "kind": "queryObject",
+        "type": "GetHorseWeightHistoryRequest"
       }
     ],
     "produces": [
       {
-        "type": "HorseWeightHistoryResponse",
+        "type": "HorseRacingPrediction.Contracts.Horses.GetHorseWeightHistoryResponse",
         "status": 200
       }
     ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "response",
+        "payloadExpression": "GetHorseWeightHistoryResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Horses",
     "method": "GET",
-    "responseShape": "HorseWeightHistoryResponse",
+    "responseShape": "GetHorseWeightHistoryResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/GetHorseWeightHistoryEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "responseJsonPath": "weightHistory"
   },
   {
     "path": "/api/horses/{horseId}/aliases",
@@ -1606,7 +1601,7 @@
       {
         "name": "request",
         "kind": "body",
-        "type": "MergeAliasRequest"
+        "type": "HorseRacingPrediction.Contracts.Horses.MergeHorseAliasRequest"
       }
     ],
     "produces": [],
@@ -1624,7 +1619,8 @@
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/MergeHorseAliasEndpoint.cs",
     "requestPresent": true,
     "responsePresent": false,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestJsonPath": "alias"
   },
   {
     "path": "/api/horses",
@@ -1633,25 +1629,32 @@
       {
         "name": "request",
         "kind": "body",
-        "type": "RegisterHorseRequest"
+        "type": "HorseRacingPrediction.Contracts.Horses.RegisterHorseRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "HorseRacingPrediction.Contracts.Horses.RegisterHorseResponse",
+        "status": 201
+      }
+    ],
     "successOutcomes": [
       {
         "status": 201,
-        "payloadExpression": "$\"/api/horses/{horseId.Value}\", new { HorseId = horseId.Value }",
+        "payloadExpression": "RegisterHorseResponse",
         "kind": "Created",
         "hasData": true
       }
     ],
     "family": "Horses",
     "method": "POST",
-    "responseShape": "$\"/api/horses/{horseId.Value}\", new { HorseId = horseId.Value }",
+    "responseShape": "RegisterHorseResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/RegisterHorseEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestJsonPath": "horse",
+    "responseJsonPath": "horseId"
   },
   {
     "path": "/api/horses",
@@ -1663,22 +1666,28 @@
         "type": "SearchHorsesRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "HorseRacingPrediction.Contracts.Horses.SearchHorsesResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "ToPagedResponse(\r\n                            sorted,\r\n                            page,\r\n                            pageSize,\r\n                            x => new HorseSummaryResponse(\r\n                                x.HorseId,\r\n                                x.RegisteredName,\r\n                                x.NormalizedName,\r\n                                x.SexCode,\r\n                                x.BirthDate,\r\n                                x.Aliases.Count))",
+        "payloadExpression": "SearchHorsesResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Horses",
     "method": "GET",
-    "responseShape": "ToPagedResponse(\r\n                            sorted,\r\n                            page,\r\n                            pageSize,\r\n                            x => new HorseSummaryResponse(\r\n                                x.HorseId,\r\n                                x.RegisteredName,\r\n                                x.NormalizedName,\r\n                                x.SexCode,\r\n                                x.BirthDate,\r\n                                x.Aliases.Count))",
+    "responseShape": "SearchHorsesResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/SearchHorsesEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "responseJsonPath": "horses"
   },
   {
     "path": "/api/horses/{horseId}",
@@ -1692,7 +1701,7 @@
       {
         "name": "request",
         "kind": "body",
-        "type": "UpdateHorseProfileRequest"
+        "type": "HorseRacingPrediction.Contracts.Horses.UpdateHorseProfileRequest"
       }
     ],
     "produces": [],
@@ -1710,7 +1719,8 @@
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Horses/UpdateHorseProfileEndpoint.cs",
     "requestPresent": true,
     "responsePresent": false,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestJsonPath": "horse"
   },
   {
     "path": "/api/identity/horse",
@@ -1778,7 +1788,7 @@
       {
         "name": "request",
         "kind": "body",
-        "type": "CorrectJockeyDataRequest"
+        "type": "HorseRacingPrediction.Contracts.Jockeys.CorrectJockeyDataRequest"
       }
     ],
     "produces": [],
@@ -1796,113 +1806,107 @@
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/CorrectJockeyDataEndpoint.cs",
     "requestPresent": true,
     "responsePresent": false,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestJsonPath": "jockey"
   },
   {
     "path": "/api/jockeys/{jockeyId}/participations",
     "endpointFile": "GetJockeyParticipationsEndpoint.cs",
     "handlerParameters": [
       {
-        "name": "jockeyId",
-        "kind": "path",
-        "type": "string"
-      },
-      {
-        "name": "take",
-        "kind": "query",
-        "type": "int?"
-      },
-      {
-        "name": "skip",
-        "kind": "query",
-        "type": "int?"
+        "name": "request",
+        "kind": "queryObject",
+        "type": "GetJockeyParticipationsRequest"
       }
     ],
     "produces": [
       {
-        "type": "ParticipationHistoryResponse",
+        "type": "HorseRacingPrediction.Contracts.Jockeys.GetJockeyParticipationsResponse",
         "status": 200
       }
     ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "await BuildParticipationHistoryAsync(\"Jockey\", jockeyId, dbContext, take, skip, cancellationToken).ConfigureAwait(false)",
+        "payloadExpression": "GetJockeyParticipationsResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Jockeys",
     "method": "GET",
-    "responseShape": "ParticipationHistoryResponse",
+    "responseShape": "GetJockeyParticipationsResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/GetJockeyParticipationsEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "responseJsonPath": "history"
   },
   {
     "path": "/api/jockeys/{jockeyId}",
     "endpointFile": "GetJockeyProfileEndpoint.cs",
     "handlerParameters": [
       {
-        "name": "jockeyId",
-        "kind": "path",
-        "type": "string"
+        "name": "request",
+        "kind": "queryObject",
+        "type": "GetJockeyProfileRequest"
       }
     ],
     "produces": [
       {
-        "type": "ApiContracts.JockeyDto",
+        "type": "HorseRacingPrediction.Contracts.Jockeys.GetJockeyProfileResponse",
         "status": 200
       }
     ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "ToAgentJockey(readModel)",
+        "payloadExpression": "GetJockeyProfileResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Jockeys",
     "method": "GET",
-    "responseShape": "ApiContracts.JockeyDto",
+    "responseShape": "GetJockeyProfileResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/GetJockeyProfileEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "responseJsonPath": "jockey"
   },
   {
     "path": "/api/jockeys/{jockeyId}/race-history",
     "endpointFile": "GetJockeyRaceHistoryEndpoint.cs",
     "handlerParameters": [
       {
-        "name": "jockeyId",
-        "kind": "path",
-        "type": "string"
+        "name": "request",
+        "kind": "queryObject",
+        "type": "GetJockeyRaceHistoryRequest"
       }
     ],
     "produces": [
       {
-        "type": "ApiContracts.JockeyRaceHistoryDto",
+        "type": "HorseRacingPrediction.Contracts.Jockeys.GetJockeyRaceHistoryResponse",
         "status": 200
       }
     ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "ToAgentJockeyRaceHistory(readModel)",
+        "payloadExpression": "GetJockeyRaceHistoryResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Jockeys",
     "method": "GET",
-    "responseShape": "ApiContracts.JockeyRaceHistoryDto",
+    "responseShape": "GetJockeyRaceHistoryResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/GetJockeyRaceHistoryEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "responseJsonPath": "history"
   },
   {
     "path": "/api/jockeys/{jockeyId}/aliases",
@@ -1916,7 +1920,7 @@
       {
         "name": "request",
         "kind": "body",
-        "type": "MergeAliasRequest"
+        "type": "HorseRacingPrediction.Contracts.Jockeys.MergeJockeyAliasRequest"
       }
     ],
     "produces": [],
@@ -1934,7 +1938,8 @@
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/MergeJockeyAliasEndpoint.cs",
     "requestPresent": true,
     "responsePresent": false,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestJsonPath": "alias"
   },
   {
     "path": "/api/jockeys",
@@ -1943,25 +1948,32 @@
       {
         "name": "request",
         "kind": "body",
-        "type": "RegisterJockeyRequest"
+        "type": "HorseRacingPrediction.Contracts.Jockeys.RegisterJockeyRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "HorseRacingPrediction.Contracts.Jockeys.RegisterJockeyResponse",
+        "status": 201
+      }
+    ],
     "successOutcomes": [
       {
         "status": 201,
-        "payloadExpression": "$\"/api/jockeys/{jockeyId.Value}\", new { JockeyId = jockeyId.Value }",
+        "payloadExpression": "RegisterJockeyResponse",
         "kind": "Created",
         "hasData": true
       }
     ],
     "family": "Jockeys",
     "method": "POST",
-    "responseShape": "$\"/api/jockeys/{jockeyId.Value}\", new { JockeyId = jockeyId.Value }",
+    "responseShape": "RegisterJockeyResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/RegisterJockeyEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestJsonPath": "jockey",
+    "responseJsonPath": "jockeyId"
   },
   {
     "path": "/api/jockeys",
@@ -1973,22 +1985,28 @@
         "type": "SearchJockeysRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "HorseRacingPrediction.Contracts.Jockeys.SearchJockeysResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "ToPagedResponse(\r\n                            sorted,\r\n                            page,\r\n                            pageSize,\r\n                            x => new JockeySummaryResponse(\r\n                                x.JockeyId,\r\n                                x.DisplayName,\r\n                                x.NormalizedName,\r\n                                x.AffiliationCode,\r\n                                x.Aliases.Count))",
+        "payloadExpression": "SearchJockeysResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Jockeys",
     "method": "GET",
-    "responseShape": "ToPagedResponse(\r\n                            sorted,\r\n                            page,\r\n                            pageSize,\r\n                            x => new JockeySummaryResponse(\r\n                                x.JockeyId,\r\n                                x.DisplayName,\r\n                                x.NormalizedName,\r\n                                x.AffiliationCode,\r\n                                x.Aliases.Count))",
+    "responseShape": "SearchJockeysResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/SearchJockeysEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "responseJsonPath": "jockeys"
   },
   {
     "path": "/api/jockeys/{jockeyId}",
@@ -2002,7 +2020,7 @@
       {
         "name": "request",
         "kind": "body",
-        "type": "UpdateJockeyProfileRequest"
+        "type": "HorseRacingPrediction.Contracts.Jockeys.UpdateJockeyProfileRequest"
       }
     ],
     "produces": [],
@@ -2020,7 +2038,8 @@
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Jockeys/UpdateJockeyProfileEndpoint.cs",
     "requestPresent": true,
     "responsePresent": false,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestJsonPath": "jockey"
   },
   {
     "path": "/api/races/{raceId}/ml-prediction",
@@ -2232,62 +2251,65 @@
       {
         "name": "request",
         "kind": "body",
-        "type": "OwnerIdentityRecoveryRequest"
+        "type": "HorseRacingPrediction.Contracts.Owners.ExecuteOwnerIdentityRecoveryRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "HorseRacingPrediction.Contracts.Owners.ExecuteOwnerIdentityRecoveryResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "receipts",
+        "payloadExpression": "ExecuteOwnerIdentityRecoveryResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Owners",
     "method": "POST",
-    "responseShape": "receipts",
+    "responseShape": "ExecuteOwnerIdentityRecoveryResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Owners/ExecuteOwnerIdentityRecoveryEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestJsonPath": "items",
+    "responseJsonPath": "receipts"
   },
   {
     "path": "/api/owners/{ownerId}",
     "endpointFile": "GetOwnerEndpoint.cs",
     "handlerParameters": [
       {
-        "name": "ownerId",
-        "kind": "path",
-        "type": "string"
-      },
-      {
-        "name": "take",
-        "kind": "query",
-        "type": "int?"
-      },
-      {
-        "name": "skip",
-        "kind": "query",
-        "type": "int?"
+        "name": "request",
+        "kind": "queryObject",
+        "type": "GetOwnerRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "HorseRacingPrediction.Contracts.Owners.GetOwnerResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "new OwnerDetailResponse(owner, currentHorses, relatedTrainers, entries, mergeHistory, hasMoreParticipations, ownerTopHorses)",
+        "payloadExpression": "GetOwnerResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Owners",
     "method": "GET",
-    "responseShape": "new OwnerDetailResponse(owner, currentHorses, relatedTrainers, entries, mergeHistory, hasMoreParticipations, ownerTopHorses)",
+    "responseShape": "GetOwnerResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Owners/GetOwnerEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "responseJsonPath": "owner"
   },
   {
     "path": "/api/owners/{ownerId}/merge",
@@ -2301,7 +2323,7 @@
       {
         "name": "request",
         "kind": "body",
-        "type": "MergeOwnerRequest"
+        "type": "HorseRacingPrediction.Contracts.Owners.MergeOwnerRequest"
       }
     ],
     "produces": [],
@@ -2319,55 +2341,68 @@
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Owners/MergeOwnerEndpoint.cs",
     "requestPresent": true,
     "responsePresent": false,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestJsonPath": "merge"
   },
   {
     "path": "/api/admin/repairs/owner-identity",
     "endpointFile": "PreviewOwnerIdentityRecoveryEndpoint.cs",
     "handlerParameters": [],
-    "produces": [],
+    "produces": [
+      {
+        "type": "HorseRacingPrediction.Contracts.Owners.PreviewOwnerIdentityRecoveryResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "result",
+        "payloadExpression": "PreviewOwnerIdentityRecoveryResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Owners",
     "method": "GET",
-    "responseShape": "result",
+    "responseShape": "PreviewOwnerIdentityRecoveryResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Owners/PreviewOwnerIdentityRecoveryEndpoint.cs",
     "requestPresent": false,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "responseJsonPath": "candidates"
   },
   {
     "path": "/api/owners",
     "endpointFile": "SearchOwnersEndpoint.cs",
     "handlerParameters": [
       {
-        "name": "query",
-        "kind": "query",
-        "type": "string?"
+        "name": "request",
+        "kind": "queryObject",
+        "type": "SearchOwnersRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "HorseRacingPrediction.Contracts.Owners.SearchOwnersResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "owners.OrderBy(x => x.DisplayName, StringComparer.Ordinal).ToList()",
+        "payloadExpression": "SearchOwnersResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Owners",
     "method": "GET",
-    "responseShape": "owners.OrderBy(x => x.DisplayName, StringComparer.Ordinal).ToList()",
+    "responseShape": "SearchOwnersResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Owners/SearchOwnersEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "responseJsonPath": "owners"
   },
   {
     "path": "/api/owners/{ownerId}",
@@ -2381,7 +2416,7 @@
       {
         "name": "request",
         "kind": "body",
-        "type": "UpdateOwnerRequest"
+        "type": "HorseRacingPrediction.Contracts.Owners.UpdateOwnerRequest"
       }
     ],
     "produces": [],
@@ -2399,7 +2434,8 @@
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Owners/UpdateOwnerEndpoint.cs",
     "requestPresent": true,
     "responsePresent": false,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestJsonPath": "owner"
   },
   {
     "path": "/api/predictions/{predictionTicketId}/betting-suggestions",
@@ -4099,7 +4135,7 @@
       {
         "name": "request",
         "kind": "body",
-        "type": "CorrectTrainerDataRequest"
+        "type": "HorseRacingPrediction.Contracts.Trainers.CorrectTrainerDataRequest"
       }
     ],
     "produces": [],
@@ -4117,81 +4153,74 @@
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/CorrectTrainerDataEndpoint.cs",
     "requestPresent": true,
     "responsePresent": false,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestJsonPath": "trainer"
   },
   {
     "path": "/api/trainers/{trainerId}/participations",
     "endpointFile": "GetTrainerParticipationsEndpoint.cs",
     "handlerParameters": [
       {
-        "name": "trainerId",
-        "kind": "path",
-        "type": "string"
-      },
-      {
-        "name": "take",
-        "kind": "query",
-        "type": "int?"
-      },
-      {
-        "name": "skip",
-        "kind": "query",
-        "type": "int?"
+        "name": "request",
+        "kind": "queryObject",
+        "type": "GetTrainerParticipationsRequest"
       }
     ],
     "produces": [
       {
-        "type": "ParticipationHistoryResponse",
+        "type": "HorseRacingPrediction.Contracts.Trainers.GetTrainerParticipationsResponse",
         "status": 200
       }
     ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "new ParticipationHistoryResponse(\"Trainer\", trainerId, entries, relationships, hasMore)",
+        "payloadExpression": "GetTrainerParticipationsResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Trainers",
     "method": "GET",
-    "responseShape": "ParticipationHistoryResponse",
+    "responseShape": "GetTrainerParticipationsResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/GetTrainerParticipationsEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "responseJsonPath": "history"
   },
   {
     "path": "/api/trainers/{trainerId}",
     "endpointFile": "GetTrainerProfileEndpoint.cs",
     "handlerParameters": [
       {
-        "name": "trainerId",
-        "kind": "path",
-        "type": "string"
+        "name": "request",
+        "kind": "queryObject",
+        "type": "GetTrainerProfileRequest"
       }
     ],
     "produces": [
       {
-        "type": "TrainerProfileResponse",
+        "type": "HorseRacingPrediction.Contracts.Trainers.GetTrainerProfileResponse",
         "status": 200
       }
     ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "response",
+        "payloadExpression": "GetTrainerProfileResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Trainers",
     "method": "GET",
-    "responseShape": "TrainerProfileResponse",
+    "responseShape": "GetTrainerProfileResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/GetTrainerProfileEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "responseJsonPath": "trainer"
   },
   {
     "path": "/api/trainers/{trainerId}/aliases",
@@ -4205,7 +4234,7 @@
       {
         "name": "request",
         "kind": "body",
-        "type": "MergeAliasRequest"
+        "type": "HorseRacingPrediction.Contracts.Trainers.MergeTrainerAliasRequest"
       }
     ],
     "produces": [],
@@ -4223,7 +4252,8 @@
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/MergeTrainerAliasEndpoint.cs",
     "requestPresent": true,
     "responsePresent": false,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestJsonPath": "alias"
   },
   {
     "path": "/api/trainers",
@@ -4232,25 +4262,32 @@
       {
         "name": "request",
         "kind": "body",
-        "type": "RegisterTrainerRequest"
+        "type": "HorseRacingPrediction.Contracts.Trainers.RegisterTrainerRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "HorseRacingPrediction.Contracts.Trainers.RegisterTrainerResponse",
+        "status": 201
+      }
+    ],
     "successOutcomes": [
       {
         "status": 201,
-        "payloadExpression": "$\"/api/trainers/{trainerId.Value}\", new { TrainerId = trainerId.Value }",
+        "payloadExpression": "RegisterTrainerResponse",
         "kind": "Created",
         "hasData": true
       }
     ],
     "family": "Trainers",
     "method": "POST",
-    "responseShape": "$\"/api/trainers/{trainerId.Value}\", new { TrainerId = trainerId.Value }",
+    "responseShape": "RegisterTrainerResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/RegisterTrainerEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestJsonPath": "trainer",
+    "responseJsonPath": "trainerId"
   },
   {
     "path": "/api/trainers",
@@ -4262,22 +4299,28 @@
         "type": "SearchTrainersRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "HorseRacingPrediction.Contracts.Trainers.SearchTrainersResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "ToPagedResponse(\r\n                            sorted,\r\n                            page,\r\n                            pageSize,\r\n                            x => new TrainerSummaryResponse(\r\n                                x.TrainerId,\r\n                                x.DisplayName,\r\n                                x.NormalizedName,\r\n                                x.AffiliationCode,\r\n                                x.Aliases.Count))",
+        "payloadExpression": "SearchTrainersResponse",
         "kind": "Ok",
         "hasData": true
       }
     ],
     "family": "Trainers",
     "method": "GET",
-    "responseShape": "ToPagedResponse(\r\n                            sorted,\r\n                            page,\r\n                            pageSize,\r\n                            x => new TrainerSummaryResponse(\r\n                                x.TrainerId,\r\n                                x.DisplayName,\r\n                                x.NormalizedName,\r\n                                x.AffiliationCode,\r\n                                x.Aliases.Count))",
+    "responseShape": "SearchTrainersResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/SearchTrainersEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "responseJsonPath": "trainers"
   },
   {
     "path": "/api/trainers/{trainerId}",
@@ -4291,7 +4334,7 @@
       {
         "name": "request",
         "kind": "body",
-        "type": "UpdateTrainerProfileRequest"
+        "type": "HorseRacingPrediction.Contracts.Trainers.UpdateTrainerProfileRequest"
       }
     ],
     "produces": [],
@@ -4309,6 +4352,7 @@
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Trainers/UpdateTrainerProfileEndpoint.cs",
     "requestPresent": true,
     "responsePresent": false,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestJsonPath": "trainer"
   }
 ]

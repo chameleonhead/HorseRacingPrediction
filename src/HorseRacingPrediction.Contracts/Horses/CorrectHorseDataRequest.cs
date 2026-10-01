@@ -1,9 +1,11 @@
+using System.Text.Json.Serialization;
 
 namespace HorseRacingPrediction.Contracts.Horses;
 
-public sealed record CorrectHorseDataRequest(
-    string? RegisteredName,
-    string? NormalizedName,
-    string? SexCode,
-    DateOnly? BirthDate,
-    string? Reason);
+public sealed record CorrectHorseDataRequest
+{
+    [JsonIgnore]
+    public string HorseId { get; init; } = string.Empty;
+
+    public CorrectHorseDataInputDto? Horse { get; init; }
+}

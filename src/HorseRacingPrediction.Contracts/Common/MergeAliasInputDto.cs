@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace HorseRacingPrediction.Contracts.Common;
 
-public sealed record MergeAliasRequest(
+public sealed record MergeAliasInputDto(
     [property: Required, StringLength(32, MinimumLength = 1)] string AliasType,
     [property: Required, StringLength(128, MinimumLength = 1)] string AliasValue,
     [property: Required, StringLength(64, MinimumLength = 1)] string SourceName,

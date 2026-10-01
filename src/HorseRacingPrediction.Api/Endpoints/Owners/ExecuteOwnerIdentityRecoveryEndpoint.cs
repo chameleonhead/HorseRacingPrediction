@@ -14,7 +14,7 @@ internal static class ExecuteOwnerIdentityRecoveryEndpoint
 {
     internal static void Map(RouteGroupBuilder group)
     {
-        group.MapPost("/admin/repairs/owner-identity/execute", async (OwnerIdentityRecoveryRequest request,
+        group.MapPost("/admin/repairs/owner-identity/execute", async (HorseRacingPrediction.Contracts.Owners.ExecuteOwnerIdentityRecoveryRequest request,
                     IDbContextProvider<EventStoreDbContext> provider, CollectionPlatformStore store, CancellationToken token) =>
                 {
                     if (request.Items is null || request.Items.Count is < 1 or > 1000
@@ -48,7 +48,13 @@ internal static class ExecuteOwnerIdentityRecoveryEndpoint
                             OwnerIdentityRecoveryId, DateTimeOffset.UtcNow, token);
                         receipts.Add(receipt);
                     }
-                    return Results.Ok(receipts);
-                });
+                    return Results.Ok(new HorseRacingPrediction.Contracts.Owners.ExecuteOwnerIdentityRecoveryResponse(
+                        receipts.Select(x => new CollectionRequestReceiptDto(x.RequestId, x.TaskId, x.CreatedTask, x.DeferredByRepairHold)).ToList()));
+                })
+                .WithName("ExecuteOwnerIdentityRecovery")
+                .WithTags("Owner API")
+                .Produces<HorseRacingPrediction.Contracts.Owners.ExecuteOwnerIdentityRecoveryResponse>(StatusCodes.Status200OK)
+                .Produces(StatusCodes.Status400BadRequest)
+                .Produces(StatusCodes.Status409Conflict);
     }
 }

@@ -14,19 +14,20 @@ internal static class GetJockeyProfileEndpoint
     {
         group.MapGet("/jockeys/{jockeyId}",
                     [SwaggerOperation(Summary = "Get jockey profile", Description = "Returns jockey profile read model")]
-        async (string jockeyId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async ([AsParameters] ApiContracts.Jockeys.GetJockeyProfileRequest request, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
                     {
+                        var jockeyId = request.JockeyId;
                         var query = new ReadModelByIdQuery<AppReadModels.JockeyReadModel>(jockeyId);
                         var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
 
                         if (readModel is null || string.IsNullOrEmpty(readModel.JockeyId))
                             return Results.NotFound();
 
-                        return Results.Ok(ToAgentJockey(readModel));
+                        return Results.Ok(new ApiContracts.Jockeys.GetJockeyProfileResponse(ToAgentJockey(readModel)));
                     })
                     .WithName("GetJockeyProfile")
                     .WithTags("Jockey API")
-                    .Produces<HorseRacingPrediction.Contracts.Jockeys.JockeyDto>(StatusCodes.Status200OK)
+                    .Produces<ApiContracts.Jockeys.GetJockeyProfileResponse>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

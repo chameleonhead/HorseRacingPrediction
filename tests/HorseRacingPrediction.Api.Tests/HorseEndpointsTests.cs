@@ -8,8 +8,10 @@ using System.Text.Json;
 
 using HorseRacingPrediction.Contracts.Common;
 using HorseRacingPrediction.Contracts.Horses;
+using HorseRacingPrediction.Contracts.Jockeys;
 using HorseRacingPrediction.Contracts.Owners;
 using HorseRacingPrediction.Contracts.Races;
+using HorseRacingPrediction.Contracts.Trainers;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -38,11 +40,37 @@ public class HorseEndpointsTests
     public async Task RegisterHorse_ReturnsCreated()
     {
         var horseId = $"horse-{Guid.NewGuid()}";
-        var request = new RegisterHorseRequest("ディープインパクト", "deepimpact", "M", new DateOnly(2002, 3, 25), horseId);
+        var request = new RegisterHorseRequest(new("ディープインパクト", "deepimpact", "M", new DateOnly(2002, 3, 25), horseId));
+        var requestJson = JsonSerializer.SerializeToElement(request, JsonOptions);
+        Assert.IsTrue(requestJson.TryGetProperty("horse", out var horse));
+        Assert.IsFalse(requestJson.TryGetProperty("registeredName", out _));
+        Assert.AreEqual(horseId, horse.GetProperty("horseId").GetString());
 
         var response = await _client.PostAsJsonAsync("/api/horses", request, JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
+        Assert.IsTrue(response.Headers.Location?.ToString().Contains($"/api/horses/{horseId}", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public async Task NullSubjectPayloads_ReturnBadRequestStringArrays()
+    {
+        var cases = new[]
+        {
+            ("/api/horses", "{\"horse\":null}"),
+            ("/api/jockeys", "{\"jockey\":null}"),
+            ("/api/trainers", "{\"trainer\":null}")
+        };
+
+        foreach (var (path, json) in cases)
+        {
+            using var response = await _client.PostAsync(path,
+                new StringContent(json, System.Text.Encoding.UTF8, "application/json"));
+            Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode, path);
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.AreEqual(JsonValueKind.Array, body.RootElement.ValueKind, path);
+            Assert.IsTrue(body.RootElement.GetArrayLength() > 0, path);
+        }
     }
 
     [TestMethod]
@@ -51,18 +79,18 @@ public class HorseEndpointsTests
         var horseId = $"horse-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/horses",
-            new RegisterHorseRequest("オルフェーヴル", "orfevr", "M", null, horseId, "サンデーレーシング"),
+            new RegisterHorseRequest(new("オルフェーヴル", "orfevr", "M", null, horseId, "サンデーレーシング")),
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/horses/{horseId}");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        var profile = await response.Content.ReadFromJsonAsync<HorseDto>(JsonOptions);
+        var profile = await response.Content.ReadFromJsonAsync<GetHorseProfileResponse>(JsonOptions);
         Assert.IsNotNull(profile);
-        Assert.AreEqual(horseId, profile.HorseId);
-        Assert.AreEqual("オルフェーヴル", profile.RegisteredName);
-        Assert.AreEqual("orfevr", profile.NormalizedName);
-        Assert.AreEqual("サンデーレーシング", profile.OwnerName);
+        Assert.AreEqual(horseId, profile.Horse.HorseId);
+        Assert.AreEqual("オルフェーヴル", profile.Horse.RegisteredName);
+        Assert.AreEqual("orfevr", profile.Horse.NormalizedName);
+        Assert.AreEqual("サンデーレーシング", profile.Horse.OwnerName);
     }
 
     [TestMethod]
@@ -74,23 +102,23 @@ public class HorseEndpointsTests
 
         await _client.PostAsJsonAsync(
             "/api/horses",
-            new RegisterHorseRequest($"SearchHorseA-{key}", $"searchhorse-a-{key}", "M", null, horseId1),
+            new RegisterHorseRequest(new($"SearchHorseA-{key}", $"searchhorse-a-{key}", "M", null, horseId1)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/horses",
-            new RegisterHorseRequest($"SearchHorseB-{key}", $"searchhorse-b-{key}", "M", null, horseId2),
+            new RegisterHorseRequest(new($"SearchHorseB-{key}", $"searchhorse-b-{key}", "M", null, horseId2)),
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/horses?query=SearchHorse&normalizedName={key}&page=2&pageSize=1&sortBy=registeredName&sortDescending=false");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<HorseSummaryDto>>(JsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<SearchHorsesResponse>(JsonOptions);
         Assert.IsNotNull(result);
-        Assert.AreEqual(2, result.TotalCount);
-        Assert.AreEqual(2, result.TotalPages);
-        Assert.AreEqual(1, result.Items.Count);
-        Assert.AreEqual(horseId2, result.Items[0].HorseId);
+        Assert.AreEqual(2, result.Pagination.TotalCount);
+        Assert.AreEqual(2, result.Pagination.TotalPages);
+        Assert.AreEqual(1, result.Horses.Count);
+        Assert.AreEqual(horseId2, result.Horses[0].HorseId);
     }
 
     [TestMethod]
@@ -99,12 +127,12 @@ public class HorseEndpointsTests
         var horseId = $"horse-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/horses",
-            new RegisterHorseRequest("テスト馬", "testuma", null, null, horseId),
+            new RegisterHorseRequest(new("テスト馬", "testuma", null, null, horseId)),
             JsonOptions);
 
         var response = await _client.PutAsJsonAsync(
             $"/api/horses/{horseId}",
-            new UpdateHorseProfileRequest(null, "testuma-updated", "F", null),
+            new UpdateHorseProfileRequest { HorseId = horseId, Horse = new(null, "testuma-updated", "F", null) },
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -115,28 +143,28 @@ public class HorseEndpointsTests
     {
         var horseId = $"horse-{Guid.NewGuid()}";
         var response = await _client.PutAsJsonAsync($"/api/horses/{horseId}",
-            new UpdateHorseProfileRequest("新規馬", "新規馬", "F", null), JsonOptions);
-        var profile = await _client.GetFromJsonAsync<HorseDto>($"/api/horses/{horseId}", JsonOptions);
+            new UpdateHorseProfileRequest { HorseId = horseId, Horse = new("新規馬", "新規馬", "F", null) }, JsonOptions);
+        var profile = await _client.GetFromJsonAsync<GetHorseProfileResponse>($"/api/horses/{horseId}", JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsNotNull(profile);
-        Assert.AreEqual("新規馬", profile.RegisteredName);
+        Assert.AreEqual("新規馬", profile.Horse.RegisteredName);
     }
 
     [TestMethod]
     public async Task UpdateHorseProfile_ConcurrentIdenticalUpserts_AreReplaySafe()
     {
         var horseId = $"horse-{Guid.NewGuid()}";
-        var request = new UpdateHorseProfileRequest("同時登録馬", "同時登録馬", "M", null);
+        var request = new UpdateHorseProfileRequest { HorseId = horseId, Horse = new("同時登録馬", "同時登録馬", "M", null) };
 
         var responses = await Task.WhenAll(
             _client.PutAsJsonAsync($"/api/horses/{horseId}", request, JsonOptions),
             _client.PutAsJsonAsync($"/api/horses/{horseId}", request, JsonOptions));
-        var profile = await _client.GetFromJsonAsync<HorseDto>($"/api/horses/{horseId}", JsonOptions);
+        var profile = await _client.GetFromJsonAsync<GetHorseProfileResponse>($"/api/horses/{horseId}", JsonOptions);
 
         Assert.IsTrue(responses.All(response => response.StatusCode == HttpStatusCode.OK));
         Assert.IsNotNull(profile);
-        Assert.AreEqual("同時登録馬", profile.RegisteredName);
+        Assert.AreEqual("同時登録馬", profile.Horse.RegisteredName);
         Assert.AreEqual(1, CountSubjectEvents(horseId));
     }
 
@@ -153,12 +181,12 @@ public class HorseEndpointsTests
         var horseId = $"horse-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/horses",
-            new RegisterHorseRequest("キタサンブラック", "kitasanblack", "M", null, horseId),
+            new RegisterHorseRequest(new("キタサンブラック", "kitasanblack", "M", null, horseId)),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
             $"/api/horses/{horseId}/aliases",
-            new MergeAliasRequest("JRA", "1234567890", "JRA-DATA", true),
+            new MergeHorseAliasRequest { HorseId = horseId, Alias = new("JRA", "1234567890", "JRA-DATA", true) },
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -170,12 +198,12 @@ public class HorseEndpointsTests
         var horseId = $"horse-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/horses",
-            new RegisterHorseRequest("テスト馬", "testuma", null, null, horseId),
+            new RegisterHorseRequest(new("テスト馬", "testuma", null, null, horseId)),
             JsonOptions);
 
         var response = await _client.PatchAsJsonAsync(
             $"/api/horses/{horseId}",
-            new CorrectHorseDataRequest(null, "testuma-fixed", "M", null, "データ誤り修正"),
+            new CorrectHorseDataRequest { HorseId = horseId, Horse = new(null, "testuma-fixed", "M", null, "データ誤り修正") },
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -194,7 +222,7 @@ public class HorseEndpointsTests
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/horses",
-            new RegisterHorseRequest("レースヒストリーテスト号", "racehistorytest", "M", null, horseId),
+            new RegisterHorseRequest(new("レースヒストリーテスト号", "racehistorytest", "M", null, horseId)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
@@ -227,21 +255,21 @@ public class HorseEndpointsTests
         var response = await _client.GetAsync($"/api/horses/{horseId}/race-history");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        var history = await response.Content.ReadFromJsonAsync<HorseRaceHistoryDto>(JsonOptions);
+        var history = await response.Content.ReadFromJsonAsync<GetHorseRaceHistoryResponse>(JsonOptions);
         Assert.IsNotNull(history);
-        Assert.AreEqual(horseId, history.HorseId);
-        Assert.AreEqual(1, history.Entries.Count);
-        Assert.AreEqual(raceId, history.Entries[0].RaceId);
-        Assert.AreEqual(entryId, history.Entries[0].EntryId);
-        Assert.AreEqual(1, history.Entries[0].FinishPosition);
+        Assert.AreEqual(horseId, history.History.HorseId);
+        Assert.AreEqual(1, history.History.Entries.Count);
+        Assert.AreEqual(raceId, history.History.Entries[0].RaceId);
+        Assert.AreEqual(entryId, history.History.Entries[0].EntryId);
+        Assert.AreEqual(1, history.History.Entries[0].FinishPosition);
 
         var participationResponse = await _client.GetAsync($"/api/horses/{horseId}/participations");
         Assert.AreEqual(HttpStatusCode.OK, participationResponse.StatusCode);
-        var participations = await participationResponse.Content.ReadFromJsonAsync<ParticipationHistoryDto>(JsonOptions);
+        var participations = await participationResponse.Content.ReadFromJsonAsync<GetHorseParticipationsResponse>(JsonOptions);
         Assert.IsNotNull(participations);
-        Assert.AreEqual("Horse", participations.SubjectType);
-        Assert.AreEqual("レースヒストリーテスト号", participations.Entries.Single().HorseName);
-        Assert.AreEqual(1, participations.Entries.Single().FinishPosition);
+        Assert.AreEqual("Horse", participations.History.SubjectType);
+        Assert.AreEqual("レースヒストリーテスト号", participations.History.Entries.Single().HorseName);
+        Assert.AreEqual(1, participations.History.Entries.Single().FinishPosition);
     }
 
     [TestMethod]
@@ -269,9 +297,9 @@ public class HorseEndpointsTests
     {
         var key = Guid.NewGuid().ToString("N");
         var ownerName = $"株式会社 共有契約馬主{key}";
-        await _client.PostAsJsonAsync("/api/horses", new RegisterHorseRequest(
+        await _client.PostAsJsonAsync("/api/horses", new RegisterHorseRequest(new(
             $"OwnerContractHorse-{key}", $"owner-contract-horse-{key}", "M", null,
-            $"horse-{Guid.NewGuid()}", ownerName), JsonOptions);
+            $"horse-{Guid.NewGuid()}", ownerName)), JsonOptions);
 
         var canonical = OwnerIdentityContract.CreateId(ownerName);
         var legacy = OwnerIdentityContract.CreateLegacyId(ownerName);
@@ -280,28 +308,28 @@ public class HorseEndpointsTests
 
         Assert.AreEqual(HttpStatusCode.OK, canonicalResponse.StatusCode);
         Assert.AreEqual(HttpStatusCode.OK, legacyResponse.StatusCode);
-        var detail = await canonicalResponse.Content.ReadFromJsonAsync<OwnerDetailDto>(JsonOptions);
-        Assert.AreEqual(canonical, detail!.Summary.OwnerId);
+        var detail = await canonicalResponse.Content.ReadFromJsonAsync<GetOwnerResponse>(JsonOptions);
+        Assert.AreEqual(canonical, detail!.Owner.Summary.OwnerId);
     }
 
     [TestMethod]
     public async Task MergeOwner_CombinesAliasesAndRecordsAudit()
     {
         var key = Guid.NewGuid().ToString("N");
-        await _client.PostAsJsonAsync("/api/horses", new RegisterHorseRequest($"OwnerHorseA-{key}", $"owner-horse-a-{key}", "M", null, $"horse-{Guid.NewGuid()}", $"統合先馬主{key}"), JsonOptions);
-        await _client.PostAsJsonAsync("/api/horses", new RegisterHorseRequest($"OwnerHorseB-{key}", $"owner-horse-b-{key}", "F", null, $"horse-{Guid.NewGuid()}", $"統合元馬主{key}"), JsonOptions);
-        var owners = await _client.GetFromJsonAsync<IReadOnlyList<OwnerSummaryDto>>($"/api/owners?query={key}", JsonOptions);
+        await _client.PostAsJsonAsync("/api/horses", new RegisterHorseRequest(new($"OwnerHorseA-{key}", $"owner-horse-a-{key}", "M", null, $"horse-{Guid.NewGuid()}", $"統合先馬主{key}")), JsonOptions);
+        await _client.PostAsJsonAsync("/api/horses", new RegisterHorseRequest(new($"OwnerHorseB-{key}", $"owner-horse-b-{key}", "F", null, $"horse-{Guid.NewGuid()}", $"統合元馬主{key}")), JsonOptions);
+        var owners = await _client.GetFromJsonAsync<SearchOwnersResponse>($"/api/owners?query={key}", JsonOptions);
         Assert.IsNotNull(owners);
-        var target = owners.Single(x => x.DisplayName.StartsWith("統合先馬主", StringComparison.Ordinal));
-        var source = owners.Single(x => x.DisplayName.StartsWith("統合元馬主", StringComparison.Ordinal));
+        var target = owners!.Owners.Single(x => x.DisplayName.StartsWith("統合先馬主", StringComparison.Ordinal));
+        var source = owners.Owners.Single(x => x.DisplayName.StartsWith("統合元馬主", StringComparison.Ordinal));
 
-        var merge = await _client.PostAsJsonAsync($"/api/owners/{target.OwnerId}/merge", new MergeOwnerRequest(source.OwnerId, "表記が同一人物と確認できたため"), JsonOptions);
-        var detail = await _client.GetFromJsonAsync<OwnerDetailDto>($"/api/owners/{target.OwnerId}", JsonOptions);
+        var merge = await _client.PostAsJsonAsync($"/api/owners/{target.OwnerId}/merge", new MergeOwnerRequest { OwnerId = target.OwnerId, Merge = new(source.OwnerId, "表記が同一人物と確認できたため") }, JsonOptions);
+        var detail = await _client.GetFromJsonAsync<GetOwnerResponse>($"/api/owners/{target.OwnerId}", JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.NoContent, merge.StatusCode);
         Assert.IsNotNull(detail);
-        Assert.AreEqual(2, detail.Summary.NameVariants.Count);
-        Assert.IsTrue(detail.MergeHistory.Any(x => x.SourceOwnerId == source.OwnerId && x.Reason.Contains("同一人物", StringComparison.Ordinal)));
+        Assert.AreEqual(2, detail!.Owner.Summary.NameVariants.Count);
+        Assert.IsTrue(detail.Owner.MergeHistory.Any(x => x.SourceOwnerId == source.OwnerId && x.Reason.Contains("同一人物", StringComparison.Ordinal)));
     }
 
     [TestMethod]
@@ -310,22 +338,22 @@ public class HorseEndpointsTests
         var key = Guid.NewGuid().ToString("N");
         await _client.PostAsJsonAsync(
             "/api/horses",
-            new RegisterHorseRequest($"OwnerEditHorse-{key}", $"owner-edit-horse-{key}", "M", null, $"horse-{Guid.NewGuid()}", $"更新前馬主{key}"),
+            new RegisterHorseRequest(new($"OwnerEditHorse-{key}", $"owner-edit-horse-{key}", "M", null, $"horse-{Guid.NewGuid()}", $"更新前馬主{key}")),
             JsonOptions);
-        var owners = await _client.GetFromJsonAsync<IReadOnlyList<OwnerSummaryDto>>($"/api/owners?query={key}", JsonOptions);
+        var owners = await _client.GetFromJsonAsync<SearchOwnersResponse>($"/api/owners?query={key}", JsonOptions);
         Assert.IsNotNull(owners);
-        var owner = owners.Single();
+        var owner = owners!.Owners.Single();
 
         var update = await _client.PutAsJsonAsync(
             $"/api/owners/{owner.OwnerId}",
-            new UpdateOwnerRequest($"更新後馬主{key}", "公式表記の訂正", [$"登録表記馬主{key}"]),
+            new UpdateOwnerRequest { OwnerId = owner.OwnerId, Owner = new($"更新後馬主{key}", "公式表記の訂正", [$"登録表記馬主{key}"]) },
             JsonOptions);
-        var detail = await _client.GetFromJsonAsync<OwnerDetailDto>($"/api/owners/{owner.OwnerId}", JsonOptions);
+        var detail = await _client.GetFromJsonAsync<GetOwnerResponse>($"/api/owners/{owner.OwnerId}", JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.NoContent, update.StatusCode);
         Assert.IsNotNull(detail);
-        Assert.AreEqual($"更新後馬主{key}", detail.Summary.DisplayName);
-        Assert.IsTrue(detail.Summary.NameVariants.Contains($"更新前馬主{key}"));
-        Assert.IsTrue(detail.Summary.NameVariants.Contains($"登録表記馬主{key}"));
+        Assert.AreEqual($"更新後馬主{key}", detail!.Owner.Summary.DisplayName);
+        Assert.IsTrue(detail.Owner.Summary.NameVariants.Contains($"更新前馬主{key}"));
+        Assert.IsTrue(detail.Owner.Summary.NameVariants.Contains($"登録表記馬主{key}"));
     }
 }

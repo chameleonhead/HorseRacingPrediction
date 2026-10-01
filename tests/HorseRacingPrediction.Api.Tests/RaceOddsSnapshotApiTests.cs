@@ -251,7 +251,7 @@ public sealed class RaceOddsSnapshotApiTests
         foreach (var (_, horseId) in entries)
         {
             using var horse = await client.PostAsJsonAsync("/api/horses",
-                new RegisterHorseRequest(horseId, horseId, "M", null, horseId));
+                SubjectRequestFactory.RegisterHorse(horseId, horseId, "M", null, horseId));
             horse.EnsureSuccessStatusCode();
         }
         using var published = await client.PostAsJsonAsync($"/api/races/{raceId}/card/publish",

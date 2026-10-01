@@ -74,29 +74,29 @@ public sealed class SharedOwnerIdentityTests
         Assert.HasCount(2, initialTasks);
         await ExecuteOwnerTasksAsync(http, initialTasks);
 
-        var owners = await http.GetFromJsonAsync<IReadOnlyList<OwnerSummaryDto>>(
+        var ownerResponse = await http.GetFromJsonAsync<SearchOwnersResponse>(
             $"/api/owners?query={key}", JsonOptions);
-        Assert.IsNotNull(owners);
-        var target = owners.Single(x => x.DisplayName == targetName);
-        var source = owners.Single(x => x.DisplayName == sourceName);
+        Assert.IsNotNull(ownerResponse);
+        var target = ownerResponse.Owners.Single(x => x.DisplayName == targetName);
+        var source = ownerResponse.Owners.Single(x => x.DisplayName == sourceName);
         var merge = await http.PostAsJsonAsync($"/api/owners/{target.OwnerId}/merge",
-            new MergeOwnerRequest(source.OwnerId, "同一人物の別表記"), JsonOptions);
+            new MergeOwnerRequest { OwnerId = target.OwnerId, Merge = new(source.OwnerId, "同一人物の別表記") }, JsonOptions);
         Assert.AreEqual(HttpStatusCode.NoContent, merge.StatusCode);
 
         var second = await SaveCardAsync(http, $"second-{key}", [sourceName]);
         var secondTasks = await OwnerTasksAsync(http);
         var secondTask = secondTasks.Single(x => x.Resource.Id == target.OwnerId);
         Assert.AreEqual(target.OwnerId, secondTask.Resource.Id);
-        Assert.AreEqual(1, (await http.GetFromJsonAsync<IReadOnlyList<OwnerSummaryDto>>(
-            $"/api/owners?query={key}", JsonOptions))!.Count);
+        Assert.AreEqual(1, (await http.GetFromJsonAsync<SearchOwnersResponse>(
+            $"/api/owners?query={key}", JsonOptions))!.Owners.Count);
 
-        var merged = await http.GetFromJsonAsync<OwnerDetailDto>(
+        var merged = await http.GetFromJsonAsync<GetOwnerResponse>(
             $"/api/owners/{target.OwnerId}", JsonOptions);
         Assert.IsNotNull(merged);
-        Assert.IsTrue(merged.Summary.NameVariants.Contains(targetName));
-        Assert.IsTrue(merged.Summary.NameVariants.Contains(sourceName));
-        Assert.AreEqual(1, (await http.GetFromJsonAsync<IReadOnlyList<OwnerSummaryDto>>(
-            $"/api/owners?query={key}", JsonOptions))!.Count);
+        Assert.IsTrue(merged.Owner.Summary.NameVariants.Contains(targetName));
+        Assert.IsTrue(merged.Owner.Summary.NameVariants.Contains(sourceName));
+        Assert.AreEqual(1, (await http.GetFromJsonAsync<SearchOwnersResponse>(
+            $"/api/owners?query={key}", JsonOptions))!.Owners.Count);
 
         if (secondTask.Status == CollectionTaskStatus.Ready)
             await ExecuteOwnerTasksAsync(http, [secondTask]);

@@ -58,15 +58,15 @@
     "verificationPassed": true,
     "qualityPassed": true,
     "scopePassed": true,
-    "independentChallenge": "Lead reviewed R1 DTO/body paths, both filters, consumers, source-value preservation, and literal script callers. Three findings were fixed: repair receipt stays flat; context grade unwraps; Collector null-success fallback remains with EnsureSuccessStatusCode. Final gates passed. Two broad API test rewrites were restored and the test scope split to T3-A2.",
+    "independentChallenge": "Lead reviewed R1 DTO/body paths, filters, consumers, source-value preservation, and literal script callers. Three findings were fixed: repair receipt stays flat; context grade unwraps; Collector null-success fallback remains with EnsureSuccessStatusCode. The post-checkpoint F1 review later found that HttpDataCollectionWriteService still used flat core-Races payloads and raw context/profile response roots behind permissive mocks. This escaped defect supersedes the earlier acceptance for the R1 existing-consumer closure; VF003 tracks the reopened adapter-path verification. Two broad API test rewrites were restored and the test scope split to T3-A2.",
     "promoted": false,
-    "escapedDefects": 0,
+    "escapedDefects": 1,
     "retries": 2,
     "leadCorrections": 3,
-    "reviewPasses": 1,
+    "reviewPasses": 2,
     "escalations": 0,
     "reviewMode": "ac-group",
     "detailReviewReason": null,
-    "decision": "accept"
+    "decision": "revise"
   }
 }

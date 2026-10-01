@@ -31,7 +31,7 @@ public sealed class HorseIdentityRepairEndpointsTests
         var targetId = DeterministicIdGenerator.BuildHorseId(name, null);
         var raceId = $"race-{Guid.NewGuid():D}";
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/horses",
-            new RegisterHorseRequest(name, name, null, null, HorseId: targetId))).StatusCode);
+            SubjectRequestFactory.RegisterHorse(name, name, null, null, horseId: targetId))).StatusCode);
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/races",
             new CreateRaceRequest(new(new DateOnly(2026, 9, 20), "TOKYO", 1, "事前補正", raceId)))).StatusCode);
         Assert.AreEqual(HttpStatusCode.OK, (await http.PostAsJsonAsync($"/api/races/{raceId}/card/publish",
@@ -98,7 +98,7 @@ public sealed class HorseIdentityRepairEndpointsTests
         var targetId = DeterministicIdGenerator.BuildHorseId(name, null);
         var raceId = $"race-{Guid.NewGuid():D}";
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/horses",
-            new RegisterHorseRequest(name, name, null, null, HorseId: targetId))).StatusCode);
+            SubjectRequestFactory.RegisterHorse(name, name, null, null, horseId: targetId))).StatusCode);
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/races",
             new CreateRaceRequest(new(new DateOnly(2026, 9, 20), "TOKYO", 2, "一括検証", raceId)))).StatusCode);
         Assert.AreEqual(HttpStatusCode.OK, (await http.PostAsJsonAsync($"/api/races/{raceId}/card/publish",
@@ -139,7 +139,7 @@ public sealed class HorseIdentityRepairEndpointsTests
         var raceId = $"race-{Guid.NewGuid():D}";
         foreach (var (id, name) in new[] { (firstId, firstName), (secondId, secondName) })
             Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/horses",
-                new RegisterHorseRequest(name, name, null, null, HorseId: id))).StatusCode);
+                SubjectRequestFactory.RegisterHorse(name, name, null, null, horseId: id))).StatusCode);
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/races",
             new CreateRaceRequest(new(new DateOnly(2026, 9, 20), "TOKYO", 3, "変更検証", raceId)))).StatusCode);
         Assert.AreEqual(HttpStatusCode.OK, (await http.PostAsJsonAsync($"/api/races/{raceId}/card/publish",
@@ -354,8 +354,8 @@ public sealed class HorseIdentityRepairEndpointsTests
         var sourceUrl = $"https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud00{suffix}/45";
         var targetId = DeterministicIdGenerator.BuildHorseId(name, sourceUrl);
         var raceId = $"race-{Guid.NewGuid()}";
-        await http.PostAsJsonAsync("/api/horses", new RegisterHorseRequest(name, name, null, null, HorseId: sourceId));
-        await http.PostAsJsonAsync("/api/horses", new RegisterHorseRequest(name, name, null, null, HorseId: targetId));
+        await http.PostAsJsonAsync("/api/horses", SubjectRequestFactory.RegisterHorse(name, name, null, null, horseId: sourceId));
+        await http.PostAsJsonAsync("/api/horses", SubjectRequestFactory.RegisterHorse(name, name, null, null, horseId: targetId));
         await http.PostAsJsonAsync("/api/races",
             new CreateRaceRequest(new(new DateOnly(2026, 9, 14), "TOKYO", 2, "統合再収集", raceId)));
         await http.PostAsJsonAsync($"/api/races/{raceId}/card/publish", new PublishRaceCardRequest(new(1)));
@@ -591,9 +591,9 @@ public sealed class HorseIdentityRepairEndpointsTests
         var raceId = $"race-{Guid.NewGuid()}";
 
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/horses",
-            new RegisterHorseRequest(name, name, null, null, HorseId: sourceId))).StatusCode);
+            SubjectRequestFactory.RegisterHorse(name, name, null, null, horseId: sourceId))).StatusCode);
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/horses",
-            new RegisterHorseRequest(name, name, null, null, HorseId: targetId))).StatusCode);
+            SubjectRequestFactory.RegisterHorse(name, name, null, null, horseId: targetId))).StatusCode);
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/races",
             new CreateRaceRequest(new(new DateOnly(2026, 9, 13), "TOKYO", 1, "修復テスト", raceId)))).StatusCode);
         Assert.AreEqual(HttpStatusCode.OK, (await http.PostAsJsonAsync($"/api/races/{raceId}/card/publish",
@@ -657,8 +657,8 @@ public sealed class HorseIdentityRepairEndpointsTests
                 CollectionReason.ManualRefresh, DateTimeOffset.UtcNow));
         var oldProfile = await http.GetAsync($"/api/horses/{sourceId}");
         Assert.AreEqual(HttpStatusCode.OK, oldProfile.StatusCode);
-        var resolved = await oldProfile.Content.ReadFromJsonAsync<HorseRacingPrediction.Contracts.Horses.HorseDto>();
-        Assert.AreEqual(targetId, resolved!.HorseId);
+        var resolved = await oldProfile.Content.ReadFromJsonAsync<HorseRacingPrediction.Contracts.Horses.GetHorseProfileResponse>();
+        Assert.AreEqual(targetId, resolved!.Horse.HorseId);
 
         var second = await http.PostAsJsonAsync("/api/admin/repairs/20260913-jra-horse-identity/apply",
             new ApplyHorseIdentityRepairRequest(candidates.Select(x => x.CandidateId).ToArray()));

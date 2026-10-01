@@ -1,0 +1,3 @@
+namespace HorseRacingPrediction.Contracts.Horses;
+
+public sealed record GetHorseWeightHistoryResponse(HorseWeightHistoryDto WeightHistory);

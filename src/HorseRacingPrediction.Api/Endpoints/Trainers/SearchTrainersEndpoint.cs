@@ -68,7 +68,7 @@ internal static class SearchTrainersEndpoint
                             });
                         }
 
-                        return Results.Ok(ToPagedResponse(
+                        var paged = ToPagedResponse(
                             sorted,
                             page,
                             pageSize,
@@ -77,11 +77,13 @@ internal static class SearchTrainersEndpoint
                                 x.DisplayName,
                                 x.NormalizedName,
                                 x.AffiliationCode,
-                                x.Aliases.Count)));
+                                x.Aliases.Count));
+                        return Results.Ok(new SearchTrainersResponse(paged.Items,
+                            new HorseRacingPrediction.Contracts.Common.PaginationDto(paged.Page, paged.PageSize, paged.TotalCount, paged.TotalPages)));
                     })
                     .WithName("SearchTrainers")
                     .WithTags("Trainer API")
-                    .Produces<PagedResponse<TrainerSummaryDto>>(StatusCodes.Status200OK)
+                    .Produces<SearchTrainersResponse>(StatusCodes.Status200OK)
                     .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest);
     }
 }

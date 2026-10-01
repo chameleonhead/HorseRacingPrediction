@@ -16,9 +16,6 @@ namespace HorseRacingPrediction.Api;
 
 public sealed record OwnerIdentityRecoveryCandidate(Guid NotificationId, Guid TaskId, string SourceId,
     string? Name, string? RaceId, string? TargetId, string? Fingerprint, string? BlockingReason);
-public sealed record OwnerIdentityRecoverySelection(Guid NotificationId, string Fingerprint);
-public sealed record OwnerIdentityRecoveryRequest(IReadOnlyList<OwnerIdentityRecoverySelection> Items);
-
 internal static class OwnerIdentityRecoveryService
 {
     internal const string OwnerIdentityRecoveryId = "owner-identity-contract-v1";

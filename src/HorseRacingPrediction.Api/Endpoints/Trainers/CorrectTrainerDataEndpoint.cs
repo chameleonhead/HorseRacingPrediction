@@ -15,12 +15,14 @@ internal static class CorrectTrainerDataEndpoint
                     [SwaggerOperation(Summary = "Correct trainer data", Description = "Corrects trainer master data with an optional audit reason")]
         async (string trainerId, CorrectTrainerDataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        if (request.Trainer is null) return Results.BadRequest(new[] { "Trainer payload is required." });
+                        var correction = request.Trainer;
                         var command = new CorrectTrainerDataCommand(
                             new TrainerId(trainerId),
-                            request.DisplayName,
-                            request.NormalizedName,
-                            request.AffiliationCode,
-                            request.Reason);
+                            correction.DisplayName,
+                            correction.NormalizedName,
+                            correction.AffiliationCode,
+                            correction.Reason);
 
                         var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                         return result.IsSuccess

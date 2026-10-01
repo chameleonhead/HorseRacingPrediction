@@ -1,0 +1,13 @@
+namespace HorseRacingPrediction.Contracts.Horses;
+
+public sealed record UpdateHorseProfileInputDto(
+    string? RegisteredName,
+    string? NormalizedName,
+    string? SexCode,
+    DateOnly? BirthDate,
+    string? OwnerName = null,
+    string? BreederName = null,
+    string? SireName = null,
+    string? DamName = null,
+    string? DamsireName = null,
+    string? CoatColor = null);

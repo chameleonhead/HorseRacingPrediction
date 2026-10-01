@@ -15,12 +15,14 @@ internal static class CorrectJockeyDataEndpoint
                     [SwaggerOperation(Summary = "Correct jockey data", Description = "Corrects jockey master data with an optional audit reason")]
         async (string jockeyId, CorrectJockeyDataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        if (request.Jockey is null) return Results.BadRequest(new[] { "Jockey payload is required." });
+                        var correction = request.Jockey;
                         var command = new CorrectJockeyDataCommand(
                             new JockeyId(jockeyId),
-                            request.DisplayName,
-                            request.NormalizedName,
-                            request.AffiliationCode,
-                            request.Reason);
+                            correction.DisplayName,
+                            correction.NormalizedName,
+                            correction.AffiliationCode,
+                            correction.Reason);
 
                         var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                         return result.IsSuccess

@@ -211,8 +211,11 @@ else
         updating = true;
         try
         {
-            var result = await Api.UpdateTrainerProfileAsync(TrainerId, new UpdateTrainerProfileRequest(
-                editDisplayName, editNormalizedName, editAffiliationCode));
+            var result = await Api.UpdateTrainerProfileAsync(TrainerId, new UpdateTrainerProfileRequest
+            {
+                TrainerId = TrainerId,
+                Trainer = new UpdateTrainerProfileInputDto(editDisplayName, editNormalizedName, editAffiliationCode)
+            });
             updateErrors = result.Success ? Array.Empty<string>() : result.Errors;
             if (result.Success) await LoadAsync();
         }
@@ -233,8 +236,11 @@ else
         mergingAlias = true;
         try
         {
-            var result = await Api.MergeTrainerAliasAsync(TrainerId, new MergeAliasRequest(
-                aliasType!, aliasValue!, aliasSourceName!, aliasIsPrimary));
+            var result = await Api.MergeTrainerAliasAsync(TrainerId, new MergeTrainerAliasRequest
+            {
+                TrainerId = TrainerId,
+                Alias = new MergeAliasInputDto(aliasType!, aliasValue!, aliasSourceName!, aliasIsPrimary)
+            });
             aliasErrors = result.Success ? Array.Empty<string>() : result.Errors;
             if (result.Success)
             {
@@ -253,8 +259,11 @@ else
         correcting = true;
         try
         {
-            var result = await Api.CorrectTrainerDataAsync(TrainerId, new CorrectTrainerDataRequest(
-                correctDisplayName, correctNormalizedName, correctAffiliationCode, correctReason));
+            var result = await Api.CorrectTrainerDataAsync(TrainerId, new CorrectTrainerDataRequest
+            {
+                TrainerId = TrainerId,
+                Trainer = new CorrectTrainerDataInputDto(correctDisplayName, correctNormalizedName, correctAffiliationCode, correctReason)
+            });
             correctErrors = result.Success ? Array.Empty<string>() : result.Errors;
             correctArmed = false;
             if (result.Success)

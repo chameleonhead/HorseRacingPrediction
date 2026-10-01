@@ -13,8 +13,9 @@ internal static class GetTrainerProfileEndpoint
     {
         group.MapGet("/trainers/{trainerId}",
                     [SwaggerOperation(Summary = "Get trainer profile", Description = "Returns trainer profile read model")]
-        async (string trainerId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async ([AsParameters] GetTrainerProfileRequest request, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
                     {
+                        var trainerId = request.TrainerId;
                         var query = new ReadModelByIdQuery<TrainerReadModel>(trainerId);
                         var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
 
@@ -32,11 +33,11 @@ internal static class GetTrainerProfileEndpoint
                                 .ToList()
                         };
 
-                        return Results.Ok(response);
+                        return Results.Ok(new GetTrainerProfileResponse(response));
                     })
                     .WithName("GetTrainerProfile")
                     .WithTags("Trainer API")
-                    .Produces<TrainerDto>(StatusCodes.Status200OK)
+                    .Produces<GetTrainerProfileResponse>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

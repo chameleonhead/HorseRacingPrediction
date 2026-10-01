@@ -1,14 +1,11 @@
+using System.Text.Json.Serialization;
 
 namespace HorseRacingPrediction.Contracts.Horses;
 
-public sealed record UpdateHorseProfileRequest(
-    string? RegisteredName,
-    string? NormalizedName,
-    string? SexCode,
-    DateOnly? BirthDate,
-    string? OwnerName = null,
-    string? BreederName = null,
-    string? SireName = null,
-    string? DamName = null,
-    string? DamsireName = null,
-    string? CoatColor = null);
+public sealed record UpdateHorseProfileRequest
+{
+    [JsonIgnore]
+    public string HorseId { get; init; } = string.Empty;
+
+    public UpdateHorseProfileInputDto? Horse { get; init; }
+}

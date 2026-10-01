@@ -122,8 +122,11 @@ else
         updating = true;
         try
         {
-            var result = await Api.UpdateJockeyProfileAsync(JockeyId, new UpdateJockeyProfileRequest(
-                editDisplayName, editNormalizedName, editAffiliationCode));
+            var result = await Api.UpdateJockeyProfileAsync(JockeyId, new UpdateJockeyProfileRequest
+            {
+                JockeyId = JockeyId,
+                Jockey = new UpdateJockeyProfileInputDto(editDisplayName, editNormalizedName, editAffiliationCode)
+            });
             updateErrors = result.Success ? Array.Empty<string>() : result.Errors;
             if (result.Success) Back();
         }
@@ -144,8 +147,11 @@ else
         mergingAlias = true;
         try
         {
-            var result = await Api.MergeJockeyAliasAsync(JockeyId, new MergeAliasRequest(
-                aliasType!, aliasValue!, aliasSourceName!, aliasIsPrimary));
+            var result = await Api.MergeJockeyAliasAsync(JockeyId, new MergeJockeyAliasRequest
+            {
+                JockeyId = JockeyId,
+                Alias = new MergeAliasInputDto(aliasType!, aliasValue!, aliasSourceName!, aliasIsPrimary)
+            });
             aliasErrors = result.Success ? Array.Empty<string>() : result.Errors;
             if (result.Success)
             {
@@ -164,8 +170,11 @@ else
         correcting = true;
         try
         {
-            var result = await Api.CorrectJockeyDataAsync(JockeyId, new CorrectJockeyDataRequest(
-                correctDisplayName, correctNormalizedName, correctAffiliationCode, correctReason));
+            var result = await Api.CorrectJockeyDataAsync(JockeyId, new CorrectJockeyDataRequest
+            {
+                JockeyId = JockeyId,
+                Jockey = new CorrectJockeyDataInputDto(correctDisplayName, correctNormalizedName, correctAffiliationCode, correctReason)
+            });
             correctErrors = result.Success ? Array.Empty<string>() : result.Errors;
             if (result.Success)
             {

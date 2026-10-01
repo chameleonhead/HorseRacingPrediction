@@ -58,7 +58,10 @@ public sealed class HttpRaceQueryService : IRaceQueryService
             return null;
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<HorseDto>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        var result = await response.Content
+            .ReadFromJsonAsync<GetHorseProfileResponse>(JsonOptions, cancellationToken)
+            .ConfigureAwait(false);
+        return result?.Horse;
     }
 
     public async Task<JockeyDto?> GetJockeyAsync(string jockeyId, CancellationToken cancellationToken = default)
@@ -68,7 +71,10 @@ public sealed class HttpRaceQueryService : IRaceQueryService
             return null;
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<JockeyDto>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        var result = await response.Content
+            .ReadFromJsonAsync<GetJockeyProfileResponse>(JsonOptions, cancellationToken)
+            .ConfigureAwait(false);
+        return result?.Jockey;
     }
 
     public async Task<TrainerDto?> GetTrainerAsync(string trainerId, CancellationToken cancellationToken = default)
@@ -78,7 +84,10 @@ public sealed class HttpRaceQueryService : IRaceQueryService
             return null;
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<TrainerDto>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        var result = await response.Content
+            .ReadFromJsonAsync<GetTrainerProfileResponse>(JsonOptions, cancellationToken)
+            .ConfigureAwait(false);
+        return result?.Trainer;
     }
 
     public async Task<MemoBySubjectDto?> GetMemosBySubjectAsync(string subjectType, string subjectId, CancellationToken cancellationToken = default)

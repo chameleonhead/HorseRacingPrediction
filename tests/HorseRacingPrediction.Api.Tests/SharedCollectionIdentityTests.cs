@@ -46,8 +46,8 @@ public sealed class SharedCollectionIdentityTests
         Assert.AreEqual(oldEntry.HorseId, entry.HorseId);
         Assert.AreEqual("幸 英明", entry.JockeyName);
         Assert.AreNotEqual(oldEntry.JockeyId, entry.JockeyId);
-        var oldMaster = await http.GetFromJsonAsync<JockeyDto>($"/api/jockeys/{oldEntry.JockeyId}");
-        Assert.AreEqual("幸 英明 106 M", oldMaster!.DisplayName);
+        var oldMaster = await http.GetFromJsonAsync<GetJockeyProfileResponse>($"/api/jockeys/{oldEntry.JockeyId}");
+        Assert.AreEqual("幸 英明 106 M", oldMaster!.Jockey.DisplayName);
     }
 
     [TestMethod]
@@ -82,27 +82,27 @@ public sealed class SharedCollectionIdentityTests
         Assert.IsNotNull(unrelatedLease);
         Assert.IsTrue(await store.CompleteAttemptAsync(unrelatedLease.TaskId, unrelatedLease.LeaseToken, DateTimeOffset.UtcNow,
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "OwnerNotRegistered")));
-        var candidates = await http.GetFromJsonAsync<OwnerIdentityRecoveryCandidate[]>("/api/admin/repairs/owner-identity");
-        var candidate = candidates!.Single(x => x.TaskId == original.TaskId);
-        var blocked = candidates!.Single(x => x.TaskId == unrelated.TaskId);
+        var candidates = await http.GetFromJsonAsync<PreviewOwnerIdentityRecoveryResponse>("/api/admin/repairs/owner-identity");
+        var candidate = candidates!.Candidates.Single(x => x.TaskId == original.TaskId);
+        var blocked = candidates.Candidates.Single(x => x.TaskId == unrelated.TaskId);
         Assert.AreEqual("NotKnownFaultyOwnerId", blocked.BlockingReason);
         Assert.IsNull(candidate.BlockingReason);
         Assert.AreEqual(target, candidate.TargetId);
-        var request = new OwnerIdentityRecoveryRequest([new(candidate.NotificationId, candidate.Fingerprint!)]);
+        var request = new ExecuteOwnerIdentityRecoveryRequest([new(candidate.NotificationId, candidate.Fingerprint!)]);
         const string path = "/api/admin/repairs/owner-identity/execute";
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync(path, request)).StatusCode);
         await store.SetPausedAsync(true, "test recovery", now);
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync(path,
-            new OwnerIdentityRecoveryRequest([request.Items[0], new(blocked.NotificationId, "unrelated")]))).StatusCode);
+            new ExecuteOwnerIdentityRecoveryRequest([request.Items[0], new(blocked.NotificationId, "unrelated")]))).StatusCode);
         Assert.IsEmpty(await store.GetBatchResourceStatusesAsync($"owner-identity-contract-v1:{candidate.NotificationId:N}"));
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync(path,
-            new OwnerIdentityRecoveryRequest([new(candidate.NotificationId, "stale")]))).StatusCode);
+            new ExecuteOwnerIdentityRecoveryRequest([new(candidate.NotificationId, "stale")]))).StatusCode);
         var applied = await http.PostAsJsonAsync(path, request);
         applied.EnsureSuccessStatusCode();
-        var first = (await applied.Content.ReadFromJsonAsync<CollectionRequestReceipt[]>())!.Single();
+        var first = (await applied.Content.ReadFromJsonAsync<ExecuteOwnerIdentityRecoveryResponse>())!.Receipts.Single();
         var replay = await http.PostAsJsonAsync(path, request);
         replay.EnsureSuccessStatusCode();
-        Assert.AreEqual(first.RequestId, (await replay.Content.ReadFromJsonAsync<CollectionRequestReceipt[]>())!.Single().RequestId);
+        Assert.AreEqual(first.RequestId, (await replay.Content.ReadFromJsonAsync<ExecuteOwnerIdentityRecoveryResponse>())!.Receipts.Single().RequestId);
         var history = await store.GetResourceDetailAsync(source, definition);
         Assert.AreEqual(CollectionAttemptResult.ResourceNotFound, history!.Attempts.Single().Result);
         Assert.AreEqual(CollectionFailureResolutionStatus.Superseded, history.Failures!.Single().ResolutionStatus);
@@ -173,23 +173,23 @@ public sealed class SharedCollectionIdentityTests
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         const string raw = "マル外 ＡＢＣ";
         var legacy = DeterministicIdGenerator.BuildEntityId("horse", DeterministicIdGenerator.NormalizeKey(raw));
-        (await http.PostAsJsonAsync("/api/horses", new RegisterHorseRequest(raw, raw, "M", new(2024, 1, 1), legacy))).EnsureSuccessStatusCode();
+        (await http.PostAsJsonAsync("/api/horses", SubjectRequestFactory.RegisterHorse(raw, raw, "M", new(2024, 1, 1), legacy))).EnsureSuccessStatusCode();
         Assert.AreEqual(DeterministicIdGenerator.BuildHorseId(raw), DeterministicIdGenerator.BuildHorseId("ABC"));
         var resolved = await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("ABC", BirthDate: new(2024, 1, 1)));
         resolved.EnsureSuccessStatusCode();
         Assert.AreEqual(legacy, (await resolved.Content.ReadFromJsonAsync<ResolvedIdentityDto>())!.Id);
-        (await http.PutAsJsonAsync($"/api/horses/{legacy}", new UpdateHorseProfileRequest("ABC", "ABC", "M", new(2024, 1, 1)))).EnsureSuccessStatusCode();
+        (await http.PutAsJsonAsync($"/api/horses/{legacy}", new UpdateHorseProfileRequest { HorseId = legacy, Horse = new("ABC", "ABC", "M", new(2024, 1, 1)) })).EnsureSuccessStatusCode();
         var afterNameCorrection = await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("ABC"));
         afterNameCorrection.EnsureSuccessStatusCode();
         Assert.AreEqual(legacy, (await afterNameCorrection.Content.ReadFromJsonAsync<ResolvedIdentityDto>())!.Id);
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("ABC", BirthDate: new(2023, 1, 1)))).StatusCode);
         Assert.AreEqual(HttpStatusCode.UnprocessableEntity, (await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("ABC", "https://www.jra.go.jp/JRADB/accessU.html?CNAME=other"))).StatusCode);
-        (await http.PostAsJsonAsync("/api/horses", new RegisterHorseRequest("ABC", "ABC", "M", new(2020, 1, 1), DeterministicIdGenerator.BuildHorseId("ABC")))).EnsureSuccessStatusCode();
+        (await http.PostAsJsonAsync("/api/horses", SubjectRequestFactory.RegisterHorse("ABC", "ABC", "M", new(2020, 1, 1), DeterministicIdGenerator.BuildHorseId("ABC")))).EnsureSuccessStatusCode();
         var ambiguous = await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("ABC"));
         Assert.AreEqual(HttpStatusCode.UnprocessableEntity, ambiguous.StatusCode);
         Assert.AreEqual("AmbiguousHorseIdentity", (await ambiguous.Content.ReadFromJsonAsync<Dictionary<string, string>>())!["code"]);
         var collisionId = DeterministicIdGenerator.BuildHorseId("ABC-DEF");
-        (await http.PostAsJsonAsync("/api/horses", new RegisterHorseRequest("ABC-DEF", "ABC-DEF", null, null, collisionId))).EnsureSuccessStatusCode();
+        (await http.PostAsJsonAsync("/api/horses", SubjectRequestFactory.RegisterHorse("ABC-DEF", "ABC-DEF", null, null, collisionId))).EnsureSuccessStatusCode();
         Assert.AreEqual(collisionId, DeterministicIdGenerator.BuildHorseId("ABCDEF"));
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("ABCDEF"))).StatusCode);
     }
@@ -203,7 +203,7 @@ public sealed class SharedCollectionIdentityTests
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var id = "horse-" + Guid.NewGuid();
         const string source = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024123456/00";
-        (await http.PostAsJsonAsync("/api/horses", new RegisterHorseRequest("サンプル", "サンプル", "M", new(2024, 1, 1), id))).EnsureSuccessStatusCode();
+        (await http.PostAsJsonAsync("/api/horses", SubjectRequestFactory.RegisterHorse("サンプル", "サンプル", "M", new(2024, 1, 1), id))).EnsureSuccessStatusCode();
         var path = $"/api/v2/admin/subjects/Horse/{id}/profile";
         var profile = new JraSubjectProfileDto("Horse", "マル外 サンプル", source, source,
             new() { ["生年月日"] = "2024年1月1日" }, DateTimeOffset.UtcNow);

@@ -82,12 +82,12 @@ public sealed class SubjectNameNormalizationEndpointsTests
         var secondResponse = await _client.PostAsJsonAsync(
             "/api/admin/repairs/subject-name-normalization/apply", request);
         var second = await secondResponse.Content.ReadFromJsonAsync<SubjectNameNormalizationApplyResultDto>();
-        var profile = await _client.GetFromJsonAsync<TrainerDto>($"/api/trainers/{trainerId}");
+        var profile = await _client.GetFromJsonAsync<GetTrainerProfileResponse>($"/api/trainers/{trainerId}");
 
         Assert.AreEqual(HttpStatusCode.OK, firstResponse.StatusCode);
         Assert.AreEqual(1, first!.AppliedCount);
-        Assert.AreEqual("適用 花子", profile!.DisplayName);
-        Assert.AreEqual("適用花子", profile.NormalizedName);
+        Assert.AreEqual("適用 花子", profile!.Trainer.DisplayName);
+        Assert.AreEqual("適用花子", profile.Trainer.NormalizedName);
         Assert.AreEqual(1, second!.SkippedCount);
         Assert.AreEqual("すでに正規化されています。", second.Items.Single().Message);
     }
@@ -99,7 +99,7 @@ public sealed class SubjectNameNormalizationEndpointsTests
         await RegisterTrainerAsync(trainerId, "変更 前（栗東）", "before");
         var candidate = (await SearchAsync(CollectionResourceType.Trainer, trainerId)).Items.Single();
         using var correction = await _client.PatchAsJsonAsync($"/api/trainers/{trainerId}",
-            new CorrectTrainerDataRequest("変更 後（栗東）", "after", null, "並行更新"));
+            new CorrectTrainerDataRequest { TrainerId = trainerId, Trainer = new("変更 後（栗東）", "after", null, "並行更新") });
         correction.EnsureSuccessStatusCode();
 
         var response = await _client.PostAsJsonAsync(
@@ -130,13 +130,13 @@ public sealed class SubjectNameNormalizationEndpointsTests
 
     private async Task RegisterHorseAsync(string id, string display, string normalized) =>
         (await _client.PostAsJsonAsync("/api/horses",
-            new RegisterHorseRequest(display, normalized, null, null, HorseId: id))).EnsureSuccessStatusCode();
+            SubjectRequestFactory.RegisterHorse(display, normalized, null, null, horseId: id))).EnsureSuccessStatusCode();
 
     private async Task RegisterJockeyAsync(string id, string display, string normalized) =>
         (await _client.PostAsJsonAsync("/api/jockeys",
-            new RegisterJockeyRequest(display, normalized, null, id))).EnsureSuccessStatusCode();
+            SubjectRequestFactory.RegisterJockey(display, normalized, null, id))).EnsureSuccessStatusCode();
 
     private async Task RegisterTrainerAsync(string id, string display, string normalized) =>
         (await _client.PostAsJsonAsync("/api/trainers",
-            new RegisterTrainerRequest(display, normalized, null, id))).EnsureSuccessStatusCode();
+            SubjectRequestFactory.RegisterTrainer(display, normalized, null, id))).EnsureSuccessStatusCode();
 }

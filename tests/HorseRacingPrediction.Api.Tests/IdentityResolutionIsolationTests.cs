@@ -28,7 +28,7 @@ public sealed class IdentityResolutionIsolationTests
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         const string source = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002014110060/B1";
         var parentId = "horse-" + Guid.NewGuid();
-        (await http.PostAsJsonAsync("/api/horses", new RegisterHorseRequest("マテラスカイ", "マテラスカイ", "M", new(2014, 3, 18), parentId))).EnsureSuccessStatusCode();
+        (await http.PostAsJsonAsync("/api/horses", SubjectRequestFactory.RegisterHorse("マテラスカイ", "マテラスカイ", "M", new(2014, 3, 18), parentId))).EnsureSuccessStatusCode();
         var profile = new JraSubjectProfileDto("Horse", "マテラスカイ", source, source,
             new() { ["生年月日"] = "2014年3月18日" }, DateTimeOffset.UtcNow);
         await new JraSubjectProfileApiClient(http).SaveAsync("Horse", parentId, profile, CancellationToken.None);

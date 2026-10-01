@@ -14,15 +14,17 @@ internal static class GetJockeyParticipationsEndpoint
     internal static void Map(RouteGroupBuilder group)
     {
         group.MapGet("/jockeys/{jockeyId}/participations",
-                    async (string jockeyId, int? take, int? skip, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
+                    async ([AsParameters] HorseRacingPrediction.Contracts.Jockeys.GetJockeyParticipationsRequest request, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
                     {
+                        var jockeyId = request.JockeyId;
                         using var dbContext = dbContextProvider.CreateContext();
                         if (!await dbContext.Jockeys.AsNoTracking().AnyAsync(x => x.JockeyId == jockeyId, cancellationToken).ConfigureAwait(false)) return Results.NotFound();
-                        return Results.Ok(await BuildParticipationHistoryAsync("Jockey", jockeyId, dbContext, take, skip, cancellationToken).ConfigureAwait(false));
+                        var history = await BuildParticipationHistoryAsync("Jockey", jockeyId, dbContext, request.Take, request.Skip, cancellationToken).ConfigureAwait(false);
+                        return Results.Ok(new HorseRacingPrediction.Contracts.Jockeys.GetJockeyParticipationsResponse(history));
                     })
                     .WithName("GetJockeyParticipations")
                     .WithTags("Jockey API")
-                    .Produces<ParticipationHistoryDto>(StatusCodes.Status200OK)
+                    .Produces<HorseRacingPrediction.Contracts.Jockeys.GetJockeyParticipationsResponse>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

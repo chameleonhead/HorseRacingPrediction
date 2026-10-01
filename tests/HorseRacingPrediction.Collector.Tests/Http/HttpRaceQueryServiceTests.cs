@@ -57,6 +57,38 @@ public sealed class HttpRaceQueryServiceTests
     }
 
     [TestMethod]
+    public async Task GetSubjectProfilesAsync_UnwrapsTypedProfileResponses()
+    {
+        var handler = new StubHttpMessageHandler();
+        handler.Add(HttpMethod.Get, "/api/horses/horse-001", new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = JsonContent.Create(new { horse = new { horseId = "horse-001", registeredName = "テスト馬" } })
+        });
+        handler.Add(HttpMethod.Get, "/api/jockeys/jockey-001", new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = JsonContent.Create(new { jockey = new { jockeyId = "jockey-001", displayName = "テスト騎手" } })
+        });
+        handler.Add(HttpMethod.Get, "/api/trainers/trainer-001", new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = JsonContent.Create(new { trainer = new { trainerId = "trainer-001", displayName = "テスト調教師" } })
+        });
+
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        var service = new HttpRaceQueryService(httpClient);
+
+        var horse = await service.GetHorseAsync("horse-001");
+        var jockey = await service.GetJockeyAsync("jockey-001");
+        var trainer = await service.GetTrainerAsync("trainer-001");
+
+        Assert.AreEqual("horse-001", horse?.HorseId);
+        Assert.AreEqual("テスト馬", horse?.RegisteredName);
+        Assert.AreEqual("jockey-001", jockey?.JockeyId);
+        Assert.AreEqual("テスト騎手", jockey?.DisplayName);
+        Assert.AreEqual("trainer-001", trainer?.TrainerId);
+        Assert.AreEqual("テスト調教師", trainer?.DisplayName);
+    }
+
+    [TestMethod]
     public async Task GetMemosBySubjectAsync_WhenFound_PreservesSnapshotFieldsAndListOrder()
     {
         var handler = new StubHttpMessageHandler();

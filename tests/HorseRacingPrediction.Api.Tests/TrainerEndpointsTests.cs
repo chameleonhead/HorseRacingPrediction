@@ -36,7 +36,7 @@ public class TrainerEndpointsTests
     public async Task RegisterTrainer_ReturnsCreated()
     {
         var trainerId = $"trainer-{Guid.NewGuid()}";
-        var request = new RegisterTrainerRequest("池江泰寿", "ikejayasutoshi", "JRA", trainerId);
+        var request = SubjectRequestFactory.RegisterTrainer("池江泰寿", "ikejayasutoshi", "JRA", trainerId);
 
         var response = await _client.PostAsJsonAsync("/api/trainers", request, JsonOptions);
 
@@ -49,18 +49,18 @@ public class TrainerEndpointsTests
         var trainerId = $"trainer-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/trainers",
-            new RegisterTrainerRequest("国枝栄", "kunieda", "JRA", trainerId),
+            SubjectRequestFactory.RegisterTrainer("国枝栄", "kunieda", "JRA", trainerId),
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/trainers/{trainerId}");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        var profile = await response.Content.ReadFromJsonAsync<TrainerDto>(JsonOptions);
+        var profile = await response.Content.ReadFromJsonAsync<GetTrainerProfileResponse>(JsonOptions);
         Assert.IsNotNull(profile);
-        Assert.AreEqual(trainerId, profile.TrainerId);
-        Assert.AreEqual("国枝栄", profile.DisplayName);
-        Assert.AreEqual("kunieda", profile.NormalizedName);
-        Assert.AreEqual("JRA", profile.AffiliationCode);
+        Assert.AreEqual(trainerId, profile.Trainer.TrainerId);
+        Assert.AreEqual("国枝栄", profile.Trainer.DisplayName);
+        Assert.AreEqual("kunieda", profile.Trainer.NormalizedName);
+        Assert.AreEqual("JRA", profile.Trainer.AffiliationCode);
     }
 
     [TestMethod]
@@ -72,23 +72,23 @@ public class TrainerEndpointsTests
 
         await _client.PostAsJsonAsync(
             "/api/trainers",
-            new RegisterTrainerRequest($"SearchTrainerA-{key}", $"search-trainer-a-{key}", "JRA", trainerId1),
+            SubjectRequestFactory.RegisterTrainer($"SearchTrainerA-{key}", $"search-trainer-a-{key}", "JRA", trainerId1),
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/trainers",
-            new RegisterTrainerRequest($"SearchTrainerB-{key}", $"search-trainer-b-{key}", "JRA", trainerId2),
+            SubjectRequestFactory.RegisterTrainer($"SearchTrainerB-{key}", $"search-trainer-b-{key}", "JRA", trainerId2),
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/trainers?query=SearchTrainer&affiliationCode=JRA&page=2&pageSize=1&sortBy=displayName&sortDescending=false");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<TrainerSummaryDto>>(JsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<SearchTrainersResponse>(JsonOptions);
         Assert.IsNotNull(result);
-        Assert.AreEqual(2, result.TotalCount);
-        Assert.AreEqual(2, result.TotalPages);
-        Assert.AreEqual(1, result.Items.Count);
-        Assert.AreEqual(trainerId2, result.Items[0].TrainerId);
+        Assert.AreEqual(2, result.Pagination.TotalCount);
+        Assert.AreEqual(2, result.Pagination.TotalPages);
+        Assert.AreEqual(1, result.Trainers.Count);
+        Assert.AreEqual(trainerId2, result.Trainers[0].TrainerId);
     }
 
     [TestMethod]
@@ -97,12 +97,12 @@ public class TrainerEndpointsTests
         var trainerId = $"trainer-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/trainers",
-            new RegisterTrainerRequest("テスト調教師", "testtrainer", null, trainerId),
+            SubjectRequestFactory.RegisterTrainer("テスト調教師", "testtrainer", null, trainerId),
             JsonOptions);
 
         var response = await _client.PutAsJsonAsync(
             $"/api/trainers/{trainerId}",
-            new UpdateTrainerProfileRequest(null, "testtrainer-updated", "JRA"),
+            new UpdateTrainerProfileRequest { TrainerId = trainerId, Trainer = new(null, "testtrainer-updated", "JRA") },
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -113,19 +113,19 @@ public class TrainerEndpointsTests
     {
         var trainerId = $"trainer-{Guid.NewGuid()}";
         var response = await _client.PutAsJsonAsync($"/api/trainers/{trainerId}",
-            new UpdateTrainerProfileRequest("新規調教師", "新規調教師", "JRA"), JsonOptions);
-        var profile = await _client.GetFromJsonAsync<TrainerDto>($"/api/trainers/{trainerId}", JsonOptions);
+            new UpdateTrainerProfileRequest { TrainerId = trainerId, Trainer = new("新規調教師", "新規調教師", "JRA") }, JsonOptions);
+        var profile = await _client.GetFromJsonAsync<GetTrainerProfileResponse>($"/api/trainers/{trainerId}", JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsNotNull(profile);
-        Assert.AreEqual("新規調教師", profile.DisplayName);
+        Assert.AreEqual("新規調教師", profile.Trainer.DisplayName);
     }
 
     [TestMethod]
     public async Task UpdateTrainerProfile_ConcurrentReplay_AddsOneEvent()
     {
         var trainerId = $"trainer-{Guid.NewGuid()}";
-        var request = new UpdateTrainerProfileRequest("同時調教師", "同時調教師", "JRA");
+        var request = new UpdateTrainerProfileRequest { TrainerId = trainerId, Trainer = new("同時調教師", "同時調教師", "JRA") };
 
         var responses = await Task.WhenAll(
             _client.PutAsJsonAsync($"/api/trainers/{trainerId}", request, JsonOptions),
@@ -149,12 +149,12 @@ public class TrainerEndpointsTests
         var trainerId = $"trainer-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/trainers",
-            new RegisterTrainerRequest("藤沢和雄", "fujisawakatsuo", "JRA", trainerId),
+            SubjectRequestFactory.RegisterTrainer("藤沢和雄", "fujisawakatsuo", "JRA", trainerId),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
             $"/api/trainers/{trainerId}/aliases",
-            new MergeAliasRequest("JRA", "T00456", "JRA-DATA", true),
+            new MergeTrainerAliasRequest { TrainerId = trainerId, Alias = new("JRA", "T00456", "JRA-DATA", true) },
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -166,12 +166,12 @@ public class TrainerEndpointsTests
         var trainerId = $"trainer-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/trainers",
-            new RegisterTrainerRequest("テスト調教師", "testtrainer", null, trainerId),
+            SubjectRequestFactory.RegisterTrainer("テスト調教師", "testtrainer", null, trainerId),
             JsonOptions);
 
         var response = await _client.PatchAsJsonAsync(
             $"/api/trainers/{trainerId}",
-            new CorrectTrainerDataRequest(null, "testtrainer-fixed", "JRA", "名前誤り修正"),
+            new CorrectTrainerDataRequest { TrainerId = trainerId, Trainer = new(null, "testtrainer-fixed", "JRA", "名前誤り修正") },
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);

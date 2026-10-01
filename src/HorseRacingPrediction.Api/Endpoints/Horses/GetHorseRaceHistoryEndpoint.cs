@@ -15,20 +15,21 @@ internal static class GetHorseRaceHistoryEndpoint
     {
         group.MapGet("/horses/{horseId}/race-history",
                     [SwaggerOperation(Summary = "Get horse race history", Description = "Returns race history read model for a horse")]
-        async (string horseId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async ([AsParameters] ApiContracts.Horses.GetHorseRaceHistoryRequest request, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
                     {
+                        var horseId = request.HorseId;
                         var query = new ReadModelByIdQuery<AppReadModels.HorseRaceHistoryReadModel>(horseId);
                         var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
 
                         if (readModel is null || string.IsNullOrEmpty(readModel.HorseId))
                             return Results.NotFound();
 
-                        return Results.Ok(ToAgentHorseRaceHistory(readModel));
+                        return Results.Ok(new ApiContracts.Horses.GetHorseRaceHistoryResponse(ToAgentHorseRaceHistory(readModel)));
                     })
                     .AddEndpointFilter<RacePredictionReadEndpointFilter>()
                     .WithName("GetHorseRaceHistory")
                     .WithTags("Horse API")
-                    .Produces<HorseRacingPrediction.Contracts.Horses.HorseRaceHistoryDto>(StatusCodes.Status200OK)
+                    .Produces<ApiContracts.Horses.GetHorseRaceHistoryResponse>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

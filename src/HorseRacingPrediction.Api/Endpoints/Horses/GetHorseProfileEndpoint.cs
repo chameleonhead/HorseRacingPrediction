@@ -17,9 +17,10 @@ internal static class GetHorseProfileEndpoint
     {
         group.MapGet("/horses/{horseId}",
                     [SwaggerOperation(Summary = "Get horse profile", Description = "Returns horse profile read model")]
-        async (string horseId, IQueryProcessor queryProcessor,
+        async ([AsParameters] ApiContracts.Horses.GetHorseProfileRequest request, IQueryProcessor queryProcessor,
                         IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
                     {
+                        var horseId = request.HorseId;
                         using (var dbContext = dbContextProvider.CreateContext())
                         {
                             var redirect = await dbContext.HorseIdentityRepairRedirects.AsNoTracking()
@@ -32,11 +33,11 @@ internal static class GetHorseProfileEndpoint
                         if (readModel is null || string.IsNullOrEmpty(readModel.HorseId))
                             return Results.NotFound();
 
-                        return Results.Ok(ToAgentHorse(readModel));
+                        return Results.Ok(new ApiContracts.Horses.GetHorseProfileResponse(ToAgentHorse(readModel)));
                     })
                     .WithName("GetHorseProfile")
                     .WithTags("Horse API")
-                    .Produces<HorseRacingPrediction.Contracts.Horses.HorseDto>(StatusCodes.Status200OK)
+                    .Produces<ApiContracts.Horses.GetHorseProfileResponse>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

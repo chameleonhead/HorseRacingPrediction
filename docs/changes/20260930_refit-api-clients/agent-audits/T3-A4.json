@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260930_refit-api-clients",
+  "taskId": "T3-A4",
+  "attemptId": "T3-A4",
+  "state": "completed",
+  "taskDifficulty": "high",
+  "acceptanceCriteria": ["AC2", "AC4", "AC5"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose worker model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime did not expose per-worker usage"
+  },
+  "scope": ["tests/HorseRacingPrediction.Api.Tests"],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review effort telemetry was not exposed"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "effort telemetry was not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable per-task elapsed effort telemetry was not exposed"
+  },
+  "startRevision": "d519b6eb",
+  "endRevisionOrPatch": "working-tree:T3-A4 explicit API adapters and four TestServer consumer regressions; final Release run 2026-10-01",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "After the production boundary was confirmed, the API.Tests owner made explicit per-file adapters and added four real HttpDataCollectionWriteService-to-TestServer regressions for nested request/response mapping, bulk Result unwrapping, profile/context reads, missing-profile recovery, and reschedule lineage. Initial API test build found eight named-argument capitalization errors, corrected at callsites; one unchanged nullable warning remains at CollectionAdministrationComponentTests.cs:445. Current-source full Release API run passed 389, skipped 1, failed 0 (390 total); the focused four adapter integrations passed 4/4 again against the post-format solution build. The worker also preserved all existing assertions and logged temporary TRX output.",
+    "promoted": false,
+    "escapedDefects": 0,
+    "retries": 1,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

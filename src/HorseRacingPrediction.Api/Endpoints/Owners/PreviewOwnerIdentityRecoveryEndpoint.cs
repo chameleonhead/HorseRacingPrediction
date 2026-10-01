@@ -22,7 +22,12 @@ internal static class PreviewOwnerIdentityRecoveryEndpoint
                     var result = new List<OwnerIdentityRecoveryCandidate>();
                     foreach (var failure in failures.Where(x => x.Resource.Type == CollectionResourceType.Owner))
                         result.Add(await PreviewOwnerIdentityRecoveryAsync(db, store, failure, token));
-                    return Results.Ok(result);
-                });
+                    return Results.Ok(new HorseRacingPrediction.Contracts.Owners.PreviewOwnerIdentityRecoveryResponse(
+                        result.Select(x => new HorseRacingPrediction.Contracts.Owners.OwnerIdentityRecoveryCandidateDto(
+                            x.NotificationId, x.TaskId, x.SourceId, x.Name, x.RaceId, x.TargetId, x.Fingerprint, x.BlockingReason)).ToList()));
+                })
+                .WithName("PreviewOwnerIdentityRecovery")
+                .WithTags("Owner API")
+                .Produces<HorseRacingPrediction.Contracts.Owners.PreviewOwnerIdentityRecoveryResponse>(StatusCodes.Status200OK);
     }
 }

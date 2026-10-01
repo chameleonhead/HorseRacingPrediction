@@ -10,7 +10,10 @@ using System.Text.Json.Serialization;
 using HorseRacingPrediction.Contracts.Common;
 using HorseRacingPrediction.Contracts.Common.Time;
 using HorseRacingPrediction.Contracts.Identity;
+using HorseRacingPrediction.Contracts.Horses;
 using HorseRacingPrediction.Contracts.Races;
+using HorseRacingPrediction.Contracts.Jockeys;
+using HorseRacingPrediction.Contracts.Trainers;
 
 namespace HorseRacingPrediction.Collector.Http;
 
@@ -92,18 +95,16 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
 
         if (existing is null)
         {
-            var createRequest = new
-            {
-                RaceId = raceId,
-                RaceDate = parsedRaceDate,
-                RacecourseCode = racecourseCode,
-                RaceNumber = raceNumber,
-                RaceName = raceName,
-                GradeCode = gradeCode,
-                SurfaceCode = surfaceCode,
-                DistanceMeters = distanceMeters,
-                DirectionCode = directionCode
-            };
+            var createRequest = new CreateRaceRequest(new CreateRaceInputDto(
+                parsedRaceDate,
+                racecourseCode,
+                raceNumber,
+                raceName,
+                raceId,
+                gradeCode,
+                surfaceCode,
+                distanceMeters,
+                directionCode));
             var createResponse = await _httpClient
                 .PostAsJsonAsync("/api/races", createRequest, cancellationToken)
                 .ConfigureAwait(false);
@@ -142,7 +143,10 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
 
         if (entryCount is > 0 && (existing is null || existing.Status == RaceStatus.Draft))
         {
-            var publishRequest = new { EntryCount = entryCount.Value };
+            var publishRequest = new PublishRaceCardRequest(new PublishRaceCardInputDto(entryCount.Value))
+            {
+                RaceId = raceId
+            };
             var publishResponse = await _httpClient
                 .PostAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}/card/publish", publishRequest, cancellationToken)
                 .ConfigureAwait(false);
@@ -166,16 +170,17 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? directionCode,
         CancellationToken cancellationToken)
     {
-        var correctRequest = new
+        var correctRequest = new CorrectRaceDataRequest(new CorrectRaceDataInputDto(
+            raceName,
+            racecourseCode,
+            raceNumber,
+            gradeCode,
+            surfaceCode,
+            distanceMeters,
+            directionCode,
+            "Collected by data collection agent"))
         {
-            RaceName = raceName,
-            RacecourseCode = racecourseCode,
-            RaceNumber = (int?)raceNumber,
-            GradeCode = gradeCode,
-            SurfaceCode = surfaceCode,
-            DistanceMeters = distanceMeters,
-            DirectionCode = directionCode,
-            Reason = "Collected by data collection agent"
+            RaceId = raceId
         };
         var patchResponse = await _httpClient
             .PatchAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}", correctRequest, cancellationToken)
@@ -455,24 +460,25 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
                 await EnsureTrainerExistsByIdAsync(existingEntry.TrainerId, trainerName, cancellationToken).ConfigureAwait(false);
             }
 
-            var updateRequest = new
-            {
-                EntryId = existingEntry.EntryId,
-                HorseId = existingEntry.HorseId,
-                HorseNumber = horseNumber ?? existingEntry.HorseNumber,
-                GateNumber = gateNumber ?? existingEntry.GateNumber,
-                JockeyId = updatedJockeyId,
-                TrainerId = existingEntry.TrainerId,
-                HorseName = horseName,
-                AssignedWeight = assignedWeight ?? existingEntry.AssignedWeight,
-                SexCode = sexCode ?? existingEntry.SexCode,
-                Age = age ?? existingEntry.Age,
-                DeclaredWeight = declaredWeight ?? existingEntry.DeclaredWeight,
-                DeclaredWeightDiff = declaredWeightDiff ?? existingEntry.DeclaredWeightDiff,
-                RunningStyleCode = existingEntry.RunningStyleCode,
-                OwnerName = ownerName ?? existingEntry.OwnerName,
-                ParticipationStatus = participationStatus
-            };
+            var updateRequest = new RegisterEntryRequest(new RegisterEntryInputDto(
+                existingEntry.HorseId,
+                horseNumber ?? existingEntry.HorseNumber,
+                updatedJockeyId,
+                existingEntry.TrainerId,
+                gateNumber ?? existingEntry.GateNumber,
+                assignedWeight ?? existingEntry.AssignedWeight,
+                sexCode ?? existingEntry.SexCode,
+                age ?? existingEntry.Age,
+                declaredWeight ?? existingEntry.DeclaredWeight,
+                declaredWeightDiff ?? existingEntry.DeclaredWeightDiff,
+                existingEntry.RunningStyleCode,
+                existingEntry.EntryId,
+                horseName,
+                null,
+                null,
+                ownerName ?? existingEntry.OwnerName,
+                null,
+                participationStatus));
             var updateResponse = await _httpClient
                 .PostAsJsonAsync(
                     $"/api/races/{Uri.EscapeDataString(raceId)}/entries",
@@ -497,26 +503,24 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             : await UpsertTrainerAsync(trainerName, null, null, cancellationToken).ConfigureAwait(false);
 
         var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, horseId);
-        var registerRequest = new
-        {
-            EntryId = entryId,
-            HorseId = horseId,
-            HorseNumber = horseNumber,
-            JockeyId = jockeyId,
-            TrainerId = trainerId,
-            HorseName = horseName,
-            JockeyName = cleanedJockeyName,
-            TrainerName = trainerName,
-            OwnerName = ownerName,
-            GateNumber = gateNumber,
-            AssignedWeight = assignedWeight,
-            SexCode = sexCode,
-            Age = age,
-            DeclaredWeight = declaredWeight,
-            DeclaredWeightDiff = declaredWeightDiff,
-            HorseSourceIdentity = jraHorseSourceIdentity,
-            ParticipationStatus = participationStatus
-        };
+        var registerRequest = new RegisterEntryRequest(new RegisterEntryInputDto(
+            horseId,
+            horseNumber,
+            jockeyId,
+            trainerId,
+            gateNumber,
+            assignedWeight,
+            sexCode,
+            age,
+            declaredWeight,
+            declaredWeightDiff,
+            EntryId: entryId,
+            HorseName: horseName,
+            JockeyName: cleanedJockeyName,
+            TrainerName: trainerName,
+            OwnerName: ownerName,
+            HorseSourceIdentity: jraHorseSourceIdentity,
+            ParticipationStatus: participationStatus));
 
         var response = await _httpClient
             .PostAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}/entries", registerRequest, cancellationToken)
@@ -566,7 +570,10 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         if (race?.Status == RaceStatus.Draft)
         {
             var entryCount = race.Entries.Count > 0 ? race.Entries.Count : 1;
-            var publishRequest = new { EntryCount = entryCount };
+            var publishRequest = new PublishRaceCardRequest(new PublishRaceCardInputDto(entryCount))
+            {
+                RaceId = raceId
+            };
             var publishResponse = await _httpClient
                 .PostAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}/card/publish", publishRequest, cancellationToken)
                 .ConfigureAwait(false);
@@ -576,12 +583,13 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             }
         }
 
-        var resultRequest = new
-        {
-            WinningHorseName = winningHorseName,
-            DeclaredAt = declaredAt is not null
+        var resultRequest = new DeclareRaceResultRequest(new DeclareRaceResultInputDto(
+            winningHorseName,
+            declaredAt is not null
                 ? (DateTimeOffset?)DateTimeOffset.Parse(declaredAt, CultureInfo.InvariantCulture)
-                : null
+                : null))
+        {
+            RaceId = raceId
         };
         var resultResponse = await _httpClient
             .PostAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}/result", resultRequest, cancellationToken)
@@ -646,14 +654,16 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         var matchedEntry = race?.Entries.SingleOrDefault(entry => entry.HorseId == horseId)
             ?? throw new InvalidOperationException("A registered horse identity is required before recording a result.");
         var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, matchedEntry.HorseId);
-        var request = new
+        var request = new DeclareEntryResultRequest(new DeclareEntryResultInputDto(
+            finishPosition,
+            officialTime,
+            marginText,
+            lastThreeFurlongTime,
+            abnormalResultCode,
+            prizeMoney))
         {
-            FinishPosition = finishPosition,
-            OfficialTime = officialTime,
-            MarginText = marginText,
-            LastThreeFurlongTime = lastThreeFurlongTime,
-            AbnormalResultCode = abnormalResultCode,
-            PrizeMoney = prizeMoney
+            RaceId = raceId,
+            EntryId = entryId
         };
 
         var response = await _httpClient
@@ -676,14 +686,15 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
     {
         ValidateRequiredText(raceId, nameof(raceId));
 
-        var request = new
+        var request = new DeclarePayoutResultRequest(new DeclarePayoutResultInputDto(
+            HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(),
+            ParsePayoutsForRequest(winPayoutsJson)?.Select(x => new PayoutEntryDto(x.Combination, x.Amount)).ToList(),
+            ParsePayoutsForRequest(placePayoutsJson)?.Select(x => new PayoutEntryDto(x.Combination, x.Amount)).ToList(),
+            ParsePayoutsForRequest(quinellaPayoutsJson)?.Select(x => new PayoutEntryDto(x.Combination, x.Amount)).ToList(),
+            ParsePayoutsForRequest(exactaPayoutsJson)?.Select(x => new PayoutEntryDto(x.Combination, x.Amount)).ToList(),
+            ParsePayoutsForRequest(trifectaPayoutsJson)?.Select(x => new PayoutEntryDto(x.Combination, x.Amount)).ToList()))
         {
-            DeclaredAt = HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(),
-            WinPayouts = ParsePayoutsForRequest(winPayoutsJson),
-            PlacePayouts = ParsePayoutsForRequest(placePayoutsJson),
-            QuinellaPayouts = ParsePayoutsForRequest(quinellaPayoutsJson),
-            ExactaPayouts = ParsePayoutsForRequest(exactaPayoutsJson),
-            TrifectaPayouts = ParsePayoutsForRequest(trifectaPayoutsJson)
+            RaceId = raceId
         };
 
         var response = await _httpClient
@@ -843,20 +854,19 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? sexCode,
         CancellationToken cancellationToken)
     {
-        var existing = await GetAsync<HorseExistenceDto>($"/api/horses/{Uri.EscapeDataString(horseId)}", cancellationToken).ConfigureAwait(false);
+        var existingResponse = await GetAsync<GetHorseProfileResponse>($"/api/horses/{Uri.EscapeDataString(horseId)}", cancellationToken).ConfigureAwait(false);
+        var existing = existingResponse?.Horse;
         var resolvedName = string.IsNullOrWhiteSpace(horseName) ? horseId : horseName.Trim();
         var normalizedName = DeterministicIdGenerator.NormalizeDisplayName(resolvedName);
 
         if (existing is null)
         {
-            var registerRequest = new
-            {
-                HorseId = horseId,
-                RegisteredName = resolvedName,
-                NormalizedName = normalizedName,
-                SexCode = sexCode,
-                BirthDate = (DateOnly?)null
-            };
+            var registerRequest = new RegisterHorseRequest(new RegisterHorseInputDto(
+                resolvedName,
+                normalizedName,
+                sexCode,
+                null,
+                horseId));
             var response = await _httpClient
                 .PostAsJsonAsync("/api/horses", registerRequest, cancellationToken)
                 .ConfigureAwait(false);
@@ -883,7 +893,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? jockeyName,
         CancellationToken cancellationToken)
     {
-        var existing = await GetAsync<JockeyExistenceDto>($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", cancellationToken).ConfigureAwait(false);
+        var existingResponse = await GetAsync<GetJockeyProfileResponse>($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", cancellationToken).ConfigureAwait(false);
+        var existing = existingResponse?.Jockey;
         var resolvedName = string.IsNullOrWhiteSpace(jockeyName)
             ? jockeyId
             : JockeyNameNormalizer.Normalize(jockeyName);
@@ -891,13 +902,11 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
 
         if (existing is null)
         {
-            var registerRequest = new
-            {
-                JockeyId = jockeyId,
-                DisplayName = resolvedName,
-                NormalizedName = normalizedName,
-                AffiliationCode = (string?)null
-            };
+            var registerRequest = new RegisterJockeyRequest(new RegisterJockeyInputDto(
+                resolvedName,
+                normalizedName,
+                null,
+                jockeyId));
             var response = await _httpClient
                 .PostAsJsonAsync("/api/jockeys", registerRequest, cancellationToken)
                 .ConfigureAwait(false);
@@ -924,19 +933,18 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? trainerName,
         CancellationToken cancellationToken)
     {
-        var existing = await GetAsync<TrainerExistenceDto>($"/api/trainers/{Uri.EscapeDataString(trainerId)}", cancellationToken).ConfigureAwait(false);
+        var existingResponse = await GetAsync<GetTrainerProfileResponse>($"/api/trainers/{Uri.EscapeDataString(trainerId)}", cancellationToken).ConfigureAwait(false);
+        var existing = existingResponse?.Trainer;
         var resolvedName = string.IsNullOrWhiteSpace(trainerName) ? trainerId : trainerName.Trim();
         var normalizedName = DeterministicIdGenerator.NormalizeDisplayName(resolvedName);
 
         if (existing is null)
         {
-            var registerRequest = new
-            {
-                TrainerId = trainerId,
-                DisplayName = resolvedName,
-                NormalizedName = normalizedName,
-                AffiliationCode = (string?)null
-            };
+            var registerRequest = new RegisterTrainerRequest(new RegisterTrainerInputDto(
+                resolvedName,
+                normalizedName,
+                null,
+                trainerId));
             var response = await _httpClient
                 .PostAsJsonAsync("/api/trainers", registerRequest, cancellationToken)
                 .ConfigureAwait(false);
@@ -959,7 +967,12 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
     }
 
     private async Task<RacePredictionContextDto?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken)
-        => await GetAsync<RacePredictionContextDto>($"/api/races/{Uri.EscapeDataString(raceId)}/context", cancellationToken).ConfigureAwait(false);
+    {
+        var response = await GetAsync<GetRacePredictionContextResponse>(
+            $"/api/races/{Uri.EscapeDataString(raceId)}/context",
+            cancellationToken).ConfigureAwait(false);
+        return response?.Context;
+    }
 
     // ------------------------------------------------------------------ //
     // private helpers — payout parsing
@@ -995,18 +1008,19 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? coatColor,
         CancellationToken cancellationToken)
     {
-        var updateRequest = new
+        var updateRequest = new UpdateHorseProfileRequest
         {
-            RegisteredName = registeredName,
-            NormalizedName = normalizedName,
-            SexCode = sexCode,
-            BirthDate = birthDate,
-            OwnerName = ownerName,
-            BreederName = breederName,
-            SireName = sireName,
-            DamName = damName,
-            DamsireName = damsireName,
-            CoatColor = coatColor
+            Horse = new UpdateHorseProfileInputDto(
+                registeredName,
+                normalizedName,
+                sexCode,
+                birthDate,
+                ownerName,
+                breederName,
+                sireName,
+                damName,
+                damsireName,
+                coatColor)
         };
         var response = await _httpClient
             .PutAsJsonAsync($"/api/horses/{Uri.EscapeDataString(horseId)}", updateRequest, cancellationToken)
@@ -1021,11 +1035,9 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? affiliationCode,
         CancellationToken cancellationToken)
     {
-        var updateRequest = new
+        var updateRequest = new UpdateJockeyProfileRequest
         {
-            DisplayName = displayName,
-            NormalizedName = normalizedName,
-            AffiliationCode = affiliationCode
+            Jockey = new UpdateJockeyProfileInputDto(displayName, normalizedName, affiliationCode)
         };
         var response = await _httpClient
             .PutAsJsonAsync($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", updateRequest, cancellationToken)
@@ -1040,11 +1052,9 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? affiliationCode,
         CancellationToken cancellationToken)
     {
-        var updateRequest = new
+        var updateRequest = new UpdateTrainerProfileRequest
         {
-            DisplayName = displayName,
-            NormalizedName = normalizedName,
-            AffiliationCode = affiliationCode
+            Trainer = new UpdateTrainerProfileInputDto(displayName, normalizedName, affiliationCode)
         };
         var response = await _httpClient
             .PutAsJsonAsync($"/api/trainers/{Uri.EscapeDataString(trainerId)}", updateRequest, cancellationToken)
@@ -1087,17 +1097,16 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
     {
         ValidateRequiredText(raceId, nameof(raceId));
         ValidateRequiredText(replacementRaceId, nameof(replacementRaceId));
+        var request = new MarkRaceRescheduledRequest(new MarkRaceRescheduledInputDto(replacementRaceId))
+        {
+            RaceId = raceId
+        };
         using var response = await _httpClient.PostAsJsonAsync(
             $"/api/races/{Uri.EscapeDataString(raceId)}/reschedule",
-            new { ReplacementRaceId = replacementRaceId }, cancellationToken).ConfigureAwait(false);
+            request, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }
 
-    // ------------------------------------------------------------------ //
-    // Refresh-only DTOs. Normal subject upserts intentionally avoid existence GETs.
-    private sealed class HorseExistenceDto { public string HorseId { get; init; } = string.Empty; }
-    private sealed class JockeyExistenceDto { public string JockeyId { get; init; } = string.Empty; }
-    private sealed class TrainerExistenceDto { public string TrainerId { get; init; } = string.Empty; }
 }
 
 internal enum AgentAcquisitionSubjectType { Horse, Jockey, Trainer }

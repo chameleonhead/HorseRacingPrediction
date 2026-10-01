@@ -14,18 +14,20 @@ internal static class UpdateTrainerProfileEndpoint
         group.MapPut("/trainers/{trainerId}",
                     [SwaggerOperation(Summary = "Update trainer profile", Description = "Updates profile information of an existing trainer")]
         async (string trainerId, UpdateTrainerProfileRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
-                    {
-                        var command = new UpdateTrainerProfileCommand(
-                            new TrainerId(trainerId),
-                            request.DisplayName,
-                            request.NormalizedName,
-                            request.AffiliationCode);
+                        {
+                            if (request.Trainer is null) return Results.BadRequest(new[] { "Trainer payload is required." });
+                            var profile = request.Trainer;
+                            var command = new UpdateTrainerProfileCommand(
+                                new TrainerId(trainerId),
+                            profile.DisplayName,
+                            profile.NormalizedName,
+                            profile.AffiliationCode);
 
-                        var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
-                        return result.IsSuccess
-                            ? Results.Ok()
-                            : Results.BadRequest(new[] { "Command execution failed." });
-                    })
+                            var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                            return result.IsSuccess
+                                ? Results.Ok()
+                                : Results.BadRequest(new[] { "Command execution failed." });
+                        })
                     .WithName("UpdateTrainerProfile")
                     .WithTags("Trainer API")
                     .Produces(StatusCodes.Status200OK)

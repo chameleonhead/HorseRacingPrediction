@@ -15,18 +15,20 @@ internal static class RegisterTrainerEndpoint
                     [SwaggerOperation(Summary = "Register trainer", Description = "Registers a new trainer")]
         async (RegisterTrainerRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        if (request.Trainer is null) return Results.BadRequest(new[] { "Trainer payload is required." });
+                        var trainer = request.Trainer;
                         try
                         {
-                            var trainerId = string.IsNullOrWhiteSpace(request.TrainerId) ? TrainerId.New : new TrainerId(request.TrainerId);
+                            var trainerId = string.IsNullOrWhiteSpace(trainer.TrainerId) ? TrainerId.New : new TrainerId(trainer.TrainerId);
                             var command = new RegisterTrainerCommand(
                                 trainerId,
-                                request.DisplayName,
-                                request.NormalizedName,
-                                request.AffiliationCode);
+                                trainer.DisplayName,
+                                trainer.NormalizedName,
+                                trainer.AffiliationCode);
 
                             var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                             return result.IsSuccess
-                                ? Results.Created($"/api/trainers/{trainerId.Value}", new { TrainerId = trainerId.Value })
+                                ? Results.Created($"/api/trainers/{trainerId.Value}", new RegisterTrainerResponse(trainerId.Value))
                                 : Results.BadRequest(new[] { "Command execution failed." });
                         }
                         catch (InvalidOperationException ex) when (string.Equals(ex.Message, "Trainer is already registered.", StringComparison.Ordinal))
@@ -36,7 +38,7 @@ internal static class RegisterTrainerEndpoint
                     })
                     .WithName("RegisterTrainer")
                     .WithTags("Trainer API")
-                    .Produces(StatusCodes.Status201Created)
+                    .Produces<RegisterTrainerResponse>(StatusCodes.Status201Created)
                     .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
                     .Produces(StatusCodes.Status401Unauthorized);
     }

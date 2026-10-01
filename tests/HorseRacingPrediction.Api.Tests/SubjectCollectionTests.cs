@@ -19,7 +19,7 @@ public sealed class SubjectCollectionTests
         await using var disposable = app; using var client = http;
         client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var id = "horse-" + Guid.NewGuid();
-        (await client.PostAsJsonAsync("/api/horses", new RegisterHorseRequest("エンジャムメント", "エンジャムメント", "F", new DateOnly(2024, 4, 11), id, "旧馬主"))).EnsureSuccessStatusCode();
+        (await client.PostAsJsonAsync("/api/horses", SubjectRequestFactory.RegisterHorse("エンジャムメント", "エンジャムメント", "F", new DateOnly(2024, 4, 11), id, "旧馬主"))).EnsureSuccessStatusCode();
         var path = $"/api/v2/admin/subjects/Horse/{id}/profile";
         const string horseUrl = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=public-horse-id";
         var profile = new JraSubjectProfileDto("Horse", "エンジャムメント", horseUrl, horseUrl,
@@ -29,7 +29,7 @@ public sealed class SubjectCollectionTests
         (await client.PutAsJsonAsync(path, next)).EnsureSuccessStatusCode();
         var saved = (await client.GetFromJsonAsync<JraSubjectProfileDto>($"/api/v2/admin/subjects/Horse/{id}/profiles/current"))!;
         Assert.AreEqual("鹿毛", saved.Fields["毛色"]); Assert.AreEqual("父馬", saved.Fields["父"]);
-        var horse = (await client.GetFromJsonAsync<HorseDto>($"/api/horses/{id}"))!;
+        var horse = (await client.GetFromJsonAsync<GetHorseProfileResponse>($"/api/horses/{id}"))!.Horse;
         Assert.AreEqual("新馬主", horse.OwnerName);
         Assert.AreEqual("新生産者", horse.BreederName);
         Assert.AreEqual("父馬", horse.SireName);
@@ -47,11 +47,11 @@ public sealed class SubjectCollectionTests
         var (app, http) = await TestApplicationFactory.CreateAsync(); await using var disposable = app; using var client = http;
         client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var trainerId = "trainer-" + Guid.NewGuid();
-        (await client.PostAsJsonAsync("/api/trainers", new RegisterTrainerRequest("中舘 英二", "中舘英二", null, trainerId))).EnsureSuccessStatusCode();
+        (await client.PostAsJsonAsync("/api/trainers", SubjectRequestFactory.RegisterTrainer("中舘 英二", "中舘英二", null, trainerId))).EnsureSuccessStatusCode();
         var profile = new JraSubjectProfileDto("Trainer", "中舘 英二", "trainer-key", "https://www.jra.go.jp/JRADB/accessC.html",
             new() { ["生年月日"] = "1965年7月22日", ["所属"] = "美浦", ["免許取得年"] = "2015年" }, DateTimeOffset.UtcNow);
         (await client.PutAsJsonAsync($"/api/v2/admin/subjects/Trainer/{trainerId}/profile", profile)).EnsureSuccessStatusCode();
-        Assert.AreEqual("美浦", (await client.GetFromJsonAsync<TrainerDto>($"/api/trainers/{trainerId}"))!.AffiliationCode);
+        Assert.AreEqual("美浦", (await client.GetFromJsonAsync<GetTrainerProfileResponse>($"/api/trainers/{trainerId}"))!.Trainer.AffiliationCode);
         var raceId = "race-" + Guid.NewGuid(); var date = new DateOnly(2026, 9, 6);
         (await client.PostAsJsonAsync("/api/races", new CreateRaceRequest(new(date, "NAKAYAMA", 6, "旧名", raceId)))).EnsureSuccessStatusCode();
         var response = await client.PostAsJsonAsync("/api/v2/admin/races",
@@ -69,7 +69,7 @@ public sealed class SubjectCollectionTests
         client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var trainerId = "trainer-" + Guid.NewGuid();
         (await client.PostAsJsonAsync("/api/trainers",
-            new RegisterTrainerRequest("黒岩 陽一（美浦）", "黒岩陽一", "美浦", trainerId)))
+            SubjectRequestFactory.RegisterTrainer("黒岩 陽一（美浦）", "黒岩陽一", "美浦", trainerId)))
             .EnsureSuccessStatusCode();
         var profile = new JraSubjectProfileDto("Trainer", "黒岩 陽一",
             "Trainer:黒岩陽一:1980-03-27", "https://www.jra.go.jp/JRADB/accessC.html",
@@ -91,7 +91,7 @@ public sealed class SubjectCollectionTests
         await using var application = app; using var client = http;
         client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var horseId = DeterministicIdGenerator.BuildHorseId("履歴の馬");
-        (await client.PostAsJsonAsync("/api/horses", new RegisterHorseRequest("履歴の馬", "履歴の馬", null, null, horseId))).EnsureSuccessStatusCode();
+        (await client.PostAsJsonAsync("/api/horses", SubjectRequestFactory.RegisterHorse("履歴の馬", "履歴の馬", null, null, horseId))).EnsureSuccessStatusCode();
         var date = new DateOnly(2026, 9, 6);
         var prepare = await client.PostAsJsonAsync("/api/v2/admin/races",
             new CreateRaceFromScheduleRequest(new(date, "中山", 6, "メイクデビュー中山")));

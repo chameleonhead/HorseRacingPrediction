@@ -132,8 +132,11 @@ else
         updating = true;
         try
         {
-            var result = await Api.UpdateHorseProfileAsync(HorseId, new UpdateHorseProfileRequest(
-                editRegisteredName, editNormalizedName, editSexCode, editBirthDate, editOwnerName));
+            var result = await Api.UpdateHorseProfileAsync(HorseId, new UpdateHorseProfileRequest
+            {
+                HorseId = HorseId,
+                Horse = new UpdateHorseProfileInputDto(editRegisteredName, editNormalizedName, editSexCode, editBirthDate, editOwnerName)
+            });
             updateErrors = result.Success ? Array.Empty<string>() : result.Errors;
             if (result.Success) Back();
         }
@@ -154,8 +157,11 @@ else
         mergingAlias = true;
         try
         {
-            var result = await Api.MergeHorseAliasAsync(HorseId, new MergeAliasRequest(
-                aliasType!, aliasValue!, aliasSourceName!, aliasIsPrimary));
+            var result = await Api.MergeHorseAliasAsync(HorseId, new MergeHorseAliasRequest
+            {
+                HorseId = HorseId,
+                Alias = new MergeAliasInputDto(aliasType!, aliasValue!, aliasSourceName!, aliasIsPrimary)
+            });
             aliasErrors = result.Success ? Array.Empty<string>() : result.Errors;
             if (result.Success)
             {
@@ -174,8 +180,11 @@ else
         correcting = true;
         try
         {
-            var result = await Api.CorrectHorseDataAsync(HorseId, new CorrectHorseDataRequest(
-                correctRegisteredName, correctNormalizedName, correctSexCode, correctBirthDate, correctReason));
+            var result = await Api.CorrectHorseDataAsync(HorseId, new CorrectHorseDataRequest
+            {
+                HorseId = HorseId,
+                Horse = new CorrectHorseDataInputDto(correctRegisteredName, correctNormalizedName, correctSexCode, correctBirthDate, correctReason)
+            });
             correctErrors = result.Success ? Array.Empty<string>() : result.Errors;
             if (result.Success)
             {

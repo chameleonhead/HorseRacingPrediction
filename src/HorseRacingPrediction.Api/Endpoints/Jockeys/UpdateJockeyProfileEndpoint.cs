@@ -14,18 +14,20 @@ internal static class UpdateJockeyProfileEndpoint
         group.MapPut("/jockeys/{jockeyId}",
                     [SwaggerOperation(Summary = "Update jockey profile", Description = "Updates profile information of an existing jockey")]
         async (string jockeyId, UpdateJockeyProfileRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
-                    {
-                        var command = new UpdateJockeyProfileCommand(
-                            new JockeyId(jockeyId),
-                            request.DisplayName,
-                            request.NormalizedName,
-                            request.AffiliationCode);
+                        {
+                            if (request.Jockey is null) return Results.BadRequest(new[] { "Jockey payload is required." });
+                            var profile = request.Jockey;
+                            var command = new UpdateJockeyProfileCommand(
+                                new JockeyId(jockeyId),
+                            profile.DisplayName,
+                            profile.NormalizedName,
+                            profile.AffiliationCode);
 
-                        var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
-                        return result.IsSuccess
-                            ? Results.Ok()
-                            : Results.BadRequest(new[] { "Command execution failed." });
-                    })
+                            var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                            return result.IsSuccess
+                                ? Results.Ok()
+                                : Results.BadRequest(new[] { "Command execution failed." });
+                        })
                     .WithName("UpdateJockeyProfile")
                     .WithTags("Jockey API")
                     .Produces(StatusCodes.Status200OK)

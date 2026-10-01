@@ -16,8 +16,9 @@ internal static class GetTrainerParticipationsEndpoint
     {
         group.MapGet("/trainers/{trainerId}/participations",
                     [SwaggerOperation(Summary = "Get trainer participation history", Description = "Returns races and related horses, jockeys and owners for a trainer")]
-        async (string trainerId, int? take, int? skip, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
+        async ([AsParameters] HorseRacingPrediction.Contracts.Trainers.GetTrainerParticipationsRequest request, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
                     {
+                        var trainerId = request.TrainerId;
                         using var dbContext = dbContextProvider.CreateContext();
                         var trainerExists = await dbContext.Trainers.AsNoTracking().AnyAsync(x => x.TrainerId == trainerId, cancellationToken).ConfigureAwait(false);
                         if (!trainerExists) return Results.NotFound();
@@ -44,8 +45,8 @@ internal static class GetTrainerParticipationsEndpoint
                                 trainerId, trainer.DisplayName, x.entry.OwnerName, entryResult?.FinishPosition, entryResult?.PrizeMoney);
                         }).OrderByDescending(x => x.RaceDate).ThenByDescending(x => x.RaceNumber).ToList();
 
-                        var limit = Math.Max(take.GetValueOrDefault(10), 1);
-                        var offset = Math.Max(skip.GetValueOrDefault(0), 0);
+                        var limit = Math.Max(request.Take.GetValueOrDefault(10), 1);
+                        var offset = Math.Max(request.Skip.GetValueOrDefault(0), 0);
                         var entries = allEntries.Skip(offset).Take(limit).ToList();
                         var hasMore = offset + entries.Count < allEntries.Count;
 
@@ -56,11 +57,12 @@ internal static class GetTrainerParticipationsEndpoint
                                 new RelationshipSummaryDto("Jockey", x.Key.JockeyId!, x.Key.JockeyName!, "騎乗した騎手", x.Count(), x.Max(y => y.RaceDate))))
                             .OrderByDescending(x => x.ParticipationCount).ToList();
 
-                        return Results.Ok(new ParticipationHistoryDto("Trainer", trainerId, entries, relationships, hasMore));
+                        return Results.Ok(new HorseRacingPrediction.Contracts.Trainers.GetTrainerParticipationsResponse(
+                            new ParticipationHistoryDto("Trainer", trainerId, entries, relationships, hasMore)));
                     })
                     .WithName("GetTrainerParticipations")
                     .WithTags("Trainer API")
-                    .Produces<ParticipationHistoryDto>(StatusCodes.Status200OK)
+                    .Produces<HorseRacingPrediction.Contracts.Trainers.GetTrainerParticipationsResponse>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

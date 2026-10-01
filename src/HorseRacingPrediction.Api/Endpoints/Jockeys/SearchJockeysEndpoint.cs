@@ -68,7 +68,7 @@ internal static class SearchJockeysEndpoint
                             });
                         }
 
-                        return Results.Ok(ToPagedResponse(
+                        var paged = ToPagedResponse(
                             sorted,
                             page,
                             pageSize,
@@ -77,11 +77,13 @@ internal static class SearchJockeysEndpoint
                                 x.DisplayName,
                                 x.NormalizedName,
                                 x.AffiliationCode,
-                                x.Aliases.Count)));
+                                x.Aliases.Count));
+                        return Results.Ok(new SearchJockeysResponse(paged.Items,
+                            new HorseRacingPrediction.Contracts.Common.PaginationDto(paged.Page, paged.PageSize, paged.TotalCount, paged.TotalPages)));
                     })
                     .WithName("SearchJockeys")
                     .WithTags("Jockey API")
-                    .Produces<PagedResponse<JockeySummaryDto>>(StatusCodes.Status200OK)
+                    .Produces<SearchJockeysResponse>(StatusCodes.Status200OK)
                     .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest);
     }
 }

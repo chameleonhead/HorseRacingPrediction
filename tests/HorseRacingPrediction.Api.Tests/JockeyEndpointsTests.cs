@@ -36,7 +36,7 @@ public class JockeyEndpointsTests
     public async Task RegisterJockey_ReturnsCreated()
     {
         var jockeyId = $"jockey-{Guid.NewGuid()}";
-        var request = new RegisterJockeyRequest("武豊", "takeyutaka", "JRA", jockeyId);
+        var request = SubjectRequestFactory.RegisterJockey("武豊", "takeyutaka", "JRA", jockeyId);
 
         var response = await _client.PostAsJsonAsync("/api/jockeys", request, JsonOptions);
 
@@ -49,18 +49,18 @@ public class JockeyEndpointsTests
         var jockeyId = $"jockey-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/jockeys",
-            new RegisterJockeyRequest("川田将雅", "kawadamasaya", "JRA", jockeyId),
+            SubjectRequestFactory.RegisterJockey("川田将雅", "kawadamasaya", "JRA", jockeyId),
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/jockeys/{jockeyId}");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        var profile = await response.Content.ReadFromJsonAsync<JockeyDto>(JsonOptions);
+        var profile = await response.Content.ReadFromJsonAsync<GetJockeyProfileResponse>(JsonOptions);
         Assert.IsNotNull(profile);
-        Assert.AreEqual(jockeyId, profile.JockeyId);
-        Assert.AreEqual("川田将雅", profile.DisplayName);
-        Assert.AreEqual("kawadamasaya", profile.NormalizedName);
-        Assert.AreEqual("JRA", profile.AffiliationCode);
+        Assert.AreEqual(jockeyId, profile.Jockey.JockeyId);
+        Assert.AreEqual("川田将雅", profile.Jockey.DisplayName);
+        Assert.AreEqual("kawadamasaya", profile.Jockey.NormalizedName);
+        Assert.AreEqual("JRA", profile.Jockey.AffiliationCode);
     }
 
     [TestMethod]
@@ -72,23 +72,23 @@ public class JockeyEndpointsTests
 
         await _client.PostAsJsonAsync(
             "/api/jockeys",
-            new RegisterJockeyRequest($"SearchJockeyA-{key}", $"search-jockey-a-{key}", "JRA", jockeyId1),
+            SubjectRequestFactory.RegisterJockey($"SearchJockeyA-{key}", $"search-jockey-a-{key}", "JRA", jockeyId1),
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/jockeys",
-            new RegisterJockeyRequest($"SearchJockeyB-{key}", $"search-jockey-b-{key}", "JRA", jockeyId2),
+            SubjectRequestFactory.RegisterJockey($"SearchJockeyB-{key}", $"search-jockey-b-{key}", "JRA", jockeyId2),
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/jockeys?query=SearchJockey&affiliationCode=JRA&page=2&pageSize=1&sortBy=displayName&sortDescending=false");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<JockeySummaryDto>>(JsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<SearchJockeysResponse>(JsonOptions);
         Assert.IsNotNull(result);
-        Assert.AreEqual(2, result.TotalCount);
-        Assert.AreEqual(2, result.TotalPages);
-        Assert.AreEqual(1, result.Items.Count);
-        Assert.AreEqual(jockeyId2, result.Items[0].JockeyId);
+        Assert.AreEqual(2, result.Pagination.TotalCount);
+        Assert.AreEqual(2, result.Pagination.TotalPages);
+        Assert.AreEqual(1, result.Jockeys.Count);
+        Assert.AreEqual(jockeyId2, result.Jockeys[0].JockeyId);
     }
 
     [TestMethod]
@@ -97,12 +97,12 @@ public class JockeyEndpointsTests
         var jockeyId = $"jockey-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/jockeys",
-            new RegisterJockeyRequest("テスト騎手", "testjockey", null, jockeyId),
+            SubjectRequestFactory.RegisterJockey("テスト騎手", "testjockey", null, jockeyId),
             JsonOptions);
 
         var response = await _client.PutAsJsonAsync(
             $"/api/jockeys/{jockeyId}",
-            new UpdateJockeyProfileRequest(null, null, "OVERSEAS"),
+            new UpdateJockeyProfileRequest { JockeyId = jockeyId, Jockey = new(null, null, "OVERSEAS") },
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -113,19 +113,19 @@ public class JockeyEndpointsTests
     {
         var jockeyId = $"jockey-{Guid.NewGuid()}";
         var response = await _client.PutAsJsonAsync($"/api/jockeys/{jockeyId}",
-            new UpdateJockeyProfileRequest("新規騎手", "新規騎手", "JRA"), JsonOptions);
-        var profile = await _client.GetFromJsonAsync<JockeyDto>($"/api/jockeys/{jockeyId}", JsonOptions);
+            new UpdateJockeyProfileRequest { JockeyId = jockeyId, Jockey = new("新規騎手", "新規騎手", "JRA") }, JsonOptions);
+        var profile = await _client.GetFromJsonAsync<GetJockeyProfileResponse>($"/api/jockeys/{jockeyId}", JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsNotNull(profile);
-        Assert.AreEqual("新規騎手", profile.DisplayName);
+        Assert.AreEqual("新規騎手", profile.Jockey.DisplayName);
     }
 
     [TestMethod]
     public async Task UpdateJockeyProfile_ConcurrentReplay_AddsOneEvent()
     {
         var jockeyId = $"jockey-{Guid.NewGuid()}";
-        var request = new UpdateJockeyProfileRequest("同時騎手", "同時騎手", "JRA");
+        var request = new UpdateJockeyProfileRequest { JockeyId = jockeyId, Jockey = new("同時騎手", "同時騎手", "JRA") };
 
         var responses = await Task.WhenAll(
             _client.PutAsJsonAsync($"/api/jockeys/{jockeyId}", request, JsonOptions),
@@ -149,12 +149,12 @@ public class JockeyEndpointsTests
         var jockeyId = $"jockey-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/jockeys",
-            new RegisterJockeyRequest("福永祐一", "fukunagayuichi", "JRA", jockeyId),
+            SubjectRequestFactory.RegisterJockey("福永祐一", "fukunagayuichi", "JRA", jockeyId),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
             $"/api/jockeys/{jockeyId}/aliases",
-            new MergeAliasRequest("JRA", "J00123", "JRA-DATA", true),
+            new MergeJockeyAliasRequest { JockeyId = jockeyId, Alias = new("JRA", "J00123", "JRA-DATA", true) },
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -166,12 +166,12 @@ public class JockeyEndpointsTests
         var jockeyId = $"jockey-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/jockeys",
-            new RegisterJockeyRequest("テスト騎手", "testjockey", null, jockeyId),
+            SubjectRequestFactory.RegisterJockey("テスト騎手", "testjockey", null, jockeyId),
             JsonOptions);
 
         var response = await _client.PatchAsJsonAsync(
             $"/api/jockeys/{jockeyId}",
-            new CorrectJockeyDataRequest(null, "testjockey-fixed", "JRA", "名前誤り修正"),
+            new CorrectJockeyDataRequest { JockeyId = jockeyId, Jockey = new(null, "testjockey-fixed", "JRA", "名前誤り修正") },
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);

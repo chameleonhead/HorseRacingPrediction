@@ -4,6 +4,7 @@ using HorseRacingPrediction.Domain.Horses;
 using Swashbuckle.AspNetCore.Annotations;
 
 using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Horses;
 
 namespace HorseRacingPrediction.Api.Endpoints.Horses;
 
@@ -13,14 +14,16 @@ internal static class MergeHorseAliasEndpoint
     {
         group.MapPost("/horses/{horseId}/aliases",
                     [SwaggerOperation(Summary = "Merge horse alias", Description = "Adds or updates an alias for a horse from an external data source")]
-        async (string horseId, MergeAliasRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string horseId, MergeHorseAliasRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        if (request.Alias is null) return Results.BadRequest(new[] { "Alias payload is required." });
+                        var alias = request.Alias;
                         var command = new MergeHorseAliasCommand(
                             new HorseId(horseId),
-                            request.AliasType,
-                            request.AliasValue,
-                            request.SourceName,
-                            request.IsPrimary);
+                            alias.AliasType,
+                            alias.AliasValue,
+                            alias.SourceName,
+                            alias.IsPrimary);
 
                         var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                         return result.IsSuccess

@@ -15,20 +15,21 @@ internal static class GetJockeyRaceHistoryEndpoint
     {
         group.MapGet("/jockeys/{jockeyId}/race-history",
                     [SwaggerOperation(Summary = "Get jockey race history", Description = "Returns race history read model for a jockey")]
-        async (string jockeyId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async ([AsParameters] ApiContracts.Jockeys.GetJockeyRaceHistoryRequest request, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
                     {
+                        var jockeyId = request.JockeyId;
                         var query = new ReadModelByIdQuery<AppReadModels.JockeyRaceHistoryReadModel>(jockeyId);
                         var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
 
                         if (readModel is null || string.IsNullOrEmpty(readModel.JockeyId))
                             return Results.NotFound();
 
-                        return Results.Ok(ToAgentJockeyRaceHistory(readModel));
+                        return Results.Ok(new ApiContracts.Jockeys.GetJockeyRaceHistoryResponse(ToAgentJockeyRaceHistory(readModel)));
                     })
                     .AddEndpointFilter<RacePredictionReadEndpointFilter>()
                     .WithName("GetJockeyRaceHistory")
                     .WithTags("Jockey API")
-                    .Produces<HorseRacingPrediction.Contracts.Jockeys.JockeyRaceHistoryDto>(StatusCodes.Status200OK)
+                    .Produces<ApiContracts.Jockeys.GetJockeyRaceHistoryResponse>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

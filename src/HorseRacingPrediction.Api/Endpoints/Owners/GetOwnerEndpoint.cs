@@ -17,8 +17,9 @@ internal static class GetOwnerEndpoint
     internal static void Map(RouteGroupBuilder group)
     {
         group.MapGet("/owners/{ownerId}",
-                    async (string ownerId, int? take, int? skip, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
+                    async ([AsParameters] GetOwnerRequest request, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
                     {
+                        var ownerId = request.OwnerId;
                         using var dbContext = dbContextProvider.CreateContext();
                         var owners = await BuildOwnersAsync(dbContext, cancellationToken).ConfigureAwait(false);
                         var owner = owners.SingleOrDefault(x => x.OwnerId == ownerId
@@ -43,8 +44,8 @@ internal static class GetOwnerEndpoint
                                 x.entry.TrainerId, x.entry.TrainerId is null ? null : trainers.GetValueOrDefault(x.entry.TrainerId, x.entry.TrainerId), x.entry.OwnerName,
                                 entryResult?.FinishPosition, entryResult?.PrizeMoney);
                         }).OrderByDescending(x => x.RaceDate).ToList();
-                        var limit = Math.Max(take.GetValueOrDefault(10), 1);
-                        var offset = Math.Max(skip.GetValueOrDefault(0), 0);
+                        var limit = Math.Max(request.Take.GetValueOrDefault(10), 1);
+                        var offset = Math.Max(request.Skip.GetValueOrDefault(0), 0);
                         var entries = allEntries.Skip(offset).Take(limit).ToList();
                         var hasMoreParticipations = offset + entries.Count < allEntries.Count;
                         var currentHorses = horses.Where(x => x.OwnerName is not null && names.Contains(x.OwnerName))
@@ -62,11 +63,11 @@ internal static class GetOwnerEndpoint
                             .GroupBy(x => (x.HorseId, x.HorseName))
                             .Select(x => new RelationshipSummaryDto("Horse", x.Key.HorseId, x.Key.HorseName, "所有した馬", x.Count(), x.Max(y => y.RaceDate), x.Sum(y => y.PrizeMoney ?? 0m), x.Count(y => y.FinishPosition == 1)))
                             .OrderByDescending(x => x.PrizeMoneyTotal).ThenByDescending(x => x.ParticipationCount).Take(5).ToList();
-                        return Results.Ok(new OwnerDetailDto(owner, currentHorses, relatedTrainers, entries, mergeHistory, hasMoreParticipations, ownerTopHorses));
+                        return Results.Ok(new GetOwnerResponse(new OwnerDetailDto(owner, currentHorses, relatedTrainers, entries, mergeHistory, hasMoreParticipations, ownerTopHorses)));
                     })
                     .WithName("GetOwner")
                     .WithTags("Owner API")
-                    .Produces<OwnerDetailDto>()
+                    .Produces<GetOwnerResponse>()
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

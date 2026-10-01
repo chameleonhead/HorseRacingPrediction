@@ -76,37 +76,37 @@ public class WeekendRacePredictionScenarioTests
 
         // --- 馬・騎手・調教師を登録する ---
         var registerHorse1 = await _client.PostAsJsonAsync("/api/horses",
-            new RegisterHorseRequest("サニーブレイズ", "SUNNYBLAZE", "M", new DateOnly(2022, 4, 10), horse1Id),
+            SubjectRequestFactory.RegisterHorse("サニーブレイズ", "SUNNYBLAZE", "M", new DateOnly(2022, 4, 10), horse1Id),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, registerHorse1.StatusCode, "本命馬の登録に失敗");
 
         var registerHorse2 = await _client.PostAsJsonAsync("/api/horses",
-            new RegisterHorseRequest("スターライトランナー", "STARLIGHTRUNNER", "M", new DateOnly(2022, 3, 20), horse2Id),
+            SubjectRequestFactory.RegisterHorse("スターライトランナー", "STARLIGHTRUNNER", "M", new DateOnly(2022, 3, 20), horse2Id),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, registerHorse2.StatusCode, "対抗馬の登録に失敗");
 
         var registerHorse3 = await _client.PostAsJsonAsync("/api/horses",
-            new RegisterHorseRequest("エメラルドウィンド", "EMERALDWIND", "M", new DateOnly(2022, 5, 1), horse3Id),
+            SubjectRequestFactory.RegisterHorse("エメラルドウィンド", "EMERALDWIND", "M", new DateOnly(2022, 5, 1), horse3Id),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, registerHorse3.StatusCode, "3番手馬の登録に失敗");
 
         var registerJockey1 = await _client.PostAsJsonAsync("/api/jockeys",
-            new RegisterJockeyRequest("田中 剛", "TANAKAGO", "JRA", jockey1Id),
+            SubjectRequestFactory.RegisterJockey("田中 剛", "TANAKAGO", "JRA", jockey1Id),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, registerJockey1.StatusCode, "騎手1の登録に失敗");
 
         var registerJockey2 = await _client.PostAsJsonAsync("/api/jockeys",
-            new RegisterJockeyRequest("山本 優", "YAMAMOTOYUU", "JRA", jockey2Id),
+            SubjectRequestFactory.RegisterJockey("山本 優", "YAMAMOTOYUU", "JRA", jockey2Id),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, registerJockey2.StatusCode, "騎手2の登録に失敗");
 
         var registerJockey3 = await _client.PostAsJsonAsync("/api/jockeys",
-            new RegisterJockeyRequest("鈴木 健", "SUZUKIKEN", "JRA", jockey3Id),
+            SubjectRequestFactory.RegisterJockey("鈴木 健", "SUZUKIKEN", "JRA", jockey3Id),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, registerJockey3.StatusCode, "騎手3の登録に失敗");
 
         var registerTrainer = await _client.PostAsJsonAsync("/api/trainers",
-            new RegisterTrainerRequest("佐藤 誠", "SATOMAKOTO", "JRA", trainerId),
+            SubjectRequestFactory.RegisterTrainer("佐藤 誠", "SATOMAKOTO", "JRA", trainerId),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, registerTrainer.StatusCode, "調教師の登録に失敗");
 

@@ -52,6 +52,28 @@ public sealed class HttpDataCollectionWriteServiceUpsertTests
     }
 
     [TestMethod]
+    public async Task SubjectUpserts_SendNestedProfilePayloads()
+    {
+        var handler = new RecordingHandler();
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("https://example.invalid") };
+        var sut = new HttpDataCollectionWriteService(client, new AgentAcquisitionStatusRecorder());
+
+        await sut.UpsertHorseProfileAsync("テスト馬", null, "F", "2020-01-02", "馬主", null, null, null, null, "鹿毛");
+        await sut.UpsertJockeyAsync("テスト騎手", null, "JRA");
+        await sut.UpsertTrainerAsync("テスト調教師", null, "JRA");
+
+        using var horse = JsonDocument.Parse(handler.Writes.Single(write => write.Path.StartsWith("/api/horses/", StringComparison.Ordinal)).Body);
+        using var jockey = JsonDocument.Parse(handler.Writes.Single(write => write.Path.StartsWith("/api/jockeys/", StringComparison.Ordinal)).Body);
+        using var trainer = JsonDocument.Parse(handler.Writes.Single(write => write.Path.StartsWith("/api/trainers/", StringComparison.Ordinal)).Body);
+        Assert.AreEqual("テスト馬", horse.RootElement.GetProperty("horse").GetProperty("registeredName").GetString());
+        Assert.AreEqual("鹿毛", horse.RootElement.GetProperty("horse").GetProperty("coatColor").GetString());
+        Assert.AreEqual("テスト騎手", jockey.RootElement.GetProperty("jockey").GetProperty("displayName").GetString());
+        Assert.AreEqual("JRA", jockey.RootElement.GetProperty("jockey").GetProperty("affiliationCode").GetString());
+        Assert.AreEqual("テスト調教師", trainer.RootElement.GetProperty("trainer").GetProperty("displayName").GetString());
+        Assert.AreEqual("JRA", trainer.RootElement.GetProperty("trainer").GetProperty("affiliationCode").GetString());
+    }
+
+    [TestMethod]
     public async Task JockeyAndTrainerUpserts_UseTheSameCanonicalIdsAsRaceBulk()
     {
         var handler = new RecordingHandler();
@@ -73,16 +95,19 @@ public sealed class HttpDataCollectionWriteServiceUpsertTests
     private sealed class RecordingHandler : HttpMessageHandler
     {
         public List<(HttpMethod Method, string Path)> Requests { get; } = [];
+        public List<(string Path, string Body)> Writes { get; } = [];
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             Requests.Add((request.Method, request.RequestUri!.AbsolutePath));
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            if (request.Content is not null)
+                Writes.Add((request.RequestUri.AbsolutePath, await request.Content.ReadAsStringAsync(cancellationToken)));
+            return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = request.RequestUri.AbsolutePath == "/api/identity/horse"
                     ? JsonContent.Create(new ResolvedIdentityDto("horse-legacy")) : null
-            });
+            };
         }
     }
 
@@ -102,16 +127,22 @@ public sealed class HttpDataCollectionWriteServiceUpsertTests
         var handler = new EntryHandler("horse-existing", jockeyId: "jockey-contaminated");
         using var client = new HttpClient(handler) { BaseAddress = new Uri("https://example.invalid") };
         var sut = new HttpDataCollectionWriteService(client, new AgentAcquisitionStatusRecorder());
-        await sut.UpsertRaceEntryAsync("race-test", 8, "テスト馬", "幸 英明", null, null, null, null, null, null, null);
+        await sut.UpsertRaceEntryWithHorseIdentityAsync(
+            "race-test", 8, "テスト馬", "幸 英明", "調教師", null, null, null, null, null, null, null,
+            "jra:horse:source-identity");
         var correctId = DeterministicIdGenerator.BuildEntityId("jockey",
             DeterministicIdGenerator.NormalizeKey("幸 英明"));
         Assert.IsTrue(handler.Writes.Any(x => x.Path == $"/api/jockeys/{correctId}"));
         Assert.IsFalse(handler.Writes.Any(x => x.Path.Contains("jockey-contaminated", StringComparison.Ordinal)));
         using var json = JsonDocument.Parse(handler.Writes.Single(x => x.Path.EndsWith("/entries")).Body);
-        Assert.AreEqual(correctId, json.RootElement.GetProperty("jockeyId").GetString());
-        Assert.AreEqual("horse-existing", json.RootElement.GetProperty("horseId").GetString());
+        var entry = json.RootElement.GetProperty("entry");
+        Assert.AreEqual(correctId, entry.GetProperty("jockeyId").GetString());
+        Assert.AreEqual("horse-existing", entry.GetProperty("horseId").GetString());
         Assert.AreEqual(DeterministicIdGenerator.BuildRaceEntryId("race-test", "horse-existing"),
-            json.RootElement.GetProperty("entryId").GetString());
+            entry.GetProperty("entryId").GetString());
+        Assert.AreEqual(JsonValueKind.Null, entry.GetProperty("jockeyName").ValueKind);
+        Assert.AreEqual(JsonValueKind.Null, entry.GetProperty("trainerName").ValueKind);
+        Assert.AreEqual(JsonValueKind.Null, entry.GetProperty("horseSourceIdentity").ValueKind);
     }
 
     [TestMethod]
@@ -124,10 +155,11 @@ public sealed class HttpDataCollectionWriteServiceUpsertTests
         await sut.UpsertRaceEntryAsync("race-test", 9, "テスト馬", null, null, null, null, null, null, null, null);
         var registration = handler.Writes.Single(write => write.Path.EndsWith("/entries"));
         using var json = JsonDocument.Parse(registration.Body);
-        Assert.AreEqual(DeterministicIdGenerator.BuildRaceEntryId("race-test", horseId), json.RootElement.GetProperty("entryId").GetString());
-        Assert.AreEqual(9, json.RootElement.GetProperty("horseNumber").GetInt32());
-        Assert.AreEqual("逃", json.RootElement.GetProperty("runningStyleCode").GetString());
-        Assert.AreEqual("所有者", json.RootElement.GetProperty("ownerName").GetString());
+        var entry = json.RootElement.GetProperty("entry");
+        Assert.AreEqual(DeterministicIdGenerator.BuildRaceEntryId("race-test", horseId), entry.GetProperty("entryId").GetString());
+        Assert.AreEqual(9, entry.GetProperty("horseNumber").GetInt32());
+        Assert.AreEqual("逃", entry.GetProperty("runningStyleCode").GetString());
+        Assert.AreEqual("所有者", entry.GetProperty("ownerName").GetString());
     }
 
     [TestMethod]
@@ -167,12 +199,25 @@ public sealed class HttpDataCollectionWriteServiceUpsertTests
                 Content = path.EndsWith("/context")
                     ? JsonContent.Create(new
                     {
-                        raceId = "race-test",
-                        entries = new[] { new {
-                        entryId = DeterministicIdGenerator.BuildRaceEntryId("race-test", horseId), horseId,
-                        horseNumber = 8, gateNumber = 4, jockeyId, runningStyleCode = "逃", ownerName = "所有者" } }
+                        context = new
+                        {
+                            raceId = "race-test",
+                            entries = new[]
+                            {
+                                new
+                                {
+                                    entryId = DeterministicIdGenerator.BuildRaceEntryId("race-test", horseId),
+                                    horseId,
+                                    horseNumber = 8,
+                                    gateNumber = 4,
+                                    jockeyId,
+                                    runningStyleCode = "逃",
+                                    ownerName = "所有者"
+                                }
+                            }
+                        }
                     })
-                    : JsonContent.Create(new { horseId, registeredName = "テスト馬" }),
+                    : JsonContent.Create(new { horse = new { horseId, registeredName = "テスト馬" } }),
             };
         }
     }
