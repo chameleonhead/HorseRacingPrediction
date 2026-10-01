@@ -30,9 +30,9 @@ curl() {
     */api/admin/collection/pipeline) if [ "$TEST_CASE" = get-failure ]; then return 22; fi; echo '{}' ;;
     */pipeline)
       if [[ " $* " != *" -X PUT "* ]]; then return 90; fi
-      if [[ " $* " == *'"paused":true'* ]]; then
+      if [[ " $* " == *'"pipeline":{"paused":true'* ]]; then
         if [ "$TEST_CASE" = pause-failure ]; then return 22; fi
-      elif [[ " $* " == *'"paused":false'* ]]; then
+      elif [[ " $* " == *'"pipeline":{"paused":false'* ]]; then
         echo RESUMED >&2
       else
         return 90
@@ -115,7 +115,7 @@ if (-not $guardBase.Success -or
     $guardScript -notmatch '"\$base/pipeline-state"' -or
     $guardScript -notmatch '"\$base/tasks\?status=Running&limit=1"' -or
     $guardScript -notmatch '-X PUT' -or
-    $guardScript -notmatch '"paused":true' -or
+    $guardScript -notmatch '"pipeline":\{"paused":true' -or
     $guardScript -notmatch '\.pipeline\.isPaused' -or
     $guardScript -notmatch '\.page\.items \| if type == "array" then length' -or
     $guardScript.Contains('/api/admin/collection') -or

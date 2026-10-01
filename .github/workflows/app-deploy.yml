@@ -300,7 +300,7 @@ jobs:
               exit 1
             fi
             curl --fail --silent --show-error -X PUT -H "X-Api-Key: $API_KEY" \
-              -H 'Content-Type: application/json' --data '{"paused":false}' "$base/pipeline" >/dev/null
+              -H 'Content-Type: application/json' --data '{"pipeline":{"paused":false}}' "$base/pipeline" >/dev/null
           else
             echo "Collection remains paused; recovery requires an explicit operator decision."
           fi
@@ -349,7 +349,7 @@ jobs:
           if [ "$was_paused" = "false" ]; then
             curl --fail --silent --show-error -X PUT \
               -H "X-Api-Key: $API_KEY" -H 'Content-Type: application/json' \
-              --data '{"paused":true,"reason":"deployment version transition"}' "$base/pipeline" >/dev/null
+              --data '{"pipeline":{"paused":true,"reason":"deployment version transition"}}' "$base/pipeline" >/dev/null
           fi
           drained=false
           for attempt in $(seq 1 60); do

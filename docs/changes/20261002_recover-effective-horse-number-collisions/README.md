@@ -87,6 +87,7 @@ because this is a deterministic validation failure.
 | VF-02 | The corrected helper reached production but received HTTP 404 from `/api/admin/...` | Deterministic repository helper contract drift; current API uses `/api/v2/admin/collection/...` and response envelopes | v2 routes/envelopes applied; validator/contract test passed; original diagnostic completed for 8 resources and 3 execution batches | Verified |
 | VF-03 | Entry-repair inspection for an affected race returned HTTP 500 | Deterministic production-path defect or unsupported corrupted state; response body was not emitted | Keep repair mutation blocked, add collision identity evidence first, deploy, and recollect once to identify the exact safe repair target | In progress |
 | VF-04 | Planned `codegraph index --update` is unsupported; full `codegraph index` then encountered the live index database lock | Verification environment mismatch; this CodeGraph version journals live changes and does not expose `--update` | `codegraph status` reported up to date and a fresh explore returned the edited source; no index files were removed | Verified |
+| VF-05 | Deploy run `36918563467` failed while pausing collection: `PUT /pipeline` returned HTTP 400 | Deterministic workflow/API contract drift; workflow sent a flat body while the endpoint requires `SetCollectionPipelineRequest.pipeline` | Send `{pipeline:{paused,...}}` for pause and resume, strengthen the shell contract test, rerun its original command, then push and monitor a new deploy | In progress |
 
 ## Planned verification
 
