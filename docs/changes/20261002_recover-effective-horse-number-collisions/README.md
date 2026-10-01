@@ -1,6 +1,6 @@
 # Effective horse number collision recovery
 
-Status: Approved
+Status: Proposed
 
 ## Incident summary
 
@@ -49,6 +49,7 @@ because this is a deterministic validation failure.
 | Blind retry cannot succeed | Validation failure is deterministic and writes nothing | Diagnose, repair, then create one controlled recollection | Retry the failure group now | Repeated notifications and unchanged race status | Resolved in design |
 | Scope of affected races is not yet known | Operator identified dates, not race IDs/group key | Query actionable failures and race evidence read-only before repair | Assume every race on both dates is corrupt | Unnecessary repair surface | Resolved in design |
 | Existing source data may already contain duplicate persisted assignments | Effective-set validation includes untouched existing entries | Inspection must distinguish stale identity alias from pre-existing duplicate number | Relax uniqueness | Silent corruption | Resolved in design |
+| Every runner has a different stored/result Horse ID | Controlled production recollection reports 11/11 to 16/16 collisions in each affected race, not an isolated number shift | Treat this as legacy name-derived identity promotion, never as a horse-number correction; require an official source identity, exact normalized name, exactly one source-less name-derived candidate, and the fenced repair boundary | Replace entries by horse number alone | Same-name horses could be conflated without the uniqueness and source-less gates | Open decision |
 
 ## Acceptance criteria
 
@@ -74,8 +75,8 @@ because this is a deterministic validation failure.
 |---|---|---|---|
 | T-01 | Verified | Capture production failure and race evidence read-only | Group `0FB0D54D5B4D2FAA`: 8 deterministic failures on 2026-09-26; 2026-09-27 races currently have result timestamps/status |
 | T-02 | Verified | Add the smallest structured collision evidence / repair handoff needed after T-01 | Collision outcome now includes horse number plus existing/incoming Horse IDs; 17 API tests pass |
-| T-03 | In progress | Verify and deploy the approved implementation | Local build/tests pass; CI/deploy pending push |
-| T-04 | Dependent | Execute fenced repair and controlled recollection for affected races | Repair receipts and task outcomes |
+| T-03 | Verified | Verify and deploy the approved implementation | Run `36920958445`: verification, image/Lambda deployment, API restart, and health check passed; restore intentionally kept the pipeline paused while actionable failures existed |
+| T-04 | In progress | Execute fenced repair and controlled recollection for affected races | Eight controlled recollections completed and produced exact collision pairs; repair mutation awaits the identity-promotion decision |
 | T-05 | Dependent | Verify result persistence and lifecycle states for both dates | Post-recovery API evidence |
 | T-06 | Runnable | Final review: AC/task traceability, scope, security, rollback, regression | Review section update |
 
@@ -87,7 +88,7 @@ because this is a deterministic validation failure.
 | VF-02 | The corrected helper reached production but received HTTP 404 from `/api/admin/...` | Deterministic repository helper contract drift; current API uses `/api/v2/admin/collection/...` and response envelopes | v2 routes/envelopes applied; validator/contract test passed; original diagnostic completed for 8 resources and 3 execution batches | Verified |
 | VF-03 | Entry-repair inspection for an affected race returned HTTP 500 | Deterministic production-path defect or unsupported corrupted state; response body was not emitted | Keep repair mutation blocked, add collision identity evidence first, deploy, and recollect once to identify the exact safe repair target | In progress |
 | VF-04 | Planned `codegraph index --update` is unsupported; full `codegraph index` then encountered the live index database lock | Verification environment mismatch; this CodeGraph version journals live changes and does not expose `--update` | `codegraph status` reported up to date and a fresh explore returned the edited source; no index files were removed | Verified |
-| VF-05 | Deploy run `36918563467` failed while pausing collection: `PUT /pipeline` returned HTTP 400 | Deterministic workflow/API contract drift; workflow sent a flat body while the endpoint requires `SetCollectionPipelineRequest.pipeline` | Send `{pipeline:{paused,...}}` for pause and resume, strengthen the shell contract test, rerun its original command, then push and monitor a new deploy | In progress |
+| VF-05 | Deploy run `36918563467` failed while pausing collection: `PUT /pipeline` returned HTTP 400 | Deterministic workflow/API contract drift; workflow sent a flat body while the endpoint requires `SetCollectionPipelineRequest.pipeline` | Send `{pipeline:{paused,...}}` for pause and resume, strengthen the shell contract test, rerun its original command, then push and monitor a new deploy | Verified by production pause/drain in run `36920958445` |
 | VF-06 | Deploy run `36919986834` failed in the full test suite before deployment because `CollectionQueueCutoverContractTests` still asserted the obsolete flat pipeline request | Deterministic incomplete test-contract update; the focused shell test passed but a second independent contract test retained the old body | Update both pause and resume assertions, run the focused collector contract tests, then rerun CI/deploy | Verified: 14 focused tests passed locally |
 
 ## Planned verification
@@ -135,6 +136,18 @@ attempted. The first product checkpoint preserves the uniqueness guard and adds 
 Horse IDs to the rejected outcome. Related API (17), scraping (18), and repair-hold (10) tests and the
 solution build pass with no warning. Next: push, observe CI/deploy to terminal success, create one
 controlled recovery task set, and read the new collision evidence before choosing a repair mutation.
+
+Checkpoint 2 (2026-10-02): commit `ff07fea0` deployed successfully through image/Lambda rollout,
+API restart, and health check in run `36920958445`. The workflow then intentionally refused to resume
+over actionable failures. An exact-membership recovery created eight tasks; because those tasks were
+Normal-lane behind an existing queue, the eight still-unattempted tasks were cancelled and recreated
+for the same resources/revision as Realtime priority. All eight completed atomically with no writes and
+reported whole-field identity drift: Hanshin 1R 11/11, 5R 14/14, 10R 14/14; Nakayama 1R 13/13,
+3R 16/16, 5R 14/14, 8R 16/16, 10R 16/16. The pipeline is restored to its original running state.
+This disproves the isolated `ブリンカー`-adjacent-number hypothesis. The remaining material choice is
+whether to extend the fenced repair to promote a unique source-less, name-derived Horse identity from
+the official source identity while preserving the existing Horse ID. No automatic promotion or
+assignment mutation has been performed.
 
 ### Final review
 
