@@ -1,6 +1,6 @@
 # 装具表示だけの出馬表馬番セルを未確定として扱う
 
-- Status: Approved
+- Status: Implemented
 - Change record schema: 2
 - Orchestration schema: 2
 - Owner: Main/Lead
@@ -11,8 +11,8 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | In progress | rebase先の契約namespace変更に合わせて回帰テストを修正中 |
-| Verification | In progress | rebase後のRelease build失敗を閉じ、送信前validationと全gateを再検証する |
+| Code | Complete | `93235379`でparser/test、`a1517b6b`でrebase後namespace・監査・送信validation記録を是正 |
+| Verification | Complete | focused 29、Release build、solution non-External 1,576 passed（1 skipped）、format、validator成功 |
 | Deployment/operation | Not applicable | ローカル解析コードの修正であり、本変更内でデプロイ操作は行わない |
 
 ## Context
@@ -84,8 +84,8 @@ material concernは上記で設計上解消しており、Open decisionはない
 | --- | --- | --- | --- | --- |
 | AC1 | 枠番・馬番が空で`horse_icon blinker`画像だけを含む公式形状の行を、例外なく`HorseNumber = null`として解析できる | T1 | Playwright HTML→snapshotter→parser回帰テスト | Verified |
 | AC2 | 数字とブリンカー画像が同居するセル、および`馬番N` AccessibleName表現では正式番号を保持する | T1 | publication tests 15件成功 | Verified |
-| AC3 | `取消`・`除外`は従来の参加状態を維持し、未知の非空非番号値は`JraValueParseException`になる。未確定番号を送信する前に公式horse identityを検証する | T1, T3 | parser testsとworkflow validation経路の確認 | Connected |
-| AC4 | 関連スクレイピング回帰、build、CI同等format検証が成功し、共通snapshotterの公開契約を変更しない | T2, T4 | 関連test、build、format、rebase後diff/status監査 | Connected |
+| AC3 | `取消`・`除外`は従来の参加状態を維持し、未知の非空非番号値は`JraValueParseException`になる。未確定番号を送信する前に公式horse identityを検証する | T1, T3 | parser/workflow focused 29件と送信経路確認 | Verified |
+| AC4 | 関連スクレイピング回帰、build、CI同等format検証が成功し、共通snapshotterの公開契約を変更しない | T2, T4 | build、solution test、format、validator、diff/status | Verified |
 
 ## Delivery plan
 
@@ -96,9 +96,9 @@ material concernは上記で設計上解消しており、Open decisionはない
 | ID | Task | Owner | Model tier | Routing | Depends on | Write scope | Verification | Completion evidence | Audit | Result metrics | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | 専用馬番解析と実DOM形状の回帰テストを実装 | Bounded coding worker | Worker tier | Luna/high — frozen parser rule、局所・可逆・独立検証可能 | Approval | `src/HorseRacingPrediction.Scraping/Jra/Parsing/RaceCardPageParser.cs`; `tests/HorseRacingPrediction.Scraping.Tests/Parsing/RaceCardPublicationTests.cs` | 対象test classとScraping tests | rebased implementation commit、成功コマンド、[T1-A1 audit](agent-audits/T1-A1.json) | T1-A1 | unavailable; retries 0; corrections 0; reviews 1 | Verified |
-| T2 | 統合結果を反証レビューし、全gateを検証して記録 | Main/Lead | Lead tier | Lead — final acceptance・統合・最終判定は委譲しない | T1, T3, T4 | このchange recordのみ | counterexample確認、関連test/build/format/diff/status | Verification recordとfinal review | none | unavailable; retries 0; corrections 0; reviews 1 | Dependent |
+| T2 | 統合結果を反証レビューし、全gateを検証して記録 | Main/Lead | Lead tier | Lead — final acceptance・統合・最終判定は委譲しない | T1, T3, T4 | このchange recordのみ | counterexample確認、関連test/build/format/diff/status | Verification recordとfinal review | none | unavailable; retries 0; corrections 0; reviews 2 | Verified |
 | T3 | nullable馬番の送信前validationと送信契約を確認 | Main/Lead | Lead tier | Lead — public contractと永続化境界の判断 | T1 | read-only | parser→workflow validation→write serviceのコード経路と既存test | 本記録のvalidation調査結果 | none | unavailable; retries 0; corrections 0; reviews 1 | Verified |
-| T4 | rebase後のnamespace破損、監査revision、検証failure記録を修正してCI gateを再実行 | Main/Lead | Lead tier | Lead — integrationとprocess contractの是正 | T1, T3 | test、change record、agent audit | focused、Release build、CI test、format、validator | commitとverification record | none | unavailable; retries 0; corrections 1; reviews 1 | In progress |
+| T4 | rebase後のnamespace破損、監査revision、検証failure記録を修正してCI gateを再実行 | Main/Lead | Lead tier | Lead — integrationとprocess contractの是正 | T1, T3 | test、change record、agent audit | focused、Release build、CI test、format、validator | `a1517b6b`とverification record | none | unavailable; retries 0; corrections 1; reviews 1 | Verified |
 
 T1 workerはテスト作成と最小・関連regressionを実行する。T2 Leadがworker自己申告とは独立にテスト、差分、スコープを確認する。T1が共通snapshotter、公開契約、永続化へ拡張を要する場合、またはfocused correction後も検証不能の場合はLeadへ戻す。
 
@@ -111,6 +111,7 @@ T1 workerはテスト作成と最小・関連regressionを実行する。T2 Lead
 - **Checkpoint review (2026-10-02, Main/Lead):** AC1～AC3を統合差分とPlaywright経路で確認。許容条件は`numberText=ブリンカー着用`、`horse_icon blinker`、画像altの三条件に限定され、数字・取消/除外・未知値の分岐を保持。workerの無条件full Scraping testでExternal 25件が失敗したため、CIと同じ除外条件で独立再実行し364件成功。focused correctionやLead code correctionは不要。
 - **Final review (2026-10-02, Main/Lead):** T1/T2とAC1～AC4をVerifiedへ照合。production parser→snapshot projection→Playwright fixtureの実経路が接続され、共通snapshotter変更なし。Release build、solution non-External 1,513件、format、diff/status、audit validator成功を確認。承認範囲の未完了task・findingなし。
 - **Final review superseded (2026-10-02):** push前rebase後のRelease buildで契約namespace移動による追加testのコンパイル失敗を検出し、前回の完了判定を撤回。AC3/AC4をConnected、recordをApprovedへ戻し、T3/T4をclosure itemとして追加した。
+- **Final review after rebase (2026-10-02, Main/Lead):** ブリンカー後続番号は未観測仮説として実装対象外へ明確化。nullable番号は送信前identity validationを通ることをproduction pathと既存workflow testで確認。VF2を修正し、focused 29、format、Release build、CI同等solution test 1,576 passed/1 skipped、audit validator、diff/statusを再実行した。VF1の再実行では失敗がExternalカテゴリ2件だけで、いずれも馬主名という本変更外のlive状態であることをtest属性と出力で確認。承認範囲のtaskとACに未完了なし。
 
 ## Send-path validation investigation
 
@@ -126,8 +127,8 @@ T1 workerはテスト作成と最小・関連regressionを実行する。T2 Lead
 
 | ID | Task | Command / failure | Classification and evidence | Disposition | Owner | State |
 | --- | --- | --- | --- | --- | --- | --- |
-| VF1 | External smoke follow-up | worker: unfiltered Scraping test、External JRA tests 25 failed | worker指示がCIの`TestCategory!=External`を反映しなかったprocess-contract誤り。filtered Scraping 364件とsolution 1,513件は成功したが、元コマンド失敗を記録せず完了扱いした | External smokeは通常CI外であり本ACを阻害しない。今後worker regressionはworkflow exact filterを使用。live adapter確認は明示的なpre-release smokeのownerへ残す | Main/Lead | Externally blocked |
-| VF2 | T4 | rebase後Release build: `Contracts.RaceEntryParticipationStatus`が不存在 | origin/mainの契約整理でnamespaceが`Contracts.Races`へ移動。追加testだけが旧完全修飾名を保持 | test参照を現行namespaceへ更新し、元のRelease buildと後続CI testを再実行 | Main/Lead | In progress |
+| VF1 | External smoke follow-up | worker: unfiltered Scraping test、External JRA tests 25 failed | process-contract誤り。rebase後に元コマンドを再実行し390件中2件だけ失敗。両方が`TestCategory("External")`のlive JRA testで、失敗項目は馬主名欠落。HorseNumber変更とは独立 | CI契約のnon-External gateは全成功。live owner-name smokeは本ACを阻害しない外部追跡事項としてMain/Leadが担当 | Main/Lead | Verified |
+| VF2 | T4 | rebase後Release build: `Contracts.RaceEntryParticipationStatus`が不存在 | origin/mainの契約整理でnamespaceが`Contracts.Races`へ移動。追加testだけが旧完全修飾名を保持 | `a1517b6b`でtest参照を更新し、同じRelease buildを0 warning/0 errorで再実行。後続CI testも成功 | Main/Lead | Verified |
 
 ## Verification record
 
@@ -138,8 +139,13 @@ T1 workerはテスト作成と最小・関連regressionを実行する。T2 Lead
 - `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`: exit 0。
 - `dotnet build HorseRacingPrediction.sln --no-restore --configuration Release`: success、0 errors、既存nullable warning 1件。
 - `dotnet test HorseRacingPrediction.sln --no-build --configuration Release --filter "TestCategory!=External"`: 1,513 passed、1 skipped、0 failed。
-- `git diff --check`: success。実装commit `439ecbec`はparserと対応testだけを変更。
+- `git diff --check`: success。rebase後実装commit `93235379`はparserと対応testだけを変更。
+- Rebase後focused parser/workflow tests: 29 passed、0 failed。
+- Rebase後`dotnet build HorseRacingPrediction.sln --no-restore --configuration Release`: 0 warnings、0 errors。
+- Rebase後CI相当solution test: 1,576 passed、1 skipped、0 failed。
+- Rebase後unfiltered Scraping test: 387 passed、1 skipped、External 2 failed。失敗は馬主名live assertionで、本変更のHorseNumber経路外。
+- Rebase後audit validator、format、`git diff --check`: success。
 
 ## Deviations and follow-up
 
-push前rebaseでVF2が発生したため、最新検証結果は上記failure ledgerとT4で更新する。デプロイ・過去失敗タスクの再実行はNon-goalsどおり未実施。
+External live testの馬主名2件はMain/Lead所有の非阻害follow-up。ブリンカー後続番号の未観測仮説は実装していない。デプロイ・過去失敗タスクの再実行はNon-goalsどおり未実施。
