@@ -127,8 +127,13 @@ public sealed class CollectedRaceIdentityGuardTests
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsFalse(body.Result.CorePersisted);
-        Assert.IsTrue(body.Result.Outcomes!.Any(x => x.ErrorCode is "RaceEntryIdentityMismatch" or "InvalidHorseNumber"),
+        var outcomes = body.Result.Outcomes!;
+        Assert.IsTrue(outcomes.Any(x => x.ErrorCode is "RaceEntryIdentityMismatch" or "InvalidHorseNumber"),
             string.Join(" | ", body.Result.Errors));
+        var collision = outcomes.Single(x => x.ErrorCode == "InvalidHorseNumber");
+        Assert.AreEqual("HorseNumber=1", collision.Key);
+        StringAssert.Contains(collision.Message, "ExistingHorseId=");
+        StringAssert.Contains(collision.Message, "IncomingHorseId=");
         Assert.AreEqual(eventsBefore, CountStoredEvents(app));
         Assert.AreEqual(tasksBefore, await CountTasksAsync(app));
         Assert.AreEqual(beforeContext, await GetContextJsonAsync(http, initialBody.Result.RaceId));

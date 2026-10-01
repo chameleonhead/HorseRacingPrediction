@@ -62,12 +62,27 @@ internal static partial class RaceResultBulkService
                 HorseRacingPrediction.Contracts.Common.JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", item.HorseName!), item.HorseSourceIdentity),
                 item.HorseNumber
             }).ToArray();
-        var effectiveNumbers = (existing?.Entries ?? []).Where(entry => !incoming.Any(item => item.HorseId == entry.HorseId))
-            .Select(entry => entry.HorseNumber).Concat(incoming.Select(item => item.HorseNumber
-                ?? existing?.Entries.FirstOrDefault(entry => entry.HorseId == item.HorseId)?.HorseNumber))
-            .Where(number => number.HasValue).ToArray();
-        if (effectiveNumbers.Distinct().Count() != effectiveNumbers.Length)
-            failures.Add(new("Entry", "HorseNumber", "Rejected", "InvalidHorseNumber", "Effective horse numbers must be unique; no data was written."));
+        var effectiveAssignments = (existing?.Entries ?? [])
+            .Where(entry => !incoming.Any(item => item.HorseId == entry.HorseId))
+            .Select(entry => new { entry.HorseId, entry.HorseNumber, Origin = "Existing" })
+            .Concat(incoming.Select(item => new
+            {
+                item.HorseId,
+                HorseNumber = item.HorseNumber
+                    ?? existing?.Entries.FirstOrDefault(entry => entry.HorseId == item.HorseId)?.HorseNumber,
+                Origin = "Incoming"
+            }))
+            .Where(item => item.HorseNumber.HasValue)
+            .ToArray();
+        foreach (var collision in effectiveAssignments.GroupBy(item => item.HorseNumber!.Value)
+                     .Where(group => group.Count() > 1))
+        {
+            var assignments = string.Join(", ", collision.OrderBy(item => item.Origin, StringComparer.Ordinal)
+                .ThenBy(item => item.HorseId, StringComparer.Ordinal)
+                .Select(item => $"{item.Origin}HorseId={item.HorseId}"));
+            failures.Add(new("Entry", $"HorseNumber={collision.Key}", "Rejected", "InvalidHorseNumber",
+                $"Effective horse number is assigned to multiple horse identities ({assignments}); no data was written."));
+        }
         return failures.Count == 0 ? null : Results.Ok(new HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkResponse(
             new HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkResultDto(
                 raceId, failures.Select(item => $"{item.ErrorCode}: {item.Key} — {item.Message}").ToArray(),
