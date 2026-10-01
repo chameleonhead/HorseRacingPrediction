@@ -91,10 +91,10 @@ public sealed class RaceCardPublicationTests
         var entries = Parse(snapshot).Entries;
 
         Assert.IsNull(entries[0].HorseNumber);
-        Assert.AreEqual(HorseRacingPrediction.Contracts.RaceEntryParticipationStatus.Cancelled,
+        Assert.AreEqual(HorseRacingPrediction.Contracts.Races.RaceEntryParticipationStatus.Cancelled,
             entries[0].ParticipationStatus);
         Assert.IsNull(entries[1].HorseNumber);
-        Assert.AreEqual(HorseRacingPrediction.Contracts.RaceEntryParticipationStatus.Excluded,
+        Assert.AreEqual(HorseRacingPrediction.Contracts.Races.RaceEntryParticipationStatus.Excluded,
             entries[1].ParticipationStatus);
     }
 

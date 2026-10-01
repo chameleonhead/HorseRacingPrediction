@@ -1,6 +1,6 @@
 # 装具表示だけの出馬表馬番セルを未確定として扱う
 
-- Status: Implemented
+- Status: Approved
 - Change record schema: 2
 - Orchestration schema: 2
 - Owner: Main/Lead
@@ -11,8 +11,8 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Complete | `439ecbec`で専用判定と実DOM形状テストを追加 |
-| Verification | Complete | focused 15、Scraping non-External 364、solution non-External 1,513（1 skip）、format、Release build成功 |
+| Code | In progress | rebase先の契約namespace変更に合わせて回帰テストを修正中 |
+| Verification | In progress | rebase後のRelease build失敗を閉じ、送信前validationと全gateを再検証する |
 | Deployment/operation | Not applicable | ローカル解析コードの修正であり、本変更内でデプロイ操作は行わない |
 
 ## Context
@@ -47,7 +47,7 @@
 ## Technical impact
 
 - `RaceCardPageParser` の馬番値取得を、汎用的な補完済みセル本文の直接検証から馬番セル専用解析へ切り出す。
-- セル本文またはフラグメントに明示的な馬番（数字または`馬番N`）があれば1～18として解析する。
+- セル本文として明示された馬番（数字または`馬番N`）は従来どおり1～18として解析する。
 - セル本文が空、または馬番を表さない装具フラグメントだけなら未確定としてnullを返す。
 - `取消`・`除外`は参加状態として従来どおり処理する。
 - 装具表示以外の未知の非空値は従来どおり例外にし、外部DOM変更を黙って無視しない。
@@ -71,7 +71,7 @@
 
 | ID | Concern and evidence | Impact | Proposed disposition | AC/task/test | Agent position | User disposition | State |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| C1 | 装具altを無条件に空扱いすると、将来そこに番号も含まれる表現を取りこぼす可能性がある | 正式番号があるのにnull化し得る | 既存の数字・`馬番N`解析を先行維持し、確認済みの装具だけの形状に限定する | AC1/AC2, T1 | 推奨 | Approved | Resolved in design |
+| C1 | 「ブリンカー断片の後に番号断片がある」形状は実ページで未確認の仮説 | 仮説を一般化すると不要な複雑化と誤抽出を招く | 実装対象にせず、確認済みの「セル本文がブリンカーaltだけ」の形状と既存のセル本文番号だけを扱う。将来観測時はproduction-shaped evidenceから別途設計する | AC1/AC2, T1 | 推奨 | Approved | Excluded follow-up |
 | C2 | 任意の未知文字列をnull化するとJRA DOM変更を隠す | サイレントなデータ欠落 | `horse_icon blinker`と画像altの両方が一致する場合だけ許容し、それ以外は従来どおり例外 | AC3, T1 | 必須 | Approved | Resolved in design |
 | C3 | 公式ページは時間経過で内容が変わる | live URLだけでは回帰証拠が再現不能になる | 公式HTMLで確認した最小DOM形状をPlaywrightテストfixtureへ固定した | AC1, T1/T2 | 推奨 | Approved | Resolved in design |
 | C4 | 共通snapshotter修正は他parserへ影響する | 回帰範囲とレビュー負担が増える | snapshotterは変更せずRaceCard HorseNumber専用処理だけ変更した | AC4, T1/T2 | 推奨 | Approved | Resolved in design |
@@ -84,8 +84,8 @@ material concernは上記で設計上解消しており、Open decisionはない
 | --- | --- | --- | --- | --- |
 | AC1 | 枠番・馬番が空で`horse_icon blinker`画像だけを含む公式形状の行を、例外なく`HorseNumber = null`として解析できる | T1 | Playwright HTML→snapshotter→parser回帰テスト | Verified |
 | AC2 | 数字とブリンカー画像が同居するセル、および`馬番N` AccessibleName表現では正式番号を保持する | T1 | publication tests 15件成功 | Verified |
-| AC3 | `取消`・`除外`は従来の参加状態を維持し、未知の非空非番号値は`JraValueParseException`になる | T1 | cancellation/publication parser tests成功 | Verified |
-| AC4 | 関連スクレイピング回帰、build、CI同等format検証が成功し、共通snapshotterの公開契約を変更しない | T2 | CI同等test/build/format、diff/status監査成功 | Verified |
+| AC3 | `取消`・`除外`は従来の参加状態を維持し、未知の非空非番号値は`JraValueParseException`になる。未確定番号を送信する前に公式horse identityを検証する | T1, T3 | parser testsとworkflow validation経路の確認 | Connected |
+| AC4 | 関連スクレイピング回帰、build、CI同等format検証が成功し、共通snapshotterの公開契約を変更しない | T2, T4 | 関連test、build、format、rebase後diff/status監査 | Connected |
 
 ## Delivery plan
 
@@ -95,8 +95,10 @@ material concernは上記で設計上解消しており、Open decisionはない
 
 | ID | Task | Owner | Model tier | Routing | Depends on | Write scope | Verification | Completion evidence | Audit | Result metrics | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | 専用馬番解析と実DOM形状の回帰テストを実装 | Bounded coding worker | Worker tier | Luna/high — frozen parser rule、局所・可逆・独立検証可能 | Approval | `src/HorseRacingPrediction.Scraping/Jra/Parsing/RaceCardPageParser.cs`; `tests/HorseRacingPrediction.Scraping.Tests/Parsing/RaceCardPublicationTests.cs` | 対象test classとScraping tests | `439ecbec`、成功コマンド、[T1-A1 audit](agent-audits/T1-A1.json) | T1-A1 | unavailable; retries 0; corrections 0; reviews 1 | Verified |
-| T2 | 統合結果を反証レビューし、全gateを検証して記録 | Main/Lead | Lead tier | Lead — final acceptance・統合・最終判定は委譲しない | T1 | このchange recordのみ | counterexample確認、関連test/build/format/diff/status | Verification recordとfinal review | none | unavailable; retries 0; corrections 0; reviews 1 | Verified |
+| T1 | 専用馬番解析と実DOM形状の回帰テストを実装 | Bounded coding worker | Worker tier | Luna/high — frozen parser rule、局所・可逆・独立検証可能 | Approval | `src/HorseRacingPrediction.Scraping/Jra/Parsing/RaceCardPageParser.cs`; `tests/HorseRacingPrediction.Scraping.Tests/Parsing/RaceCardPublicationTests.cs` | 対象test classとScraping tests | rebased implementation commit、成功コマンド、[T1-A1 audit](agent-audits/T1-A1.json) | T1-A1 | unavailable; retries 0; corrections 0; reviews 1 | Verified |
+| T2 | 統合結果を反証レビューし、全gateを検証して記録 | Main/Lead | Lead tier | Lead — final acceptance・統合・最終判定は委譲しない | T1, T3, T4 | このchange recordのみ | counterexample確認、関連test/build/format/diff/status | Verification recordとfinal review | none | unavailable; retries 0; corrections 0; reviews 1 | Dependent |
+| T3 | nullable馬番の送信前validationと送信契約を確認 | Main/Lead | Lead tier | Lead — public contractと永続化境界の判断 | T1 | read-only | parser→workflow validation→write serviceのコード経路と既存test | 本記録のvalidation調査結果 | none | unavailable; retries 0; corrections 0; reviews 1 | Verified |
+| T4 | rebase後のnamespace破損、監査revision、検証failure記録を修正してCI gateを再実行 | Main/Lead | Lead tier | Lead — integrationとprocess contractの是正 | T1, T3 | test、change record、agent audit | focused、Release build、CI test、format、validator | commitとverification record | none | unavailable; retries 0; corrections 1; reviews 1 | In progress |
 
 T1 workerはテスト作成と最小・関連regressionを実行する。T2 Leadがworker自己申告とは独立にテスト、差分、スコープを確認する。T1が共通snapshotter、公開契約、永続化へ拡張を要する場合、またはfocused correction後も検証不能の場合はLeadへ戻す。
 
@@ -108,6 +110,24 @@ T1 workerはテスト作成と最小・関連regressionを実行する。T2 Lead
 - **Pre-implementation review (2026-10-02, Main/Lead):** T1をRunnable、T2をT1依存のDependentと分類。T1のexclusive write scope、既存の数字+装具・AccessibleName・取消/除外・garbage反例、最小test class、Scraping regressionをworker契約へ固定した。共通snapshotter、公開契約、永続化へ変更が必要ならLeadへ戻す。
 - **Checkpoint review (2026-10-02, Main/Lead):** AC1～AC3を統合差分とPlaywright経路で確認。許容条件は`numberText=ブリンカー着用`、`horse_icon blinker`、画像altの三条件に限定され、数字・取消/除外・未知値の分岐を保持。workerの無条件full Scraping testでExternal 25件が失敗したため、CIと同じ除外条件で独立再実行し364件成功。focused correctionやLead code correctionは不要。
 - **Final review (2026-10-02, Main/Lead):** T1/T2とAC1～AC4をVerifiedへ照合。production parser→snapshot projection→Playwright fixtureの実経路が接続され、共通snapshotter変更なし。Release build、solution non-External 1,513件、format、diff/status、audit validator成功を確認。承認範囲の未完了task・findingなし。
+- **Final review superseded (2026-10-02):** push前rebase後のRelease buildで契約namespace移動による追加testのコンパイル失敗を検出し、前回の完了判定を撤回。AC3/AC4をConnected、recordをApprovedへ戻し、T3/T4をclosure itemとして追加した。
+
+## Send-path validation investigation
+
+- `RaceCardPageParser` は未確定番号を`null`のまま保持し、番号・枠を行位置から推測しない。
+- `JraRaceCardCollectionWorkflow.ValidateCardEntriesForPersistence` は送信直前に番号範囲、重複、参加状態を検査する。`HorseNumber=null`は意図した暫定状態なので拒否しない。
+- 1頭でも番号がnullなら、全entryの`HorseSourceIdentity`がJRA公式形式へnormalizeできることを送信前に必須化する。欠落時は`JraHorseSourceIdentityUnavailableException`となり、write serviceは呼ばれない。
+- identityが揃えば`RaceResultEntryBulkDto.HorseNumber`または`UpsertRaceEntryWithHorseIdentityAsync`へnullのまま送る。write serviceも既知番号の0以下だけを拒否し、nullはhorse identityをstable keyとして受理する。
+- 既存test `RefreshPageAsync_ProvisionalNumbersRequireEveryOfficialHorseIdentityBeforeWrites` と `RefreshPageAsync_ForwardsMixedProvisionalNumbersWithoutInventingValues` が、送信前停止とnullable転送をそれぞれ検証する。
+
+結論: 今回のブリンカーだけの未確定行は、公式horse identityが取れなければ送信前に停止し、取れていれば未確定番号として意図どおり送信される。番号断片順序の仮説を実装へ一般化する必要はない。
+
+## Verification failure ledger
+
+| ID | Task | Command / failure | Classification and evidence | Disposition | Owner | State |
+| --- | --- | --- | --- | --- | --- | --- |
+| VF1 | External smoke follow-up | worker: unfiltered Scraping test、External JRA tests 25 failed | worker指示がCIの`TestCategory!=External`を反映しなかったprocess-contract誤り。filtered Scraping 364件とsolution 1,513件は成功したが、元コマンド失敗を記録せず完了扱いした | External smokeは通常CI外であり本ACを阻害しない。今後worker regressionはworkflow exact filterを使用。live adapter確認は明示的なpre-release smokeのownerへ残す | Main/Lead | Externally blocked |
+| VF2 | T4 | rebase後Release build: `Contracts.RaceEntryParticipationStatus`が不存在 | origin/mainの契約整理でnamespaceが`Contracts.Races`へ移動。追加testだけが旧完全修飾名を保持 | test参照を現行namespaceへ更新し、元のRelease buildと後続CI testを再実行 | Main/Lead | In progress |
 
 ## Verification record
 
@@ -122,4 +142,4 @@ T1 workerはテスト作成と最小・関連regressionを実行する。T2 Lead
 
 ## Deviations and follow-up
 
-workerが無条件で実行したScraping testではExternalなJRA live navigation/page-contentテスト25件が外部ページ状態により失敗した。CI契約は`TestCategory!=External`であり、同条件のScraping 364件とsolution 1,513件は成功したためAC4を阻害しない。デプロイ・過去失敗タスクの再実行はNon-goalsどおり未実施。
+push前rebaseでVF2が発生したため、最新検証結果は上記failure ledgerとT4で更新する。デプロイ・過去失敗タスクの再実行はNon-goalsどおり未実施。
