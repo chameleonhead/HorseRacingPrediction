@@ -42,6 +42,10 @@ jobs:
         shell: pwsh
         run: ./tests/scripts/test-collector-temp-lifecycle.ps1 -Bash /bin/bash
 
+      - name: Verify Playwright container version
+        shell: pwsh
+        run: ./tests/scripts/test-playwright-container-version.ps1
+
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
@@ -96,6 +100,9 @@ jobs:
       - name: Build collector Lambda container
         run: |
           docker build -f Dockerfile.collector-lambda -t collector-lambda-ci .
+          docker run --rm --entrypoint /var/task/.playwright/node/linux-x64/node \
+            collector-lambda-ci -e \
+            "const { chromium } = require('/var/task/.playwright/package'); (async () => { const browser = await chromium.launch({ headless: true }); const page = await browser.newPage(); await page.setContent('<main>ready</main>'); if (await page.textContent('main') !== 'ready') throw new Error('Unexpected page content'); await browser.close(); console.log('PASS Playwright Chromium launched in collector image'); })().catch(error => { console.error(error); process.exit(1); });"
           docker run --rm --entrypoint /bin/sh \
             -v "$PWD/tests/scripts/test-collector-core-suppression.sh:/tmp/test-collector-core-suppression.sh:ro" \
             collector-lambda-ci /tmp/test-collector-core-suppression.sh \
@@ -335,19 +342,19 @@ jobs:
           API_BASE_URL: ${{ steps.api-url.outputs.value }}
           API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
         run: |
-          base="$API_BASE_URL/api/admin/collection"
-          pipeline="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/pipeline")"
+          base="$API_BASE_URL/api/v2/admin/collection"
+          pipeline="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/pipeline-state")"
           was_paused="$(jq -er '.isPaused | if type == "boolean" then tostring else error("Invalid pipeline state") end' <<<"$pipeline")"
           echo "was_paused=$was_paused" >> "$GITHUB_OUTPUT"
           if [ "$was_paused" = "false" ]; then
-            curl --fail --silent --show-error -X POST \
+            curl --fail --silent --show-error -X PUT \
               -H "X-Api-Key: $API_KEY" -H 'Content-Type: application/json' \
-              --data '{"reason":"deployment version transition"}' "$base/pipeline/pause" >/dev/null
+              --data '{"paused":true,"reason":"deployment version transition"}' "$base/pipeline" >/dev/null
           fi
           drained=false
           for attempt in $(seq 1 60); do
             running="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/tasks?status=Running&limit=1")"
-            count="$(jq -er 'if type == "array" then length else error("Invalid task list") end' <<<"$running")"
+            count="$(jq -er '.items | if type == "array" then length else error("Invalid task list") end' <<<"$running")"
             if [ "$count" = "0" ]; then
               drained=true
               break
