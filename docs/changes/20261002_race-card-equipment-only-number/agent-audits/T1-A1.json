@@ -22,10 +22,39 @@
     "src/HorseRacingPrediction.Scraping/Jra/Parsing/RaceCardPageParser.cs",
     "tests/HorseRacingPrediction.Scraping.Tests/Parsing/RaceCardPublicationTests.cs"
   ],
-  "review": null,
-  "overhead": null,
-  "elapsed": null,
+  "review": {
+    "usageAvailability": null,
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": null
+  },
+  "overhead": {
+    "availability": null,
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": null
+  },
+  "elapsed": {
+    "availability": null,
+    "minutes": null,
+    "reason": null
+  },
   "startRevision": "bc31dd0a12faaa40c9fb44e91652db3326c9728d",
   "endRevisionOrPatch": null,
-  "outcome": null
+  "outcome": {
+    "verificationPassed": null,
+    "qualityPassed": null,
+    "scopePassed": null,
+    "independentChallenge": null,
+    "retries": null,
+    "leadCorrections": null,
+    "reviewPasses": null,
+    "promoted": null,
+    "escapedDefects": null,
+    "escalations": null,
+    "reviewMode": null,
+    "detailReviewReason": null,
+    "decision": null
+  }
 }

@@ -2,6 +2,7 @@
 
 - Status: Approved
 - Change record schema: 2
+- Orchestration schema: 2
 - Owner: Main/Lead
 - Created: 2026-10-02
 - Updated: 2026-10-02
