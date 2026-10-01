@@ -78,7 +78,7 @@ public sealed class CollectionQueueCutoverContractTests
         var guard = Slice(lambdaJob, guardStart, infrastructureStart);
         var preDeployPipelineRead = guard.IndexOf("\"$base/pipeline-state\"", StringComparison.Ordinal);
         var preDeployPause = guard.IndexOf(
-            "--data '{\"paused\":true,\"reason\":\"deployment version transition\"}' \"$base/pipeline\"",
+            "--data '{\"pipeline\":{\"paused\":true,\"reason\":\"deployment version transition\"}}' \"$base/pipeline\"",
             StringComparison.Ordinal);
         var drainLoop = guard.IndexOf("for attempt in $(seq 1 60)", StringComparison.Ordinal);
 
@@ -88,7 +88,7 @@ public sealed class CollectionQueueCutoverContractTests
         StringAssert.Contains(guard, "base=\"$API_BASE_URL/api/v2/admin/collection\"");
         StringAssert.Contains(guard, "\"$base/pipeline-state\"");
         StringAssert.Contains(guard,
-            "--data '{\"paused\":true,\"reason\":\"deployment version transition\"}' \"$base/pipeline\"");
+            "--data '{\"pipeline\":{\"paused\":true,\"reason\":\"deployment version transition\"}}' \"$base/pipeline\"");
         StringAssert.Contains(guard, "\"$base/tasks?status=Running&limit=1\"");
         StringAssert.Contains(guard, ".items | if type == \"array\" then length");
         Assert.IsFalse(guard.Contains("/api/admin/collection", StringComparison.Ordinal));
@@ -116,7 +116,7 @@ public sealed class CollectionQueueCutoverContractTests
             StringComparison.Ordinal);
         var actionableFailureCheck = restoreStep.IndexOf("\"$base/failure-notifications?view=Actionable&limit=1\"",
             StringComparison.Ordinal);
-        var pipelineResume = restoreStep.IndexOf("--data '{\"paused\":false}' \"$base/pipeline\"",
+        var pipelineResume = restoreStep.IndexOf("--data '{\"pipeline\":{\"paused\":false}}' \"$base/pipeline\"",
             StringComparison.Ordinal);
 
         Assert.IsGreaterThanOrEqualTo(0, apiDeployStart);
@@ -130,7 +130,7 @@ public sealed class CollectionQueueCutoverContractTests
         StringAssert.Contains(restoreStep, "\"$base/tasks?status=Running&limit=1\"");
         StringAssert.Contains(restoreStep, "\"$base/failure-notifications?view=Actionable&limit=1\"");
         StringAssert.Contains(restoreStep, "-X PUT");
-        StringAssert.Contains(restoreStep, "--data '{\"paused\":false}' \"$base/pipeline\"");
+        StringAssert.Contains(restoreStep, "--data '{\"pipeline\":{\"paused\":false}}' \"$base/pipeline\"");
         StringAssert.Contains(restoreStep, "Collection remains paused; recovery requires an explicit operator decision.");
         StringAssert.Contains(restoreStep, "Actionable failures remain; pipeline stays paused for explicit recovery");
         Assert.IsGreaterThan(pipelineStateRead, postDeployDrainCheck);
