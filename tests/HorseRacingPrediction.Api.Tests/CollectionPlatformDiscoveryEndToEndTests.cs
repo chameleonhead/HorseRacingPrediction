@@ -57,18 +57,21 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             var date = new DateOnly(2026, 9, 12);
             using var createResponse = await client.PostAsJsonAsync("api/v2/admin/collection/tasks", new
             {
-                Mode = "Resource",
-                Resource = new
+                Task = new
                 {
-                    ResourceType = CollectionResourceType.Race,
-                    Provider = "JRA",
-                    ResourceId = $"discovery:{date:yyyyMMdd}",
-                    DefinitionId = "race-discovery",
-                    RequestedRevision = 1,
-                    Reason = CollectionReason.Discovery,
-                    Lane = CollectionLane.Realtime,
-                    Priority = 100,
-                    EffectiveDate = date,
+                    Mode = "Resource",
+                    Resource = new
+                    {
+                        ResourceType = CollectionResourceType.Race,
+                        Provider = "JRA",
+                        ResourceId = $"discovery:{date:yyyyMMdd}",
+                        DefinitionId = "race-discovery",
+                        RequestedRevision = 1,
+                        Reason = CollectionReason.Discovery,
+                        Lane = CollectionLane.Realtime,
+                        Priority = 100,
+                        EffectiveDate = date,
+                    }
                 }
             });
             createResponse.EnsureSuccessStatusCode();
@@ -119,22 +122,26 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
 
             using var rediscoveryResponse = await client.PostAsJsonAsync("api/v2/admin/collection/tasks", new
             {
-                Mode = "Resource",
-                Resource = new
+                Task = new
                 {
-                    ResourceType = CollectionResourceType.Race,
-                    Provider = "JRA",
-                    ResourceId = detail.Resource.Id,
-                    DefinitionId = "race-detail",
-                    RequestedRevision = HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail,
-                    Reason = CollectionReason.Discovery,
-                    Lane = CollectionLane.Realtime,
-                    Priority = 80,
-                    EffectiveDate = date,
+                    Mode = "Resource",
+                    Resource = new
+                    {
+                        ResourceType = CollectionResourceType.Race,
+                        Provider = "JRA",
+                        ResourceId = detail.Resource.Id,
+                        DefinitionId = "race-detail",
+                        RequestedRevision = HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail,
+                        Reason = CollectionReason.Discovery,
+                        Lane = CollectionLane.Realtime,
+                        Priority = 80,
+                        EffectiveDate = date,
+                    }
                 }
             });
             rediscoveryResponse.EnsureSuccessStatusCode();
-            var rediscovery = await rediscoveryResponse.Content.ReadFromJsonAsync<CollectionTaskSubmissionResponse>();
+            var responseBody = await rediscoveryResponse.Content.ReadFromJsonAsync<CreateCollectionTaskResponse>();
+            var rediscovery = responseBody?.Submission;
             Assert.IsNotNull(rediscovery);
             Assert.AreEqual("Resource", rediscovery.Mode);
             Assert.IsFalse(rediscovery.Receipt.CreatedTask);
@@ -172,18 +179,21 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             var future = new DateOnly(2026, 9, 19);
             using var createResponse = await client.PostAsJsonAsync("api/v2/admin/collection/tasks", new
             {
-                Mode = "Resource",
-                Resource = new
+                Task = new
                 {
-                    ResourceType = CollectionResourceType.Race,
-                    Provider = "JRA",
-                    ResourceId = $"discovery:{today:yyyyMMdd}",
-                    DefinitionId = "race-discovery",
-                    RequestedRevision = 1,
-                    Reason = CollectionReason.Discovery,
-                    Lane = CollectionLane.Realtime,
-                    Priority = 100,
-                    EffectiveDate = today,
+                    Mode = "Resource",
+                    Resource = new
+                    {
+                        ResourceType = CollectionResourceType.Race,
+                        Provider = "JRA",
+                        ResourceId = $"discovery:{today:yyyyMMdd}",
+                        DefinitionId = "race-discovery",
+                        RequestedRevision = 1,
+                        Reason = CollectionReason.Discovery,
+                        Lane = CollectionLane.Realtime,
+                        Priority = 100,
+                        EffectiveDate = today,
+                    }
                 }
             });
             createResponse.EnsureSuccessStatusCode();
@@ -211,12 +221,15 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             await new CollectionPlatformWorkerClient(client, new CollectionDefinitionHandlerRegistry([handler]))
                 .ExecuteAsync(new(notification.TaskId, notification.DispatchGeneration), CancellationToken.None);
 
-            var tasks = await client.GetFromJsonAsync<CollectionTaskPage>(
+            var tasksResponse = await client.GetFromJsonAsync<ListCollectionTasksResponse>(
                 "api/v2/admin/collection/tasks?statuses=Ready");
-            var states = await client.GetFromJsonAsync<CollectionStatePage>(
+            var tasks = tasksResponse?.Page;
+            var statesResponse = await client.GetFromJsonAsync<SearchCollectionStatesResponse>(
                 "api/v2/admin/collection/states?statuses=Pending");
-            var failures = await client.GetFromJsonAsync<IReadOnlyList<PendingCollectionFailureNotification>>(
+            var states = statesResponse?.Page;
+            var failuresResponse = await client.GetFromJsonAsync<ListFailureNotificationsResponse>(
                 "api/v2/admin/collection/failure-notifications?view=Actionable");
+            var failures = failuresResponse?.Notifications;
             Assert.IsNotNull(tasks);
             Assert.HasCount(1, tasks.Items);
             Assert.IsGreaterThan(new DateTimeOffset(2026, 9, 12, 1, 0, 0, TimeSpan.Zero),

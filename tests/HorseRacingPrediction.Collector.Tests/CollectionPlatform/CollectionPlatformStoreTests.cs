@@ -66,11 +66,13 @@ public sealed class CollectionPlatformStoreTests
         {
             if (request.RequestUri!.AbsolutePath.EndsWith("/leases", StringComparison.Ordinal))
                 return new(System.Net.HttpStatusCode.OK)
-                { Content = System.Net.Http.Json.JsonContent.Create(new CollectionTaskAcquireResult(CollectionTaskAcquireStatus.Acquired, lease)) };
+                { Content = System.Net.Http.Json.JsonContent.Create(CollectionWireTestData.AcquiredTask(lease)) };
             Assert.AreEqual("/api/v2/internal/collection/tasks/" + lease.TaskId + "/attempts", request.RequestUri.AbsolutePath);
             Assert.AreEqual(HttpMethod.Post, request.Method);
             var body = await request.Content!.ReadAsStringAsync(cancellationToken);
-            var completion = System.Text.Json.JsonSerializer.Deserialize<CollectionAttemptCompletion>(body,
+            using var document = System.Text.Json.JsonDocument.Parse(body);
+            var completion = System.Text.Json.JsonSerializer.Deserialize<CollectionAttemptCompletion>(
+                document.RootElement.GetProperty("attempt").GetRawText(),
                 new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
             Assert.IsTrue(await store.CompleteAttemptAsync(lease.TaskId, lease.LeaseToken, now.AddSeconds(1), completion));
             return new(System.Net.HttpStatusCode.OK);

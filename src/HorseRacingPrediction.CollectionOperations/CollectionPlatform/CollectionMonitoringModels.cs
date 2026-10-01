@@ -1,3 +1,5 @@
+using HorseRacingPrediction.Contracts.Collection;
+
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 public sealed record CollectionMonitoringTaskSnapshot(

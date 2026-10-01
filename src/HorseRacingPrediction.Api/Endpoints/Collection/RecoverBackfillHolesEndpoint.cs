@@ -9,12 +9,13 @@ internal static class RecoverBackfillHolesEndpoint
 {
     internal static void Map(IEndpointRouteBuilder endpoints) =>
         endpoints.MapPost("/api/v2/admin/collection/backfill-batches/{id}/recovery-batches",
-            async (string id, CollectionPlatformStore store, CancellationToken token) =>
+            async ([AsParameters] RecoverBackfillHolesRequest request,
+                CollectionPlatformStore store, CancellationToken token) =>
             {
-                var batch = await store.GetBackfillBatchAsync(id, token);
+                var batch = await store.GetBackfillBatchAsync(request.Id, token);
                 if (batch is null) return Results.NotFound();
                 var created = 0;
-                var recoveryBatchId = $"recovery:{id}:{Guid.NewGuid():N}";
+                var recoveryBatchId = $"recovery:{request.Id}:{Guid.NewGuid():N}";
                 foreach (var hole in batch.Holes)
                 {
                     var state = await store.GetStateAsync(hole.Resource, hole.Definition, token);
@@ -24,6 +25,7 @@ internal static class RecoverBackfillHolesEndpoint
                         batchId: recoveryBatchId, cancellationToken: token);
                     if (receipt.CreatedTask) created++;
                 }
-                return Results.Accepted(value: new BackfillHoleRecoveryResult(batch.Holes.Count, created));
-            });
+                return Results.Accepted(value: new RecoverBackfillHolesResponse(
+                    new BackfillHoleRecoveryResultDto(batch.Holes.Count, created)));
+            }).Produces<RecoverBackfillHolesResponse>(StatusCodes.Status202Accepted);
 }

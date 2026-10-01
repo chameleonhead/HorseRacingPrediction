@@ -24,14 +24,28 @@ public sealed class CollectionOperationsEndpointTests
             using var client = app.GetTestClient();
 
             using var reversed = await client.PostAsJsonAsync("/api/v2/admin/collection/recollection-batches",
-                new CollectionRecollectionBatchRequest("RacePeriod", Provider: "JRA",
-                    From: new(2026, 9, 13), To: new(2026, 9, 12)));
+                new CreateRecollectionBatchRequest(new CreateRecollectionBatchInputDto("RacePeriod", Provider: "JRA",
+                    From: new(2026, 9, 13), To: new(2026, 9, 12))));
             using var tooLong = await client.PostAsJsonAsync("/api/v2/admin/collection/recollection-batches",
-                new CollectionRecollectionBatchRequest("RacePeriod", Provider: "JRA",
-                    From: new(2026, 7, 1), To: new(2026, 8, 1)));
+                new CreateRecollectionBatchRequest(new CreateRecollectionBatchInputDto("RacePeriod", Provider: "JRA",
+                    From: new(2026, 7, 1), To: new(2026, 8, 1))));
+            using var preview = await client.PostAsJsonAsync("/api/v2/admin/collection/recollection-previews",
+                new PreviewRacePeriodRecollectionRequest(new PreviewRacePeriodRecollectionInputDto(
+                    new(2026, 9, 12), new(2026, 9, 13), Provider: "jra")));
+            using var reversedPreview = await client.PostAsJsonAsync("/api/v2/admin/collection/recollection-previews",
+                new PreviewRacePeriodRecollectionRequest(new PreviewRacePeriodRecollectionInputDto(
+                    new(2026, 9, 13), new(2026, 9, 12), Provider: "JRA")));
 
             Assert.AreEqual(HttpStatusCode.BadRequest, reversed.StatusCode);
             Assert.AreEqual(HttpStatusCode.BadRequest, tooLong.StatusCode);
+            Assert.AreEqual(HttpStatusCode.OK, preview.StatusCode);
+            Assert.AreEqual(HttpStatusCode.BadRequest, reversedPreview.StatusCode);
+            var previewBody = await preview.Content.ReadFromJsonAsync<PreviewRacePeriodRecollectionResponse>();
+            Assert.IsNotNull(previewBody);
+            Assert.AreEqual(new DateOnly(2026, 9, 12), previewBody.Preview.From);
+            Assert.AreEqual(new DateOnly(2026, 9, 13), previewBody.Preview.To);
+            Assert.AreEqual(2, previewBody.Preview.InclusiveDays);
+            Assert.AreEqual("JRA", previewBody.Preview.Provider);
             Assert.IsEmpty(await store.GetTasksAsync());
         }
         finally { Directory.Delete(directory, true); }
@@ -46,15 +60,15 @@ public sealed class CollectionOperationsEndpointTests
             var store = await CreateStoreAsync(directory);
             await using var app = await CreateApplicationAsync(store);
             using var client = app.GetTestClient();
-            var request = new CollectionRecollectionBatchRequest("RacePeriod", Provider: "JRA",
-                From: new(2026, 9, 12), To: new(2026, 9, 13), BatchId: "recollection:test-1");
+            var request = new CreateRecollectionBatchRequest(new CreateRecollectionBatchInputDto("RacePeriod",
+                Provider: "JRA", From: new(2026, 9, 12), To: new(2026, 9, 13), BatchId: "recollection:test-1"));
 
             using var firstResponse = await client.PostAsJsonAsync(
                 "/api/v2/admin/collection/recollection-batches", request);
-            var first = (await firstResponse.Content.ReadFromJsonAsync<CollectionRecollectionBatchResponse>())?.RacePeriod;
+            var first = (await firstResponse.Content.ReadFromJsonAsync<CreateRecollectionBatchResponse>())?.Batch.RacePeriod;
             using var duplicateResponse = await client.PostAsJsonAsync(
                 "/api/v2/admin/collection/recollection-batches", request);
-            var duplicate = (await duplicateResponse.Content.ReadFromJsonAsync<CollectionRecollectionBatchResponse>())?.RacePeriod;
+            var duplicate = (await duplicateResponse.Content.ReadFromJsonAsync<CreateRecollectionBatchResponse>())?.Batch.RacePeriod;
 
             Assert.AreEqual(HttpStatusCode.Accepted, firstResponse.StatusCode);
             Assert.AreEqual(2, first!.Batch.ExpectedDiscoveryDays);
@@ -76,8 +90,8 @@ public sealed class CollectionOperationsEndpointTests
 
             using var rerunResponse = await client.PostAsJsonAsync(
                 "/api/v2/admin/collection/recollection-batches",
-                request with { BatchId = "recollection:test-2" });
-            var rerun = (await rerunResponse.Content.ReadFromJsonAsync<CollectionRecollectionBatchResponse>())?.RacePeriod;
+                request with { Batch = request.Batch! with { BatchId = "recollection:test-2" } });
+            var rerun = (await rerunResponse.Content.ReadFromJsonAsync<CreateRecollectionBatchResponse>())?.Batch.RacePeriod;
 
             Assert.AreEqual(HttpStatusCode.Accepted, rerunResponse.StatusCode);
             Assert.AreEqual(2, rerun!.TasksCreated);
@@ -97,20 +111,10 @@ public sealed class CollectionOperationsEndpointTests
             using var client = app.GetTestClient();
 
             using var response = await client.PostAsJsonAsync("/api/v2/admin/collection/tasks",
-                new
-                {
-                    Mode = "Resource",
-                    Resource = new
-                    {
-                        ResourceType = CollectionResourceType.Horse,
-                        Provider = "JRA",
-                        ResourceId = "H123",
-                        DefinitionId = "horse-profile",
-                        RequestedRevision = 1,
-                        Reason = CollectionReason.ManualRefresh,
-                        ExplicitUrl = "file:///JRADB/accessS.html"
-                    }
-                });
+                new CreateCollectionTaskRequest(new CreateCollectionTaskInputDto("Resource",
+                    Resource: new CollectionResourceTaskInputDto(CollectionResourceType.Horse, "JRA", "H123",
+                        "horse-profile", 1, CollectionReason.ManualRefresh,
+                        ExplicitUrl: "file:///JRADB/accessS.html"))));
 
             Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
             StringAssert.Contains(await response.Content.ReadAsStringAsync(), "HTTP(S)");
@@ -132,19 +136,9 @@ public sealed class CollectionOperationsEndpointTests
             using var client = app.GetTestClient();
 
             using var response = await client.PostAsJsonAsync("/api/v2/admin/collection/tasks",
-                new
-                {
-                    Mode = "Resource",
-                    Resource = new
-                    {
-                        ResourceType = CollectionResourceType.Horse,
-                        Provider = "JRA",
-                        ResourceId = "merged-source",
-                        DefinitionId = "horse-profile",
-                        RequestedRevision = 1,
-                        Reason = CollectionReason.ManualRefresh
-                    }
-                });
+                new CreateCollectionTaskRequest(new CreateCollectionTaskInputDto("Resource",
+                    Resource: new CollectionResourceTaskInputDto(CollectionResourceType.Horse, "JRA", "merged-source",
+                        "horse-profile", 1, CollectionReason.ManualRefresh))));
 
             Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
             StringAssert.Contains(await response.Content.ReadAsStringAsync(), "補正済みのため収集対象外です");
@@ -173,10 +167,12 @@ public sealed class CollectionOperationsEndpointTests
             using var publish = await client.PostAsJsonAsync(
                 $"/api/admin/collection/failure-notifications/{failure.NotificationId}/published", new { });
             Assert.IsTrue(publish.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed);
-            var actionable = await client.GetFromJsonAsync<List<PendingCollectionFailureNotification>>(
+            var actionableResponse = await client.GetFromJsonAsync<ListFailureNotificationsResponse>(
                 "/api/v2/admin/collection/failure-notifications?view=Actionable");
-            var unpublished = await client.GetFromJsonAsync<List<PendingCollectionFailureNotification>>(
+            var unpublishedResponse = await client.GetFromJsonAsync<ListFailureNotificationsResponse>(
                 "/api/v2/admin/collection/failure-notifications?view=Unpublished");
+            var actionable = actionableResponse?.Notifications;
+            var unpublished = unpublishedResponse?.Notifications;
 
             Assert.HasCount(1, actionable!);
             Assert.HasCount(1, unpublished!);
@@ -198,8 +194,9 @@ public sealed class CollectionOperationsEndpointTests
             await using var app = await CreateApplicationAsync(store);
             using var client = app.GetTestClient();
 
-            var result = await client.GetFromJsonAsync<CollectionTaskViewCounts>(
+            var response = await client.GetFromJsonAsync<GetTaskViewCountsResponse>(
                 "/api/v2/admin/collection/operations/task-view-counts");
+            var result = response?.Counts;
 
             Assert.IsNotNull(result);
             Assert.AreEqual(2, result.Counts["waiting"]);
@@ -221,29 +218,35 @@ public sealed class CollectionOperationsEndpointTests
 
             var missingMode = new
             {
-                Resource = new
+                Task = new
                 {
-                    ResourceType = CollectionResourceType.Horse,
-                    Provider = "JRA",
-                    ResourceId = "H1",
-                    DefinitionId = "horse-profile",
-                    RequestedRevision = 1,
-                    Reason = CollectionReason.ManualRefresh
+                    Resource = new
+                    {
+                        ResourceType = CollectionResourceType.Horse,
+                        Provider = "JRA",
+                        ResourceId = "H1",
+                        DefinitionId = "horse-profile",
+                        RequestedRevision = 1,
+                        Reason = CollectionReason.ManualRefresh
+                    }
                 }
             };
-            var unknownMode = new { Mode = "Either", SourceUrl = new { Url = "https://example.test" } };
+            var unknownMode = new { Task = new { Mode = "Either", SourceUrl = new { Url = "https://example.test" } } };
             var contradictory = new
             {
-                Mode = "Resource",
-                SourceUrl = new { Url = "https://example.test" },
-                Resource = new
+                Task = new
                 {
-                    ResourceType = CollectionResourceType.Horse,
-                    Provider = "JRA",
-                    ResourceId = "H1",
-                    DefinitionId = "horse-profile",
-                    RequestedRevision = 1,
-                    Reason = CollectionReason.ManualRefresh
+                    Mode = "Resource",
+                    SourceUrl = new { Url = "https://example.test" },
+                    Resource = new
+                    {
+                        ResourceType = CollectionResourceType.Horse,
+                        Provider = "JRA",
+                        ResourceId = "H1",
+                        DefinitionId = "horse-profile",
+                        RequestedRevision = 1,
+                        Reason = CollectionReason.ManualRefresh
+                    }
                 }
             };
 
@@ -273,11 +276,14 @@ public sealed class CollectionOperationsEndpointTests
             var path = $"/api/v2/admin/collection/tasks/{taskId:D}";
 
             Assert.AreEqual(HttpStatusCode.BadRequest,
-                (await client.PatchAsJsonAsync(path, new { cancellationRequested = false })).StatusCode);
+                (await client.PatchAsJsonAsync(path,
+                    new CancelCollectionTaskRequest(new CancelCollectionTaskInputDto(false)))).StatusCode);
             Assert.AreEqual(HttpStatusCode.NoContent,
-                (await client.PatchAsJsonAsync(path, new { cancellationRequested = true })).StatusCode);
+                (await client.PatchAsJsonAsync(path,
+                    new CancelCollectionTaskRequest(new CancelCollectionTaskInputDto(true)))).StatusCode);
             Assert.AreEqual(HttpStatusCode.Conflict,
-                (await client.PatchAsJsonAsync(path, new { cancellationRequested = true })).StatusCode);
+                (await client.PatchAsJsonAsync(path,
+                    new CancelCollectionTaskRequest(new CancelCollectionTaskInputDto(true)))).StatusCode);
             Assert.AreEqual(CollectionTaskStatus.Cancelled, (await store.GetTasksAsync()).Single().Status);
         }
         finally { Directory.Delete(directory, true); }
@@ -298,8 +304,9 @@ public sealed class CollectionOperationsEndpointTests
             await using var app = await CreateApplicationAsync(store);
             using var client = app.GetTestClient();
 
-            var page = await client.GetFromJsonAsync<CollectionTaskPage>(
+            var pageResponse = await client.GetFromJsonAsync<ListCollectionTasksResponse>(
                 "/api/v2/admin/collection/tasks?statuses=Ready&resourceType=Horse&provider=jra&page=1&pageSize=1");
+            var page = pageResponse?.Page;
 
             Assert.IsNotNull(page);
             Assert.AreEqual(2, page.TotalCount);
@@ -330,17 +337,20 @@ public sealed class CollectionOperationsEndpointTests
             await using var app = await CreateApplicationAsync(store);
             using var client = app.GetTestClient();
 
-            var groups = await client.GetFromJsonAsync<IReadOnlyList<CollectionFailureGroup>>(
+            var groupsResponse = await client.GetFromJsonAsync<ListFailureNotificationGroupsResponse>(
                 "/api/v2/admin/collection/failure-notification-groups");
+            var groups = groupsResponse?.Groups;
             Assert.IsNotNull(groups);
             Assert.HasCount(1, groups);
             Assert.AreEqual(2, groups[0].Count);
             Assert.HasCount(2, groups[0].NotificationIds);
 
             var response = await client.PostAsJsonAsync("/api/v2/admin/collection/recovery-batches",
-                new { SelectorType = "NotificationIds", NotificationIds = groups[0].NotificationIds });
+                new CreateCollectionRecoveryBatchRequest(new CreateCollectionRecoveryBatchInputDto(
+                    "NotificationIds", NotificationIds: groups[0].NotificationIds)));
             Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
-            var recovery = await response.Content.ReadFromJsonAsync<CollectionFailureRecoveryResult>();
+            var recoveryEnvelope = await response.Content.ReadFromJsonAsync<CreateCollectionRecoveryBatchResponse>();
+            var recovery = recoveryEnvelope?.Recovery;
             Assert.IsNotNull(recovery);
             Assert.AreEqual(2, recovery.CreatedTaskCount);
             Assert.IsEmpty(await store.GetActionableFailureNotificationsAsync(DateTimeOffset.UtcNow, 10));
@@ -373,14 +383,17 @@ public sealed class CollectionOperationsEndpointTests
             }
             await using var app = await CreateApplicationAsync(store);
             using var client = app.GetTestClient();
-            var groups = await client.GetFromJsonAsync<IReadOnlyList<CollectionFailureGroup>>(
+            var groupsResponse = await client.GetFromJsonAsync<ListFailureNotificationGroupsResponse>(
                 "/api/v2/admin/collection/failure-notification-groups");
+            var groups = groupsResponse?.Groups;
             var key = groups!.Single().GroupKey;
 
-            var firstPage = await client.GetFromJsonAsync<CollectionFailureGroupPage>(
+            var firstPageResponse = await client.GetFromJsonAsync<GetFailureNotificationGroupResponse>(
                 $"/api/v2/admin/collection/failure-notification-groups/{key}?page=1&pageSize=2");
-            var searched = await client.GetFromJsonAsync<CollectionFailureGroupPage>(
+            var firstPage = firstPageResponse?.Page;
+            var searchedResponse = await client.GetFromJsonAsync<GetFailureNotificationGroupResponse>(
                 $"/api/v2/admin/collection/failure-notification-groups/{key}?search=H002&page=1&pageSize=50");
+            var searched = searchedResponse?.Page;
 
             Assert.IsNotNull(firstPage);
             Assert.AreEqual(3, firstPage.TotalCount);
@@ -392,13 +405,16 @@ public sealed class CollectionOperationsEndpointTests
             Assert.AreEqual("https://explicit.example.test/H002", searched.Items.Single().RequestedUrl);
 
             using var staleResponse = await client.PostAsJsonAsync("/api/v2/admin/collection/recovery-batches",
-                new { SelectorType = "GroupKey", GroupKey = key, ExpectedNotificationIds = Array.Empty<Guid>() });
+                new CreateCollectionRecoveryBatchRequest(new CreateCollectionRecoveryBatchInputDto("GroupKey",
+                    GroupKey: key, ExpectedNotificationIds: Array.Empty<Guid>())));
             Assert.AreEqual(HttpStatusCode.Conflict, staleResponse.StatusCode,
                 "Group recovery must reject membership drift between selection and execution.");
             var response = await client.PostAsJsonAsync("/api/v2/admin/collection/recovery-batches",
-                new { SelectorType = "GroupKey", GroupKey = key, ExpectedNotificationIds = groups!.Single().NotificationIds });
+                new CreateCollectionRecoveryBatchRequest(new CreateCollectionRecoveryBatchInputDto("GroupKey",
+                    GroupKey: key, ExpectedNotificationIds: groups!.Single().NotificationIds)));
             Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
-            var recovery = await response.Content.ReadFromJsonAsync<CollectionFailureRecoveryResult>();
+            var recoveryEnvelope = await response.Content.ReadFromJsonAsync<CreateCollectionRecoveryBatchResponse>();
+            var recovery = recoveryEnvelope?.Recovery;
             Assert.IsNotNull(recovery);
             Assert.AreEqual(3, recovery.SelectedCount);
             Assert.AreEqual(3, recovery.CreatedTaskCount);
@@ -418,7 +434,8 @@ public sealed class CollectionOperationsEndpointTests
             await using var app = await CreateApplicationAsync(store);
             using var client = app.GetTestClient();
             var response = await client.PostAsJsonAsync("/api/v2/admin/collection/recovery-batches",
-                new { SelectorType = "NotificationIds", NotificationIds = Enumerable.Range(0, 1001).Select(_ => Guid.NewGuid()).ToArray() });
+                new CreateCollectionRecoveryBatchRequest(new CreateCollectionRecoveryBatchInputDto(
+                    "NotificationIds", NotificationIds: Enumerable.Range(0, 1001).Select(_ => Guid.NewGuid()).ToArray())));
             Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode,
                 "The request must pass the size guard and fail only because the synthetic notifications do not exist.");
         }
@@ -440,12 +457,14 @@ public sealed class CollectionOperationsEndpointTests
             await using var app = await CreateApplicationAsync(store);
             using var client = app.GetTestClient();
 
-            var detail = await client.GetFromJsonAsync<BackfillBatchSnapshot>("/api/v2/admin/collection/backfill-batches/2026-09");
+            var detailResponse = await client.GetFromJsonAsync<GetBackfillBatchResponse>("/api/v2/admin/collection/backfill-batches/2026-09");
+            var detail = detailResponse?.Batch;
             Assert.IsNotNull(detail);
             Assert.HasCount(1, detail.Holes);
             var response = await client.PostAsJsonAsync("/api/v2/admin/collection/backfill-batches/2026-09/recovery-batches", new { });
             Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
-            var result = await response.Content.ReadFromJsonAsync<BackfillHoleRecoveryResult>();
+            var resultEnvelope = await response.Content.ReadFromJsonAsync<RecoverBackfillHolesResponse>();
+            var result = resultEnvelope?.Recovery;
             Assert.IsNotNull(result);
             Assert.AreEqual(1, result.Holes);
             Assert.AreEqual(1, result.TasksCreated);
@@ -472,18 +491,18 @@ public sealed class CollectionOperationsEndpointTests
 
             using var firstResponse = await client.PostAsJsonAsync(
                 "/api/v2/admin/collection/backfill-batches/retryable/recovery-batches", new { });
-            var first = await firstResponse.Content.ReadFromJsonAsync<BackfillHoleRecoveryResult>();
+            var first = (await firstResponse.Content.ReadFromJsonAsync<RecoverBackfillHolesResponse>())?.Recovery;
             Assert.AreEqual(1, first?.TasksCreated);
             using var duplicateResponse = await client.PostAsJsonAsync(
                 "/api/v2/admin/collection/backfill-batches/retryable/recovery-batches", new { });
-            var duplicate = await duplicateResponse.Content.ReadFromJsonAsync<BackfillHoleRecoveryResult>();
+            var duplicate = (await duplicateResponse.Content.ReadFromJsonAsync<RecoverBackfillHolesResponse>())?.Recovery;
             Assert.AreEqual(0, duplicate?.TasksCreated, "An active task must not be duplicated.");
 
             var recovery = (await store.GetTasksAsync()).Single(x => x.TaskId != original.TaskId);
             Assert.IsTrue(await store.ReconcileDeadLetterAsync(recovery.TaskId, 1, now.AddSeconds(2), "again"));
             using var retryResponse = await client.PostAsJsonAsync(
                 "/api/v2/admin/collection/backfill-batches/retryable/recovery-batches", new { });
-            var retry = await retryResponse.Content.ReadFromJsonAsync<BackfillHoleRecoveryResult>();
+            var retry = (await retryResponse.Content.ReadFromJsonAsync<RecoverBackfillHolesResponse>())?.Recovery;
             Assert.AreEqual(1, retry?.TasksCreated, "A terminal failed recovery must be retryable.");
         }
         finally { Directory.Delete(directory, true); }
@@ -511,7 +530,7 @@ public sealed class CollectionOperationsEndpointTests
 
             using var response = await client.PostAsJsonAsync(
                 "/api/v2/admin/collection/backfill-batches/complete/recovery-batches", new { });
-            var result = await response.Content.ReadFromJsonAsync<BackfillHoleRecoveryResult>();
+            var result = (await response.Content.ReadFromJsonAsync<RecoverBackfillHolesResponse>())?.Recovery;
 
             Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
             Assert.AreEqual(0, result?.Holes);
@@ -542,7 +561,7 @@ public sealed class CollectionOperationsEndpointTests
 
             using var response = await client.PostAsJsonAsync(
                 "/api/v2/admin/collection/backfill-batches/large/recovery-batches", new { });
-            var result = await response.Content.ReadFromJsonAsync<BackfillHoleRecoveryResult>();
+            var result = (await response.Content.ReadFromJsonAsync<RecoverBackfillHolesResponse>())?.Recovery;
 
             Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
             Assert.AreEqual(101, result?.Holes);

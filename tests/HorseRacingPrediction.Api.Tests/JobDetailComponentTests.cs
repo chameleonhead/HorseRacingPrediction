@@ -312,10 +312,13 @@ public sealed class JobDetailComponentTests
             {
                 ManualRequests++;
                 if (FailManualRequest) throw new HttpRequestException("offline");
-                return await Ok(new CollectionTaskSubmissionResponse("Resource",
+                return await Ok(new
+                {
+                    submission = new CollectionTaskSubmissionResponse("Resource",
                     new CollectionRequestReceipt(Guid.NewGuid(), DeferredByRepairHold ? null : ReceiptTaskId,
                         CreatedTask, DeferredByRepairHold), Resource, Definition, new DateOnly(2026, 9, 28), null,
-                    new Dictionary<string, string>()));
+                    new Dictionary<string, string>())
+                });
             }
             if (request.Method == HttpMethod.Patch && request.RequestUri!.AbsolutePath.EndsWith("/tasks/" + ActiveTaskId.ToString("D")))
             {
@@ -326,11 +329,14 @@ public sealed class JobDetailComponentTests
             if (request.RequestUri!.AbsolutePath.Contains("/execution-batches/", StringComparison.Ordinal))
             {
                 var batchNow = DateTimeOffset.UtcNow;
-                return await Ok(new HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionExecutionBatchDetail(
+                return await Ok(new
+                {
+                    batch = new HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionExecutionBatchDetail(
                     ExecutionBatchId, Guid.Parse("44444444-4444-4444-4444-444444444444"),
                     "sqs-message", "lambda-request", 1, batchNow, batchNow.AddSeconds(2),
                     [new(ActiveTaskId, Resource, Definition, CollectionTaskStatus.Succeeded,
-                        CollectionAttemptResult.Succeeded, 1, 1, batchNow, batchNow.AddSeconds(2))]));
+                        CollectionAttemptResult.Succeeded, 1, 1, batchNow, batchNow.AddSeconds(2))])
+                });
             }
 
             var now = DateTimeOffset.UtcNow;
@@ -357,7 +363,7 @@ public sealed class JobDetailComponentTests
                 RequestTotal: 30, TaskTotal: 2, AttemptTotal: 1, LatestTask: latestTask,
                 TaskHistoryPage: TaskHistoryPage, AttemptHistoryPage: 1,
                 Failures: BuildFailures(now));
-            return await Ok(detail);
+            return await Ok(new { resource = detail });
         }
 
         private IReadOnlyList<PendingCollectionFailureNotification> BuildFailures(DateTimeOffset now)

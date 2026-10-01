@@ -8,5 +8,7 @@ internal static class ListBackfillBatchesEndpoint
     internal static void Map(IEndpointRouteBuilder endpoints) =>
         endpoints.MapGet("/api/v2/admin/collection/backfill-batches",
             async (CollectionPlatformStore store, CancellationToken token) =>
-                Results.Ok(await store.GetBackfillBatchesAsync(token)));
+                Results.Ok(new ListBackfillBatchesResponse((await store.GetBackfillBatchesAsync(token))
+                    .Select(CollectionContractMapper.ToDto).ToArray())))
+            .Produces<ListBackfillBatchesResponse>(StatusCodes.Status200OK);
 }

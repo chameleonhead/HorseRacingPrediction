@@ -1,0 +1,3 @@
+namespace HorseRacingPrediction.Contracts.Collection;
+
+public sealed record GetFailureNotificationGroupResponse(CollectionFailureGroupPageDto Page);

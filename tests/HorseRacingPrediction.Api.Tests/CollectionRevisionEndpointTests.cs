@@ -36,23 +36,30 @@ public sealed class CollectionRevisionEndpointTests
             await app.StartAsync();
             await using var lifetime = app;
             using var client = app.GetTestClient();
-            var impact = new RevisionImpactRequest(RevisionImpactScopeType.SpecificResources, [affected]);
 
             var previewResponse = await client.PostAsJsonAsync("api/v2/admin/collection/revision-impact-previews",
-                new RevisionImpactPreviewRequest(definition.Value, 8, impact));
+                new PreviewRevisionImpactRequest(new PreviewRevisionImpactInputDto(definition.Value, 8,
+                    new RevisionImpactInputDto(RevisionImpactScopeType.SpecificResources,
+                        [new CollectionResourceKeyDto(affected.Type, affected.Provider, affected.Id)]))));
             previewResponse.EnsureSuccessStatusCode();
-            var preview = await previewResponse.Content.ReadFromJsonAsync<RevisionImpactPreview>();
+            var previewEnvelope = await previewResponse.Content.ReadFromJsonAsync<PreviewRevisionImpactResponse>();
+            var preview = previewEnvelope?.Preview;
             Assert.IsNotNull(preview);
-            CollectionAssert.AreEquivalent(new[] { affected.Normalize() }, preview.AffectedResources.ToArray());
+            Assert.AreEqual(affected.Type, preview.AffectedResources.Single().Type);
+            Assert.AreEqual(affected.Provider, preview.AffectedResources.Single().Provider);
+            Assert.AreEqual(affected.Id, preview.AffectedResources.Single().Id);
 
             (await client.PostAsJsonAsync($"api/v2/admin/collection/definitions/{definition.Value}/revisions",
-                new ApplyCollectionRevisionRequest(definition.Value, 8, "specific fix", impact)))
+                new CreateCollectionRevisionRequest(new CreateCollectionRevisionInputDto(8, "specific fix",
+                    new RevisionImpactInputDto(RevisionImpactScopeType.SpecificResources,
+                        [new CollectionResourceKeyDto(affected.Type, affected.Provider, affected.Id)])))))
                 .EnsureSuccessStatusCode();
             (await client.PostAsJsonAsync("api/v2/admin/collection/recollection-batches",
-                new CollectionRecollectionBatchRequest("Revision", definition.Value, 8,
-                    Lane: CollectionLane.Normal, Priority: 50))).EnsureSuccessStatusCode();
-            var progress = await client.GetFromJsonAsync<RevisionRecollectionProgress>(
+                new CreateRecollectionBatchRequest(new CreateRecollectionBatchInputDto("Revision", definition.Value, 8,
+                    Lane: CollectionLane.Normal, Priority: 50)))).EnsureSuccessStatusCode();
+            var progressResponse = await client.GetFromJsonAsync<GetRevisionRecollectionProgressResponse>(
                 $"api/v2/admin/collection/recollection-batches?definition={definition.Value}&revision=8");
+            var progress = progressResponse?.Progress;
 
             Assert.IsNotNull(progress);
             Assert.AreEqual(1, progress.Affected);

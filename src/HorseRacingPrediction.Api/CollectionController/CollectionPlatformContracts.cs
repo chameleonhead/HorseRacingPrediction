@@ -8,8 +8,6 @@ public sealed record CreateCollectionRequest(CollectionResourceType ResourceType
     CollectionLane Lane = CollectionLane.Normal, int Priority = (int)CollectionPriority.Normal,
     string? ExplicitUrl = null, string? BatchId = null, DateOnly? EffectiveDate = null,
     IReadOnlyDictionary<string, string>? Attributes = null);
-public sealed record AcquireCollectionTaskRequest(long DispatchGeneration, int LeaseSeconds = 900,
-    CollectionAttemptCorrelation? Correlation = null);
 public sealed record HeartbeatCollectionTaskRequest(string LeaseToken, int LeaseSeconds = 900);
 public sealed record PauseCollectionPipelineRequest(string? Reason);
 public sealed record RecoverCollectionFailuresRequest(IReadOnlyList<Guid> NotificationIds,
@@ -18,7 +16,6 @@ public sealed record RecoverCollectionFailuresRequest(IReadOnlyList<Guid> Notifi
 public sealed record RecoverCollectionFailureGroupRequest(int? RequestedRevision = null,
     CollectionLane Lane = CollectionLane.Normal, int Priority = (int)CollectionPriority.Normal,
     IReadOnlyList<Guid>? ExpectedNotificationIds = null);
-public enum BulkCollectionSelection { SpecificResources, HorsesRacedInDateRange, HorsesByTrainer, LastCollectedBefore, RevisionImpact, Failed, Stale }
 public sealed record BulkCollectionOperationRequest(string DefinitionId, int RequestedRevision,
     CollectionReason Reason, BulkCollectionSelection Selection, string Provider = "JRA",
     IReadOnlyList<ResourceKey>? Resources = null, DateOnly? From = null, DateOnly? To = null,
@@ -38,10 +35,8 @@ public sealed record CollectionOperationsDashboard(CollectionProgressSnapshot Pr
     DateTimeOffset GeneratedAt);
 public sealed record RevisionRecollectionRequest(CollectionLane Lane = CollectionLane.Background,
     int Priority = (int)CollectionPriority.Background);
-public sealed record CreateBackfillBatchRequest(int Year, int Month, string Provider = "JRA", string? BatchId = null);
 public sealed record CreateRacePeriodRecollectionRequest(DateOnly From, DateOnly To, string Provider = "JRA",
     string? BatchId = null);
-public enum RaceEntryOwnerRepairEligibility { CardRetrievalCandidate, ExistingRequest, OutsideCardLookupPeriod }
 public sealed record RaceEntryOwnerRepairCandidate(string RaceId, string ResourceId, string? RaceName,
     string RacecourseCode, int RaceNumber, int EntryCount, int MissingOwnerCount, DateOnly Date = default,
     RaceEntryOwnerRepairEligibility Eligibility = RaceEntryOwnerRepairEligibility.CardRetrievalCandidate,

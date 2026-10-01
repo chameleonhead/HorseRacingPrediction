@@ -10,9 +10,13 @@ internal static class CreateCollectionRevisionEndpoint
             CreateCollectionRevisionRequest request, CollectionPlatformStore store,
             IEnumerable<INamedRevisionImpactCondition> conditions, CancellationToken token) =>
         {
-            var affected = await store.AddRevisionAndApplyImpactAsync(new(definition), request.Revision,
-                request.Description, CollectionPlatformEndpointSupport.BuildImpact(request.Impact), conditions, JstTime.Now(), token);
-            return Results.Ok(new CollectionRevisionApplyResult(definition, request.Revision, affected));
-        });
+            if (request.Revision is null)
+                return Results.BadRequest(new { message = "Revision input is required." });
+            var input = request.Revision;
+            var affected = await store.AddRevisionAndApplyImpactAsync(new(definition), input.Revision,
+                input.Description, CollectionPlatformEndpointSupport.BuildImpact(
+                    CollectionContractMapper.ToInternal(input.Impact)), conditions, JstTime.Now(), token);
+            return Results.Ok(new CreateCollectionRevisionResponse(
+                new CollectionRevisionApplyResultDto(definition, input.Revision, affected)));
+        }).Produces<CreateCollectionRevisionResponse>(StatusCodes.Status200OK);
 }
-internal sealed record CreateCollectionRevisionRequest(int Revision, string Description, RevisionImpactRequest Impact);

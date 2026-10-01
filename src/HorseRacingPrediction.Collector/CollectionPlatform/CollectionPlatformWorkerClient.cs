@@ -43,7 +43,9 @@ public sealed class CollectionPlatformWorkerClient
         string queueMessageId, CancellationToken cancellationToken)
     {
         using var response = await _client.PostAsJsonAsync("api/v2/internal/collection/execution-leases",
-            new CollectionExecutionAcquireRequest(wake, queueMessageId), cancellationToken).ConfigureAwait(false);
+            new AcquireNextExecutionRequest(new AcquireNextExecutionInputDto(
+                new CollectionWakeSignalDto(wake.WakeId, wake.DispatchEnvelopeId, wake.ReservationToken,
+                    wake.ContractVersion), queueMessageId)), cancellationToken).ConfigureAwait(false);
         var expectedStatus = response.StatusCode;
         if (expectedStatus is not (HttpStatusCode.Created or HttpStatusCode.OK))
         {
@@ -51,9 +53,10 @@ public sealed class CollectionPlatformWorkerClient
             throw new InvalidDataException($"Unexpected collection execution acquire status {(int)expectedStatus}.");
         }
 
-        var result = await response.Content.ReadFromJsonAsync<CollectionExecutionAcquireResult>(AcquireResponseJsonOptions,
+        var wireResponse = await response.Content.ReadFromJsonAsync<AcquireNextExecutionResponse>(AcquireResponseJsonOptions,
             cancellationToken)
             .ConfigureAwait(false) ?? throw new InvalidDataException("Collection execution acquire response was empty.");
+        var result = ToInternal(wireResponse.Acquisition);
         if (expectedStatus == HttpStatusCode.Created)
         {
             if (result.Status != CollectionExecutionAcquireStatus.Acquired
@@ -81,7 +84,9 @@ public sealed class CollectionPlatformWorkerClient
     {
         using var response = await _client.PatchAsJsonAsync(
             $"api/v2/internal/collection/execution-batches/{executionBatchId:D}",
-            new { Transition = "Start", LeaseToken = leaseToken, LeaseSeconds = 960, LambdaRequestId = lambdaRequestId }, cancellationToken)
+            new TransitionCollectionExecutionRequest(new TransitionCollectionExecutionInputDto(
+                "Start", leaseToken, 960, lambdaRequestId))
+            { Id = executionBatchId }, cancellationToken)
             .ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }
@@ -91,7 +96,9 @@ public sealed class CollectionPlatformWorkerClient
     {
         using var response = await _client.PatchAsJsonAsync(
             $"api/v2/internal/collection/execution-batches/{executionBatchId:D}",
-            new { Transition = "Complete", LeaseToken = leaseToken }, cancellationToken).ConfigureAwait(false);
+            new TransitionCollectionExecutionRequest(new TransitionCollectionExecutionInputDto(
+                "Complete", leaseToken))
+            { Id = executionBatchId }, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }
 
@@ -101,15 +108,15 @@ public sealed class CollectionPlatformWorkerClient
         var acquireStarted = _clock.GetTimestamp();
         using var acquireResponse = await _client.PostAsJsonAsync(
             $"api/v2/internal/collection/tasks/{notification.TaskId}/leases",
-            new
-            {
-                notification.DispatchGeneration,
-                LeaseSeconds = 900,
-                Correlation = CollectionAttemptCorrelationScope.Current
-            }, cancellationToken).ConfigureAwait(false);
+            new AcquireCollectionTaskRequest(new AcquireCollectionTaskInputDto(notification.DispatchGeneration,
+                900, ToDto(CollectionAttemptCorrelationScope.Current)))
+            { Id = notification.TaskId },
+            cancellationToken).ConfigureAwait(false);
         acquireResponse.EnsureSuccessStatusCode();
-        var acquire = await acquireResponse.Content.ReadFromJsonAsync<CollectionTaskAcquireResult>(cancellationToken)
+        var acquireResponseBody = await acquireResponse.Content.ReadFromJsonAsync<AcquireCollectionTaskResponse>(cancellationToken)
             .ConfigureAwait(false) ?? throw new InvalidOperationException("Collection task acquire response was empty.");
+        var acquire = new CollectionTaskAcquireResult(acquireResponseBody.Acquisition.Status,
+            acquireResponseBody.Acquisition.Task is null ? null : ToInternal(acquireResponseBody.Acquisition.Task));
         var acquireElapsed = _clock.GetElapsedTime(acquireStarted, _clock.GetTimestamp());
         if (acquire.Status is CollectionTaskAcquireStatus.AlreadyTerminal
             or CollectionTaskAcquireStatus.SupersededGeneration or CollectionTaskAcquireStatus.RepairHeld) return;
@@ -218,21 +225,46 @@ public sealed class CollectionPlatformWorkerClient
     {
         using var completeResponse = await _client.PostAsJsonAsync(
             $"api/v2/internal/collection/tasks/{taskId}/attempts",
-            new CompleteRequest(leaseToken, completion.Result, completion.ErrorCode, completion.ErrorMessage,
+            new CompleteCollectionTaskAttemptRequest(new CompleteCollectionTaskAttemptInputDto(
+                leaseToken, completion.Result, completion.ErrorCode, completion.ErrorMessage,
                 completion.RequestedUrl?.ToString(), completion.FinalUrl?.ToString(), completion.HttpStatusCode,
                 completion.PageIdentification, completion.RetryAt, completion.NextCollectionAt,
-                completion.LocationOutcomes, completion.FailureImpact, completion.StageOutcomes,
-                completion.RaceEvidence), cancellationToken)
+                completion.LocationOutcomes?.Select(x => new ResourceLocationOutcomeDto(x.LocationId,
+                    x.Result, x.ErrorCode, x.Artifact)).ToArray(), completion.FailureImpact,
+                completion.StageOutcomes?.Select(x => new CollectionStageOutcomeDto(x.Stage, x.Artifact,
+                    x.Result, x.ErrorCode, x.ErrorMessage, x.RequestedUrl, x.FinalUrl, x.Persisted)).ToArray(),
+                completion.RaceEvidence is null ? null : new RaceSchedulingEvidenceDto(
+                    completion.RaceEvidence.OfficialStartAt, completion.RaceEvidence.Provenance,
+                    completion.RaceEvidence.VerifiedAt)))
+            { Id = taskId }, cancellationToken)
             .ConfigureAwait(false);
         completeResponse.EnsureSuccessStatusCode();
     }
 
-    private sealed record CompleteRequest(string LeaseToken, CollectionAttemptResult Result,
-        string? ErrorCode, string? ErrorMessage, string? RequestedUrl, string? FinalUrl,
-        int? HttpStatusCode, string? PageIdentification, DateTimeOffset? RetryAt,
-        DateTimeOffset? NextCollectionAt, IReadOnlyList<ResourceLocationOutcome>? LocationOutcomes,
-        CollectionFailureImpact FailureImpact, IReadOnlyList<CollectionStageOutcome>? StageOutcomes,
-        RaceSchedulingEvidence? RaceEvidence);
+    private static CollectionAttemptCorrelationDto? ToDto(CollectionAttemptCorrelation? value)
+        => value is null ? null : new(value.ExecutionBatchId, value.DispatchEnvelopeId, value.QueueMessageId,
+            value.LambdaRequestId, value.BatchTaskOrdinal, value.BatchTaskCount);
+
+    private static CollectionExecutionAcquireResult ToInternal(CollectionExecutionAcquireResultDto value)
+        => new(value.Status, value.ExecutionBatchId, value.LeaseToken,
+            value.Envelope is null ? null : ToInternal(value.Envelope), value.StartBefore,
+            value.NoWorkReason, value.ReservationReleaseOutcome);
+
+    private static CollectionDispatchEnvelope ToInternal(CollectionDispatchEnvelopeDto value)
+        => new(value.EnvelopeId, new(value.Compatibility.Provider,
+                new CollectionDefinitionId(value.Compatibility.Definition.Value), value.Compatibility.EffectiveDate,
+                value.Compatibility.Lane, value.Compatibility.GroupKind, value.Compatibility.GroupKey),
+            value.Tasks.Select(x => new CollectionDispatchTaskReference(x.TaskId, x.DispatchGeneration)).ToArray(),
+            value.ContractVersion);
+
+    private static LeasedCollectionTask ToInternal(LeasedCollectionTaskDto value)
+        => new(value.TaskId, value.RequestId,
+            new(value.Resource.Type, value.Resource.Provider, value.Resource.Id),
+            new CollectionDefinitionId(value.Definition.Value), value.RequestedRevision, value.Reason,
+            value.Lane, value.Priority, value.LeaseToken, value.LeaseExpiresAt, value.EffectiveDate,
+            value.Attributes, value.Locations?.Select(x => new ResourceLocationCandidate(x.LocationId,
+                x.Url, x.Source, x.Status, x.LastVerifiedAt, x.Artifact)).ToArray(), value.RaceHoldGeneration,
+            value.EntryAssignmentFingerprint);
 }
 
 public sealed class CollectionTaskActiveElsewhereException(Guid taskId)

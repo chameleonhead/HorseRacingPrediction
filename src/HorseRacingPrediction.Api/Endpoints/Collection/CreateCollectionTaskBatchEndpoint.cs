@@ -13,21 +13,25 @@ internal static class CreateCollectionTaskBatchEndpoint
 {
     internal static void Map(IEndpointRouteBuilder endpoints) =>
         endpoints.MapPost("/api/v2/admin/collection/task-batches",
-            async (CollectionTaskBatchRequest request, CollectionPlatformStore store,
+            async (CreateCollectionTaskBatchRequest request, CollectionPlatformStore store,
                 [FromServices] IDbContextProvider<EventStoreDbContext> domain,
                 [FromServices] IEnumerable<INamedRevisionImpactCondition> conditions, CancellationToken token) =>
             {
-                if (string.Equals(request.Mode, "PreviewSelection", StringComparison.Ordinal))
+                if (request.Batch is null)
+                    return Results.BadRequest(new { message = "Batch input is required." });
+                var input = request.Batch;
+                if (string.Equals(input.Mode, "PreviewSelection", StringComparison.Ordinal))
                 {
-                    if (request.PreviewSelection is null || request.ExplicitItems is not null)
+                    if (input.PreviewSelection is null || input.ExplicitItems is not null)
                         return Results.BadRequest(new { message = "PreviewSelection mode accepts only previewSelection." });
-                    if (!Enum.TryParse<BulkCollectionSelection>(request.PreviewSelection.Selection, true,
+                    if (!Enum.TryParse<BulkCollectionSelection>(input.PreviewSelection.Selection, true,
                             out var selection))
                         return Results.BadRequest(new { message = "Selection is invalid." });
-                    var value = request.PreviewSelection;
+                    var value = input.PreviewSelection;
                     var bulk = new BulkCollectionOperationRequest(value.DefinitionId, value.RequestedRevision,
-                        value.Reason, selection, value.Provider, value.Resources, value.From, value.To,
-                        value.TrainerId, value.LastCollectedBefore, null, value.ExpectedResources, value.BatchId,
+                        value.Reason, selection, value.Provider, value.Resources?.Select(CollectionContractMapper.ToInternal).ToArray(), value.From, value.To,
+                        value.TrainerId, value.LastCollectedBefore, null,
+                        value.ExpectedResources?.Select(CollectionContractMapper.ToInternal).ToArray(), value.BatchId,
                         value.Lane, value.Priority);
                     var targets = await CollectionPlatformEndpointSupport.ResolveBulkTargetsAsync(
                         bulk, store, domain, conditions, token);
@@ -43,15 +47,16 @@ internal static class CreateCollectionTaskBatchEndpoint
                         bulk.RequestedRevision, bulk.Reason, targets,
                         HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(), batchId,
                         bulk.Lane, bulk.Priority, token);
-                    return Results.Accepted(value: new CollectionTaskBatchSubmissionResponse(
-                        request.Mode, result, null));
+                    return Results.Accepted(value: new CreateCollectionTaskBatchResponse(
+                        CollectionContractMapper.ToDto(new CollectionTaskBatchSubmissionResponse(
+                            input.Mode, result, null))));
                 }
 
-                if (string.Equals(request.Mode, "ExplicitItems", StringComparison.Ordinal))
+                if (string.Equals(input.Mode, "ExplicitItems", StringComparison.Ordinal))
                 {
-                    if (request.ExplicitItems is null || request.PreviewSelection is not null)
+                    if (input.ExplicitItems is null || input.PreviewSelection is not null)
                         return Results.BadRequest(new { message = "ExplicitItems mode accepts only explicitItems." });
-                    var itemRequest = request.ExplicitItems;
+                    var itemRequest = input.ExplicitItems;
                     if (itemRequest.Items is null || itemRequest.Items.Count is < 1 or > 500)
                         return Results.BadRequest(new { message = "Batch items must contain between 1 and 500 entries." });
                     if (itemRequest.Items.Select(item => item.ItemKey)
@@ -77,7 +82,8 @@ internal static class CreateCollectionTaskBatchEndpoint
                         new CollectionRequestBulkOutcomeDto(outcome.ItemKey, outcome.Status,
                             outcome.Receipt?.RequestId, outcome.Receipt?.TaskId,
                             outcome.Receipt?.CreatedTask ?? false, outcome.ErrorCode, outcome.Message)).ToArray());
-                    var response = new CollectionTaskBatchSubmissionResponse(request.Mode, null, itemResponse);
+                    var response = new CreateCollectionTaskBatchResponse(CollectionContractMapper.ToDto(
+                        new CollectionTaskBatchSubmissionResponse(input.Mode, null, itemResponse)));
                     return outcomes.All(x => string.Equals(x.Status, "Accepted", StringComparison.OrdinalIgnoreCase))
                         ? Results.Accepted(value: response)
                         : Results.Json(response, statusCode: StatusCodes.Status207MultiStatus);
@@ -86,9 +92,8 @@ internal static class CreateCollectionTaskBatchEndpoint
             })
             .WithName("CreateCollectionTaskBatch")
             .WithTags("Collection Platform")
-            .Produces<CollectionTaskBatchSubmissionResponse>(StatusCodes.Status200OK)
-            .Produces<CollectionTaskBatchSubmissionResponse>(StatusCodes.Status202Accepted)
-            .Produces<CollectionTaskBatchSubmissionResponse>(StatusCodes.Status207MultiStatus)
+            .Produces<CreateCollectionTaskBatchResponse>(StatusCodes.Status202Accepted)
+            .Produces<CreateCollectionTaskBatchResponse>(StatusCodes.Status207MultiStatus)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status409Conflict);
 }

@@ -2,6 +2,7 @@ using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Net.Http.Json;
 
@@ -22,12 +23,29 @@ public sealed class CollectionMonitoringServiceTests
         Assert.AreEqual(HttpStatusCode.Unauthorized,
             (await http.GetAsync("/api/v2/admin/collection/operations/monitoring-findings")).StatusCode);
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
-        var report = await http.GetFromJsonAsync<CollectionMonitoringReport>(
+        var store = app.Services.GetRequiredService<CollectionPlatformStore>();
+        var now = DateTimeOffset.UtcNow.AddMinutes(-2);
+        var definition = new CollectionDefinitionId("horse-profile");
+        await store.RegisterDefinitionAsync(definition, "Horse", CollectionResourceType.Horse, 1, "initial", false);
+        var receipt = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", $"monitor-{Guid.NewGuid():N}"),
+            definition, 1, CollectionReason.Discovery, now);
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        await store.CompleteAttemptAsync(taskId, lease.LeaseToken, now.AddMinutes(1),
+            new(CollectionAttemptResult.ValidationFailure, "ValidationFailure", "contract test failure"));
+        await store.SetPausedAsync(false, null, DateTimeOffset.UtcNow);
+
+        var response = await http.GetFromJsonAsync<GetCollectionMonitoringFindingsResponse>(
             "/api/v2/admin/collection/operations/monitoring-findings");
+        var report = response?.Findings;
 
         Assert.IsNotNull(report);
         Assert.IsTrue(report.Enabled);
-        Assert.AreNotEqual(CollectionMonitoringOutcome.MonitorFailed, report.Outcome);
+        Assert.AreNotEqual(CollectionMonitoringOutcomeDto.MonitorFailed, report.Outcome);
+        var finding = report.Findings.Single(x => x.Kind == "ActionableFailureGroup");
+        Assert.IsFalse(string.IsNullOrWhiteSpace(finding.Fingerprint));
+        Assert.AreEqual(CollectionFindingClassificationDto.ProgramBug, finding.Classification);
     }
 
     [TestMethod]

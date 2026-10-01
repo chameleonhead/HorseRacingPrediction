@@ -14,74 +14,6 @@ public readonly record struct CollectionDefinitionId(string Value)
     public override string ToString() => Value;
 }
 
-public enum CollectionReason
-{
-    Initial,
-    Backfill,
-    Discovery,
-    ScheduledRefresh,
-    DefinitionChanged,
-    ManualRefresh,
-    Recovery,
-    PeriodRecollection,
-}
-
-public enum CollectionStateStatus
-{
-    Unknown,
-    Pending,
-    Collecting,
-    Current,
-    RefreshDue,
-    Stale,
-    Failed,
-    Unavailable,
-}
-
-public enum CollectionTaskStatus
-{
-    Pending,
-    Ready,
-    Running,
-    RetryWaiting,
-    WaitingDiscovery,
-    Succeeded,
-    Failed,
-    Cancelled,
-    DeadLetter,
-}
-
-public enum CollectionAttemptResult
-{
-    Running,
-    Succeeded,
-    TransientFailure,
-    PermanentFailure,
-    ResourceNotFound,
-    ResourceNotYetAvailable,
-    ParseFailure,
-    ValidationFailure,
-    UnexpectedPage,
-    AccessLimited,
-    Cancelled,
-    NotApplicable,
-}
-
-public enum CollectionLane { Realtime, Normal, Background }
-
-public enum CollectionPriority
-{
-    Background = 10,
-    Low = 30,
-    Normal = 50,
-    High = 70,
-    Critical = 100,
-}
-
-public enum RevisionImpactScopeType { All, SpecificResources, DateRange, NamedCondition }
-public enum ResourceLocationSource { Explicit, Generated, Discovered, Redirected, Manual }
-public enum ResourceLocationStatus { Unknown, Active, Suspect, Invalid }
-
 public sealed record CollectionSchedule(bool ShouldCollect, DateTimeOffset? NextCollectionAt,
     CollectionPriority Priority, CollectionLane Lane, string Reason);
 
@@ -133,41 +65,10 @@ public sealed class CollectionResourceSuppressedException(ResourceKey resource, 
 public sealed class CollectionRequestIdempotencyMismatchException(string batchId)
     : InvalidOperationException($"Collection request idempotency mismatch for {batchId}.");
 
-public enum CollectionTaskAcquireStatus
-{
-    Acquired,
-    AlreadyTerminal,
-    SupersededGeneration,
-    ActiveElsewhere,
-    RepairHeld,
-}
-
 public sealed record CollectionTaskAcquireResult(CollectionTaskAcquireStatus Status, LeasedCollectionTask? Task = null);
 
 public sealed record CollectionWakeSignal(Guid WakeId, Guid DispatchEnvelopeId, string ReservationToken,
     int ContractVersion = 1);
-public enum CollectionExecutionAcquireStatus { Acquired, NoWork }
-public enum CollectionExecutionNoWorkReason
-{
-    InvalidRequest,
-    PipelinePaused,
-    LeaseConflict,
-    ReservationUnavailable,
-    ReservationInconsistent,
-    TaskIneligible,
-    RepairHold,
-    ResourceUnavailable,
-    EnvelopeInvalid,
-}
-public enum CollectionReservationReleaseOutcome
-{
-    NotAttempted,
-    Released,
-    AlreadyReleasedOrChanged,
-    SkippedStaleGeneration,
-    SkippedActiveLease,
-    SkippedAmbiguousRows,
-}
 public enum CollectionDispatchCycleOutcome
 {
     NoCandidates,
@@ -243,11 +144,6 @@ public sealed record LeasedCollectionTask(Guid TaskId, Guid RequestId, ResourceK
     IReadOnlyList<ResourceLocationCandidate>? Locations = null,
     long RaceHoldGeneration = 0, string? EntryAssignmentFingerprint = null);
 
-public enum CollectionFailureImpact { StopPipeline, Isolated }
-
-public enum RaceArtifactKind { Card, Result }
-public enum RaceArtifactStatus { Unknown, AwaitingPublication, Due, Collecting, Current, Blocked, Unavailable }
-
 public sealed record CollectionStageOutcome(string Stage, RaceArtifactKind Artifact,
     CollectionAttemptResult Result, string? ErrorCode = null, string? ErrorMessage = null,
     Uri? RequestedUrl = null, Uri? FinalUrl = null, bool Persisted = false);
@@ -317,8 +213,6 @@ public sealed record CollectionDispatchTaskReference(Guid TaskId, long DispatchG
 {
     public bool IsSupported() => TaskId != Guid.Empty && DispatchGeneration > 0;
 }
-
-public enum CollectionDispatchGroupKind { Definition, RaceDay, WeekendSubjects }
 
 public sealed record CollectionDispatchCompatibilityKey(string Provider, CollectionDefinitionId Definition,
     DateOnly? EffectiveDate, CollectionLane Lane,
@@ -395,7 +289,6 @@ public sealed record CollectionReadinessSnapshot(int PendingHorseRequests, int P
 }
 
 public sealed record CollectionPipelineState(bool IsPaused, string? Reason, DateTimeOffset? UpdatedAt);
-public enum CollectionFailureResolutionStatus { Open, RecoveryInProgress, Resolved, Superseded }
 public sealed record PendingCollectionFailureNotification(Guid NotificationId, Guid TaskId,
     ResourceKey Resource, CollectionDefinitionId Definition, CollectionTaskStatus Status,
     string? ErrorCode, string? ErrorMessage, int AttemptCount, DateTimeOffset FailedAt,

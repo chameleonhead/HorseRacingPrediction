@@ -1699,7 +1699,7 @@ public sealed class CollectionDispatchStarvationReproductionTests
                 },
                 AcquireFault.UnknownStatusAfterCommit => new(HttpStatusCode.Created)
                 {
-                    Content = new StringContent("{\"status\":99}", System.Text.Encoding.UTF8, "application/json")
+                    Content = new StringContent("{\"acquisition\":{\"status\":99}}", System.Text.Encoding.UTF8, "application/json")
                 },
                 _ => throw new ArgumentOutOfRangeException(nameof(fault), fault, "Unknown acquire fault.")
             };

@@ -36,6 +36,7 @@ internal static class ApplyRaceEntryOwnerMigrationEndpoint
                     JstTime.Now(), CollectionPlatformEndpointSupport.RaceEntryOwnerMigrationBatchId,
                     CollectionLane.Normal, (int)CollectionPriority.Normal, token);
             var batch = await store.GetBatchResourceStatusesAsync(CollectionPlatformEndpointSupport.RaceEntryOwnerMigrationBatchId, token);
-            return Results.Ok(CollectionPlatformEndpointSupport.BuildRaceEntryOwnerMigrationProgress(candidates, batch));
-        });
+            return Results.Ok(new ApplyRaceEntryOwnerMigrationResponse(CollectionContractMapper.ToDto(
+                CollectionPlatformEndpointSupport.BuildRaceEntryOwnerMigrationProgress(candidates, batch))));
+        }).Produces<ApplyRaceEntryOwnerMigrationResponse>(StatusCodes.Status200OK);
 }

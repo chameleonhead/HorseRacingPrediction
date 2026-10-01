@@ -75,7 +75,7 @@ internal static class CollectionPlatformEndpointSupport
         _ => throw new ArgumentException("Revision impact parameters are invalid."),
     };
 
-    internal static async Task<IResult> RecoverFailuresAsync(IReadOnlyList<PendingCollectionFailureNotification> failures,
+    internal static async Task<CollectionFailureRecoveryResult> RecoverFailuresAsync(IReadOnlyList<PendingCollectionFailureNotification> failures,
         int? requestedRevision, CollectionLane lane, int priority, CollectionPlatformStore store, CancellationToken token)
     {
         var taskIds = new List<Guid>(failures.Count);
@@ -90,8 +90,8 @@ internal static class CollectionPlatformEndpointSupport
             if (receipt.CreatedTask) created++;
             if (receipt.TaskId is { } taskId) taskIds.Add(taskId);
         }
-        return Results.Accepted(value: new CollectionFailureRecoveryResult(failures.Count, created,
-            failures.Count - created, taskIds.Distinct().ToList()));
+        return new CollectionFailureRecoveryResult(failures.Count, created,
+            failures.Count - created, taskIds.Distinct().ToList());
     }
 
     internal static async Task<IReadOnlyList<CollectionBulkTarget>> ResolveBulkTargetsAsync(BulkCollectionOperationRequest request,

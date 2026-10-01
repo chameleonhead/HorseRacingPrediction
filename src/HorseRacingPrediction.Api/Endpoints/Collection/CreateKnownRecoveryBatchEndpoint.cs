@@ -14,11 +14,12 @@ internal static class CreateKnownRecoveryBatchEndpoint
             {
                 try
                 {
-                    return Results.Ok(await service.ApplyKnownRecoveryAsync(JstTime.Now(), logger, token));
+                    return Results.Ok(new CreateKnownRecoveryBatchResponse(CollectionContractMapper.ToDto(
+                        await service.ApplyKnownRecoveryAsync(JstTime.Now(), logger, token))));
                 }
                 catch (InvalidOperationException exception)
                 {
                     return Results.Conflict(new { message = exception.Message });
                 }
-            });
+            }).Produces<CreateKnownRecoveryBatchResponse>(StatusCodes.Status200OK);
 }

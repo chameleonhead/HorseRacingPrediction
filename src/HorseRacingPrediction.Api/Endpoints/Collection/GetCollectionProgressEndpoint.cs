@@ -8,5 +8,7 @@ internal static class GetCollectionProgressEndpoint
     internal static void Map(IEndpointRouteBuilder endpoints) =>
         endpoints.MapGet("/api/v2/admin/collection/operations/progress",
             async (CollectionPlatformStore store, CancellationToken token) =>
-                Results.Ok(await store.GetProgressAsync(token)));
+                Results.Ok(new GetCollectionProgressResponse(CollectionContractMapper.ToDto(
+                    await store.GetProgressAsync(token)))))
+            .Produces<GetCollectionProgressResponse>(StatusCodes.Status200OK);
 }

@@ -58,12 +58,13 @@ public sealed class CollectionRequestBatchEndpointTests
             var duplicate = request with { Items = [request.Items[0], request.Items[0]] };
             Assert.AreEqual(HttpStatusCode.BadRequest,
                 (await client.PostAsJsonAsync("api/v2/admin/collection/task-batches",
-                    new CollectionTaskBatchRequest("ExplicitItems", ExplicitItems: duplicate))).StatusCode);
+                    new CreateCollectionTaskBatchRequest(new CreateCollectionTaskBatchInputDto("ExplicitItems",
+                        ExplicitItems: duplicate)))).StatusCode);
             Assert.AreEqual(HttpStatusCode.BadRequest,
                 (await client.PostAsJsonAsync("api/v2/admin/collection/task-batches",
-                    new CollectionTaskBatchRequest("ExplicitItems", PreviewSelection:
-                        new("horse-profile", 1, CollectionReason.Discovery, "SpecificResources"),
-                        ExplicitItems: request))).StatusCode,
+                    new CreateCollectionTaskBatchRequest(new CreateCollectionTaskBatchInputDto("ExplicitItems",
+                        PreviewSelection: new("horse-profile", 1, CollectionReason.Discovery, "SpecificResources"),
+                        ExplicitItems: request)))).StatusCode,
                 "A merged batch request must not combine selector modes.");
             Assert.HasCount(1, await store.GetTasksAsync());
         }
@@ -74,9 +75,11 @@ public sealed class CollectionRequestBatchEndpointTests
         CollectionRequestBulkRequest request)
     {
         var response = await client.PostAsJsonAsync("api/v2/admin/collection/task-batches",
-            new CollectionTaskBatchRequest("ExplicitItems", ExplicitItems: request));
+            new CreateCollectionTaskBatchRequest(new CreateCollectionTaskBatchInputDto("ExplicitItems",
+                ExplicitItems: request)));
         response.EnsureSuccessStatusCode();
-        var submission = await response.Content.ReadFromJsonAsync<CollectionTaskBatchSubmissionResponse>();
+        var responseBody = await response.Content.ReadFromJsonAsync<CreateCollectionTaskBatchResponse>();
+        var submission = responseBody?.Submission;
         Assert.IsNotNull(submission);
         Assert.AreEqual("ExplicitItems", submission.Mode);
         return submission.ExplicitItems!;

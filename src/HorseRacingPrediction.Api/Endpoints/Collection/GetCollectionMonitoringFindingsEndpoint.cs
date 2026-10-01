@@ -9,5 +9,7 @@ internal static class GetCollectionMonitoringFindingsEndpoint
     internal static void Map(IEndpointRouteBuilder endpoints) =>
         endpoints.MapGet("/api/v2/admin/collection/operations/monitoring-findings",
             async ([FromServices] CollectionMonitoringService service, CancellationToken token) =>
-                Results.Ok(await service.InspectAsync(JstTime.Now(), token)));
+                Results.Ok(new GetCollectionMonitoringFindingsResponse(CollectionContractMapper.ToDto(
+                    await service.InspectAsync(JstTime.Now(), token)))))
+            .Produces<GetCollectionMonitoringFindingsResponse>(StatusCodes.Status200OK);
 }

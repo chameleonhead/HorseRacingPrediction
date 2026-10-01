@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.Predictor.Scheduling;
 
@@ -7,9 +8,16 @@ public sealed class CollectionReadinessClient(HttpClient client)
 {
     public async Task<CollectionReadinessSnapshot> GetAsync(string raceId,
         CancellationToken cancellationToken = default)
-        => await client.GetFromJsonAsync<CollectionReadinessSnapshot>(
+    {
+        var response = await client.GetFromJsonAsync<GetRaceCollectionReadinessResponse>(
             $"api/v2/admin/collection/races/{Uri.EscapeDataString(raceId)}/readiness", cancellationToken)
-           ?? throw new InvalidOperationException("Collection readiness response was empty.");
+            .ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Collection readiness response was empty.");
+
+        return new CollectionReadinessSnapshot(response.Readiness.PendingHorseRequests,
+            response.Readiness.PendingJockeyRequests, response.Readiness.PendingRaceResultRequests,
+            response.Readiness.PendingTrainerRequests);
+    }
 }
 
 public sealed class PredictionExecutionOptions

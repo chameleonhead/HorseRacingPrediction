@@ -10,17 +10,18 @@ internal static class SetCollectionPipelineEndpoint
         endpoints.MapPut("/api/v2/admin/collection/pipeline", async (SetCollectionPipelineRequest request,
             CollectionPlatformStore store, CancellationToken token) =>
         {
-            if (request.Paused && string.IsNullOrWhiteSpace(request.Reason))
+            if (request.Pipeline is null)
+                return Results.BadRequest(new { message = "Pipeline input is required." });
+            if (request.Pipeline.Paused && string.IsNullOrWhiteSpace(request.Pipeline.Reason))
                 return Results.BadRequest(new { message = "A reason is required when pausing the pipeline." });
-            await store.SetPausedAsync(request.Paused, request.Paused ? request.Reason : null, JstTime.Now(), token);
+            await store.SetPausedAsync(request.Pipeline.Paused,
+                request.Pipeline.Paused ? request.Pipeline.Reason : null, JstTime.Now(), token);
             return Results.NoContent();
         }).AddEndpointFilter(async (context, next) =>
         {
             var request = context.Arguments.OfType<SetCollectionPipelineRequest>().Single();
-            if (request.Paused) return await next(context);
+            if (request.Pipeline?.Paused is true) return await next(context);
             var filter = context.HttpContext.RequestServices.GetRequiredService<global::HorseRacingPrediction.Api.Security.RaceWriteEndpointFilter>();
             return await filter.InvokeAsync(context, next);
         });
 }
-
-internal sealed record SetCollectionPipelineRequest(bool Paused, string? Reason = null);

@@ -352,13 +352,13 @@ public sealed class HorseIdentityRepairSettingsComponentTests
                 [new("race-target", "20260919:Hanshin:11", "大阪スポーツ杯", "阪神", 11, 16, 15,
                     new(2026, 9, 19))], Eligible: 1);
             if (request.Method == HttpMethod.Post && path.EndsWith("migration-previews/race-entry-owner-repair", StringComparison.Ordinal))
-                return Ok(progress);
+                return Ok(new { preview = progress });
             if (request.Method == HttpMethod.Get && path.EndsWith("migrations/race-entry-owner-repair", StringComparison.Ordinal))
-                return Ok(progress);
+                return Ok(new { progress });
             if (request.Method == HttpMethod.Post && path.EndsWith("migrations/race-entry-owner-repair", StringComparison.Ordinal))
             {
                 Applied = true;
-                return Ok(progress);
+                return Ok(new { progress });
             }
             if (path.EndsWith("subject-identification", StringComparison.Ordinal))
                 return Ok(new GetSubjectIdentificationRepairResponse(new SubjectIdentificationRepairPreviewDto([])));

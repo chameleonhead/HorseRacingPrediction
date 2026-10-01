@@ -1,5 +1,6 @@
 using System.Net;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts.Collection;
 using HorseRacingPrediction.Collector.Http;
 
 using HorseRacingPrediction.Contracts.Identity;

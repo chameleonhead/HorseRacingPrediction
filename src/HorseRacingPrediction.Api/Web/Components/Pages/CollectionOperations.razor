@@ -221,7 +221,8 @@ else
         { operationErrors = ["正しい年と月を入力してください。"]; return; }
         await RunAsync(async () =>
         {
-            var result = await Api.CreateBackfillBatchAsync(new(year, month));
+            var result = await Api.CreateBackfillBatchAsync(new(
+                new CreateBackfillBatchInputDto(year, month)));
             if (!result.Success) { operationErrors = result.Errors; return; }
             successMessage = $"{year}年{month}月の過去データ収集を受け付けました。";
             await LoadBackfillsAsync();

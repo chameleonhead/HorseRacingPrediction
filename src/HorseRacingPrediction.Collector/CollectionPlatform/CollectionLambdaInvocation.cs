@@ -1,5 +1,6 @@
 using System.Text.Json;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 

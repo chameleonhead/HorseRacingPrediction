@@ -1,6 +1,7 @@
 using Amazon.CloudWatch;
 using Amazon.CloudWatch.Model;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts.Collection;
 using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Api.CollectionController;

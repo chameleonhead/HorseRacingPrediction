@@ -17,7 +17,7 @@ internal static class GetRaceEntryOwnerMigrationEndpoint
                     .GetRaceEntryOwnerMigrationCandidatesAsync(dbContextProvider, token);
                 var batch = await store.GetBatchResourceStatusesAsync(
                     CollectionPlatformEndpointSupport.RaceEntryOwnerMigrationBatchId, token);
-                return Results.Ok(CollectionPlatformEndpointSupport
-                    .BuildRaceEntryOwnerMigrationProgress(candidates, batch));
-            });
+                return Results.Ok(new GetRaceEntryOwnerMigrationResponse(CollectionContractMapper.ToDto(
+                    CollectionPlatformEndpointSupport.BuildRaceEntryOwnerMigrationProgress(candidates, batch))));
+            }).Produces<GetRaceEntryOwnerMigrationResponse>(StatusCodes.Status200OK);
 }

@@ -31,10 +31,10 @@ public sealed class CollectionRequestApiClientTests
         Assert.AreEqual("/api/v2/admin/collection/task-batches", handler.RequestUri!.AbsolutePath);
         Assert.AreEqual(HttpMethod.Post, handler.Method);
         Assert.IsNotNull(handler.Body);
-        Assert.AreEqual("ExplicitItems", handler.Body.Mode);
-        Assert.IsNotNull(handler.Body.ExplicitItems);
-        Assert.AreEqual(3, handler.Body.ExplicitItems.Items.Count);
-        Assert.AreEqual(3, handler.Body.ExplicitItems.Items.Select(x => x.ItemKey).Distinct(StringComparer.Ordinal).Count());
+        Assert.AreEqual("ExplicitItems", handler.Body.Batch!.Mode);
+        Assert.IsNotNull(handler.Body.Batch.ExplicitItems);
+        Assert.AreEqual(3, handler.Body.Batch.ExplicitItems.Items.Count);
+        Assert.AreEqual(3, handler.Body.Batch.ExplicitItems.Items.Select(x => x.ItemKey).Distinct(StringComparer.Ordinal).Count());
         Assert.HasCount(3, response.Outcomes);
     }
 
@@ -63,6 +63,37 @@ public sealed class CollectionRequestApiClientTests
         Assert.IsFalse(response.Outcomes[2].CreatedTask);
     }
 
+    [TestMethod]
+    public async Task RequestAsync_UsesTaskResourceEnvelopeAndRetainsInputValues()
+    {
+        var handler = new RecordingSingleHandler();
+        var client = new CollectionRequestApiClient(new HttpClient(handler)
+        {
+            BaseAddress = new("https://api.example.test/"),
+        });
+        var effectiveDate = new DateOnly(2026, 9, 12);
+        var attributes = new Dictionary<string, string> { ["batchId"] = "single-batch", ["caller"] = "test" };
+
+        await client.RequestAsync(new(CollectionResourceType.Horse, "JRA", "H001"), new("horse-profile"),
+            3, CollectionReason.ManualRefresh, CollectionLane.Realtime, 70,
+            new Uri("https://example.test/horses/H001"), effectiveDate, attributes, CancellationToken.None);
+
+        Assert.AreEqual("Resource", handler.Body!.Task!.Mode);
+        var resource = handler.Body.Task.Resource!;
+        Assert.AreEqual(CollectionResourceType.Horse, resource.ResourceType);
+        Assert.AreEqual("JRA", resource.Provider);
+        Assert.AreEqual("H001", resource.ResourceId);
+        Assert.AreEqual("horse-profile", resource.DefinitionId);
+        Assert.AreEqual(3, resource.RequestedRevision);
+        Assert.AreEqual(CollectionReason.ManualRefresh, resource.Reason);
+        Assert.AreEqual(CollectionLane.Realtime, resource.Lane);
+        Assert.AreEqual(70, resource.Priority);
+        Assert.AreEqual("https://example.test/horses/H001", resource.ExplicitUrl);
+        Assert.AreEqual(effectiveDate, resource.EffectiveDate);
+        Assert.AreEqual("single-batch", resource.BatchId);
+        Assert.AreEqual("test", resource.Attributes!["caller"]);
+    }
+
     private static CollectionRequestBulkItemDto Item(string key, string type, string id, string definition) =>
         new(key, type, "JRA", id, definition, 1, "Discovery", "Realtime", 70, null,
             new DateOnly(2026, 9, 12), null);
@@ -72,7 +103,7 @@ public sealed class CollectionRequestApiClientTests
         public int RequestCount { get; private set; }
         public Uri? RequestUri { get; private set; }
         public HttpMethod? Method { get; private set; }
-        public CollectionTaskBatchRequest? Body { get; private set; }
+        public CreateCollectionTaskBatchRequest? Body { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
@@ -80,8 +111,8 @@ public sealed class CollectionRequestApiClientTests
             RequestCount++;
             RequestUri = request.RequestUri;
             Method = request.Method;
-            Body = await request.Content!.ReadFromJsonAsync<CollectionTaskBatchRequest>(cancellationToken);
-            var items = Body!.ExplicitItems!.Items;
+            Body = await request.Content!.ReadFromJsonAsync<CreateCollectionTaskBatchRequest>(cancellationToken);
+            var items = Body!.Batch!.ExplicitItems!.Items;
             var outcomes = returnPartialOutcomes
                 ? new[]
                 {
@@ -94,9 +125,22 @@ public sealed class CollectionRequestApiClientTests
                 : items.Select(x => new CollectionRequestBulkOutcomeDto(x.ItemKey, "Created")).ToArray();
             return new(HttpStatusCode.OK)
             {
-                Content = JsonContent.Create(new CollectionTaskBatchSubmissionResponse("ExplicitItems", null,
-                    new CollectionRequestBulkResponse(outcomes))),
+                Content = JsonContent.Create(new CreateCollectionTaskBatchResponse(
+                    new CollectionTaskBatchSubmissionDto("ExplicitItems", null,
+                        new CollectionRequestBulkResponse(outcomes)))),
             };
+        }
+    }
+
+    private sealed class RecordingSingleHandler : HttpMessageHandler
+    {
+        public CreateCollectionTaskRequest? Body { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Body = await request.Content!.ReadFromJsonAsync<CreateCollectionTaskRequest>(cancellationToken);
+            return new(HttpStatusCode.Accepted);
         }
     }
 }

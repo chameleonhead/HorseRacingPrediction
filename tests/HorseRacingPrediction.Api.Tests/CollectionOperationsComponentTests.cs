@@ -110,7 +110,7 @@ public sealed class CollectionOperationsComponentTests
                     DateTimeOffset.UtcNow, null, null, null,
                     "SubjectIdentification:MultipleCandidates", null, null)]);
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
-            { Content = JsonContent.Create(page) });
+            { Content = JsonContent.Create(new { page }) });
         }
     }
 
@@ -125,13 +125,18 @@ public sealed class CollectionOperationsComponentTests
             if (request.Method == HttpMethod.Post && path.EndsWith("/backfills", StringComparison.Ordinal))
             {
                 BackfillRequests++;
-                return Ok(new BackfillBatchSnapshot("jra:2026-09", new(2026, 9, 1), new(2026, 9, 30),
-                    30, 1, 1, 0, 0, 0, [], DateTimeOffset.UtcNow, null));
+                return Ok(new
+                {
+                    batch = new BackfillBatchSnapshot("jra:2026-09", new(2026, 9, 1), new(2026, 9, 30),
+                    30, 1, 1, 0, 0, 0, [], DateTimeOffset.UtcNow, null)
+                });
             }
 
             object value = path switch
             {
-                "/api/v2/admin/collection/operations/dashboard" => new CollectionOperationsDashboard(
+                "/api/v2/admin/collection/operations/dashboard" => new
+                {
+                    dashboard = new CollectionOperationsDashboard(
                     new CollectionProgressSnapshot(new Dictionary<CollectionResourceType, int> { [CollectionResourceType.Race] = 10 },
                         new Dictionary<CollectionStateStatus, int> { [CollectionStateStatus.Failed] = 2 },
                         new Dictionary<CollectionLane, int> { [CollectionLane.Realtime] = 3 },
@@ -141,25 +146,35 @@ public sealed class CollectionOperationsComponentTests
                         DateTimeOffset.UtcNow.AddMinutes(-2), DateTimeOffset.UtcNow,
                         [Guid.NewGuid(), Guid.NewGuid()], [new(CollectionResourceType.RaceResult, "JRA", "R1")])],
                     [new BackfillBatchSnapshot("jra:2026-08", new(2026, 8, 1), new(2026, 8, 31),
-                        31, 31, 0, 0, 30, 1, [], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow)], DateTimeOffset.UtcNow),
-                "/api/v2/admin/collection/operations/progress" => new CollectionProgressSnapshot(
+                        31, 31, 0, 0, 30, 1, [], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow)], DateTimeOffset.UtcNow)
+                },
+                "/api/v2/admin/collection/operations/progress" => new
+                {
+                    progress = new CollectionProgressSnapshot(
                     new Dictionary<CollectionResourceType, int> { [CollectionResourceType.Race] = 10 },
                     new Dictionary<CollectionStateStatus, int> { [CollectionStateStatus.Failed] = 2 },
                     new Dictionary<CollectionLane, int> { [CollectionLane.Realtime] = 3 },
-                    new Dictionary<int, int> { [100] = 3 }, new Dictionary<string, int>(), 2),
-                "/api/v2/admin/collection/failure-notification-groups" => new[]
+                    new Dictionary<int, int> { [100] = 3 }, new Dictionary<string, int>(), 2)
+                },
+                "/api/v2/admin/collection/failure-notification-groups" => new
+                {
+                    groups = new[]
                 {
                     new CollectionFailureGroup("race-result|Failed|UnexpectedPage", new("race-result"),
                         CollectionTaskStatus.Failed, "UnexpectedPage", "別ページ", 2,
                         DateTimeOffset.UtcNow.AddMinutes(-2), DateTimeOffset.UtcNow,
                         [Guid.NewGuid(), Guid.NewGuid()], [new(CollectionResourceType.RaceResult, "JRA", "R1")]),
+                }
                 },
                 "/api/v2/admin/collection/failure-notification-groups/race-result%7CFailed%7CUnexpectedPage" =>
-                    FailurePage(),
-                "/api/v2/admin/collection/backfill-batches" => new[]
+                    new { page = FailurePage() },
+                "/api/v2/admin/collection/backfill-batches" => new
+                {
+                    batches = new[]
                 {
                     new BackfillBatchSnapshot("jra:2026-08", new(2026, 8, 1), new(2026, 8, 31),
                         31, 31, 0, 0, 30, 1, [], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow),
+                }
                 },
                 _ => Array.Empty<object>(),
             };

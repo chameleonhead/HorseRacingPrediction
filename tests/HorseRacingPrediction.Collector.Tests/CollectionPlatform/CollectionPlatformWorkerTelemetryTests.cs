@@ -1,6 +1,7 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Http;
+using HorseRacingPrediction.Collector.Tests.TestSupport;
 using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Net.Http.Json;
@@ -222,8 +223,7 @@ public sealed class CollectionPlatformWorkerTelemetryTests
                 clock.Advance(TimeSpan.FromMilliseconds(20));
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = JsonContent.Create(new CollectionTaskAcquireResult(
-                        CollectionTaskAcquireStatus.Acquired, lease)),
+                    Content = JsonContent.Create(CollectionWireTestData.AcquiredTask(lease)),
                 });
             }
             clock.Advance(TimeSpan.FromMilliseconds(30));

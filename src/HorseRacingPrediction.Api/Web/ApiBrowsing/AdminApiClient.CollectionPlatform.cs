@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Api.Endpoints.Collection;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
@@ -12,70 +13,71 @@ public sealed partial class AdminApiClient
     private const string CollectionPlatformPath = "/api/v2/admin/collection";
 
     public Task<CollectionProgressSnapshot?> GetCollectionProgressAsync(CancellationToken token = default)
-        => GetJsonAsync<CollectionProgressSnapshot>($"{CollectionPlatformPath}/operations/progress", token);
+        => GetCollectionJsonAsync<CollectionProgressSnapshot>($"{CollectionPlatformPath}/operations/progress", "Progress", token);
 
     public Task<CollectionTaskViewCounts?> GetCollectionTaskViewCountsAsync(CancellationToken token = default)
-        => GetJsonAsync<CollectionTaskViewCounts>($"{CollectionPlatformPath}/operations/task-view-counts", token);
+        => GetCollectionJsonAsync<CollectionTaskViewCounts>($"{CollectionPlatformPath}/operations/task-view-counts", "Counts", token);
 
     public Task<CollectionOperationsDashboard?> GetCollectionOperationsDashboardAsync(CancellationToken token = default)
-        => GetJsonAsync<CollectionOperationsDashboard>($"{CollectionPlatformPath}/operations/dashboard", token);
+        => GetCollectionJsonAsync<CollectionOperationsDashboard>($"{CollectionPlatformPath}/operations/dashboard", "Dashboard", token);
 
     public Task<CollectionPipelineState?> GetCollectionPipelineAsync(CancellationToken token = default)
-        => GetJsonAsync<CollectionPipelineState>($"{CollectionPlatformPath}/pipeline-state", token);
+        => GetCollectionJsonAsync<CollectionPipelineState>($"{CollectionPlatformPath}/pipeline-state", "Pipeline", token);
 
     public Task<CollectionStateSnapshot?> GetCollectionStateAsync(ResourceKey resource,
         CollectionDefinitionId definition, CancellationToken token = default)
-        => GetJsonAsync<CollectionStateSnapshot>(
+        => GetCollectionJsonAsync<CollectionStateSnapshot>(
             $"{CollectionPlatformPath}/resources/{resource.Type}/{Uri.EscapeDataString(resource.Provider)}" +
-            $"/{Uri.EscapeDataString(resource.Id)}/definitions/{Uri.EscapeDataString(definition.Value)}/state", token);
+            $"/{Uri.EscapeDataString(resource.Id)}/definitions/{Uri.EscapeDataString(definition.Value)}/state", "State", token);
 
     public Task<CollectionResourceDetail?> GetCollectionResourceDetailAsync(ResourceKey resource,
         CollectionDefinitionId definition, int requestHistoryPage = 1, int taskHistoryPage = 1,
         int attemptHistoryPage = 1, int historyPageSize = 25,
         CancellationToken token = default)
-        => GetJsonAsync<CollectionResourceDetail>(
+        => GetCollectionJsonAsync<CollectionResourceDetail>(
             $"{CollectionPlatformPath}/resources/{resource.Type}/{Uri.EscapeDataString(resource.Provider)}" +
             $"/{Uri.EscapeDataString(resource.Id)}/definitions/{Uri.EscapeDataString(definition.Value)}" +
             $"?requestHistoryPage={Math.Max(1, requestHistoryPage)}" +
             $"&taskHistoryPage={Math.Max(1, taskHistoryPage)}" +
             $"&attemptHistoryPage={Math.Max(1, attemptHistoryPage)}" +
-            $"&historyPageSize={Math.Clamp(historyPageSize, 1, 100)}", token);
+            $"&historyPageSize={Math.Clamp(historyPageSize, 1, 100)}", "Resource", token);
 
     public Task<IReadOnlyList<BackfillBatchSnapshot>?> GetBackfillBatchesAsync(
         CancellationToken token = default)
-        => GetJsonAsync<IReadOnlyList<BackfillBatchSnapshot>>($"{CollectionPlatformPath}/backfill-batches", token);
+        => GetCollectionJsonAsync<IReadOnlyList<BackfillBatchSnapshot>>($"{CollectionPlatformPath}/backfill-batches", "Batches", token);
 
     public Task<BackfillBatchSnapshot?> GetBackfillBatchAsync(string batchId, CancellationToken token = default)
-        => GetJsonAsync<BackfillBatchSnapshot>($"{CollectionPlatformPath}/backfill-batches/{Uri.EscapeDataString(batchId)}", token);
+        => GetCollectionJsonAsync<BackfillBatchSnapshot>($"{CollectionPlatformPath}/backfill-batches/{Uri.EscapeDataString(batchId)}", "Batch", token);
 
     public Task<AdminApiResult<BackfillHoleRecoveryResult>> RecoverBackfillHolesAsync(string batchId,
         CancellationToken token = default)
         => SendCollectionPlatformAsync<BackfillHoleRecoveryResult>(HttpMethod.Post,
-            $"{CollectionPlatformPath}/backfill-batches/{Uri.EscapeDataString(batchId)}/recovery-batches", new { }, token);
+            $"{CollectionPlatformPath}/backfill-batches/{Uri.EscapeDataString(batchId)}/recovery-batches", null, "Recovery", token);
 
     public Task<RaceEntryOwnerRepairPreview?> ListRaceEntryOwnerRepairCandidatesAsync(
         DateOnly date, CancellationToken token = default)
-        => GetJsonAsync<RaceEntryOwnerRepairPreview>(
-            $"{CollectionPlatformPath}/race-entry-owner-repair-candidates?date={date:yyyy-MM-dd}", token);
+        => GetCollectionJsonAsync<RaceEntryOwnerRepairPreview>(
+            $"{CollectionPlatformPath}/race-entry-owner-repair-candidates?date={date:yyyy-MM-dd}", "Preview", token);
 
     public Task<AdminApiResult<RaceEntryOwnerRepairReceipt>> CreateRaceEntryOwnerRepairBatchAsync(
         RaceEntryOwnerRepairRequest request, CancellationToken token = default)
         => SendCollectionPlatformAsync<RaceEntryOwnerRepairReceipt>(HttpMethod.Post,
-            $"{CollectionPlatformPath}/race-entry-owner-repair-batches", request, token);
+            $"{CollectionPlatformPath}/race-entry-owner-repair-batches",
+            new CreateRaceEntryOwnerRepairBatchRequest(new(request.Date, request.RaceIds, request.BatchId)), "Repair", token);
 
     public async Task<IReadOnlyList<CollectionTaskSummary>?> GetCollectionTasksAsync(
         CollectionTaskStatus? status = null, int limit = 200, CancellationToken token = default)
     {
-        var page = await GetJsonAsync<CollectionTaskPage>(
+        var page = await GetCollectionJsonAsync<CollectionTaskPage>(
             $"{CollectionPlatformPath}/tasks?limit={Math.Clamp(limit, 1, 1000)}" +
-            (status is null ? string.Empty : $"&status={status}"), token).ConfigureAwait(false);
+            (status is null ? string.Empty : $"&status={status}"), "Page", token).ConfigureAwait(false);
         return page?.Items;
     }
 
     public Task<CollectionExecutionBatchDetail?> GetCollectionExecutionBatchAsync(Guid executionBatchId,
         CancellationToken token = default)
-        => GetJsonAsync<CollectionExecutionBatchDetail>(
-            $"{CollectionPlatformPath}/execution-batches/{executionBatchId:D}", token);
+        => GetCollectionJsonAsync<CollectionExecutionBatchDetail>(
+            $"{CollectionPlatformPath}/execution-batches/{executionBatchId:D}", "Batch", token);
 
     public Task<CollectionTaskPage?> SearchCollectionTasksAsync(CollectionTaskQuery query,
         CancellationToken token = default)
@@ -98,7 +100,7 @@ public sealed partial class AdminApiClient
         };
         var queryString = string.Join('&', values.Where(x => !string.IsNullOrWhiteSpace(x.Value))
             .Select(x => $"{x.Key}={Uri.EscapeDataString(x.Value!)}"));
-        return GetJsonAsync<CollectionTaskPage>($"{CollectionPlatformPath}/tasks?{queryString}", token);
+        return GetCollectionJsonAsync<CollectionTaskPage>($"{CollectionPlatformPath}/tasks?{queryString}", "Page", token);
     }
 
     public Task<CollectionStatePage?> SearchCollectionStatesAsync(CollectionStateQuery query,
@@ -116,18 +118,18 @@ public sealed partial class AdminApiClient
         };
         var queryString = string.Join('&', values.Where(x => !string.IsNullOrWhiteSpace(x.Value))
             .Select(x => $"{x.Key}={Uri.EscapeDataString(x.Value!)}"));
-        return GetJsonAsync<CollectionStatePage>($"{CollectionPlatformPath}/states?{queryString}", token);
+        return GetCollectionJsonAsync<CollectionStatePage>($"{CollectionPlatformPath}/states?{queryString}", "Page", token);
     }
 
     public Task<IReadOnlyList<PendingCollectionFailureNotification>?> GetCollectionFailureNotificationsAsync(
         int limit = 100, CancellationToken token = default)
-        => GetJsonAsync<IReadOnlyList<PendingCollectionFailureNotification>>(
-            $"{CollectionPlatformPath}/failure-notifications?view=Actionable&limit={Math.Clamp(limit, 1, 1000)}", token);
+        => GetCollectionJsonAsync<IReadOnlyList<PendingCollectionFailureNotification>>(
+            $"{CollectionPlatformPath}/failure-notifications?view=Actionable&limit={Math.Clamp(limit, 1, 1000)}", "Notifications", token);
 
     public Task<IReadOnlyList<CollectionFailureGroup>?> GetCollectionFailureGroupsAsync(
         int limit = 5000, CancellationToken token = default)
-        => GetJsonAsync<IReadOnlyList<CollectionFailureGroup>>(
-            $"{CollectionPlatformPath}/failure-notification-groups?limit={Math.Clamp(limit, 1, 10000)}", token);
+        => GetCollectionJsonAsync<IReadOnlyList<CollectionFailureGroup>>(
+            $"{CollectionPlatformPath}/failure-notification-groups?limit={Math.Clamp(limit, 1, 10000)}", "Groups", token);
 
     public Task<CollectionFailureGroupPage?> GetCollectionFailureGroupAsync(string groupKey,
         string? search = null, int page = 1, int pageSize = 50, CancellationToken token = default)
@@ -135,79 +137,95 @@ public sealed partial class AdminApiClient
         var query = $"page={Math.Max(1, page)}&pageSize={Math.Clamp(pageSize, 1, 100)}";
         if (!string.IsNullOrWhiteSpace(search))
             query += $"&search={Uri.EscapeDataString(search.Trim())}";
-        return GetJsonAsync<CollectionFailureGroupPage>(
-            $"{CollectionPlatformPath}/failure-notification-groups/{Uri.EscapeDataString(groupKey)}?{query}", token);
+        return GetCollectionJsonAsync<CollectionFailureGroupPage>(
+            $"{CollectionPlatformPath}/failure-notification-groups/{Uri.EscapeDataString(groupKey)}?{query}", "Page", token);
     }
 
     public Task<AdminApiResult<CollectionFailureRecoveryResult>> RecoverCollectionFailuresAsync(
         RecoverCollectionFailuresRequest request, CancellationToken token = default)
         => SendCollectionPlatformAsync<CollectionFailureRecoveryResult>(HttpMethod.Post,
-            $"{CollectionPlatformPath}/recovery-batches", new CollectionRecoveryBatchRequest("NotificationIds",
-                request.NotificationIds, RequestedRevision: request.RequestedRevision, Lane: request.Lane, Priority: request.Priority), token);
+            $"{CollectionPlatformPath}/recovery-batches", new CreateCollectionRecoveryBatchRequest(
+                new("NotificationIds", request.NotificationIds, RequestedRevision: request.RequestedRevision,
+                    Lane: request.Lane, Priority: request.Priority)), "Recovery", token);
 
     public Task<AdminApiResult<CollectionFailureRecoveryResult>> RecoverCollectionFailureGroupAsync(
         string groupKey, RecoverCollectionFailureGroupRequest request, CancellationToken token = default)
         => SendCollectionPlatformAsync<CollectionFailureRecoveryResult>(HttpMethod.Post,
-            $"{CollectionPlatformPath}/recovery-batches", new CollectionRecoveryBatchRequest("GroupKey",
-                GroupKey: groupKey, ExpectedNotificationIds: request.ExpectedNotificationIds,
-                RequestedRevision: request.RequestedRevision, Lane: request.Lane, Priority: request.Priority), token);
+            $"{CollectionPlatformPath}/recovery-batches", new CreateCollectionRecoveryBatchRequest(
+                new("GroupKey", GroupKey: groupKey, ExpectedNotificationIds: request.ExpectedNotificationIds,
+                    RequestedRevision: request.RequestedRevision, Lane: request.Lane, Priority: request.Priority)),
+            "Recovery", token);
 
-    public Task<AdminApiResult<BackfillBatchSnapshot>> CreateBackfillBatchAsync(
+    public Task<AdminApiResult<CreateBackfillBatchResponse>> CreateBackfillBatchAsync(
         CreateBackfillBatchRequest request, CancellationToken token = default)
-        => SendCollectionPlatformAsync<BackfillBatchSnapshot>(HttpMethod.Post,
+        => SendCollectionPlatformAsync<CreateBackfillBatchResponse>(HttpMethod.Post,
             $"{CollectionPlatformPath}/backfill-batches", request, token);
 
     public Task<AdminApiResult<RevisionImpactPreview>> PreviewRevisionImpactAsync(
         RevisionImpactPreviewRequest request, CancellationToken token = default)
         => SendCollectionPlatformAsync<RevisionImpactPreview>(HttpMethod.Post,
-            $"{CollectionPlatformPath}/revision-impact-previews", request, token);
+            $"{CollectionPlatformPath}/revision-impact-previews", new PreviewRevisionImpactRequest(
+                new PreviewRevisionImpactInputDto(request.DefinitionId, request.Revision,
+                    new RevisionImpactInputDto(request.Impact.ScopeType,
+                        request.Impact.Resources?.Select(x => new CollectionResourceKeyDto(x.Type, x.Provider, x.Id)).ToArray(),
+                        request.Impact.From, request.Impact.To, request.Impact.NamedCondition))), "Preview", token);
 
     public Task<AdminApiResult<CollectionRevisionApplyResult>> ApplyRevisionAsync(
         ApplyCollectionRevisionRequest request, CancellationToken token = default)
         => SendCollectionPlatformAsync<CollectionRevisionApplyResult>(HttpMethod.Post,
             $"{CollectionPlatformPath}/definitions/{Uri.EscapeDataString(request.DefinitionId)}/revisions",
-            new CreateCollectionRevisionRequest(request.Revision, request.Description, request.Impact), token);
+            new CreateCollectionRevisionRequest(new CreateCollectionRevisionInputDto(request.Revision,
+                request.Description, new RevisionImpactInputDto(request.Impact.ScopeType,
+                    request.Impact.Resources?.Select(x => new CollectionResourceKeyDto(x.Type, x.Provider, x.Id)).ToArray(),
+                    request.Impact.From, request.Impact.To, request.Impact.NamedCondition))), "Result", token);
 
     public Task<AdminApiResult<CollectionRecollectionBatchResponse>> RecollectRevisionAsync(
         string definitionId, int revision, RevisionRecollectionRequest request,
         CancellationToken token = default)
         => SendCollectionPlatformAsync<CollectionRecollectionBatchResponse>(HttpMethod.Post,
             $"{CollectionPlatformPath}/recollection-batches",
-            new CollectionRecollectionBatchRequest("Revision", definitionId, revision, Lane: request.Lane, Priority: request.Priority), token);
+            new CreateRecollectionBatchRequest(new("Revision", definitionId, revision,
+                Lane: request.Lane, Priority: request.Priority)), "Batch", token);
 
     public Task<RevisionRecollectionProgress?> GetRevisionRecollectionProgressAsync(
         string definitionId, int revision, CancellationToken token = default)
-        => GetJsonAsync<RevisionRecollectionProgress>(
-            $"{CollectionPlatformPath}/recollection-batches?definition={Uri.EscapeDataString(definitionId)}&revision={revision}", token);
+        => GetCollectionJsonAsync<RevisionRecollectionProgress>(
+            $"{CollectionPlatformPath}/recollection-batches?definition={Uri.EscapeDataString(definitionId)}&revision={revision}", "Progress", token);
 
     public Task<AdminApiResult> PauseCollectionPipelineAsync(string? reason,
         CancellationToken token = default)
         => SendAsync(HttpMethod.Put, $"{CollectionPlatformPath}/pipeline",
-            new SetCollectionPipelineRequest(true, reason), token);
+            new SetCollectionPipelineRequest(new SetCollectionPipelineInputDto(true, reason)), token);
 
     public Task<AdminApiResult> ResumeCollectionPipelineAsync(CancellationToken token = default)
-        => SendAsync(HttpMethod.Put, $"{CollectionPlatformPath}/pipeline", new SetCollectionPipelineRequest(false), token);
+        => SendAsync(HttpMethod.Put, $"{CollectionPlatformPath}/pipeline",
+            new SetCollectionPipelineRequest(new SetCollectionPipelineInputDto(false)), token);
 
     public Task<AdminApiResult> CancelCollectionTaskAsync(Guid taskId, CancellationToken token = default)
-        => SendAsync(HttpMethod.Patch, $"{CollectionPlatformPath}/tasks/{taskId:D}", new CollectionTaskCancellationRequest(true), token);
+        => SendAsync(HttpMethod.Patch, $"{CollectionPlatformPath}/tasks/{taskId:D}",
+            new CancelCollectionTaskRequest(new CancelCollectionTaskInputDto(true)), token);
 
     public Task<AdminApiResult<CollectionTaskSubmissionResponse>> RequestCollectionAsync(
         CreateCollectionRequest request, CancellationToken token = default)
         => SendCollectionPlatformAsync<CollectionTaskSubmissionResponse>(HttpMethod.Post,
-            $"{CollectionPlatformPath}/tasks", new CollectionTaskRequest("Resource", new CollectionResourceTaskRequest(
-                request.ResourceType, request.Provider, request.ResourceId, request.DefinitionId, request.RequestedRevision,
-                request.Reason, request.Lane, request.Priority, request.ExplicitUrl, request.BatchId,
-                request.EffectiveDate, request.Attributes)), token);
+            $"{CollectionPlatformPath}/tasks", new CreateCollectionTaskRequest(new CreateCollectionTaskInputDto("Resource",
+                new CollectionResourceTaskInputDto(request.ResourceType, request.Provider, request.ResourceId,
+                    request.DefinitionId, request.RequestedRevision, request.Reason, request.Lane, request.Priority,
+                    request.ExplicitUrl, request.BatchId, request.EffectiveDate, request.Attributes))), "Submission", token);
 
     public async Task<AdminApiResult<ExplicitUrlCollectionResult>> RequestCollectionByUrlAsync(
         string url, CancellationToken token = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{CollectionPlatformPath}/tasks")
-        { Content = JsonContent.Create(new CollectionTaskRequest("SourceUrl", SourceUrl: new(url)), options: JsonOptions) };
+        {
+            Content = JsonContent.Create(new CreateCollectionTaskRequest(new CreateCollectionTaskInputDto(
+            "SourceUrl", SourceUrl: new(url))), options: JsonOptions)
+        };
         using var response = await _httpClient.SendAsync(request, token).ConfigureAwait(false);
         if (response.IsSuccessStatusCode)
         {
-            var submission = await response.Content.ReadFromJsonAsync<CollectionTaskSubmissionResponse>(JsonOptions, token).ConfigureAwait(false);
+            var submission = await ReadCollectionResponseAsync<CollectionTaskSubmissionResponse>(response,
+                "Submission", token).ConfigureAwait(false);
             if (submission is null) return AdminApiResult<ExplicitUrlCollectionResult>.Fail(["応答の解析に失敗しました。"]);
             return AdminApiResult<ExplicitUrlCollectionResult>.Ok(new(true, submission.Resource, submission.Definition,
                 submission.EffectiveDate, submission.Attributes, submission.ExplicitUrl, null, null, submission.Receipt));
@@ -224,34 +242,53 @@ public sealed partial class AdminApiClient
     public Task<AdminApiResult<CollectionBulkPreview>> PreviewBulkCollectionAsync(
         BulkCollectionOperationRequest request, CancellationToken token = default)
         => SendCollectionPlatformAsync<CollectionBulkPreview>(HttpMethod.Post,
-            $"{CollectionPlatformPath}/task-batch-previews", request, token);
+            $"{CollectionPlatformPath}/task-batch-previews", new PreviewCollectionTaskBatchRequest(
+                new PreviewCollectionTaskBatchInputDto(request.DefinitionId, request.RequestedRevision, request.Reason,
+                    request.Selection, request.Provider,
+                    request.Resources?.Select(x => new CollectionResourceKeyDto(x.Type, x.Provider, x.Id)).ToArray(),
+                    request.From, request.To, request.TrainerId, request.LastCollectedBefore,
+                    request.ImpactRevision,
+                    request.ExpectedResources?.Select(x => new CollectionResourceKeyDto(x.Type, x.Provider, x.Id)).ToArray(),
+                    request.BatchId, request.Lane, request.Priority)), "Preview", token);
 
     public Task<AdminApiResult<CollectionTaskBatchSubmissionResponse>> ExecuteBulkCollectionAsync(
         BulkCollectionOperationRequest request, CancellationToken token = default)
         => SendCollectionPlatformAsync<CollectionTaskBatchSubmissionResponse>(HttpMethod.Post,
-            $"{CollectionPlatformPath}/task-batches", new CollectionTaskBatchRequest("PreviewSelection",
-                new CollectionSelectionTaskBatchRequest(request.DefinitionId, request.RequestedRevision, request.Reason,
-                    request.Selection.ToString(), request.Provider, request.Resources, request.From, request.To,
-                    request.TrainerId, request.LastCollectedBefore, request.ExpectedResources, request.BatchId,
-                    request.Lane, request.Priority)), token);
+            $"{CollectionPlatformPath}/task-batches", new CreateCollectionTaskBatchRequest(
+                new CreateCollectionTaskBatchInputDto("PreviewSelection",
+                    new CollectionSelectionTaskBatchInputDto(request.DefinitionId, request.RequestedRevision,
+                        request.Reason, request.Selection.ToString(), request.Provider,
+                        request.Resources?.Select(x => new CollectionResourceKeyDto(x.Type, x.Provider, x.Id)).ToArray(),
+                        request.From, request.To, request.TrainerId, request.LastCollectedBefore,
+                        request.ExpectedResources?.Select(x => new CollectionResourceKeyDto(x.Type, x.Provider, x.Id)).ToArray(),
+                        request.BatchId, request.Lane, request.Priority))), "Submission", token);
 
     public Task<AdminApiResult<CollectionTaskBatchSubmissionResponse>> SubmitCollectionTaskBatchAsync(
         CollectionRequestBulkRequest request, CancellationToken token = default)
         => SendCollectionPlatformAsync<CollectionTaskBatchSubmissionResponse>(HttpMethod.Post,
-            $"{CollectionPlatformPath}/task-batches", new CollectionTaskBatchRequest("ExplicitItems",
-                ExplicitItems: request), token);
+            $"{CollectionPlatformPath}/task-batches", new CreateCollectionTaskBatchRequest(
+                new CreateCollectionTaskBatchInputDto("ExplicitItems", ExplicitItems: request)), "Submission", token);
 
-    public Task<AdminApiResult<RacePeriodRecollectionPreview>> PreviewRacePeriodRecollectionAsync(
+    public async Task<AdminApiResult<RacePeriodRecollectionPreview>> PreviewRacePeriodRecollectionAsync(
         CreateRacePeriodRecollectionRequest request, CancellationToken token = default)
-        => SendCollectionPlatformAsync<RacePeriodRecollectionPreview>(HttpMethod.Post,
-            $"{CollectionPlatformPath}/recollection-previews", request, token);
+    {
+        var result = await SendCollectionPlatformAsync<PreviewRacePeriodRecollectionResponse>(HttpMethod.Post,
+            $"{CollectionPlatformPath}/recollection-previews",
+            new PreviewRacePeriodRecollectionRequest(new(request.From, request.To, request.Provider, request.BatchId)),
+            token).ConfigureAwait(false);
+        return result.Success
+            ? AdminApiResult<RacePeriodRecollectionPreview>.Ok(new(result.Value!.Preview.From,
+                result.Value.Preview.To, result.Value.Preview.InclusiveDays, result.Value.Preview.Provider))
+            : AdminApiResult<RacePeriodRecollectionPreview>.Fail(result.Errors);
+    }
 
     public async Task<AdminApiResult<RacePeriodRecollectionReceipt>> CreateRacePeriodRecollectionAsync(
         CreateRacePeriodRecollectionRequest request, CancellationToken token = default)
     {
         var result = await SendCollectionPlatformAsync<CollectionRecollectionBatchResponse>(HttpMethod.Post,
-            $"{CollectionPlatformPath}/recollection-batches", new CollectionRecollectionBatchRequest("RacePeriod",
-                Provider: request.Provider, From: request.From, To: request.To, BatchId: request.BatchId), token)
+            $"{CollectionPlatformPath}/recollection-batches", new CreateRecollectionBatchRequest(
+                new("RacePeriod", Provider: request.Provider, From: request.From, To: request.To,
+                    BatchId: request.BatchId)), "Batch", token)
             .ConfigureAwait(false);
         if (!result.Success) return AdminApiResult<RacePeriodRecollectionReceipt>.Fail(result.Errors);
         return result.Value?.RacePeriod is { } receipt
@@ -262,31 +299,62 @@ public sealed partial class AdminApiClient
     public Task<AdminApiResult<RaceEntryOwnerMigrationProgress>> PreviewRaceEntryOwnerMigrationAsync(
         CancellationToken token = default)
         => SendCollectionPlatformAsync<RaceEntryOwnerMigrationProgress>(HttpMethod.Post,
-            $"{CollectionPlatformPath}/migration-previews/race-entry-owner-repair", new { }, token);
+            $"{CollectionPlatformPath}/migration-previews/race-entry-owner-repair", null, "Preview", token);
 
     public Task<AdminApiResult<RaceEntryOwnerMigrationProgress>> ApplyRaceEntryOwnerMigrationAsync(
         CancellationToken token = default)
         => SendCollectionPlatformAsync<RaceEntryOwnerMigrationProgress>(HttpMethod.Post,
-            $"{CollectionPlatformPath}/migrations/race-entry-owner-repair", new { }, token);
+            $"{CollectionPlatformPath}/migrations/race-entry-owner-repair", null, "Progress", token);
 
     public Task<RaceEntryOwnerMigrationProgress?> GetRaceEntryOwnerMigrationProgressAsync(
         CancellationToken token = default)
-        => GetJsonAsync<RaceEntryOwnerMigrationProgress>(
-            $"{CollectionPlatformPath}/migrations/race-entry-owner-repair", token);
+        => GetCollectionJsonAsync<RaceEntryOwnerMigrationProgress>(
+            $"{CollectionPlatformPath}/migrations/race-entry-owner-repair", "Progress", token);
+
+    private Task<AdminApiResult<T>> SendCollectionPlatformAsync<T>(HttpMethod method, string path,
+        object? body, CancellationToken token)
+        => SendCollectionPlatformAsync<T>(method, path, body, responseProperty: null, token);
 
     private async Task<AdminApiResult<T>> SendCollectionPlatformAsync<T>(HttpMethod method, string path,
-        object body, CancellationToken token)
+        object? body, string? responseProperty, CancellationToken token)
     {
-        using var request = new HttpRequestMessage(method, path)
-        {
-            Content = JsonContent.Create(body, options: JsonOptions),
-        };
+        using var request = new HttpRequestMessage(method, path);
+        if (body is not null) request.Content = JsonContent.Create(body, options: JsonOptions);
         using var response = await _httpClient.SendAsync(request, token).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             return AdminApiResult<T>.Fail(await ReadErrorsAsync(response, token).ConfigureAwait(false));
-        var value = await response.Content.ReadFromJsonAsync<T>(JsonOptions, token).ConfigureAwait(false);
+        var value = responseProperty is null
+            ? await response.Content.ReadFromJsonAsync<T>(JsonOptions, token).ConfigureAwait(false)
+            : await ReadCollectionResponseAsync<T>(response, responseProperty, token).ConfigureAwait(false);
         return value is null
             ? AdminApiResult<T>.Fail(["応答の解析に失敗しました。"])
             : AdminApiResult<T>.Ok(value);
+    }
+
+    private async Task<T?> GetCollectionJsonAsync<T>(string path, string responseProperty,
+        CancellationToken token)
+    {
+        using var response = await _httpClient.GetAsync(path, token).ConfigureAwait(false);
+        if (response.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.NoContent)
+            return default;
+        response.EnsureSuccessStatusCode();
+        return await ReadCollectionResponseAsync<T>(response, responseProperty, token).ConfigureAwait(false);
+    }
+
+    private static async Task<T?> ReadCollectionResponseAsync<T>(HttpResponseMessage response,
+        string responseProperty, CancellationToken token)
+    {
+        await using var stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: token).ConfigureAwait(false);
+        var root = document.RootElement;
+        JsonElement value = default;
+        var found = root.ValueKind == JsonValueKind.Object
+            && root.EnumerateObject().Any(property =>
+            {
+                if (!string.Equals(property.Name, responseProperty, StringComparison.OrdinalIgnoreCase)) return false;
+                value = property.Value;
+                return true;
+            });
+        return found ? value.Deserialize<T>(JsonOptions) : default;
     }
 }

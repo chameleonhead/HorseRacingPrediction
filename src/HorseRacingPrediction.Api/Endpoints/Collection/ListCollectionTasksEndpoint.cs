@@ -9,34 +9,32 @@ internal static class ListCollectionTasksEndpoint
 {
     internal static void Map(IEndpointRouteBuilder endpoints) =>
         endpoints.MapGet("/api/v2/admin/collection/tasks",
-            async (CollectionTaskStatus? status, int? limit, string? statuses,
-                CollectionResourceType? resourceType, string? provider, string? definitionId,
-                CollectionLane? lane, string? search, string? errorSearch,
-                DateTimeOffset? createdFrom, DateTimeOffset? createdTo,
-                bool? actionableOnly, bool? latestOnly, int? page, int? pageSize,
+            async ([AsParameters] ListCollectionTasksRequest request,
                 CollectionPlatformStore store, CancellationToken token) =>
             {
                 IReadOnlyCollection<CollectionTaskStatus>? parsedStatuses = null;
-                if (!string.IsNullOrWhiteSpace(statuses))
+                if (!string.IsNullOrWhiteSpace(request.Statuses))
                 {
                     var values = new List<CollectionTaskStatus>();
-                    foreach (var value in statuses.Split(',', StringSplitOptions.RemoveEmptyEntries
+                    foreach (var value in request.Statuses.Split(',', StringSplitOptions.RemoveEmptyEntries
                                  | StringSplitOptions.TrimEntries))
                     {
                         if (!Enum.TryParse<CollectionTaskStatus>(value, true, out var parsed))
                             return Results.BadRequest(new { message = $"Unknown task status: {value}" });
                         values.Add(parsed);
                     }
-                    if (status is not null) values.Add(status.Value);
+                    if (request.Status is not null) values.Add(request.Status.Value);
                     parsedStatuses = values.Distinct().ToArray();
                 }
-                else if (status is not null)
-                    parsedStatuses = [status.Value];
+                else if (request.Status is not null)
+                    parsedStatuses = [request.Status.Value];
 
-                if (createdFrom > createdTo)
+                if (request.CreatedFrom > request.CreatedTo)
                     return Results.BadRequest(new { message = "createdFrom must not be later than createdTo." });
-                return Results.Ok(await store.SearchTasksAsync(new(parsedStatuses, resourceType, provider,
-                    definitionId, lane, search, createdFrom, createdTo, errorSearch, page ?? 1,
-                    pageSize ?? limit ?? 50, actionableOnly ?? false, latestOnly ?? false), token));
-            });
+                var result = await store.SearchTasksAsync(new(parsedStatuses, request.ResourceType, request.Provider,
+                    request.DefinitionId, request.Lane, request.Search, request.CreatedFrom, request.CreatedTo,
+                    request.ErrorSearch, request.Page ?? 1, request.PageSize ?? request.Limit ?? 50,
+                    request.ActionableOnly ?? false, request.LatestOnly ?? false), token);
+                return Results.Ok(new ListCollectionTasksResponse(CollectionContractMapper.ToDto(result)));
+            }).Produces<ListCollectionTasksResponse>(StatusCodes.Status200OK);
 }

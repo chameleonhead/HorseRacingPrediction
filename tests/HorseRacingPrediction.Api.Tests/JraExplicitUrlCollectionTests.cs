@@ -115,17 +115,19 @@ public sealed class JraExplicitUrlCollectionTests
         await using var application = app;
         using var http = client;
 
-        var before = await http.GetFromJsonAsync<CollectionTaskPage>(
+        var beforeResponse = await http.GetFromJsonAsync<ListCollectionTasksResponse>(
             "/api/v2/admin/collection/tasks?limit=100");
+        var before = beforeResponse?.Page;
         using var response = await http.PostAsJsonAsync("/api/v2/admin/collection/tasks",
-            new { Mode = "SourceUrl", SourceUrl = new { Url = "https://example.test/not-jra" } });
+            new { Task = new { Mode = "SourceUrl", SourceUrl = new { Url = "https://example.test/not-jra" } } });
 
         Assert.AreEqual(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         var error = await response.Content.ReadFromJsonAsync<ExplicitUrlCollectionResult>();
         Assert.IsNotNull(error);
         Assert.AreEqual("UnidentifiedExplicitLocation", error.ErrorCode);
-        var after = await http.GetFromJsonAsync<CollectionTaskPage>(
+        var afterResponse = await http.GetFromJsonAsync<ListCollectionTasksResponse>(
             "/api/v2/admin/collection/tasks?limit=100");
+        var after = afterResponse?.Page;
         Assert.AreEqual(before!.Items.Count, after!.Items.Count);
     }
 
@@ -137,11 +139,11 @@ public sealed class JraExplicitUrlCollectionTests
         using var http = client;
         var invalidBodies = new[]
         {
-            "{\"mode\":\"SourceUrl\",\"sourceUrl\":{\"url\":null}}",
-            "{\"mode\":\"SourceUrl\",\"sourceUrl\":{\"url\":\"\"}}",
-            "{\"mode\":\"SourceUrl\",\"sourceUrl\":{\"url\":\"https://www.jra.go.jp/JRADB/accessS.html?CNAME=one&CNAME=two\"}}",
-            "{\"mode\":\"SourceUrl\",\"sourceUrl\":{\"url\":\"https://www.jra.go.jp.evil.test/JRADB/accessS.html?CNAME=pw01sde1006202604011120260905/2F\"}}",
-            "{\"mode\":\"SourceUrl\",\"sourceUrl\":{\"url\":\"https://www.jra.go.jp/JRADB/accessS.html?CNAME=%ZZ\"}}",
+            "{\"task\":{\"mode\":\"SourceUrl\",\"sourceUrl\":{\"url\":null}}}",
+            "{\"task\":{\"mode\":\"SourceUrl\",\"sourceUrl\":{\"url\":\"\"}}}",
+            "{\"task\":{\"mode\":\"SourceUrl\",\"sourceUrl\":{\"url\":\"https://www.jra.go.jp/JRADB/accessS.html?CNAME=one&CNAME=two\"}}}",
+            "{\"task\":{\"mode\":\"SourceUrl\",\"sourceUrl\":{\"url\":\"https://www.jra.go.jp.evil.test/JRADB/accessS.html?CNAME=pw01sde1006202604011120260905/2F\"}}}",
+            "{\"task\":{\"mode\":\"SourceUrl\",\"sourceUrl\":{\"url\":\"https://www.jra.go.jp/JRADB/accessS.html?CNAME=%ZZ\"}}}",
         };
 
         foreach (var body in invalidBodies)
@@ -170,15 +172,17 @@ public sealed class JraExplicitUrlCollectionTests
         const string url = "https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1006202604011120260905/2F";
 
         using var response = await http.PostAsJsonAsync("/api/v2/admin/collection/tasks",
-            new { Mode = "SourceUrl", SourceUrl = new { Url = url } });
+            new { Task = new { Mode = "SourceUrl", SourceUrl = new { Url = url } } });
 
         response.EnsureSuccessStatusCode();
-        var result = await response.Content.ReadFromJsonAsync<CollectionTaskSubmissionResponse>();
+        var responseBody = await response.Content.ReadFromJsonAsync<CreateCollectionTaskResponse>();
+        var result = responseBody?.Submission;
         Assert.IsNotNull(result);
         Assert.AreEqual("SourceUrl", result.Mode);
         Assert.IsNotNull(result.Receipt);
-        var tasks = await http.GetFromJsonAsync<CollectionTaskPage>(
+        var tasksResponse = await http.GetFromJsonAsync<ListCollectionTasksResponse>(
             "/api/v2/admin/collection/tasks?limit=100");
+        var tasks = tasksResponse?.Page;
         var task = tasks!.Items.Single(x => x.Resource == result.Resource && x.Definition == result.Definition);
         Assert.AreEqual(2, task.RequestedRevision);
     }

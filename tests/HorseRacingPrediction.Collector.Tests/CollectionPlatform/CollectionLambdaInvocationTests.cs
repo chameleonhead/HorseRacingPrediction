@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts.Collection;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
 
@@ -198,10 +199,10 @@ public sealed class CollectionLambdaInvocationTests
         var wake = new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "reservation");
         var worker = Worker(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = JsonContent.Create(new CollectionExecutionAcquireResult(
+            Content = JsonContent.Create(new AcquireNextExecutionResponse(ToWire(new CollectionExecutionAcquireResult(
                 CollectionExecutionAcquireStatus.NoWork,
                 NoWorkReason: CollectionExecutionNoWorkReason.PipelinePaused,
-                ReservationReleaseOutcome: CollectionReservationReleaseOutcome.Released),
+                ReservationReleaseOutcome: CollectionReservationReleaseOutcome.Released))),
                 options: AcquireResponseJsonOptions)
         });
 
@@ -252,9 +253,9 @@ public sealed class CollectionLambdaInvocationTests
 
     [TestMethod]
     [DataRow("not-json", 200)]
-    [DataRow("{\"status\":\"unknownAcquireStatus\"}", 200)]
-    [DataRow("{\"status\":\"noWork\",\"noWorkReason\":\"futureReason\"}", 200)]
-    [DataRow("{\"status\":\"noWork\",\"noWorkReason\":\"reservationUnavailable\"}", 201)]
+    [DataRow("{\"acquisition\":{\"status\":\"unknownAcquireStatus\"}}", 200)]
+    [DataRow("{\"acquisition\":{\"status\":\"noWork\",\"noWorkReason\":\"futureReason\"}}", 200)]
+    [DataRow("{\"acquisition\":{\"status\":\"noWork\",\"noWorkReason\":\"reservationUnavailable\"}}", 201)]
     public async Task Wake_MalformedOrAmbiguousAcquireResponseIsRetriedBySqs(string body, int statusCode)
     {
         var wake = new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "reservation");
@@ -276,8 +277,8 @@ public sealed class CollectionLambdaInvocationTests
         };
         var wake = new CollectionWakeSignal(Guid.NewGuid(), envelope.EnvelopeId, "reservation");
         var worker = Worker(_ => JsonContentResponse(HttpStatusCode.Created,
-            new CollectionExecutionAcquireResult(CollectionExecutionAcquireStatus.Acquired,
-                Guid.NewGuid(), "lease-token", envelope)));
+            new AcquireNextExecutionResponse(ToWire(new CollectionExecutionAcquireResult(
+                CollectionExecutionAcquireStatus.Acquired, Guid.NewGuid(), "lease-token", envelope)))));
 
         var response = await CollectionLambdaInvocation.ExecuteWakeAsync(WakeEvent("wake-invalid-envelope", wake), worker);
 
@@ -292,12 +293,14 @@ public sealed class CollectionLambdaInvocationTests
         var worker = Worker(request =>
         {
             var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
-            var wakeId = body.RootElement.GetProperty("wake").GetProperty("wakeId").GetGuid();
+            var wakeId = body.RootElement.GetProperty("acquisition").GetProperty("wake")
+                .GetProperty("wakeId").GetGuid();
             var result = new CollectionExecutionAcquireResult(CollectionExecutionAcquireStatus.NoWork,
                 NoWorkReason: wakeId == stale.WakeId
                     ? CollectionExecutionNoWorkReason.ReservationUnavailable
                     : CollectionExecutionNoWorkReason.LeaseConflict);
-            return JsonContentResponse(HttpStatusCode.OK, result);
+            return JsonContentResponse(HttpStatusCode.OK,
+                new AcquireNextExecutionResponse(ToWire(result)));
         });
         var eventJson = JsonSerializer.Serialize(new
         {
@@ -325,13 +328,14 @@ public sealed class CollectionLambdaInvocationTests
         {
             var path = request.RequestUri!.AbsolutePath;
             if (path.EndsWith("/execution-leases", StringComparison.Ordinal))
-                return JsonContentResponse(HttpStatusCode.Created, new CollectionExecutionAcquireResult(
-                    CollectionExecutionAcquireStatus.Acquired, executionBatchId, "lease-token", envelope));
+                return JsonContentResponse(HttpStatusCode.Created, new AcquireNextExecutionResponse(ToWire(
+                    new CollectionExecutionAcquireResult(CollectionExecutionAcquireStatus.Acquired,
+                        executionBatchId, "lease-token", envelope))));
             if (path.EndsWith("/execution-batches/" + executionBatchId, StringComparison.Ordinal))
             {
                 Assert.AreEqual(HttpMethod.Patch, request.Method);
                 using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
-                var transition = body.RootElement.GetProperty("transition").GetString();
+                var transition = body.RootElement.GetProperty("transition").GetProperty("transition").GetString();
                 if (transition == "Complete") completeCalls++;
                 else Assert.AreEqual("Start", transition);
                 return new(HttpStatusCode.OK);
@@ -343,7 +347,7 @@ public sealed class CollectionLambdaInvocationTests
                 var status = taskId == envelope.Tasks[1].TaskId
                     ? CollectionTaskAcquireStatus.ActiveElsewhere
                     : CollectionTaskAcquireStatus.AlreadyTerminal;
-                return JsonResponse(new CollectionTaskAcquireResult(status));
+                return JsonResponse(new AcquireCollectionTaskResponse(new CollectionTaskAcquireResultDto(status)));
             }
 
             throw new AssertFailedException($"Unexpected worker request: {path}");
@@ -377,6 +381,17 @@ public sealed class CollectionLambdaInvocationTests
     private static CollectionDispatchEnvelope Envelope(int count) => new(Guid.NewGuid(),
         new("JRA", new("race-card"), new DateOnly(2026, 9, 12), CollectionLane.Realtime),
         Enumerable.Range(0, count).Select(_ => new CollectionDispatchTaskReference(Guid.NewGuid(), 1)).ToArray());
+
+    private static CollectionExecutionAcquireResultDto ToWire(CollectionExecutionAcquireResult value)
+        => new(value.Status, value.ExecutionBatchId, value.LeaseToken,
+            value.Envelope is null ? null : new CollectionDispatchEnvelopeDto(value.Envelope.EnvelopeId,
+                new CollectionDispatchCompatibilityKeyDto(value.Envelope.Compatibility.Provider,
+                    new CollectionDefinitionIdDto(value.Envelope.Compatibility.Definition.Value),
+                    value.Envelope.Compatibility.EffectiveDate, value.Envelope.Compatibility.Lane,
+                    value.Envelope.Compatibility.GroupKind, value.Envelope.Compatibility.GroupKey),
+                value.Envelope.Tasks.Select(x => new CollectionDispatchTaskReferenceDto(x.TaskId,
+                    x.DispatchGeneration)).ToArray(), value.Envelope.ContractVersion),
+            value.StartBefore, value.NoWorkReason, value.ReservationReleaseOutcome);
 
     private static string Event(string messageId, CollectionDispatchEnvelope envelope) => JsonSerializer.Serialize(new
     {

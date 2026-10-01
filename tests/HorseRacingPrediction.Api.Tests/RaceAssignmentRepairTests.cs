@@ -385,12 +385,15 @@ public sealed class RaceAssignmentRepairTests
         var dispatch = (await store.GetPendingDispatchesAsync(DateTimeOffset.UtcNow, 100)).Single(x =>
             DeterministicIdGenerator.TryBuildRaceIdFromResource(x.Resource.Id) == raceId);
         var acquired = await (await http.PostAsJsonAsync($"/api/v2/internal/collection/tasks/{dispatch.Notification.TaskId}/leases",
-            new { dispatchGeneration = dispatch.Notification.DispatchGeneration, leaseSeconds = 60 })).Content.ReadFromJsonAsync<CollectionTaskAcquireResult>();
-        Assert.IsNotNull(acquired?.Task);
-        Assert.AreEqual(release.Release.AssignmentFingerprint, acquired.Task.EntryAssignmentFingerprint);
-        Assert.AreEqual(manifest.HoldGeneration, acquired.Task.RaceHoldGeneration);
-        using (CollectionWorkerLeaseContext.Push(acquired.Task.TaskId, acquired.Task.LeaseToken,
-            acquired.Task.RaceHoldGeneration, acquired.Task.EntryAssignmentFingerprint))
+            new AcquireCollectionTaskRequest(new AcquireCollectionTaskInputDto(
+                dispatch.Notification.DispatchGeneration, LeaseSeconds: 60)))).Content
+            .ReadFromJsonAsync<AcquireCollectionTaskResponse>();
+        var acquiredTask = acquired?.Acquisition.Task;
+        Assert.IsNotNull(acquiredTask);
+        Assert.AreEqual(release.Release.AssignmentFingerprint, acquiredTask.EntryAssignmentFingerprint);
+        Assert.AreEqual(manifest.HoldGeneration, acquiredTask.RaceHoldGeneration);
+        using (CollectionWorkerLeaseContext.Push(acquiredTask.TaskId, acquiredTask.LeaseToken,
+            acquiredTask.RaceHoldGeneration, acquiredTask.EntryAssignmentFingerprint))
             (await transport.PostAsJsonAsync(oddsPath, odds)).EnsureSuccessStatusCode();
         var saved = await http.GetFromJsonAsync<ListRaceOddsSnapshotsResponse>(oddsPath);
         Assert.IsNotNull(saved);

@@ -14,7 +14,16 @@
         "type": "AcquireCollectionTaskRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "AcquireCollectionTaskResponse",
+        "status": 200
+      },
+      {
+        "type": "AcquireCollectionTaskResponse",
+        "status": 201
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -59,7 +68,16 @@
         "type": "CollectionExecutionAcquireRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "AcquireNextExecutionResponse",
+        "status": 200
+      },
+      {
+        "type": "AcquireNextExecutionResponse",
+        "status": 201
+      }
+    ],
     "successOutcomes": [
       {
         "status": 201,
@@ -87,7 +105,16 @@
     "path": "/api/v2/admin/collection/migrations/race-detail",
     "endpointFile": "ApplyRaceDetailMigrationEndpoint.cs",
     "handlerParameters": [],
-    "produces": [],
+    "produces": [
+      {
+        "type": "ApplyRaceDetailMigrationResponse",
+        "status": 200
+      },
+      {
+        "type": "ApplyRaceDetailMigrationResponse",
+        "status": 409
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -108,7 +135,12 @@
     "path": "/api/v2/admin/collection/migrations/race-entry-owner-repair",
     "endpointFile": "ApplyRaceEntryOwnerMigrationEndpoint.cs",
     "handlerParameters": [],
-    "produces": [],
+    "produces": [
+      {
+        "type": "ApplyRaceEntryOwnerMigrationResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -199,7 +231,12 @@
         "type": "CreateBackfillBatchRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "CreateBackfillBatchResponse",
+        "status": 202
+      }
+    ],
     "successOutcomes": [
       {
         "status": 202,
@@ -228,7 +265,7 @@
     ],
     "produces": [
       {
-        "type": "CollectionFailureRecoveryResult",
+        "type": "CreateCollectionRecoveryBatchResponse",
         "status": 202
       }
     ],
@@ -263,7 +300,12 @@
         "type": "CreateCollectionRevisionRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "CreateCollectionRevisionResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -292,15 +334,11 @@
     ],
     "produces": [
       {
-        "type": "CollectionTaskBatchSubmissionResponse",
-        "status": 200
-      },
-      {
-        "type": "CollectionTaskBatchSubmissionResponse",
+        "type": "CreateCollectionTaskBatchResponse",
         "status": 202
       },
       {
-        "type": "CollectionTaskBatchSubmissionResponse",
+        "type": "CreateCollectionTaskBatchResponse",
         "status": 207
       }
     ],
@@ -344,7 +382,11 @@
     ],
     "produces": [
       {
-        "type": "CollectionTaskSubmissionResponse",
+        "type": "CreateCollectionTaskResponse",
+        "status": 200
+      },
+      {
+        "type": "CreateCollectionTaskResponse",
         "status": 202
       }
     ],
@@ -392,7 +434,12 @@
     "path": "/api/v2/admin/collection/known-recovery-batches",
     "endpointFile": "CreateKnownRecoveryBatchEndpoint.cs",
     "handlerParameters": [],
-    "produces": [],
+    "produces": [
+      {
+        "type": "CreateKnownRecoveryBatchResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -420,7 +467,12 @@
         "type": "RaceEntryOwnerRepairRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "CreateRaceEntryOwnerRepairBatchResponse",
+        "status": 202
+      }
+    ],
     "successOutcomes": [
       {
         "status": 202,
@@ -449,7 +501,7 @@
     ],
     "produces": [
       {
-        "type": "CollectionRecollectionBatchResponse",
+        "type": "CreateRecollectionBatchResponse",
         "status": 202
       }
     ],
@@ -485,7 +537,12 @@
         "type": "string"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "GetBackfillBatchResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -506,7 +563,12 @@
     "path": "/api/v2/admin/collection/operations/dashboard",
     "endpointFile": "GetCollectionDashboardEndpoint.cs",
     "handlerParameters": [],
-    "produces": [],
+    "produces": [
+      {
+        "type": "GetCollectionDashboardResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -527,7 +589,12 @@
     "path": "/api/v2/admin/collection/operations/monitoring-findings",
     "endpointFile": "GetCollectionMonitoringFindingsEndpoint.cs",
     "handlerParameters": [],
-    "produces": [],
+    "produces": [
+      {
+        "type": "GetCollectionMonitoringFindingsResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -548,7 +615,12 @@
     "path": "/api/v2/admin/collection/pipeline-state",
     "endpointFile": "GetCollectionPipelineEndpoint.cs",
     "handlerParameters": [],
-    "produces": [],
+    "produces": [
+      {
+        "type": "GetCollectionPipelineResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -569,7 +641,12 @@
     "path": "/api/v2/admin/collection/operations/progress",
     "endpointFile": "GetCollectionProgressEndpoint.cs",
     "handlerParameters": [],
-    "produces": [],
+    "produces": [
+      {
+        "type": "GetCollectionProgressResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -636,7 +713,12 @@
         "type": "int?"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "GetCollectionResourceDetailResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -678,7 +760,12 @@
         "type": "string"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "GetCollectionResourceStateResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -705,7 +792,12 @@
         "type": "Guid"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "GetExecutionBatchResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -747,7 +839,12 @@
         "type": "int?"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "GetFailureNotificationGroupResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -768,7 +865,12 @@
     "path": "/api/v2/admin/collection/recovery-previews/known",
     "endpointFile": "GetKnownRecoveryPreviewEndpoint.cs",
     "handlerParameters": [],
-    "produces": [],
+    "produces": [
+      {
+        "type": "GetKnownRecoveryPreviewResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -789,7 +891,12 @@
     "path": "/api/v2/admin/collection/migration-previews/owner-identity",
     "endpointFile": "GetOwnerIdentityMigrationPreviewEndpoint.cs",
     "handlerParameters": [],
-    "produces": [],
+    "produces": [
+      {
+        "type": "GetOwnerIdentityMigrationPreviewResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -816,7 +923,12 @@
         "type": "string"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "GetRaceCollectionReadinessResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -837,7 +949,12 @@
     "path": "/api/v2/admin/collection/migrations/race-entry-owner-repair",
     "endpointFile": "GetRaceEntryOwnerMigrationEndpoint.cs",
     "handlerParameters": [],
-    "produces": [],
+    "produces": [
+      {
+        "type": "GetRaceEntryOwnerMigrationResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -869,7 +986,12 @@
         "type": "int"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "GetRevisionRecollectionProgressResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -890,7 +1012,12 @@
     "path": "/api/v2/admin/collection/operations/task-view-counts",
     "endpointFile": "GetTaskViewCountsEndpoint.cs",
     "handlerParameters": [],
-    "produces": [],
+    "produces": [
+      {
+        "type": "GetTaskViewCountsResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -927,7 +1054,12 @@
         "type": "HeartbeatCollectionTaskRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "HeartbeatCollectionTaskLeaseResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -948,7 +1080,12 @@
     "path": "/api/v2/admin/collection/backfill-batches",
     "endpointFile": "ListBackfillBatchesEndpoint.cs",
     "handlerParameters": [],
-    "produces": [],
+    "produces": [
+      {
+        "type": "ListBackfillBatchesResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -1045,7 +1182,12 @@
         "type": "int?"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "ListCollectionTasksResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -1072,7 +1214,12 @@
         "type": "int?"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "ListFailureNotificationGroupsResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -1114,7 +1261,12 @@
         "type": "int?"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "ListFailureNotificationsResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -1141,7 +1293,12 @@
         "type": "DateOnly"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "ListRaceEntryOwnerRepairCandidatesResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -1168,7 +1325,12 @@
         "type": "BulkCollectionOperationRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "PreviewCollectionTaskBatchResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -1189,7 +1351,12 @@
     "path": "/api/v2/admin/collection/migration-previews/race-detail",
     "endpointFile": "PreviewRaceDetailMigrationEndpoint.cs",
     "handlerParameters": [],
-    "produces": [],
+    "produces": [
+      {
+        "type": "PreviewRaceDetailMigrationResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -1210,7 +1377,12 @@
     "path": "/api/v2/admin/collection/migration-previews/race-entry-owner-repair",
     "endpointFile": "PreviewRaceEntryOwnerMigrationEndpoint.cs",
     "handlerParameters": [],
-    "produces": [],
+    "produces": [
+      {
+        "type": "PreviewRaceEntryOwnerMigrationResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -1230,8 +1402,19 @@
   {
     "path": "/api/v2/admin/collection/recollection-previews",
     "endpointFile": "PreviewRacePeriodRecollectionEndpoint.cs",
-    "handlerParameters": [],
-    "produces": [],
+    "handlerParameters": [
+      {
+        "name": "request",
+        "kind": "body",
+        "type": "CreateRacePeriodRecollectionRequest"
+      }
+    ],
+    "produces": [
+      {
+        "type": "PreviewRacePeriodRecollectionResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -1244,9 +1427,9 @@
     "method": "POST",
     "responseShape": "new RacePeriodRecollectionPreview(request.From, request.To,\r\n                request.To.DayNumber - request.From.DayNumber + 1, request.Provider.Trim().ToUpperInvariant())",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Collection/PreviewRacePeriodRecollectionEndpoint.cs",
-    "requestPresent": false,
+    "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": true
   },
   {
     "path": "/api/v2/admin/collection/revision-impact-previews",
@@ -1258,7 +1441,12 @@
         "type": "RevisionImpactPreviewRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "PreviewRevisionImpactResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
@@ -1285,7 +1473,12 @@
         "type": "string"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "RecoverBackfillHolesResponse",
+        "status": 202
+      }
+    ],
     "successOutcomes": [
       {
         "status": 202,
@@ -1342,7 +1535,12 @@
         "type": "int?"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "SearchCollectionStatesResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,

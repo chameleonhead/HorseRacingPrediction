@@ -8,5 +8,7 @@ internal static class GetCollectionPipelineEndpoint
     internal static void Map(IEndpointRouteBuilder endpoints) =>
         endpoints.MapGet("/api/v2/admin/collection/pipeline-state",
             async (CollectionPlatformStore store, CancellationToken token) =>
-                Results.Ok(await store.GetPipelineStateAsync(token)));
+                Results.Ok(new GetCollectionPipelineResponse(CollectionContractMapper.ToDto(
+                    await store.GetPipelineStateAsync(token)))))
+            .Produces<GetCollectionPipelineResponse>(StatusCodes.Status200OK);
 }

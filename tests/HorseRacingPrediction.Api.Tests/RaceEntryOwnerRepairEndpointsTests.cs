@@ -39,10 +39,12 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
         Assert.IsNotNull(oldCreated);
         Assert.IsEmpty(oldCreated.Result.Errors, string.Join("; ", oldCreated.Result.Errors));
 
-        var preview = await http.GetFromJsonAsync<RaceEntryOwnerRepairPreview>(
+        var previewResponse = await http.GetFromJsonAsync<ListRaceEntryOwnerRepairCandidatesResponse>(
             $"/api/v2/admin/collection/race-entry-owner-repair-candidates?date={date:yyyy-MM-dd}");
-        var repeated = await http.GetFromJsonAsync<RaceEntryOwnerRepairPreview>(
+        var preview = previewResponse?.Preview;
+        var repeatedResponse = await http.GetFromJsonAsync<ListRaceEntryOwnerRepairCandidatesResponse>(
             $"/api/v2/admin/collection/race-entry-owner-repair-candidates?date={date:yyyy-MM-dd}");
+        var repeated = repeatedResponse?.Preview;
 
         Assert.IsNotNull(preview);
         Assert.HasCount(1, preview.Candidates);
@@ -52,8 +54,9 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
 
         using var migrationPreviewResponse = await http.PostAsync(
             "/api/v2/admin/collection/migration-previews/race-entry-owner-repair", null);
-        var migrationPreview = await migrationPreviewResponse.Content
-            .ReadFromJsonAsync<RaceEntryOwnerMigrationProgress>();
+        var migrationPreviewEnvelope = await migrationPreviewResponse.Content
+            .ReadFromJsonAsync<PreviewRaceEntryOwnerMigrationResponse>();
+        var migrationPreview = migrationPreviewEnvelope?.Preview;
         Assert.IsNotNull(migrationPreview);
         Assert.IsTrue(migrationPreview.Candidates.Any(x => x.RaceId == created.Result.RaceId));
         var outside = migrationPreview.Candidates.Single(x => x.RaceId == oldCreated.Result.RaceId);
@@ -67,7 +70,8 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
             "/api/v2/admin/collection/migrations/race-entry-owner-repair", null);
         using var repeatedApply = await http.PostAsync(
             "/api/v2/admin/collection/migrations/race-entry-owner-repair", null);
-        var progress = await repeatedApply.Content.ReadFromJsonAsync<RaceEntryOwnerMigrationProgress>();
+        var progressEnvelope = await repeatedApply.Content.ReadFromJsonAsync<GetRaceEntryOwnerMigrationResponse>();
+        var progress = progressEnvelope?.Progress;
 
         Assert.AreEqual(HttpStatusCode.OK, apply.StatusCode);
         Assert.AreEqual(HttpStatusCode.OK, repeatedApply.StatusCode);

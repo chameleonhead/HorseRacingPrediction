@@ -138,16 +138,17 @@ public sealed class SharedOwnerIdentityTests
         return body;
     }
 
-    private static async Task<IReadOnlyList<CollectionTaskSummary>> OwnerTasksAsync(HttpClient http)
+    private static async Task<IReadOnlyList<CollectionTaskSummaryDto>> OwnerTasksAsync(HttpClient http)
     {
-        var tasks = await http.GetFromJsonAsync<CollectionTaskPage>(
+        var tasksResponse = await http.GetFromJsonAsync<ListCollectionTasksResponse>(
             "/api/v2/admin/collection/tasks?limit=1000", JsonOptions);
+        var tasks = tasksResponse?.Page;
         Assert.IsNotNull(tasks);
         return tasks.Items.Where(x => x.Definition.Value == "owner-identity").ToArray();
     }
 
     private static async Task ExecuteOwnerTasksAsync(HttpClient http,
-        IReadOnlyList<CollectionTaskSummary> tasks)
+        IReadOnlyList<CollectionTaskSummaryDto> tasks)
     {
         var handler = new JraSubjectProfileCollectionHandler(
             JraSubjectCollectionDefinitions.For(CollectionResourceType.Owner), new ThrowingSessionFactory(),

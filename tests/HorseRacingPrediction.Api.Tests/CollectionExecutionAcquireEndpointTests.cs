@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Globalization;
 using System.Text.Json;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
@@ -29,14 +30,15 @@ public sealed class CollectionExecutionAcquireEndpointTests
         var collectionOptions = app.Services.GetRequiredService<IOptions<CollectionPlatformOptions>>();
         var (wake, candidate, dbOptions) = await CreateReservedWakeAsync(store, collectionOptions, "acquired-then-paused");
         await store.SetPausedAsync(true, "contract test", DateTimeOffset.UtcNow);
-        using var noWorkResponse = await http.PostAsJsonAsync(AcquirePath,
+        using var noWorkResponse = await PostAcquireAsync(http,
             new CollectionExecutionAcquireRequest(wake, "queue-no-work"));
         Assert.AreEqual(HttpStatusCode.OK, noWorkResponse.StatusCode);
         using var noWorkJson = JsonDocument.Parse(await noWorkResponse.Content.ReadAsStringAsync());
-        Assert.AreEqual("noWork", noWorkJson.RootElement.GetProperty("status").GetString());
-        Assert.AreEqual("pipelinePaused", noWorkJson.RootElement.GetProperty("noWorkReason").GetString());
-        Assert.IsTrue(noWorkJson.RootElement.GetProperty("safeToReleaseReservation").GetBoolean());
-        Assert.AreEqual("released", noWorkJson.RootElement.GetProperty("reservationReleaseOutcome").GetString());
+        Assert.AreEqual("noWork", Acquisition(noWorkJson).GetProperty("status").GetString());
+        Assert.AreEqual("pipelinePaused", Acquisition(noWorkJson).GetProperty("noWorkReason").GetString());
+        Assert.IsTrue(Acquisition(noWorkJson).GetProperty("safeToReleaseReservation").GetBoolean());
+        Assert.AreEqual("released", Acquisition(noWorkJson).GetProperty("reservationReleaseOutcome").GetString());
+        Assert.IsFalse(Acquisition(noWorkJson).TryGetProperty("startBefore", out _));
         await using var verify = new CollectionPlatformDbContext(dbOptions);
         var released = await verify.DispatchOutbox.SingleAsync(x => x.OutboxId == candidate.OutboxId);
         Assert.IsNull(released.ReservationToken);
@@ -57,13 +59,15 @@ public sealed class CollectionExecutionAcquireEndpointTests
         await dispatcher.DispatchOnceAsync(CancellationToken.None);
         var rewake = queue.Wakes.Single();
         Assert.AreNotEqual(wake.WakeId, rewake.WakeId);
-        using var acquiredResponse = await http.PostAsJsonAsync(AcquirePath,
+        using var acquiredResponse = await PostAcquireAsync(http,
             new CollectionExecutionAcquireRequest(rewake, "queue-acquired"));
         Assert.AreEqual(HttpStatusCode.Created, acquiredResponse.StatusCode);
         using var acquiredJson = JsonDocument.Parse(await acquiredResponse.Content.ReadAsStringAsync());
-        Assert.AreEqual("acquired", acquiredJson.RootElement.GetProperty("status").GetString());
-        Assert.IsFalse(acquiredJson.RootElement.GetProperty("safeToReleaseReservation").GetBoolean());
-        Assert.IsFalse(acquiredJson.RootElement.TryGetProperty("noWorkReason", out _));
+        Assert.AreEqual("acquired", Acquisition(acquiredJson).GetProperty("status").GetString());
+        Assert.IsFalse(Acquisition(acquiredJson).GetProperty("safeToReleaseReservation").GetBoolean());
+        Assert.IsFalse(Acquisition(acquiredJson).TryGetProperty("noWorkReason", out _));
+        var actualStartBefore = DateTimeOffset.Parse(Acquisition(acquiredJson).GetProperty("startBefore").GetString()!);
+        Assert.AreEqual(TimeSpan.FromHours(9), actualStartBefore.Offset);
     }
 
     [TestMethod]
@@ -81,13 +85,13 @@ public sealed class CollectionExecutionAcquireEndpointTests
         using var http = client;
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
 
-        using var response = await http.PostAsJsonAsync(AcquirePath,
+        using var response = await PostAcquireAsync(http,
             new CollectionExecutionAcquireRequest(new CollectionWakeSignal(Guid.Empty, Guid.Empty, string.Empty), "opaque"));
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.AreEqual("noWork", json.RootElement.GetProperty("status").GetString());
-        Assert.AreEqual("invalidRequest", json.RootElement.GetProperty("noWorkReason").GetString());
+        Assert.AreEqual("noWork", Acquisition(json).GetProperty("status").GetString());
+        Assert.AreEqual("invalidRequest", Acquisition(json).GetProperty("noWorkReason").GetString());
     }
 
     [TestMethod]
@@ -102,14 +106,14 @@ public sealed class CollectionExecutionAcquireEndpointTests
 
         var (mismatchWake, mismatchCandidate, dbOptions) = await CreateReservedWakeAsync(store, collectionOptions,
             "token-mismatch");
-        using (var response = await http.PostAsJsonAsync(AcquirePath,
+        using (var response = await PostAcquireAsync(http,
                    new CollectionExecutionAcquireRequest(mismatchWake with { ReservationToken = "wrong-token" }, "bad-token")))
         {
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
             using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-            Assert.AreEqual("reservationUnavailable", json.RootElement.GetProperty("noWorkReason").GetString());
-            Assert.IsFalse(json.RootElement.GetProperty("safeToReleaseReservation").GetBoolean());
-            Assert.IsFalse(json.RootElement.TryGetProperty("reservationReleaseOutcome", out _));
+            Assert.AreEqual("reservationUnavailable", Acquisition(json).GetProperty("noWorkReason").GetString());
+            Assert.IsFalse(Acquisition(json).GetProperty("safeToReleaseReservation").GetBoolean());
+            Assert.IsFalse(Acquisition(json).TryGetProperty("reservationReleaseOutcome", out _));
         }
 
         var activeWake = mismatchWake;
@@ -131,14 +135,14 @@ public sealed class CollectionExecutionAcquireEndpointTests
             await db.SaveChangesAsync();
         }
 
-        using (var response = await http.PostAsJsonAsync(AcquirePath,
+        using (var response = await PostAcquireAsync(http,
                    new CollectionExecutionAcquireRequest(activeWake, "active-lease-wake")))
         {
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
             using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-            Assert.AreEqual("leaseConflict", json.RootElement.GetProperty("noWorkReason").GetString());
-            Assert.IsFalse(json.RootElement.GetProperty("safeToReleaseReservation").GetBoolean());
-            Assert.IsFalse(json.RootElement.TryGetProperty("reservationReleaseOutcome", out _));
+            Assert.AreEqual("leaseConflict", Acquisition(json).GetProperty("noWorkReason").GetString());
+            Assert.IsFalse(Acquisition(json).GetProperty("safeToReleaseReservation").GetBoolean());
+            Assert.IsFalse(Acquisition(json).TryGetProperty("reservationReleaseOutcome", out _));
         }
 
         await using var verify = new CollectionPlatformDbContext(dbOptions);
@@ -160,13 +164,13 @@ public sealed class CollectionExecutionAcquireEndpointTests
         var (expiredWake, candidate, dbOptions) = await CreateReservedWakeAsync(store, collectionOptions,
             "expired-rewake", TimeSpan.FromSeconds(1));
 
-        using (var response = await http.PostAsJsonAsync(AcquirePath,
+        using (var response = await PostAcquireAsync(http,
                    new CollectionExecutionAcquireRequest(expiredWake, "expired-message")))
         {
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
             using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-            Assert.AreEqual("reservationUnavailable", json.RootElement.GetProperty("noWorkReason").GetString());
-            Assert.IsFalse(json.RootElement.GetProperty("safeToReleaseReservation").GetBoolean());
+            Assert.AreEqual("reservationUnavailable", Acquisition(json).GetProperty("noWorkReason").GetString());
+            Assert.IsFalse(Acquisition(json).GetProperty("safeToReleaseReservation").GetBoolean());
         }
 
         var queue = new CapturingQueue();
@@ -185,11 +189,11 @@ public sealed class CollectionExecutionAcquireEndpointTests
         Assert.AreNotEqual(expiredWake.WakeId, freshWake.WakeId);
         Assert.IsTrue((await store.GetTasksAsync()).Any(x => x.TaskId == candidate.Notification.TaskId));
 
-        using var freshResponse = await http.PostAsJsonAsync(AcquirePath,
+        using var freshResponse = await PostAcquireAsync(http,
             new CollectionExecutionAcquireRequest(freshWake, "fresh-message"));
         Assert.AreEqual(HttpStatusCode.Created, freshResponse.StatusCode);
         using var freshJson = JsonDocument.Parse(await freshResponse.Content.ReadAsStringAsync());
-        Assert.AreEqual("acquired", freshJson.RootElement.GetProperty("status").GetString());
+        Assert.AreEqual("acquired", Acquisition(freshJson).GetProperty("status").GetString());
         await using var verify = new CollectionPlatformDbContext(dbOptions);
         Assert.IsTrue(await verify.ExecutionLeases.AnyAsync(x => x.DispatchEnvelopeId == freshWake.DispatchEnvelopeId));
     }
@@ -230,15 +234,15 @@ public sealed class CollectionExecutionAcquireEndpointTests
         Assert.AreNotEqual(oldWake.DispatchEnvelopeId, replacementWake.DispatchEnvelopeId);
         Assert.AreNotEqual(oldWake.ReservationToken, replacementWake.ReservationToken);
 
-        using (var delayedResponse = await http.PostAsJsonAsync(AcquirePath,
+        using (var delayedResponse = await PostAcquireAsync(http,
                    new CollectionExecutionAcquireRequest(oldWake, "delayed-old-message")))
         {
             Assert.AreEqual(HttpStatusCode.OK, delayedResponse.StatusCode);
             using var delayedJson = JsonDocument.Parse(await delayedResponse.Content.ReadAsStringAsync());
-            Assert.AreEqual("noWork", delayedJson.RootElement.GetProperty("status").GetString());
-            Assert.AreEqual("reservationUnavailable", delayedJson.RootElement.GetProperty("noWorkReason").GetString());
-            Assert.IsFalse(delayedJson.RootElement.GetProperty("safeToReleaseReservation").GetBoolean());
-            Assert.IsFalse(delayedJson.RootElement.TryGetProperty("reservationReleaseOutcome", out _));
+            Assert.AreEqual("noWork", Acquisition(delayedJson).GetProperty("status").GetString());
+            Assert.AreEqual("reservationUnavailable", Acquisition(delayedJson).GetProperty("noWorkReason").GetString());
+            Assert.IsFalse(Acquisition(delayedJson).GetProperty("safeToReleaseReservation").GetBoolean());
+            Assert.IsFalse(Acquisition(delayedJson).TryGetProperty("reservationReleaseOutcome", out _));
         }
 
         await using (var verifyReplacement = new CollectionPlatformDbContext(dbOptions))
@@ -250,13 +254,32 @@ public sealed class CollectionExecutionAcquireEndpointTests
             Assert.IsNull(replacement.DispatchedAt);
         }
 
-        using var replacementResponse = await http.PostAsJsonAsync(AcquirePath,
+        using var replacementResponse = await PostAcquireAsync(http,
             new CollectionExecutionAcquireRequest(replacementWake, "replacement-message"));
         Assert.AreEqual(HttpStatusCode.Created, replacementResponse.StatusCode);
         using var replacementJson = JsonDocument.Parse(await replacementResponse.Content.ReadAsStringAsync());
-        Assert.AreEqual("acquired", replacementJson.RootElement.GetProperty("status").GetString());
+        Assert.AreEqual("acquired", Acquisition(replacementJson).GetProperty("status").GetString());
         await using var verifyLease = new CollectionPlatformDbContext(dbOptions);
         Assert.IsTrue(await verifyLease.ExecutionLeases.AnyAsync(x => x.DispatchEnvelopeId == replacementWake.DispatchEnvelopeId));
+    }
+
+    [TestMethod]
+    public void AcquireResponseContract_RoundTripsNonJstStartBeforeOffset()
+    {
+        var startBefore = DateTimeOffset.Parse("2026-10-01T12:34:56.1234567-04:00", CultureInfo.InvariantCulture);
+        var contract = new AcquireNextExecutionResponse(new CollectionExecutionAcquireResultDto(
+            CollectionExecutionAcquireStatus.Acquired, StartBefore: startBefore));
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+
+        var json = JsonSerializer.Serialize(contract, options);
+        using var parsed = JsonDocument.Parse(json);
+        var wireValue = parsed.RootElement.GetProperty("acquisition").GetProperty("startBefore").GetString();
+        var roundTripped = JsonSerializer.Deserialize<AcquireNextExecutionResponse>(json, options);
+
+        Assert.AreEqual(startBefore.ToString("O", CultureInfo.InvariantCulture), wireValue);
+        Assert.IsNotNull(roundTripped?.Acquisition.StartBefore);
+        Assert.AreEqual(TimeSpan.FromHours(-4), roundTripped.Acquisition.StartBefore.Value.Offset);
+        Assert.AreEqual(startBefore, roundTripped.Acquisition.StartBefore.Value);
     }
 
     private static async Task<(CollectionWakeSignal Wake, PendingCollectionDispatch Candidate,
@@ -285,6 +308,18 @@ public sealed class CollectionExecutionAcquireEndpointTests
             .Options;
         return (new(wakeId, envelopeId, reservationToken), candidate, options);
     }
+
+    private static Task<HttpResponseMessage> PostAcquireAsync(HttpClient client,
+        CollectionExecutionAcquireRequest request)
+    {
+        var wake = new CollectionWakeSignalDto(request.Wake.WakeId, request.Wake.DispatchEnvelopeId,
+            request.Wake.ReservationToken, request.Wake.ContractVersion);
+        return client.PostAsJsonAsync(AcquirePath,
+            new AcquireNextExecutionRequest(new AcquireNextExecutionInputDto(wake, request.QueueMessageId)));
+    }
+
+    private static JsonElement Acquisition(JsonDocument response)
+        => response.RootElement.GetProperty("acquisition");
 
     private sealed class CapturingQueue : ICollectionPlatformTaskQueue
     {

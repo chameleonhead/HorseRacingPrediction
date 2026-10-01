@@ -412,40 +412,51 @@ public sealed class CollectionAdministrationComponentTests
             if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/task-batch-previews"))
             {
                 Previews++;
-                return await Ok(new CollectionBulkPreview(Definition, 1, 1, [Resource]));
+                return await Ok(new { preview = new CollectionBulkPreview(Definition, 1, 1, [Resource]) });
             }
             if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/recollection-previews"))
             {
                 RacePeriodPreviews++;
-                LastRacePeriodRequest = await request.Content!.ReadFromJsonAsync<CreateRacePeriodRecollectionRequest>(cancellationToken);
-                return await Ok(new RacePeriodRecollectionPreview(LastRacePeriodRequest!.From,
+                var input = await request.Content!.ReadFromJsonAsync<PreviewRacePeriodRecollectionRequest>(cancellationToken);
+                LastRacePeriodRequest = new(input!.Period!.From, input.Period.To, input.Period.Provider,
+                    input.Period.BatchId);
+                var preview = new RacePeriodRecollectionPreview(LastRacePeriodRequest!.From,
                     LastRacePeriodRequest.To, LastRacePeriodRequest.To.DayNumber - LastRacePeriodRequest.From.DayNumber + 1,
-                    "JRA"));
+                    "JRA");
+                return await Ok(new { preview });
             }
             if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/recollection-batches"))
             {
                 RacePeriodRequests++;
-                var batchRequest = await request.Content!.ReadFromJsonAsync<CollectionRecollectionBatchRequest>(cancellationToken);
+                var envelope = await request.Content!.ReadFromJsonAsync<CreateRecollectionBatchRequest>(cancellationToken);
+                var batchRequest = envelope!.Batch;
                 Assert.AreEqual("RacePeriod", batchRequest!.Mode);
                 LastRacePeriodRequest = new(batchRequest.From!.Value, batchRequest.To!.Value,
                     batchRequest.Provider!, batchRequest.BatchId);
                 var batch = new BackfillBatchSnapshot("recollection:component-test", LastRacePeriodRequest!.From,
                     LastRacePeriodRequest.To, 2, 2, 2, 0, 0, 0, [], DateTimeOffset.UtcNow, null);
-                return await Ok(new CollectionRecollectionBatchResponse("RacePeriod", null,
-                    new RacePeriodRecollectionReceipt(batch, 2, 0)));
+                return await Ok(new
+                {
+                    batch = new CollectionRecollectionBatchResponse("RacePeriod", null,
+                    new RacePeriodRecollectionReceipt(batch, 2, 0))
+                });
             }
             if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath == "/api/v2/admin/collection/tasks")
             {
                 var json = await request.Content!.ReadAsStringAsync(cancellationToken);
-                var submission = JsonSerializer.Deserialize<CollectionTaskRequest>(
+                var envelope = JsonSerializer.Deserialize<CreateCollectionTaskRequest>(
                     json, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                var submission = envelope?.Task;
                 if (string.Equals(submission?.Mode, "SourceUrl", StringComparison.Ordinal))
                 {
                     ExplicitUrlRequests++;
-                    LastExplicitUrlRequest = new(submission.SourceUrl!.Url);
-                    return await Ok(new CollectionTaskSubmissionResponse("SourceUrl",
+                    LastExplicitUrlRequest = new(submission!.SourceUrl!.Url);
+                    return await Ok(new
+                    {
+                        submission = new CollectionTaskSubmissionResponse("SourceUrl",
                         new CollectionRequestReceipt(Guid.NewGuid(), Guid.NewGuid(), true), Resource, Definition,
-                        JstTime.Today(), LastExplicitUrlRequest.Url, new Dictionary<string, string>()));
+                        JstTime.Today(), LastExplicitUrlRequest.Url, new Dictionary<string, string>())
+                    });
                 }
                 ManualRequests++;
                 var resourceRequest = submission!.Resource!;
@@ -454,34 +465,54 @@ public sealed class CollectionAdministrationComponentTests
                     resourceRequest.Reason, resourceRequest.Lane, resourceRequest.Priority,
                     resourceRequest.ExplicitUrl, resourceRequest.BatchId, resourceRequest.EffectiveDate,
                     resourceRequest.Attributes);
-                return await Ok(new CollectionTaskSubmissionResponse("Resource",
+                return await Ok(new
+                {
+                    submission = new CollectionTaskSubmissionResponse("Resource",
                     new CollectionRequestReceipt(Guid.NewGuid(), Guid.NewGuid(), true),
                     new(resourceRequest.ResourceType, resourceRequest.Provider, resourceRequest.ResourceId),
                     new(resourceRequest.DefinitionId), resourceRequest.EffectiveDate, resourceRequest.ExplicitUrl,
-                    resourceRequest.Attributes ?? new Dictionary<string, string>()));
+                    resourceRequest.Attributes ?? new Dictionary<string, string>())
+                });
             }
             object value = request.RequestUri!.AbsolutePath switch
             {
-                "/api/v2/admin/collection/tasks" when request.RequestUri.Query.Contains("limit=", StringComparison.OrdinalIgnoreCase) => new CollectionTaskPage(1, 1, 50,
+                "/api/v2/admin/collection/tasks" when request.RequestUri.Query.Contains("limit=", StringComparison.OrdinalIgnoreCase) => new
+                {
+                    page = new CollectionTaskPage(1, 1, 50,
                     [new CollectionTaskSummary(Guid.NewGuid(), Resource, Definition, CollectionTaskStatus.Pending,
-                        CollectionLane.Normal, 50, 1, DateTimeOffset.UtcNow, 0)]),
-                "/api/v2/admin/collection/tasks" when EmptyPlatform => new CollectionTaskPage(0, 1, 50, []),
-                "/api/v2/admin/collection/tasks" => new CollectionTaskPage(1, 1, 50,
+                        CollectionLane.Normal, 50, 1, DateTimeOffset.UtcNow, 0)])
+                },
+                "/api/v2/admin/collection/tasks" when EmptyPlatform => new { page = new CollectionTaskPage(0, 1, 50, []) },
+                "/api/v2/admin/collection/tasks" => new
+                {
+                    page = new CollectionTaskPage(1, 1, 50,
                     [new CollectionTaskSummary(Guid.NewGuid(), Resource, Definition, CollectionTaskStatus.Pending,
-                        CollectionLane.Normal, 50, 1, DateTimeOffset.UtcNow, 0)]),
-                "/api/v2/admin/collection/states" => new CollectionStatePage(1, 1, 50,
+                        CollectionLane.Normal, 50, 1, DateTimeOffset.UtcNow, 0)])
+                },
+                "/api/v2/admin/collection/states" => new
+                {
+                    page = new CollectionStatePage(1, 1, 50,
                     [new CollectionStateSnapshot(Resource, Definition, 1, 1, DateTimeOffset.UtcNow, null,
-                        CollectionStateStatus.Current)]),
-                "/api/v2/admin/collection/operations/progress" when EmptyPlatform => new CollectionProgressSnapshot(
+                        CollectionStateStatus.Current)])
+                },
+                "/api/v2/admin/collection/operations/progress" when EmptyPlatform => new
+                {
+                    progress = new CollectionProgressSnapshot(
                     new Dictionary<CollectionResourceType, int>(), new Dictionary<CollectionStateStatus, int>(),
                     new Dictionary<CollectionLane, int>(), new Dictionary<int, int>(),
-                    new Dictionary<string, int>(), 0),
-                "/api/v2/admin/collection/operations/progress" => new CollectionProgressSnapshot(
+                    new Dictionary<string, int>(), 0)
+                },
+                "/api/v2/admin/collection/operations/progress" => new
+                {
+                    progress = new CollectionProgressSnapshot(
                     new Dictionary<CollectionResourceType, int> { [CollectionResourceType.Horse] = 1 },
                     new Dictionary<CollectionStateStatus, int> { [CollectionStateStatus.Pending] = 1 },
                     new Dictionary<CollectionLane, int>(), new Dictionary<int, int>(),
-                    new Dictionary<string, int>(), 0),
-                "/api/v2/admin/collection/operations/task-view-counts" => new CollectionTaskViewCounts(
+                    new Dictionary<string, int>(), 0)
+                },
+                "/api/v2/admin/collection/operations/task-view-counts" => new
+                {
+                    counts = new CollectionTaskViewCounts(
                     new Dictionary<string, int>
                     {
                         ["attention"] = 0,
@@ -489,14 +520,18 @@ public sealed class CollectionAdministrationComponentTests
                         ["waiting"] = 1,
                         ["recent"] = 0,
                         ["all"] = 1
-                    }),
-                "/api/v2/admin/collection/pipeline-state" => new HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionPipelineState(false, null, DateTimeOffset.UtcNow),
-                "/api/v2/admin/collection/failure-notifications" => Array.Empty<PendingCollectionFailureNotification>(),
-                "/api/v2/admin/collection/failure-notification-groups" => FailureGroups,
-                "/api/v2/admin/collection/backfill-batches" => Array.Empty<BackfillBatchSnapshot>(),
+                    })
+                },
+                "/api/v2/admin/collection/pipeline-state" => new { pipeline = new HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionPipelineState(false, null, DateTimeOffset.UtcNow) },
+                "/api/v2/admin/collection/failure-notifications" => new { notifications = Array.Empty<PendingCollectionFailureNotification>() },
+                "/api/v2/admin/collection/failure-notification-groups" => new { groups = FailureGroups },
+                "/api/v2/admin/collection/backfill-batches" => new { batches = Array.Empty<BackfillBatchSnapshot>() },
                 _ when request.RequestUri.AbsolutePath.StartsWith("/api/v2/admin/collection/resources/") =>
-                    new CollectionResourceDetail(new(Resource, Definition, 0, 1, null, null,
-                        CollectionStateStatus.Pending), [], [], [], []),
+                    new
+                    {
+                        resource = new CollectionResourceDetail(new(Resource, Definition, 0, 1, null, null,
+                        CollectionStateStatus.Pending), [], [], [], [])
+                    },
                 _ => Array.Empty<object>(),
             };
             return await Ok(value);

@@ -3,6 +3,7 @@ using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Http;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts.Collection;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
 using Microsoft.Extensions.Logging;

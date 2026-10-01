@@ -27,7 +27,7 @@ public sealed class CollectionPlatformWorkerClientTests
 
         Assert.AreEqual($"/api/v2/internal/collection/tasks/{taskId:D}/attempts", transport.CompletionPath);
         using var document = JsonDocument.Parse(transport.CompletionBody!);
-        var outcomes = document.RootElement.GetProperty("locationOutcomes");
+        var outcomes = document.RootElement.GetProperty("attempt").GetProperty("locationOutcomes");
         Assert.AreEqual(2, outcomes.GetArrayLength());
         Assert.AreEqual(41, outcomes[0].GetProperty("locationId").GetInt64());
         Assert.AreEqual((int)CollectionAttemptResult.UnexpectedPage, outcomes[0].GetProperty("result").GetInt32());
@@ -53,7 +53,7 @@ public sealed class CollectionPlatformWorkerClientTests
 
         Assert.AreEqual($"/api/v2/internal/collection/tasks/{taskId:D}/leases", transport.AcquirePath);
         using var document = JsonDocument.Parse(transport.AcquireBody!);
-        var correlation = document.RootElement.GetProperty("correlation");
+        var correlation = document.RootElement.GetProperty("acquisition").GetProperty("correlation");
         Assert.AreEqual(expected.ExecutionBatchId, correlation.GetProperty("executionBatchId").GetGuid());
         Assert.AreEqual(expected.DispatchEnvelopeId, correlation.GetProperty("dispatchEnvelopeId").GetGuid());
         Assert.AreEqual("sqs-message", correlation.GetProperty("queueMessageId").GetString());
@@ -80,11 +80,12 @@ public sealed class CollectionPlatformWorkerClientTests
         Assert.IsNotNull(transport.CompletionBody);
         Assert.AreEqual($"/api/v2/internal/collection/tasks/{taskId:D}/attempts", transport.CompletionPath);
         using var document = JsonDocument.Parse(transport.CompletionBody);
+        var attempt = document.RootElement.GetProperty("attempt");
         Assert.AreEqual((int)CollectionAttemptResult.TransientFailure,
-            document.RootElement.GetProperty("result").GetInt32());
-        Assert.AreEqual("CollectorTimeout", document.RootElement.GetProperty("errorCode").GetString());
+            attempt.GetProperty("result").GetInt32());
+        Assert.AreEqual("CollectorTimeout", attempt.GetProperty("errorCode").GetString());
         Assert.AreEqual("Definition=horse-profile; Resource=Horse:JRA:H1",
-            document.RootElement.GetProperty("pageIdentification").GetString());
+            attempt.GetProperty("pageIdentification").GetString());
     }
 
     [TestMethod]
@@ -108,10 +109,11 @@ public sealed class CollectionPlatformWorkerClientTests
 
         using var document = JsonDocument.Parse(transport.CompletionBody!);
         Assert.AreEqual($"/api/v2/internal/collection/tasks/{taskId:D}/attempts", transport.CompletionPath);
-        Assert.AreEqual((int)expectedResult, document.RootElement.GetProperty("result").GetInt32());
-        Assert.AreEqual(statusCode, document.RootElement.GetProperty("httpStatusCode").GetInt32());
+        var attempt = document.RootElement.GetProperty("attempt");
+        Assert.AreEqual((int)expectedResult, attempt.GetProperty("result").GetInt32());
+        Assert.AreEqual(statusCode, attempt.GetProperty("httpStatusCode").GetInt32());
         Assert.AreEqual("Definition=horse-profile; Resource=Horse:JRA:H1",
-            document.RootElement.GetProperty("pageIdentification").GetString());
+            attempt.GetProperty("pageIdentification").GetString());
     }
 
     [TestMethod]
@@ -130,9 +132,9 @@ public sealed class CollectionPlatformWorkerClientTests
 
         using var document = JsonDocument.Parse(transport.CompletionBody!);
         Assert.AreEqual((int)CollectionAttemptResult.TransientFailure,
-            document.RootElement.GetProperty("result").GetInt32());
+            document.RootElement.GetProperty("attempt").GetProperty("result").GetInt32());
         Assert.AreEqual("Definition=horse-profile; Resource=Horse:JRA:H1",
-            document.RootElement.GetProperty("pageIdentification").GetString());
+            document.RootElement.GetProperty("attempt").GetProperty("pageIdentification").GetString());
     }
 
     [TestMethod]
@@ -281,7 +283,10 @@ public sealed class CollectionPlatformWorkerClientTests
             CancellationToken cancellationToken)
         {
             if (request.RequestUri!.AbsolutePath.EndsWith("/leases", StringComparison.Ordinal))
-                return new(HttpStatusCode.OK) { Content = JsonContent.Create(acquire) };
+                return new(HttpStatusCode.OK)
+                {
+                    Content = JsonContent.Create(new AcquireCollectionTaskResponse(ToDto(acquire))),
+                };
             CompletionBody = await request.Content!.ReadAsStringAsync(cancellationToken);
             return new(HttpStatusCode.NoContent);
         }
@@ -302,8 +307,8 @@ public sealed class CollectionPlatformWorkerClientTests
                 AcquireBody = await request.Content!.ReadAsStringAsync(token);
                 return new(HttpStatusCode.OK)
                 {
-                    Content = JsonContent.Create(new CollectionTaskAcquireResult(
-                        CollectionTaskAcquireStatus.Acquired, lease)),
+                    Content = JsonContent.Create(new AcquireCollectionTaskResponse(ToDto(
+                        new CollectionTaskAcquireResult(CollectionTaskAcquireStatus.Acquired, lease)))),
                 };
             }
             CompletionPath = request.RequestUri.AbsolutePath;
@@ -311,4 +316,11 @@ public sealed class CollectionPlatformWorkerClientTests
             return new(HttpStatusCode.NoContent);
         }
     }
+
+    private static CollectionTaskAcquireResultDto ToDto(CollectionTaskAcquireResult value)
+        => new(value.Status, value.Task is null ? null : new LeasedCollectionTaskDto(value.Task.TaskId,
+            value.Task.RequestId, new(value.Task.Resource.Type, value.Task.Resource.Provider, value.Task.Resource.Id),
+            new(value.Task.Definition.Value), value.Task.RequestedRevision, value.Task.Reason, value.Task.Lane,
+            value.Task.Priority, value.Task.LeaseToken, value.Task.LeaseExpiresAt, value.Task.EffectiveDate,
+            value.Task.Attributes));
 }

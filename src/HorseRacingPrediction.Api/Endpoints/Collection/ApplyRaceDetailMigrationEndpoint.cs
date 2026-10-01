@@ -12,6 +12,9 @@ internal static class ApplyRaceDetailMigrationEndpoint
             if (!(await store.GetPipelineStateAsync(token)).IsPaused)
                 return Results.Conflict(new { message = "Collection pipeline must be paused." });
             var report = await store.MergeLegacyRaceDetailsAsync(true, JstTime.Now(), token);
-            return report.Errors.Count == 0 ? Results.Ok(report) : Results.Conflict(report);
-        });
+            var response = new ApplyRaceDetailMigrationResponse(CollectionContractMapper.ToDto(report));
+            return report.Errors.Count == 0 ? Results.Ok(response) : Results.Conflict(response);
+        })
+        .Produces<ApplyRaceDetailMigrationResponse>(StatusCodes.Status200OK)
+        .Produces<ApplyRaceDetailMigrationResponse>(StatusCodes.Status409Conflict);
 }

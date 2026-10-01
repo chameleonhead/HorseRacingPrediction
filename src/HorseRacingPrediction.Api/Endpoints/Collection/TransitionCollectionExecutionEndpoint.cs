@@ -5,21 +5,24 @@ namespace HorseRacingPrediction.Api.Endpoints.Collection;
 internal static class TransitionCollectionExecutionEndpoint
 {
     internal static void Map(IEndpointRouteBuilder endpoints) => endpoints.MapPatch(
-        "/api/v2/internal/collection/execution-batches/{id:guid}", async (Guid id,
-            CollectionExecutionTransitionRequest request, CollectionPlatformStore store, CancellationToken token) =>
+        "/api/v2/internal/collection/execution-batches/{id:guid}", async (Guid id, TransitionCollectionExecutionRequest request,
+            CollectionPlatformStore store, CancellationToken token) =>
         {
-            if (request.Transition == "Start")
+            if (request.Transition is null)
+                return Results.BadRequest(new { message = "Transition input is required." });
+            var input = request.Transition;
+            if (input.Transition == "Start")
             {
-                if (request.LeaseSeconds is null)
+                if (input.LeaseSeconds is null)
                     return Results.BadRequest(new { message = "Start requires leaseSeconds." });
-                return await store.StartExecutionAsync(id, new(request.LeaseToken, request.LeaseSeconds.Value, request.LambdaRequestId), JstTime.Now(), token)
+                return await store.StartExecutionAsync(id, new(input.LeaseToken, input.LeaseSeconds.Value, input.LambdaRequestId), JstTime.Now(), token)
                     ? Results.NoContent() : Results.Conflict();
             }
-            if (request.Transition == "Complete")
+            if (input.Transition == "Complete")
             {
-                if (request.LeaseSeconds is not null || request.LambdaRequestId is not null)
+                if (input.LeaseSeconds is not null || input.LambdaRequestId is not null)
                     return Results.BadRequest(new { message = "Complete accepts only the lease token." });
-                return await store.CompleteExecutionAsync(id, request.LeaseToken, JstTime.Now(), token)
+                return await store.CompleteExecutionAsync(id, input.LeaseToken, JstTime.Now(), token)
                     ? Results.NoContent() : Results.Conflict();
             }
             return Results.BadRequest(new { message = "Transition must be Start or Complete." });
@@ -31,5 +34,3 @@ internal static class TransitionCollectionExecutionEndpoint
         .Produces(StatusCodes.Status400BadRequest)
         .Produces(StatusCodes.Status409Conflict);
 }
-internal sealed record CollectionExecutionTransitionRequest(string Transition, string LeaseToken,
-    int? LeaseSeconds = null, string? LambdaRequestId = null);

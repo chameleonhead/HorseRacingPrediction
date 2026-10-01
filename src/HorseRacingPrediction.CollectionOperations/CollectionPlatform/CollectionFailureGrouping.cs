@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
 
+using HorseRacingPrediction.Contracts.Collection;
+
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 public static class CollectionFailureGrouping

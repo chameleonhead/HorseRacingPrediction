@@ -8,5 +8,7 @@ internal static class PreviewRaceDetailMigrationEndpoint
     internal static void Map(IEndpointRouteBuilder endpoints) => endpoints.MapPost(
         "/api/v2/admin/collection/migration-previews/race-detail",
         async (CollectionPlatformStore store, CancellationToken token) =>
-            Results.Ok(await store.MergeLegacyRaceDetailsAsync(false, JstTime.Now(), token)));
+            Results.Ok(new PreviewRaceDetailMigrationResponse(CollectionContractMapper.ToDto(
+                await store.MergeLegacyRaceDetailsAsync(false, JstTime.Now(), token)))))
+            .Produces<PreviewRaceDetailMigrationResponse>(StatusCodes.Status200OK);
 }

@@ -6,38 +6,43 @@ namespace HorseRacingPrediction.Api.Endpoints.Collection;
 internal static class CreateRecollectionBatchEndpoint
 {
     internal static void Map(IEndpointRouteBuilder endpoints) => endpoints.MapPost(
-        "/api/v2/admin/collection/recollection-batches", async (CollectionRecollectionBatchRequest request,
+        "/api/v2/admin/collection/recollection-batches", async (CreateRecollectionBatchRequest request,
             CollectionPlatformStore store, IEnumerable<INamedRevisionImpactCondition> conditions, CancellationToken token) =>
         {
-            if (request.Mode == "Revision")
+            if (request.Batch is null)
+                return Results.BadRequest(new { message = "Batch input is required." });
+            var input = request.Batch;
+            if (input.Mode == "Revision")
             {
-                if (request.Definition is null || request.Revision is null || request.Provider is not null || request.From is not null || request.To is not null || request.BatchId is not null)
+                if (input.Definition is null || input.Revision is null || input.Provider is not null || input.From is not null || input.To is not null || input.BatchId is not null)
                     return Results.BadRequest(new { message = "Revision mode requires only definition and revision selectors." });
-                var expansion = await store.ExpandRevisionRecollectionAsync(new(request.Definition), request.Revision.Value,
-                    conditions, JstTime.Now(), request.Lane ?? CollectionLane.Background,
-                    request.Priority ?? (int)CollectionPriority.Background, token);
-                return Results.Accepted(value: new CollectionRecollectionBatchResponse(request.Mode, expansion, null));
+                var expansion = await store.ExpandRevisionRecollectionAsync(new(input.Definition), input.Revision.Value,
+                    conditions, JstTime.Now(), input.Lane ?? CollectionLane.Background,
+                    input.Priority ?? (int)CollectionPriority.Background, token);
+                return Results.Accepted(value: new CreateRecollectionBatchResponse(
+                    CollectionContractMapper.ToDto(new CollectionRecollectionBatchResponse(input.Mode, expansion, null))));
             }
-            if (request.Mode == "RacePeriod")
+            if (input.Mode == "RacePeriod")
             {
-                if (request.Provider is null || request.From is null || request.To is null || request.Definition is not null || request.Revision is not null || request.Lane is not null || request.Priority is not null)
+                if (input.Provider is null || input.From is null || input.To is null || input.Definition is not null || input.Revision is not null || input.Lane is not null || input.Priority is not null)
                     return Results.BadRequest(new { message = "RacePeriod mode requires provider, from, and to selectors." });
-                var selector = new CreateRacePeriodRecollectionRequest(request.From.Value, request.To.Value, request.Provider, request.BatchId);
+                var selector = new CreateRacePeriodRecollectionRequest(input.From.Value, input.To.Value, input.Provider, input.BatchId);
                 var error = CollectionPlatformEndpointSupport.ValidateRacePeriodRecollection(selector);
                 if (error is not null) return Results.BadRequest(new { message = error });
-                var batchId = string.IsNullOrWhiteSpace(request.BatchId)
-                    ? $"recollection:{request.From:yyyyMMdd}-{request.To:yyyyMMdd}:{Guid.NewGuid():N}" : request.BatchId.Trim();
-                var result = await store.CreateOrResumeRacePeriodRecollectionAsync(batchId, request.Provider,
-                    request.From.Value, request.To.Value, JstTime.Now(), token);
+                var batchId = string.IsNullOrWhiteSpace(input.BatchId)
+                    ? $"recollection:{input.From:yyyyMMdd}-{input.To:yyyyMMdd}:{Guid.NewGuid():N}" : input.BatchId.Trim();
+                var result = await store.CreateOrResumeRacePeriodRecollectionAsync(batchId, input.Provider,
+                    input.From.Value, input.To.Value, JstTime.Now(), token);
                 return Results.Accepted($"/api/v2/admin/collection/backfill-batches/{Uri.EscapeDataString(batchId)}",
-                    new CollectionRecollectionBatchResponse(request.Mode, null, result));
+                    new CreateRecollectionBatchResponse(CollectionContractMapper.ToDto(
+                        new CollectionRecollectionBatchResponse(input.Mode, null, result))));
             }
             return Results.BadRequest(new { message = "Mode must be Revision or RacePeriod." });
         })
         .WithName("CreateRecollectionBatch")
         .WithTags("Collection Platform")
         .WithDescription("mode is Revision or RacePeriod. Each mode accepts only its own selector fields.")
-        .Produces<CollectionRecollectionBatchResponse>(StatusCodes.Status202Accepted)
+        .Produces<CreateRecollectionBatchResponse>(StatusCodes.Status202Accepted)
         .Produces(StatusCodes.Status400BadRequest)
         .Produces(StatusCodes.Status409Conflict);
 }

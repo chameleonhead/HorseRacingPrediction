@@ -14,7 +14,11 @@ internal static class GetCollectionDashboardEndpoint
                 var notificationsTask = store.GetActionableFailureNotificationsAsync(JstTime.Now(), 10000, token);
                 var backfillsTask = store.GetBackfillBatchesAsync(token);
                 await Task.WhenAll(progressTask, notificationsTask, backfillsTask);
-                return Results.Ok(new CollectionOperationsDashboard(await progressTask,
-                    CollectionFailureGrouping.Build(await notificationsTask), await backfillsTask, JstTime.Now()));
-            });
+                var dashboard = new CollectionOperationsDashboard(await progressTask,
+                    CollectionFailureGrouping.Build(await notificationsTask), await backfillsTask, JstTime.Now());
+                return Results.Ok(new GetCollectionDashboardResponse(new(
+                    CollectionContractMapper.ToDto(dashboard.Progress),
+                    dashboard.Failures.Select(CollectionContractMapper.ToDto).ToArray(),
+                    dashboard.Backfills.Select(CollectionContractMapper.ToDto).ToArray(), dashboard.GeneratedAt)));
+            }).Produces<GetCollectionDashboardResponse>(StatusCodes.Status200OK);
 }

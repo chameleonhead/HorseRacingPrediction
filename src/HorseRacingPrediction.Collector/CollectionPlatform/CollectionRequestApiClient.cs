@@ -44,17 +44,18 @@ public sealed class CollectionRequestApiClient(HttpClient client) : ICollectionR
     public async Task<CollectionRequestBulkResponse> RequestManyAsync(CollectionRequestBulkRequest request,
         CancellationToken cancellationToken)
     {
-        var submission = new CollectionTaskBatchRequest("ExplicitItems", ExplicitItems: request);
+        var submission = new CreateCollectionTaskBatchRequest(new CreateCollectionTaskBatchInputDto(
+            "ExplicitItems", ExplicitItems: request));
         using var response = await client.PostAsJsonAsync("api/v2/admin/collection/task-batches", submission,
             cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
-        var result = await response.Content.ReadFromJsonAsync<CollectionTaskBatchSubmissionResponse>(cancellationToken)
+        var result = await response.Content.ReadFromJsonAsync<CreateCollectionTaskBatchResponse>(cancellationToken)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("Collection task batch response was empty.");
-        if (!string.Equals(result.Mode, "ExplicitItems", StringComparison.Ordinal)
-            || result.ExplicitItems is null)
+        if (!string.Equals(result.Submission.Mode, "ExplicitItems", StringComparison.Ordinal)
+            || result.Submission.ExplicitItems is null)
             throw new InvalidOperationException("Collection task batch response did not contain explicit-item outcomes.");
-        return result.ExplicitItems;
+        return result.Submission.ExplicitItems;
     }
 
     public async Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, int requestedRevision,
@@ -62,21 +63,12 @@ public sealed class CollectionRequestApiClient(HttpClient client) : ICollectionR
         CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
         IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken)
     {
-        using var response = await client.PostAsJsonAsync("api/v2/admin/collection/tasks", new
-        {
-            ResourceType = resource.Type,
-            resource.Provider,
-            ResourceId = resource.Id,
-            DefinitionId = definition.Value,
-            RequestedRevision = requestedRevision,
-            Reason = reason,
-            Lane = lane,
-            Priority = priority,
-            ExplicitUrl = explicitUrl?.AbsoluteUri,
-            EffectiveDate = effectiveDate,
-            Attributes = attributes,
-            BatchId = attributes.GetValueOrDefault("batchId"),
-        }, cancellationToken).ConfigureAwait(false);
+        var input = new CollectionResourceTaskInputDto(resource.Type, resource.Provider, resource.Id,
+            definition.Value, requestedRevision, reason, lane, priority, explicitUrl?.AbsoluteUri,
+            attributes.GetValueOrDefault("batchId"), effectiveDate, attributes);
+        using var response = await client.PostAsJsonAsync("api/v2/admin/collection/tasks",
+            new CreateCollectionTaskRequest(new CreateCollectionTaskInputDto("Resource", input)),
+            cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }
 }

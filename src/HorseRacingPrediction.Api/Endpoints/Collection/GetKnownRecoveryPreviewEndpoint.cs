@@ -9,5 +9,7 @@ internal static class GetKnownRecoveryPreviewEndpoint
     internal static void Map(IEndpointRouteBuilder endpoints) =>
         endpoints.MapGet("/api/v2/admin/collection/recovery-previews/known",
             async ([FromServices] CollectionMonitoringService service, CancellationToken token) =>
-                Results.Ok(await service.PreviewKnownRecoveryAsync(JstTime.Now(), token)));
+                Results.Ok(new GetKnownRecoveryPreviewResponse(CollectionContractMapper.ToDto(
+                    await service.PreviewKnownRecoveryAsync(JstTime.Now(), token)))))
+            .Produces<GetKnownRecoveryPreviewResponse>(StatusCodes.Status200OK);
 }
