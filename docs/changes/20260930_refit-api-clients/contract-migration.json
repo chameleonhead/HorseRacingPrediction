@@ -3,7 +3,7 @@
   "changeId": "20260930_refit-api-clients",
   "taskId": "T2",
   "attemptId": "T2-A2",
-  "status": "53 semantic renames, resource namespace/folder, one-type-per-file layout, and profile/alias merges complete; memo/weather merges pending",
+  "status": "Complete: 53 semantic renames, resource namespace/folder layout, one-type-per-file structure, approved profile/alias/memo/weather merges, and all 135 API Request/Response contracts are reconciled; no pending memo/weather merge.",
   "tool": "Roslynator DotNet CLI 1.0.0 rename-symbol",
   "selection": "INamedTypeSymbol in HorseRacingPrediction.Contracts assembly, exact old name; no JSON properties/values or domain/persistence symbols",
   "verification": "Semantic actual apply with target inventory; independent declaration-body/XML-doc/using-scope comparison; Contracts tests; full non-External solution tests; Release build; format verification",
@@ -499,5 +499,6 @@
     "format": "passed: dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes",
     "codeGraph": "passed after coherent A5 source edit: CODEGRAPH_NO_DAEMON=1 codegraph sync .; status reported index up to date, then RacePredictionContextDto exploration found current DTO and callers",
     "diffCheck": "passed at T2/T8 checkpoint"
-  }
+  },
+  "historicalStatusAtT2A2": "53 semantic renames, resource namespace/folder, one-type-per-file layout, and profile/alias merges complete; memo/weather merges pending"
 }
