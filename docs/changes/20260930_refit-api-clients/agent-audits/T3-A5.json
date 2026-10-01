@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260930_refit-api-clients",
+  "taskId": "T3-A5",
+  "attemptId": "T3-A5",
+  "state": "completed",
+  "taskDifficulty": "high",
+  "acceptanceCriteria": [
+    "AC2",
+    "AC4",
+    "AC5"
+  ],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose model telemetry"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime did not expose per-task usage"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.Contracts/Races",
+    "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
+    "src/HorseRacingPrediction.Api/Endpoints/Races",
+    "src/HorseRacingPrediction.Collector/CollectionPlatform/JraRaceOddsCollectionHandler.cs",
+    "tests/HorseRacingPrediction.Contracts.Tests/RaceRepairEnvelopeSerializationTests.cs",
+    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/JraRaceOddsCollectionHandlerTests.cs",
+    "tests/scripts/test-entry-repair-local.ps1",
+    "docs/changes/20260930_refit-api-clients/http-contract-inventory.json",
+    "docs/changes/20260930_refit-api-clients/http-contract-inventory.md",
+    "docs/changes/20260930_refit-api-clients/README.md",
+    "docs/changes/20260930_refit-api-clients/agent-audits/T3-A1.json",
+    "docs/changes/20260930_refit-api-clients/agent-audits/T3-A5.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review effort telemetry was not exposed"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "effort telemetry was not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable per-task elapsed effort telemetry was not exposed"
+  },
+  "startRevision": "e0d0da85",
+  "endRevisionOrPatch": "working-tree:T3-A5 Races10 operation contracts, Collector odds adapter, and final Release gates 2026-10-01",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Lead verified 10 Request/9 Response paths, DTO graph/reuse, validation/status, OpenAPI, script, and Collector odds TestServer roundtrip. 255 Contracts files/types align; old request has zero refs. Gates: Contracts 55, Collector 410, API 391/1 skip, Release build, format, CodeGraph, audit. Fixed seven imports. README records late-discovered Collector scope.",
+    "promoted": false,
+    "escapedDefects": 0,
+    "retries": 1,
+    "leadCorrections": 2,
+    "reviewPasses": 3,
+    "escalations": 0,
+    "decision": "accept",
+    "reviewMode": "ac-group",
+    "detailReviewReason": null
+  }
+}

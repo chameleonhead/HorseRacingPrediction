@@ -76,15 +76,21 @@ public sealed class JraRaceOddsCollectionHandlerTests
 
     private sealed class StaticResponseHandler(HttpStatusCode status, string body) : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             Assert.AreEqual(HttpMethod.Post, request.Method);
             StringAssert.EndsWith(request.RequestUri!.AbsolutePath, "/api/v2/admin/races/20260912%3ATokyo%3A11/odds-snapshot-records");
-            return Task.FromResult(new HttpResponseMessage(status)
+            using var json = System.Text.Json.JsonDocument.Parse(
+                await request.Content!.ReadAsStringAsync(cancellationToken));
+            Assert.IsTrue(json.RootElement.TryGetProperty("snapshot", out var snapshot));
+            Assert.IsFalse(json.RootElement.TryGetProperty("observedAt", out _));
+            Assert.AreEqual(1, snapshot.GetProperty("entries").GetArrayLength());
+            Assert.AreEqual(1, snapshot.GetProperty("observations").GetArrayLength());
+            return new HttpResponseMessage(status)
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
-            });
+            };
         }
     }
 

@@ -16,12 +16,13 @@ internal static class CreateRaceOddsSnapshotEndpoint
     internal static void Map(IEndpointRouteBuilder endpoints)
     {
         endpoints.MapPost("/api/v2/admin/races/{raceId}/odds-snapshot-records",
-            async (string raceId, RecordRaceOddsSnapshotRequest request, [FromServices] ICommandBus commands,
+            async (string raceId, CreateRaceOddsSnapshotRequest request, [FromServices] ICommandBus commands,
                 [FromServices] IQueryProcessor queries, CancellationToken token) =>
             {
-                var entries = request.Entries ?? [];
-                var observations = request.Observations;
-                var errors = RaceOddsEndpointMappings.Validate(request.ObservedAt, entries, observations);
+                if (request.Snapshot is null) return Results.BadRequest(new { ErrorCode = "InvalidOddsSnapshot" });
+                var entries = request.Snapshot.Entries ?? [];
+                var observations = request.Snapshot.Observations;
+                var errors = RaceOddsEndpointMappings.Validate(request.Snapshot.ObservedAt, entries, observations);
                 if (errors.Count > 0) return Results.ValidationProblem(errors);
                 var race = await queries.ProcessAsync(
                     new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId), token);
@@ -37,13 +38,17 @@ internal static class CreateRaceOddsSnapshotEndpoint
                 if (observations?.Any(item => !RaceOddsSelection.CanResolve(
                         new RaceOddsObservation(item.Market, item.Selection, item.Value), assignments)) == true)
                     return Results.BadRequest(new { ErrorCode = "UnknownHorseNumber", Message = "Odds selections must resolve to confirmed horse or frame assignments." });
-                await commands.PublishAsync(new RecordRaceOddsSnapshotCommand(new RaceId(raceId), request.ObservedAt,
+                await commands.PublishAsync(new RecordRaceOddsSnapshotCommand(new RaceId(raceId), request.Snapshot.ObservedAt,
                     entries.Select(x => new RaceOddsEntry(x.HorseNumber, x.WinOdds, x.Popularity)).ToArray(),
                     observations?.Select(x => new RaceOddsObservation(x.Market, x.Selection, x.Value,
                         x.Popularity)).ToArray()), token);
                 return Results.Created($"/api/v2/admin/races/{Uri.EscapeDataString(raceId)}/odds-snapshot-records", null);
             })
             .AddEndpointFilter<RaceWriteEndpointFilter>()
-            .AddEndpointFilter<RaceActiveCollectionEndpointFilter>();
+            .AddEndpointFilter<RaceActiveCollectionEndpointFilter>()
+            .Produces(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
     }
 }

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260930_refit-api-clients",
+  "taskId": "T3-A6",
+  "attemptId": "T3-A6",
+  "state": "completed",
+  "taskDifficulty": "high",
+  "acceptanceCriteria": [
+    "AC2",
+    "AC4",
+    "AC5"
+  ],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose model telemetry"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime did not expose per-task usage"
+  },
+  "scope": [
+    "tests/HorseRacingPrediction.Api.Tests/{RaceAssignmentRepairTests.cs,RaceOddsSnapshotApiTests.cs,RaceCancellationTests.cs,WeekendRacePredictionScenarioTests.cs}",
+    "docs/changes/20260930_refit-api-clients/agent-audits/T3-A6.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review effort telemetry was not exposed"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "effort telemetry was not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable per-task elapsed effort telemetry was not exposed"
+  },
+  "startRevision": "e0d0da85",
+  "endRevisionOrPatch": "working-tree:T3-A6 explicit Races10 API adapters; final Release run 2026-10-01",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "The worker kept edits within the four assigned API test files. Initial build found eight named-argument casing errors and corrected the callsites. The first focused run passed 25/28: one repair helper consumed a response twice and two odds tests still used the old flat request; its retry exposed a stale GET array assertion. All were adapted to the frozen envelopes without weakening existing business assertions. The current full API Release run passed 391, skipped 1, failed 0 (392 total); focused Races10 passed 28/28. It includes a real RaceOddsSnapshotApiClient.SaveAsync-to-TestServer round trip that verifies persisted snapshot entries and observations. The build warning at CollectionAdministrationComponentTests.cs:445 is unchanged baseline nullable flow.",
+    "promoted": false,
+    "escapedDefects": 0,
+    "retries": 2,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "escalations": 0,
+    "decision": "accept",
+    "reviewMode": "ac-group",
+    "detailReviewReason": null
+  }
+}

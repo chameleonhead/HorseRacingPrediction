@@ -34,10 +34,10 @@ public sealed class RaceOddsSnapshotApiClient(HttpClient client) : IRaceOddsSnap
     public async Task SaveAsync(string raceId, JraRaceOddsPage page, CancellationToken cancellationToken)
     {
         using var response = await client.PostAsJsonAsync($"api/v2/admin/races/{Uri.EscapeDataString(raceId)}/odds-snapshot-records",
-            new RecordRaceOddsSnapshotRequest(page.ObservedAt,
+            new CreateRaceOddsSnapshotRequest(raceId, new CreateRaceOddsSnapshotInputDto(page.ObservedAt,
                 page.Entries.Select(x => new RaceOddsEntryInputDto(x.HorseNumber, x.WinOdds, x.Popularity)).ToArray(),
                 page.Entries.Select(x => new RaceOddsObservationInputDto("Win", x.HorseNumber.ToString(),
-                    x.WinOdds, x.Popularity)).ToArray()),
+                    x.WinOdds, x.Popularity)).ToArray())),
             cancellationToken).ConfigureAwait(false);
         if (response.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.BadRequest)
         {

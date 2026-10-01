@@ -2890,24 +2890,36 @@
         "kind": "body"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "ApplyRaceEntryRepairResponse",
+        "status": 200
+      },
+      {
+        "status": 400
+      },
+      {
+        "status": 409
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
         "hasData": true,
-        "payloadExpression": "anonymous { OperationId, Fingerprint, Version, Verified, BackupHash, AssignmentFingerprint }",
+        "payloadExpression": "ApplyRaceEntryRepairResponse",
         "kind": "Ok"
       }
     ],
     "family": "Races",
     "method": "POST",
-    "responseShape": "anonymous { OperationId, Fingerprint, Version, Verified, BackupHash, AssignmentFingerprint }",
+    "responseShape": "ApplyRaceEntryRepairResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/ApplyRaceEntryRepairEndpoint.cs",
     "handler": "RaceEntryRepairOperations.ApplyAsync",
     "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestContractType": "ApplyRaceEntryRepairRequest"
   },
   {
     "path": "/api/races/{raceId}/close",
@@ -3068,25 +3080,39 @@
       {
         "name": "request",
         "kind": "body",
-        "type": "RecordRaceOddsSnapshotRequest"
+        "type": "CreateRaceOddsSnapshotRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "status": 201
+      },
+      {
+        "status": 400
+      },
+      {
+        "status": 404
+      },
+      {
+        "status": 409
+      }
+    ],
     "successOutcomes": [
       {
         "status": 201,
-        "payloadExpression": "$\"/api/v2/admin/races/{Uri.EscapeDataString(raceId)}/odds-snapshot-records\", null",
+        "payloadExpression": "Location with no response body",
         "kind": "Created",
         "hasData": false
       }
     ],
     "family": "Races",
     "method": "POST",
-    "responseShape": null,
+    "responseShape": "",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/CreateRaceOddsSnapshotEndpoint.cs",
     "requestPresent": true,
     "responsePresent": false,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestContractType": "CreateRaceOddsSnapshotRequest"
   },
   {
     "path": "/api/races/{raceId}/entries/{entryId}/result",
@@ -3241,25 +3267,26 @@
     ],
     "produces": [
       {
-        "type": "PredictionComparisonViewReadModel",
+        "type": "GetPredictionComparisonResponse",
         "status": 200
       }
     ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "readModel",
-        "kind": "Ok",
-        "hasData": true
+        "hasData": true,
+        "payloadExpression": "GetPredictionComparisonResponse",
+        "kind": "Ok"
       }
     ],
     "family": "Races",
     "method": "GET",
-    "responseShape": "PredictionComparisonViewReadModel",
+    "responseShape": "GetPredictionComparisonResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/GetPredictionComparisonEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "requestContractType": "GetPredictionComparisonRequest"
   },
   {
     "path": "/api/v2/admin/races/{raceId}/entry-repair/assignment-fence-state",
@@ -3271,24 +3298,33 @@
         "kind": "path"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "GetRaceAssignmentFenceResponse",
+        "status": 200
+      },
+      {
+        "status": 409
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
         "hasData": true,
-        "payloadExpression": "anonymous { generation, assignmentFingerprint }",
+        "payloadExpression": "GetRaceAssignmentFenceResponse",
         "kind": "Ok"
       }
     ],
     "family": "Races",
     "method": "GET",
-    "responseShape": "anonymous { generation, assignmentFingerprint }",
+    "responseShape": "GetRaceAssignmentFenceResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/GetRaceAssignmentFenceEndpoint.cs",
     "handler": "RaceEntryRepairOperations.GetFenceAsync",
     "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "requestContractType": "GetRaceAssignmentFenceRequest"
   },
   {
     "path": "/api/races/{raceId}",
@@ -3334,24 +3370,30 @@
         "kind": "path"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "GetRaceEntryRepairResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
         "hasData": true,
-        "payloadExpression": "RaceEntryRepairInspection",
+        "payloadExpression": "GetRaceEntryRepairResponse",
         "kind": "Ok"
       }
     ],
     "family": "Races",
     "method": "GET",
-    "responseShape": "RaceEntryRepairInspection",
+    "responseShape": "GetRaceEntryRepairResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/GetRaceEntryRepairEndpoint.cs",
     "handler": "RaceEntryRepairOperations.GetInspectionAsync",
     "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "requestContractType": "GetRaceEntryRepairRequest"
   },
   {
     "path": "/api/v2/admin/races/{raceId}/entry-repair/hold-state",
@@ -3363,24 +3405,30 @@
         "kind": "path"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "GetRaceEntryRepairHoldResponse",
+        "status": 200
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
         "hasData": true,
-        "payloadExpression": "RaceRepairHoldSnapshot",
+        "payloadExpression": "GetRaceEntryRepairHoldResponse",
         "kind": "Ok"
       }
     ],
     "family": "Races",
     "method": "GET",
-    "responseShape": "RaceRepairHoldSnapshot",
+    "responseShape": "GetRaceEntryRepairHoldResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/GetRaceEntryRepairHoldEndpoint.cs",
     "handler": "RaceEntryRepairOperations.GetHoldAsync",
     "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "requestContractType": "GetRaceEntryRepairHoldRequest"
   },
   {
     "path": "/api/races/{raceId}/context",
@@ -3426,22 +3474,31 @@
         "type": "string"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "ListRaceOddsSnapshotsResponse",
+        "status": 200
+      },
+      {
+        "status": 404
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
-        "payloadExpression": "model.OddsSnapshots",
-        "kind": "Ok",
-        "hasData": true
+        "hasData": true,
+        "payloadExpression": "ListRaceOddsSnapshotsResponse",
+        "kind": "Ok"
       }
     ],
     "family": "Races",
     "method": "GET",
-    "responseShape": "model.OddsSnapshots",
+    "responseShape": "ListRaceOddsSnapshotsResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/ListRaceOddsSnapshotsEndpoint.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": false
+    "requestBodyPresent": false,
+    "requestContractType": "ListRaceOddsSnapshotsRequest"
   },
   {
     "path": "/api/races/{raceId}/reschedule",
@@ -3511,34 +3568,43 @@
     "endpointFile": "PreviewRaceEntryRepairEndpoint.cs",
     "handlerParameters": [
       {
-        "type": "string",
         "name": "raceId",
-        "kind": "path"
+        "kind": "path",
+        "type": "string"
       },
       {
-        "type": "RaceEntryRepairManifest",
-        "name": "manifest",
-        "kind": "body"
+        "name": "request",
+        "kind": "body",
+        "type": "PreviewRaceEntryRepairRequest"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "PreviewRaceEntryRepairResponse",
+        "status": 200
+      },
+      {
+        "status": 400
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
         "hasData": true,
-        "payloadExpression": "anonymous { Eligible, Fingerprint, Version, PreviousEntries, Entries, GradeCode, ReferenceCounts, Blockers, Hold, SourceEvidence, SourceAssurance }",
+        "payloadExpression": "PreviewRaceEntryRepairResponse",
         "kind": "Ok"
       }
     ],
     "family": "Races",
     "method": "POST",
-    "responseShape": "anonymous { Eligible, Fingerprint, Version, PreviousEntries, Entries, GradeCode, ReferenceCounts, Blockers, Hold, SourceEvidence, SourceAssurance }",
+    "responseShape": "PreviewRaceEntryRepairResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/PreviewRaceEntryRepairEndpoint.cs",
     "handler": "RaceEntryRepairOperations.PreviewAsync",
     "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestContractType": "PreviewRaceEntryRepairRequest"
   },
   {
     "path": "/api/races/{raceId}/card/publish",
@@ -3696,24 +3762,36 @@
         "kind": "body"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "ReleaseRaceEntryRepairHoldResponse",
+        "status": 200
+      },
+      {
+        "status": 400
+      },
+      {
+        "status": 409
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
         "hasData": true,
-        "payloadExpression": "RaceRepairHoldSnapshot",
+        "payloadExpression": "ReleaseRaceEntryRepairHoldResponse",
         "kind": "Ok"
       }
     ],
     "family": "Races",
     "method": "PATCH",
-    "responseShape": "RaceRepairHoldSnapshot",
+    "responseShape": "ReleaseRaceEntryRepairHoldResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/ReleaseRaceEntryRepairHoldEndpoint.cs",
     "handler": "RaceEntryRepairOperations.PatchHoldAsync",
     "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestContractType": "ReleaseRaceEntryRepairHoldRequest"
   },
   {
     "path": "/api/races",
@@ -3837,24 +3915,36 @@
         "kind": "body"
       }
     ],
-    "produces": [],
+    "produces": [
+      {
+        "type": "UpdateRaceEntryRepairHoldResponse",
+        "status": 200
+      },
+      {
+        "status": 400
+      },
+      {
+        "status": 409
+      }
+    ],
     "successOutcomes": [
       {
         "status": 200,
         "hasData": true,
-        "payloadExpression": "RaceRepairHoldSnapshot",
+        "payloadExpression": "UpdateRaceEntryRepairHoldResponse",
         "kind": "Ok"
       }
     ],
     "family": "Races",
     "method": "PUT",
-    "responseShape": "RaceRepairHoldSnapshot",
+    "responseShape": "UpdateRaceEntryRepairHoldResponse",
     "sourcePath": "src/HorseRacingPrediction.Api/Endpoints/Races/UpdateRaceEntryRepairHoldEndpoint.cs",
     "handler": "RaceEntryRepairOperations.PutHoldAsync",
     "handlerSourcePath": "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
     "requestPresent": true,
     "responsePresent": true,
-    "requestBodyPresent": true
+    "requestBodyPresent": true,
+    "requestContractType": "UpdateRaceEntryRepairHoldRequest"
   },
   {
     "path": "/api/admin/repairs/20260913-jra-horse-identity/apply",

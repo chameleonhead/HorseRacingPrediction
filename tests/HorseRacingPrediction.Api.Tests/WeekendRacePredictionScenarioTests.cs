@@ -485,6 +485,15 @@ public class WeekendRacePredictionScenarioTests
         // --- 予想比較ビューを確認する ---
         var comparisonResponse = await _client.GetAsync($"/api/races/{raceId}/comparison");
         Assert.AreEqual(HttpStatusCode.OK, comparisonResponse.StatusCode, "予想比較ビュー取得に失敗");
+        var comparisonEnvelope = await comparisonResponse.Content
+            .ReadFromJsonAsync<GetPredictionComparisonResponse>(JsonOptions);
+        Assert.IsNotNull(comparisonEnvelope);
+        Assert.AreEqual(raceId, comparisonEnvelope.Comparison.RaceId);
+        Assert.AreEqual(3, comparisonEnvelope.Comparison.EntryResults.Count);
+        Assert.AreEqual(320m, comparisonEnvelope.Comparison.PayoutResult!.WinPayouts.Single().Amount);
+        var evaluatedTicket = comparisonEnvelope.Comparison.PredictionTickets
+            .Single(x => x.PredictionTicketId == ticketId);
+        Assert.IsNotNull(evaluatedTicket.LatestEvaluation);
 
         // --- 馬に紐づくメモが正しく取得できることを確認する ---
         var horse1Memos = await _client.GetAsync($"/api/memos/by-subject/Horse/{horse1Id}");

@@ -1,5 +1,4 @@
 using HorseRacingPrediction.ApiClient;
-using HorseRacingPrediction.Application.Queries.ReadModels;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -8,12 +7,43 @@ using System.Text.Json;
 using HorseRacingPrediction.Contracts.Common;
 using HorseRacingPrediction.Contracts.Horses;
 using HorseRacingPrediction.Contracts.Races;
+using HorseRacingPrediction.Collector.CollectionPlatform;
+using HorseRacingPrediction.Scraping.Jra.Models;
+using HorseRacingPrediction.Scraping.Jra.Pages;
 
 namespace HorseRacingPrediction.Api.Tests;
 
 [TestClass]
 public sealed class RaceOddsSnapshotApiTests
 {
+    [TestMethod]
+    public async Task CollectorOddsClientPostsWrappedSnapshotToApiAndPersistsValues()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var lifetime = app;
+        client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        const string raceId = "race-00000000-0000-0000-0000-000000000014";
+        await CreateRaceWithEntriesAsync(client, raceId, 14, (1, "horse-00000000-0000-0000-0000-000000000014"));
+        var fence = await GetFenceAsync(client, raceId);
+        client.DefaultRequestHeaders.Add("X-Race-Assignment-Fingerprint", fence.Fingerprint);
+        client.DefaultRequestHeaders.Add("X-Race-Hold-Generation", fence.Generation.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        var observedAt = new DateTimeOffset(2026, 9, 12, 5, 0, 0, TimeSpan.Zero);
+        var page = new JraRaceOddsPage("https://example.test/odds", new RaceId(new DateOnly(2026, 9, 12), RaceCourse.Tokyo, 11), observedAt,
+            [new(1, 2.75m, 4)]);
+
+        await new RaceOddsSnapshotApiClient(client).SaveAsync(raceId, page, CancellationToken.None);
+
+        var snapshots = await GetSnapshotsAsync(client, raceId);
+        Assert.HasCount(1, snapshots);
+        Assert.AreEqual(observedAt, snapshots[0].ObservedAt);
+        Assert.AreEqual(1, snapshots[0].Entries.Count);
+        Assert.AreEqual(2.75m, snapshots[0].Entries[0].WinOdds);
+        Assert.AreEqual(4, snapshots[0].Entries[0].Popularity);
+        Assert.AreEqual("Win", snapshots[0].Observations!.Single().Market);
+        Assert.AreEqual("1", snapshots[0].Observations!.Single().Selection);
+        Assert.AreEqual(2.75m, snapshots[0].Observations!.Single().Value);
+    }
+
     [TestMethod]
     public async Task TwoObservationsRemainAsTwoAppendOnlySnapshots()
     {
@@ -27,16 +57,17 @@ public sealed class RaceOddsSnapshotApiTests
         var secondAt = firstAt.AddMinutes(2);
         foreach (var request in new[]
         {
-            new RecordRaceOddsSnapshotRequest(firstAt, [new(1, 2.5m, 1)]),
-            new RecordRaceOddsSnapshotRequest(secondAt, [new(1, 2.3m, 1)]),
+            new CreateRaceOddsSnapshotInputDto(firstAt, [new(1, 2.5m, 1)]),
+            new CreateRaceOddsSnapshotInputDto(secondAt, [new(1, 2.3m, 1)]),
         })
         {
             using var response = await PostOddsAsync(client, raceId, request, fence);
-            response.EnsureSuccessStatusCode();
+            Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
+            Assert.AreEqual($"/api/v2/admin/races/{raceId}/odds-snapshot-records", response.Headers.Location?.OriginalString);
+            Assert.AreEqual(string.Empty, await response.Content.ReadAsStringAsync());
         }
 
-        var snapshots = await client.GetFromJsonAsync<List<RaceOddsSnapshot>>(
-            $"/api/v2/admin/races/{raceId}/odds-snapshot-records");
+        var snapshots = await GetSnapshotsAsync(client, raceId);
         Assert.IsNotNull(snapshots);
         Assert.HasCount(2, snapshots);
         Assert.AreEqual(firstAt, snapshots[0].ObservedAt);
@@ -67,7 +98,7 @@ public sealed class RaceOddsSnapshotApiTests
         }
         var fence = await GetFenceAsync(client, raceId);
         var observedAt = new DateTimeOffset(2026, 9, 12, 5, 0, 0, TimeSpan.Zero);
-        var request = new RecordRaceOddsSnapshotRequest(observedAt, [new(1, 2.5m, 1)],
+        var request = new CreateRaceOddsSnapshotInputDto(observedAt, [new(1, 2.5m, 1)],
         [
             new("Win", "1", 2.5m, 1),
             new("Place", "3", 1.5m, 1),
@@ -78,8 +109,7 @@ public sealed class RaceOddsSnapshotApiTests
         using var response = await PostOddsAsync(client, raceId, request, fence);
         response.EnsureSuccessStatusCode();
 
-        var snapshots = await client.GetFromJsonAsync<List<RaceOddsSnapshot>>(
-            $"/api/v2/admin/races/{raceId}/odds-snapshot-records");
+        var snapshots = await GetSnapshotsAsync(client, raceId);
         Assert.IsNotNull(snapshots);
         Assert.HasCount(1, snapshots);
         Assert.HasCount(5, snapshots[0].Observations!);
@@ -92,11 +122,11 @@ public sealed class RaceOddsSnapshotApiTests
     }
 
     [TestMethod]
-    [DataRow("{\"observedAt\":\"2026-09-12T05:00:00Z\",\"entries\":null}")]
-    [DataRow("{\"observedAt\":\"2026-09-12T05:00:00Z\"}")]
-    [DataRow("{\"observedAt\":\"2026-09-12T05:00:00Z\",\"entries\":[],\"observations\":[]}")]
-    [DataRow("{\"observedAt\":\"2026-09-12T05:00:00Z\",\"entries\":[null]}")]
-    [DataRow("{\"observedAt\":\"2026-09-12T05:00:00Z\",\"entries\":[],\"observations\":[null]}")]
+    [DataRow("{\"snapshot\":{\"observedAt\":\"2026-09-12T05:00:00Z\",\"entries\":null}}")]
+    [DataRow("{\"snapshot\":{\"observedAt\":\"2026-09-12T05:00:00Z\"}}")]
+    [DataRow("{\"snapshot\":{\"observedAt\":\"2026-09-12T05:00:00Z\",\"entries\":[],\"observations\":[]}}")]
+    [DataRow("{\"snapshot\":{\"observedAt\":\"2026-09-12T05:00:00Z\",\"entries\":[null]}}")]
+    [DataRow("{\"snapshot\":{\"observedAt\":\"2026-09-12T05:00:00Z\",\"entries\":[],\"observations\":[null]}}")]
     public async Task EmptyOrMissingOdds_ReturnsValidationProblem(string json)
     {
         var (app, client) = await TestApplicationFactory.CreateAsync();
@@ -126,13 +156,13 @@ public sealed class RaceOddsSnapshotApiTests
         var fence = await GetFenceAsync(client, raceId);
         var requests = new[]
         {
-            new RecordRaceOddsSnapshotRequest(DateTimeOffset.UtcNow, [new(1, -1m)]),
-            new RecordRaceOddsSnapshotRequest(DateTimeOffset.UtcNow, [new(1, 2m), new(1, 3m)]),
-            new RecordRaceOddsSnapshotRequest(DateTimeOffset.UtcNow, [],
+            new CreateRaceOddsSnapshotInputDto(DateTimeOffset.UtcNow, [new(1, -1m)]),
+            new CreateRaceOddsSnapshotInputDto(DateTimeOffset.UtcNow, [new(1, 2m), new(1, 3m)]),
+            new CreateRaceOddsSnapshotInputDto(DateTimeOffset.UtcNow, [],
                 [new("Win", "1", 2m), new(" win ", " 1 ", 3m)]),
-            new RecordRaceOddsSnapshotRequest(DateTimeOffset.UtcNow, [], [new("Win", "99", 2m)]),
-            new RecordRaceOddsSnapshotRequest(DateTimeOffset.UtcNow, [], [new("Quinella", "1-99", 2m)]),
-            new RecordRaceOddsSnapshotRequest(DateTimeOffset.UtcNow, [], [new("BracketQuinella", "1-2", 2m)]),
+            new CreateRaceOddsSnapshotInputDto(DateTimeOffset.UtcNow, [], [new("Win", "99", 2m)]),
+            new CreateRaceOddsSnapshotInputDto(DateTimeOffset.UtcNow, [], [new("Quinella", "1-99", 2m)]),
+            new CreateRaceOddsSnapshotInputDto(DateTimeOffset.UtcNow, [], [new("BracketQuinella", "1-2", 2m)]),
         };
 
         foreach (var request in requests)
@@ -155,12 +185,11 @@ public sealed class RaceOddsSnapshotApiTests
         foreach (var observedAt in new[] { firstAt, firstAt.AddMinutes(1) })
         {
             using var response = await PostOddsAsync(client, raceId,
-                new RecordRaceOddsSnapshotRequest(observedAt, [new(1, 2.5m, 1)]), fence);
+                new CreateRaceOddsSnapshotInputDto(observedAt, [new(1, 2.5m, 1)]), fence);
             response.EnsureSuccessStatusCode();
         }
 
-        var snapshots = await client.GetFromJsonAsync<List<RaceOddsSnapshot>>(
-            $"/api/v2/admin/races/{raceId}/odds-snapshot-records");
+        var snapshots = await GetSnapshotsAsync(client, raceId);
         Assert.IsNotNull(snapshots);
         Assert.HasCount(2, snapshots);
         Assert.IsTrue(snapshots.All(x => x.Observations is [{ Market: "Win", Selection: "1", Value: 2.5m }]));
@@ -186,7 +215,7 @@ public sealed class RaceOddsSnapshotApiTests
         var beforeFence = await GetFenceAsync(client, raceId);
         var at = new DateTimeOffset(2026, 9, 12, 5, 0, 0, TimeSpan.Zero);
         using (var first = await PostOddsAsync(client, raceId,
-                   new RecordRaceOddsSnapshotRequest(at, [new(1, 2.5m), new(2, 3.5m)]), beforeFence))
+                   new CreateRaceOddsSnapshotInputDto(at, [new(1, 2.5m), new(2, 3.5m)]), beforeFence))
             Assert.AreEqual(HttpStatusCode.Created, first.StatusCode);
 
         using var swapped = await client.PostAsJsonAsync("/api/races/result-bulk", initialCard with
@@ -201,13 +230,13 @@ public sealed class RaceOddsSnapshotApiTests
         Assert.AreNotEqual(beforeFence.Fingerprint, afterFence.Fingerprint);
 
         using (var stale = await PostOddsAsync(client, raceId,
-                   new RecordRaceOddsSnapshotRequest(at.AddMinutes(1), [new(1, 2.2m)]), beforeFence))
+                   new CreateRaceOddsSnapshotInputDto(at.AddMinutes(1), [new(1, 2.2m)]), beforeFence))
             Assert.AreEqual(HttpStatusCode.Conflict, stale.StatusCode);
         using (var current = await PostOddsAsync(client, raceId,
-                   new RecordRaceOddsSnapshotRequest(at.AddMinutes(2), [new(1, 2.1m)]), afterFence))
+                   new CreateRaceOddsSnapshotInputDto(at.AddMinutes(2), [new(1, 2.1m)]), afterFence))
             Assert.AreEqual(HttpStatusCode.Created, current.StatusCode);
 
-        var snapshots = await client.GetFromJsonAsync<List<RaceOddsSnapshot>>($"/api/v2/admin/races/{raceId}/odds-snapshot-records");
+        var snapshots = await GetSnapshotsAsync(client, raceId);
         Assert.IsNotNull(snapshots);
         Assert.HasCount(2, snapshots);
         Assert.AreEqual(firstHorse, snapshots[0].Assignments!.Single(x => x.HorseNumber == 1).HorseId);
@@ -229,15 +258,15 @@ public sealed class RaceOddsSnapshotApiTests
         var fence = await GetFenceAsync(client, raceId);
         var at = new DateTimeOffset(2026, 9, 12, 5, 0, 0, TimeSpan.Zero);
         using (var unconfirmed = await PostOddsAsync(client, raceId,
-                   new RecordRaceOddsSnapshotRequest(at, [new(1, 2.5m)]), fence))
+                   new CreateRaceOddsSnapshotInputDto(at, [new(1, 2.5m)]), fence))
             Assert.AreNotEqual(HttpStatusCode.Accepted, unconfirmed.StatusCode);
 
         await RegisterEntryAsync(client, raceId, secondHorse, 2);
         fence = await GetFenceAsync(client, raceId);
         using (var unknown = await PostOddsAsync(client, raceId,
-                   new RecordRaceOddsSnapshotRequest(at, [new(9, 2.5m)]), fence))
+                   new CreateRaceOddsSnapshotInputDto(at, [new(9, 2.5m)]), fence))
             Assert.AreNotEqual(HttpStatusCode.Accepted, unknown.StatusCode);
-        var snapshots = await client.GetFromJsonAsync<List<RaceOddsSnapshot>>($"/api/v2/admin/races/{raceId}/odds-snapshot-records");
+        var snapshots = await GetSnapshotsAsync(client, raceId);
         Assert.IsNotNull(snapshots);
         Assert.IsEmpty(snapshots);
     }
@@ -280,17 +309,17 @@ public sealed class RaceOddsSnapshotApiTests
     {
         using var response = await client.GetAsync($"/api/v2/admin/races/{raceId}/entry-repair/assignment-fence-state");
         response.EnsureSuccessStatusCode();
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        return (document.RootElement.GetProperty("assignmentFingerprint").GetString()!,
-            document.RootElement.GetProperty("generation").GetInt64());
+        var envelope = await response.Content.ReadFromJsonAsync<GetRaceAssignmentFenceResponse>();
+        Assert.IsNotNull(envelope);
+        return (envelope.Fence.AssignmentFingerprint, envelope.Fence.Generation);
     }
 
     private static async Task<HttpResponseMessage> PostOddsAsync(HttpClient client, string raceId,
-        RecordRaceOddsSnapshotRequest request, (string Fingerprint, long Generation) fence)
+        CreateRaceOddsSnapshotInputDto request, (string Fingerprint, long Generation) fence)
     {
         using var message = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/admin/races/{raceId}/odds-snapshot-records")
         {
-            Content = JsonContent.Create(request),
+            Content = JsonContent.Create(new CreateRaceOddsSnapshotRequest(raceId, request)),
         };
         AddFence(message, fence);
         return await client.SendAsync(message);
@@ -300,5 +329,14 @@ public sealed class RaceOddsSnapshotApiTests
     {
         message.Headers.Add("X-Race-Assignment-Fingerprint", fence.Fingerprint);
         message.Headers.Add("X-Race-Hold-Generation", fence.Generation.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    private static async Task<IReadOnlyList<RaceOddsSnapshotDto>> GetSnapshotsAsync(HttpClient client, string raceId)
+    {
+        var response = await client.GetFromJsonAsync<ListRaceOddsSnapshotsResponse>(
+            $"/api/v2/admin/races/{raceId}/odds-snapshot-records");
+        Assert.IsNotNull(response);
+        Assert.IsNotNull(response.OddsSnapshots);
+        return response.OddsSnapshots;
     }
 }
