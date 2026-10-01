@@ -16,11 +16,11 @@ The administration page session and the administration API use different authent
 
 1. Record the user-visible failure-group URL, observation time, displayed error, affected target count, and latest attempt time.
 2. Read the failure group:
-   `GET /api/admin/collection/failure-notifications/groups/{groupKey}?page=1&pageSize=100`
+   `GET /api/v2/admin/collection/failure-notification-groups/{groupKey}?page=1&pageSize=100`
 3. For each returned target, read its complete bounded history:
-   `GET /api/admin/collection/resources/{type}/{provider}/{resourceId}/{definition}?requestHistoryPage=1&taskHistoryPage=1&attemptHistoryPage=1&historyPageSize=100`
+   `GET /api/v2/admin/collection/resources/{type}/{provider}/{resourceId}/definitions/{definition}?requestHistoryPage=1&taskHistoryPage=1&attemptHistoryPage=1&historyPageSize=100`
 4. For every distinct execution batch referenced by an attempt, read:
-   `GET /api/admin/collection/execution-batches/{executionBatchId}`
+   `GET /api/v2/admin/collection/execution-batches/{executionBatchId}`
 5. Correlate the trigger, resource, request, task, attempts, requested/final URL, HTTP status, page identification, Lambda request ID, execution batch, and neighboring batch tasks.
 6. Compare the API evidence with the handler and store code that produced and persisted the error. Derive routes and response contracts from the current source rather than guessing them:
    - `src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformEndpointExtensions.cs`

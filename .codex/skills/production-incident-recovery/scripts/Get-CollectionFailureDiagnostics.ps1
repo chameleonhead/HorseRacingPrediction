@@ -43,21 +43,24 @@ try {
     $plainApiKey = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($secretPointer)
 
     $escapedGroupKey = ConvertTo-EscapedPathSegment $FailureGroupKey
-    $groupPath = "/api/admin/collection/failure-notifications/groups/$escapedGroupKey?page=1&pageSize=100"
-    $group = Invoke-CollectionDiagnosticGet $groupPath
+    $groupPath = "/api/v2/admin/collection/failure-notification-groups/${escapedGroupKey}?page=1&pageSize=100"
+    $groupEnvelope = Invoke-CollectionDiagnosticGet $groupPath
+    $group = $groupEnvelope.page
 
     $resources = foreach ($item in $group.items) {
         $type = ConvertTo-EscapedPathSegment ([string] $item.resource.type)
         $provider = ConvertTo-EscapedPathSegment ([string] $item.resource.provider)
         $resourceId = ConvertTo-EscapedPathSegment ([string] $item.resource.id)
         $definition = ConvertTo-EscapedPathSegment ([string] $item.definition.value)
-        $resourcePath = "/api/admin/collection/resources/$type/$provider/$resourceId/$definition" +
+        $resourcePath = "/api/v2/admin/collection/resources/$type/$provider/$resourceId/definitions/$definition" +
             "?requestHistoryPage=1&taskHistoryPage=1&attemptHistoryPage=1&historyPageSize=$HistoryPageSize"
+
+        $resourceEnvelope = Invoke-CollectionDiagnosticGet $resourcePath
 
         [pscustomobject]@{
             Resource = $item.resource
             Definition = $item.definition
-            Detail = Invoke-CollectionDiagnosticGet $resourcePath
+            Detail = $resourceEnvelope.resource
         }
     }
 
@@ -68,7 +71,7 @@ try {
     )
     $executionBatches = foreach ($executionBatchId in $executionBatchIds) {
         $escapedBatchId = ConvertTo-EscapedPathSegment ([string] $executionBatchId)
-        Invoke-CollectionDiagnosticGet "/api/admin/collection/execution-batches/$escapedBatchId"
+        (Invoke-CollectionDiagnosticGet "/api/v2/admin/collection/execution-batches/$escapedBatchId").batch
     }
 
     [pscustomobject]@{
