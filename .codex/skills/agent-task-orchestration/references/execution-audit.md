@@ -40,7 +40,7 @@ Store one JSON file per attempt under `docs/changes/<change>/agent-audits/<attem
   "acceptanceCriteria": ["AC2", "AC4"],
   "route": {
     "tier": "worker",
-    "requestedModel": "gpt-5.6-luna",
+    "requestedModel": "gpt-6-luna",
     "observedModel": null,
     "observationSource": null,
     "modelTelemetryReason": "runtime did not expose worker model"
@@ -98,10 +98,10 @@ At dispatch, use `state: "active"`, leave outcome, review telemetry, and elapsed
 - `Verified` requires a completed attempt, successful verification, a decision, and no open linked material failure.
 - In orchestration schema 2, every task is linked from at least one AC, delegated audit `acceptanceCriteria` exactly matches that mapping, and lead-owned routing gives a concrete non-delegation reason.
 - Model-specific success or cost statistics include only runs whose observed model is independently available; a concrete requested ID alone proves intent, not execution.
-- Successful-outcome cost includes prompt preparation, worker execution, integration, AC-group review, conditional detail review, correction, re-verification, and audit overhead. Combine slices or promote the route when fragmentation worsens the total.
+- Successful-outcome cost includes prompt preparation, worker execution, integration, AC-group review, conditional detail review, correction, re-verification, and audit overhead. Combine slices or ask the Lead to reconsider the user-directed default when fragmentation worsens the total; Strong use remains limited to decision support and replanning.
 - Normal successful JSON stays below 2,500 UTF-8 bytes. Fixture task-plan audit additions stay below 20 nonblank lines.
 - Do not estimate tokens, duration, model identity, or currency.
-- Fewer than five comparable successful samples may inform a note but cannot change persistent routing defaults.
+- An explicit user-directed model/reasoning preference may change the persistent default without prior samples, provided it is recorded as a preference rather than an efficiency claim. At least five comparable successful samples are required before making an evidence-based efficiency recommendation, except when material security/data/scope/false-completion evidence requires earlier review or rollback.
 
 Validate with:
 

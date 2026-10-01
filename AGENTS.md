@@ -91,22 +91,22 @@ Execution Mode に移行した後は、
 ### Agent task orchestration
 
 - タスク状態の正規語彙は `Proposed`、`Runnable`、`In progress`、`Dependent`、`Externally blocked`、`Rejected with reason`、`Verified` とする。`Implemented` 判定前に、承認済みスコープの `Rejected with reason`、`In progress`、`Runnable`、`Dependent`、その他の未完了状態、または受け入れ基準を阻害する `Externally blocked` を残してはならない。`Externally blocked` は、承認済み受け入れ基準に影響しない明示的な除外フォローアップに限り残せる。
-- 最終応答前に、承認済みタスク・受け入れ基準・重要なレビュー指摘を完了証拠または真正な外部 blockerへ追跡できることを、高能力モデルの主担当がリスクに応じた粒度で確認する。監査で将来の作業にも影響するスキル不足・委譲失敗が実証された場合は、`learn-from-implementation-failures` の事実確認、最小修正、validator、再検証を実施し、結果を change record に記録する。単発の軽微な実装ミスは実装内で修正する。
+- 最終応答前に、承認済みタスク・受け入れ基準・重要なレビュー指摘を完了証拠または真正な外部 blockerへ追跡できることを、Leadがリスクに応じた粒度で確認する。最終受け入れの責任はLeadにあるが、通常のレビューや受け入れで高性能モデルを必須にしない。監査で将来の作業にも影響するスキル不足・委譲失敗が実証された場合は、`learn-from-implementation-failures` の事実確認、最小修正、validator、再検証を実施し、結果を change record に記録する。単発の軽微な実装ミスは実装内で修正する。
 
-- 通常の開発・調査で複数の作業へ分割できる場合は、`agent-task-orchestration` を適用する。適用対象は、入力、成果物、書込範囲、検証方法を明確に分離できる探索、調査、定型実装、テスト候補作成、文書棚卸しなどである。単一の短い作業や、分割による調整コストが成果を上回る作業には適用しない。
-- 主担当/Astra・Leadは、要件解釈、仕様・設計・public contract、タスク分割と依存関係、リスク判断、再試行・再作業・昇格判断、統合受け入れ、最終達成判定を保持する。委譲成果は自己申告だけで採用せず、独立した証拠で確認する。
-- タスクごとに owner、model tier、依存、write scope、verification、completion evidence、state を記録する。同一ファイルまたは共有状態を並列タスクが書き込まないよう、owner を一つにする。要件が曖昧、設計・移行・セキュリティ・データ損失リスクを含む、統合が複雑、完了条件を独立検証できない、または失敗を反復する場合は、主担当が実行するか上位モデルへ昇格する。
-- このリポジトリでは、適格な委譲済みcoding、investigation、exploration、test-authoring、verification、review-phase command execution、reproduction、corrective implementationの既定要求を `gpt-6-luna`、reasoning effort `high` とする。これはユーザー指定のrouting preferenceであり、Lunaの優越性や低コストを示す測定結果ではない。曖昧な要件、仕様・architecture・public contract、persistence/migration、concurrency、security/privacy、破壊的操作などの判断はAstra/Leadが保持し、安全性・適性に反する作業をLunaへ強制しない。
-- Astra/Leadは非コーディングの仕様・要件・architecture・リスク判断、分解、再試行・昇格判断、統合受け入れ、最終判定を主に担い、実行可能な調査、編集、テスト・lint・build・format、verification、再現、修正は可能な限りLuna/highへ委譲する。Astraの直接実行は例外とし、最小限の独立read-only/verification challenge、直接実行で総費用が実質的に下がる場合、Lunaが利用不能な場合、または直ちに必要な安全・診断証拠の取得に限る。Astraは欠陥を見つけただけで実装を引き取らない。
-- Lunaの成果が問題に直面した場合、承認範囲内で局所的・可逆的・独立検証可能なら、まずLuna/highによるfocused correction、狭めたタスク、または再調査を選ぶ。初回のfocused retryを基本とし、追加の試行は再作業コストが妥当な間だけ行う。反復失敗、境界を越えるリスクや判断、Lunaの利用不能、または総費用の悪化があればAstra/Leadが再分解・昇格を判断する。Lunaだけを使い続けることを求めない。
-- routingでは経過時間より成功結果あたりの総費用を優先する。速さだけを理由に並列化せず、並列化によるprompt、統合、レビュー、再作業を含む総費用がserialなLuna実行より下がる見込みがある場合に限り並列化する。
-- Luna/highの既定routeは、最初の5件の比較可能な適格task outcomeを観測期間とし、既存のaudit項目で初回受入、再試行、レビュー指摘、修正、検証失敗、成功結果あたりの総費用を記録する。重大なsecurity/data/scope/false-completion failure、または反復するretry・correction・gate failure・review burdenにより成功結果あたりの総費用が悪化した場合は、既定routeを再検討またはrollbackする。requested modelとobserved model、ならびに利用状況telemetryを区別し、取得できない値は未確認とする。
-- Lead/Astra tierを選ぶ前に、判断部分と確定済み判断に従う実装部分を分ける。単独verificationとexclusive write ownerを持ち、prompt・統合・review overheadを含む総費用が見合うsliceを委譲し、Lead保持には分離不能の具体理由を残す。
+- 通常の開発・調査では `agent-task-orchestration` の Router → Cheap Planner → Cheap Executor → Verifier の流れを使う。これらは論理的な役割であり、必ず別agentとして起動する必要はない。PlannerとExecutorは同じagentでもよい。
+- 適格な通常実装、調査、テスト作成、build・test・lint・format等の検証、局所修正の既定要求は `gpt-6-luna`、reasoning effort `high` とする。これはユーザー指定のrouting preferenceであり、優越性や低コストの実証ではない。高性能モデルは重要な仕様・設計判断と再計画を担うStrong Plannerに限り、通常実装のexecutorとして使わない。
+- Leadは要件、承認、public contract、architecture、risk判断、タスク分割、再計画判断、統合と最終受け入れに責任を持つ。委譲成果は自己申告だけで採用せず、独立証拠で確認する。タスクの複雑さをファイル数だけで決めない。
+- コード編集前にCheap Plannerは対象と類似実装、命名・DI・依存関係、テスト、適用設計資料を調べ、目的、調査結果、変更予定ファイル、手順、残る仕様上の不明点、検証コマンドを短く記録する。Repositoryで分かることを質問せず、結果に重要な影響を及ぼす仕様だけを質問する。
+- Cheap Executorは承認済み計画と範囲に従い、不要なリファクタリング、新しい抽象化、ついでの改善を加えない。範囲が膨らむときは該当箇所の編集を止めて内部で再計画し、独立した承認済み作業を続ける。要件、外部契約、受け入れ基準、material riskを変える場合は `Proposed` に戻す。
+- Verifierは計画で指定した機械的なbuild、test、formatter、lint、type、architecture check等を実行し、その証拠を完了条件とする。LLMの自己評価だけで検証を通過させない。
+- Verifier失敗時はCheapが原因を分類し、局所的な実装ミスやRepository調査不足を修正して該当コマンドを再実行する。異なる原因の失敗数だけで昇格しない。同じ根本原因がおよそ2回続いたときRouterが再評価するが、自動昇格はしない。RouterはPlanner完了後、検証失敗後、範囲拡大時、同原因の反復時に再実行する。
+- Strong Plannerは重大な曖昧さ、設計矛盾、重要なarchitecture/public-contract tradeoff、またはCheap向けへ分解できない大きさの場合に限る。Strong Plannerは整理・再分解した実行可能な順序付き指示をCheap Executorへ戻し、自ら実装しない。Cheapが利用不可でもStrongによる通常実装へ黙って切り替えず、実行を外部blockerとして記録する。
+- 並列化は入力、依存、書込範囲、検証が分離でき、統合・レビュー・再作業を含む総費用が見合う場合だけ行う。単一ファイルや共有状態のownerは一つとし、速さだけで並列化しない。
 - worker指示にはAC ID、frozen decision/invariant、変更禁止判断、exact write scope、反例、実装自由度、Leadへ戻す境界、検証と成果形式を含める。reviewは既存AC↔Task対応をgroupとして統合成果を一回確認し、gate failure、設計変更、scope/ownership逸脱、risk/独立証拠不足、過大なretry/review burdenの場合だけtask/diffへ掘り下げる。
 - coding workerには作成・更新するtest、実装中に回す最小test、handoff前の関連regression、期待結果を指示する。test変更が不要なら理由と既存の独立証拠を示す。workerは指定testを実行して成功結果を返すまで完了扱いにせず、実行不能ならblockerを明示してtaskを未完了のまま主担当へ戻す。
 - delegated coding taskはchange record配下のagent auditへ、requested/observed model、observation source、token availability、task difficulty、patch attribution、quality/scope gates、独立反証、retry/promotion、escaped defectを記録する。observed modelやtokenを取得できない場合は未確認とし、requested値から推測しない。
 - 成功結果当たりのcostにはworkerだけでなく、automated reviewer、利用者が提供した場合のhuman active review、指摘対応、corrective implementation、promotion、再検証、audit overheadを含める。人間単価やprovider料金根拠がない値を通貨へ換算しない。同程度のtaskと帰属可能なpatchだけを比較する。
-- persistentなmodel/reasoning/budget/task-boundary改善は、Luna/highの既定routeについては上記5件の比較可能なtask outcomeを観測してから評価し、それ以外は反復する比較可能evidenceまたは重大なsecurity/data/scope/false-completion failureに基づき、一段階の変更、validator、独立forward test、観測期間、rollback条件を持たせる。自発的にrecommendationと承認済み範囲内の再指示・再分割・昇格は行えるが、未承認scopeへ拡張しない。
+- ユーザー指定によるmodel/reasoning defaultの変更は、効率の実証的主張なしに適用できる。効率改善の結論には、最初の5件以上の比較可能な成功結果と既存auditの証拠を使う。重大なsecurity/data/scope/false-completion failure、または反復するretry・correction・gate failure・review burdenがあれば既定routeを再検討またはrollbackする。requested modelとobserved model、利用状況telemetryを区別し、取得できない値は未確認とする。
 - DDD の Design/task-split、Pre-implementation、Checkpoint、Final review を各 change record で実施し、設計・分割・統合・完了判定の判断を記録する。
 - change recordの承認依頼前に、エージェントは要件衝突、設計・データ・セキュリティ、外部制約、移行・並行性・復旧、検証blind spot、cost/review工数、caller assumption、却下案から、承認判断または成否を変えるmaterial concernを能動的に提示する。各懸念は根拠、影響、推奨処置、代替、残存risk、AC/task/反例、agent position、user dispositionを持ち、`Resolved in design`、`Accepted risk`、`Excluded follow-up`、`Open decision`で管理する。`Open decision`または根拠あるagent objectionが未解決なら承認・実装へ進まない。material concernがない小変更は確認観点と短い結論だけでよい。
 - 人とエージェントの合意は、エージェントの無条件同意や利用者への責任移転ではない。安全性・受け入れ基準と衝突する場合は根拠と代替を示し、未合意のまま進めない。可逆的な好みは利用者の明示判断を尊重する。実装中に新しいmaterial design concernが出た場合は`Proposed`へ戻し、承認範囲内の局所欠陥はclosure itemと反例testを追加して自律修正する。
@@ -122,3 +122,7 @@ In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the re
 
 If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is the user's decision.
 <!-- CODEGRAPH_END -->
+
+## Workflow change record
+
+The cheap-first workflow policy change and its review evidence are tracked in [20261001_cheap-first-agent-workflow](docs/changes/20261001_cheap-first-agent-workflow/README.md).

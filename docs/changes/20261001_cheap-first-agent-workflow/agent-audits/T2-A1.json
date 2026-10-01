@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261001_cheap-first-agent-workflow",
+  "taskId": "T2",
+  "attemptId": "T2-A1",
+  "state": "completed",
+  "taskDifficulty": "low",
+  "acceptanceCriteria": ["AC1", "AC3", "AC4", "AC5", "AC6", "AC7", "AC8"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "requestedReasoningEffort": "high",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime does not expose worker model"
+  },
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "runtime does not expose per-worker usage"},
+  "scope": ["AGENTS.md"],
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "review usage and active time were not exposed"},
+  "overhead": {"availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "effort telemetry was not captured"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "reliable effort telemetry was not exposed"},
+  "startRevision": "b479029f72fb5177b0e7884503ac5a63be890e36",
+  "endRevisionOrPatch": "working-tree patch: AGENTS.md cheap-first routing policy",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Focused text search confirms prior generic high-tier promotion and five-sample policy wording is removed from the active AGENTS orchestration section; diff contains only the approved canonical policy replacement and proposal link.",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

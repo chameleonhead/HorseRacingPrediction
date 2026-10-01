@@ -9,27 +9,25 @@ Use this skill when a task has separable workstreams and delegation could reduce
 
 ## Operating model
 
-Treat model labels as capability/cost tiers, not fixed product names. Select the least capable tier that can meet the task's risk and ambiguity:
+Router, Cheap Planner, Cheap Executor, Verifier, and Strong Planner are logical responsibilities; do not spawn five agents by default. Cheap Planner and Cheap Executor may be the same agent. Router and Verifier use Cheap by default; Router does not normally edit code. The Lead owns requirements, approval, risk decisions, integration, and final acceptance, but these responsibilities do not require a high-capability model for routine implementation or review.
 
-- **Lead tier**: owns requirements, design, decomposition, integration, and final review. Use for ambiguous work, cross-cutting changes, architecture, risk decisions, and conflict resolution.
-- **Worker tier**: handles bounded, low-ambiguity research, code discovery, mechanical implementation, or test authoring under a written contract.
-- **Review tier**: independently checks the lead's plan or worker output when correctness, security, compatibility, or regression risk justifies it. It may be the lead tier or a separate capable tier.
+For eligible coding, investigation, test authoring, mechanical verification, and local correction in this repository, request `gpt-6-luna` with reasoning effort `high`. This is the user-directed default, not an empirical claim about price or quality. Record the concrete requested model at dispatch and keep observed model, observation source, and usage telemetry separate; use null plus a reason when unavailable. Do not substitute a different model tier because a task spans multiple files.
 
-Do not hard-code model IDs as permanent policy or infer pricing. At dispatch, however, record the concrete requested model ID rather than `runtime-default` or an abstract worker name so the run can be audited. Record the selected tier, measured usage if available, elapsed time, retries, and delegated result so routing can be tuned later.
-
-For coding, prefer the lowest-cost eligible route, not the lowest-cost model unconditionally. A frozen, narrow, independently verifiable task with no architecture, public-contract, persistence/migration, concurrency, security/privacy, or destructive decision may start with the current cost-sensitive coding model. In this repository that is configured as `low_cost_coding_worker`; resolve current availability at execution time. Bounded multi-file work may use the balanced worker tier. The lead retains ambiguous or high-risk work and all final acceptance.
+Use a high-capability model only as Strong Planner for material requirement ambiguity that repository investigation cannot resolve, an architecture/public-contract decision with important trade-offs, a conflict between requirements and existing design, or decomposition that still leaves an unexecutable task. Strong Planner analyzes and returns ordered, bounded tasks for Cheap Executor and does not implement ordinary code. If the cheap model is unavailable, record ordinary execution as externally blocked rather than silently handing implementation to Strong.
 
 ## Required lead workflow
 
 1. Define the outcome, constraints, acceptance criteria, and risk level before delegation.
    Before approval, surface material routing, caller-assumption, telemetry, attribution, verification, cost, and review-burden concerns in the governing concern ledger. Convert resolved concerns into acceptance criteria and counterexamples; do not wait for the user to ask whether concerns exist.
-2. Before assigning a lead tier, separate decision work from execution under frozen decisions. Split only work with a clear boundary, exclusive write owner, and independent verification, and only when prompt, integration, and review overhead is likely to remain worthwhile. For each work item record: `id`, objective, owner, tier, dependencies, read scope, write scope, deliverable, verification command or evidence, and completion state. Record a concrete non-delegation reason for every remaining lead-owned stream.
-   In a change record, record the planned executable agent role and selection reason during design, before approval, not only when dispatching. Distinguish the coordinating lead, read-only explorer, bounded coding worker, and independent reviewer when applicable; do not require all roles for every task. Assign who executes tests and who accepts the evidence, identify parallel versus serialized ownership, and state the condition for promotion to the lead. At dispatch replace role-level intent with the concrete requested model and actual agent ID; never prefill observed execution or success. Child tasks retain a link to the parent's completion criteria, so creating or handing off a task cannot close the parent outcome.
-3. Decide whether items can run in parallel. Parallelize only when they have disjoint write scopes and no ordering dependency. Serialize shared-file edits, schema/API changes, migrations, and integration work. Treat generated files, migration snapshots, shared contracts, and formatters that rewrite common files as shared write scopes even when workers edit different source files. Assign them one owner and record when a reviewed contract is frozen before dependent workers begin.
-4. Send each worker a complete prompt using the contract below. A worker must not infer missing authority from repository access.
-5. Integrate compatible slices, then review them by the existing acceptance-criterion-to-task mapping. Closely related criteria may form one review group. Review each group once against its integrated attributable diff and evidence; inspect individual tasks or diffs only when an escalation trigger is present. The lead resolves conflicts and owns the final integrated change.
-6. Record routing results: successful outputs, rework/retries, escalations, measured usage/cost when available, and elapsed time. Evaluate cost per successful outcome, not token price alone.
-7. For delegated coding, create an execution audit using [the audit schema and gates](references/execution-audit.md). Record requested and observed models separately. Include reviewer usage, active review effort, corrections, re-verification, and audit overhead in successful-outcome cost.
+2. Router classifies the task as cheap execution, cheap re-planning/splitting, a necessary specification question, or Strong Planner. Choose by ambiguity, risk, design authority, and independent verifiability, not by file count. A conventional multi-file change may stay cheap when its pattern and contract are clear.
+3. Before any code edit, Cheap Planner inspects the repository: target location, analogous implementation, naming and DI patterns, test layout, libraries, project dependencies, and API/DTO structure as relevant. Repository questions are investigated, not asked.
+4. Cheap Planner writes a concise execution plan with these fields: purpose; investigation findings; files to change; ordered implementation steps; unresolved specification questions; and verification commands with expected results. Before asking, consult AGENTS, design documents, analogous code, and safe defaults within approved behavior. Ask only when a material specification choice remains, subject to Execution Mode's narrower question gates. Do not start implementation before this plan exists.
+5. Cheap Executor follows the plan and its exact write scope, preferring existing patterns. Do not add unrelated refactoring, abstractions, or adjacent improvements. If scope grows, pause edits in the affected slice and re-plan internally. Continue independent approved slices. Seek renewed approval only if a requirement, public contract, acceptance criterion, or material risk decision changes.
+6. Verifier runs the planned mechanical checks: applicable build, unit/integration tests, formatter, lint, type check, or architecture test. A task cannot pass on an LLM's self-assessment; record command and outcome. An unavailable command is a blocker, not a passing result.
+7. After planning, after a verification failure, when scope expands, and when the same cause recurs, Router re-evaluates the route. On failure, Cheap first classifies the cause and investigates repository facts. Fix local compile, assertion, null, API-use, pattern, and implementation errors on the cheap route and rerun the failed gate. Different causes do not accumulate toward promotion. About two attempts with the same cause trigger Router reassessment, not automatic escalation.
+8. Send a case to Strong Planner only when it meets the operating-model criteria above. Strong returns concrete ordered tasks with frozen decisions and checks to Cheap Executor; if a cheap executor is unavailable, keep the implementation blocked. Do not use Strong for routine coding because it may be faster.
+9. For each work item record `id`, objective, owner, model tier, dependencies, read/write scope, deliverable, verification, completion evidence, and state. Use exclusive owners for overlapping files. Parallelize only when independent slices save total prompt, integration, review, and rework effort.
+10. Integrate slices and review against the existing AC-to-task groups. Lead resolves conflicts and accepts the integrated outcome based on executable evidence. For delegated work, record requested and observed models separately and use [the audit schema and gates](references/execution-audit.md); include reviewer usage, corrections, re-verification, and audit overhead when available.
 
 ## Audit-first recording gate
 
@@ -66,28 +64,31 @@ Every delegated prompt must state:
 - frozen decisions and invariants, decisions the worker must not change, and at least one relevant counterexample;
 - the implementation freedom that remains and the exact boundary at which the worker returns the decision to the lead;
 - expected output format, including changed files and unresolved risks;
-- escalation triggers: ambiguity, missing access, conflicting requirements, unsafe operation, failed verification, or scope expansion;
+- escalation boundary: a material ambiguity remains after repository investigation, frozen requirements conflict, the same root cause persists through focused corrections, an unsafe operation is implicated, or scope would change an acceptance criterion; an ordinary failed check alone is not a Strong Planner trigger;
 - whether parallel work is allowed and what other work it must not overlap.
 
 If any required item is unavailable, the worker should stop at the boundary and report the missing information rather than inventing it. A coding worker does not report completion until it has created or updated the contracted tests and run the contracted commands successfully. If execution is genuinely unavailable, it reports the exact blocker and leaves the task incomplete for lead classification; source inspection alone is not a passing test result.
 
 ## Suitability and routing gates
 
-Delegate to a worker tier when the task is bounded, reversible, locally verifiable, and has low ambiguity. Keep it with the lead when it changes architecture, public contracts, security/privacy, data integrity, user-visible acceptance, or requires interpreting conflicting requirements. A research worker may gather sources and summarize them, but the lead verifies source quality and applies the conclusion.
+Route ordinary execution to the requested cheap model after task-specific repository inspection and planning. Keep specification, approval, material architecture/public-contract, security/privacy, persistence, concurrency, destructive, and conflicting-requirement decisions with the Lead; use Strong Planner only if a difficult decision must be resolved or tasks must be made executable. The decision owner and executor may be different agents.
 
-Before starting, mark each item `Runnable` only if its write scope is disjoint from active items and its dependencies are satisfied. Otherwise mark it `Dependent` or serialize it. After completion, mark it `Verified` only when the stated evidence passes; a prose claim without evidence remains `In progress` until classified as `Dependent`, `Externally blocked`, or `Rejected with reason`.
+Before starting, mark each item `Runnable` only if its write scope is disjoint from active items and dependencies are satisfied. Otherwise mark it `Dependent` or serialize it. After completion, mark it `Verified` only when the stated mechanical evidence passes; a prose claim without evidence remains `In progress` until classified as `Dependent`, `Externally blocked`, or `Rejected with reason`.
 
-## Escalation and review
+## Failure classification and route reassessment
 
-Escalate to the lead tier when any of the following occurs:
+After a failed verification, Cheap Planner records the failed command, symptom, and cause category before correction. First check for a missed existing pattern, factory, DI registration, dependency, or test setup. Keep these cases on the cheap route:
 
-- the worker reports ambiguity, a missing dependency, or a requirement conflict;
-- verification fails after one focused correction, or the worker needs to broaden scope;
-- the change touches a public API, persistence/data migration, authentication/authorization, security, or irreversible action;
-- independent reviewers disagree on correctness or acceptance;
-- rework is more expensive than reassignment based on observed effort.
+- compile, namespace, or type errors;
+- a local assertion or test setup error;
+- null handling, API-call, or implementation omissions;
+- repository-understanding gaps that further inspection can resolve.
 
-At minimum, perform a lead review at decomposition, before integration of worker changes, and after final verification. The default unit after integration is an acceptance criterion or a closely related criterion group defined by the existing AC-to-task mapping, not each microtask. Check the approved AC and concern dispositions, attributable integrated diff/scope, executable real-path evidence, invariants and non-regression, audit/rework metrics, and open failures. Drill down to task/diff review only when evidence fails or conflicts, a frozen decision changed, scope/ownership is violated, risk-sensitive implementation lacks proof, independent evidence is missing, or retry/review burden exceeds its boundary. Resolve the cause, rerun the group evidence, and make the acceptance decision at group level. For high-risk work, add an independent review with no access to the worker's conclusion where practical.
+Different-cause failures do not accumulate toward promotion. About two focused failures with the same root cause are a Router reassessment point, not an automatic Strong escalation. Continue cheap correction where the cause remains local and independently verifiable. Strong Planner is warranted when evidence shows an unresolved design conflict, material ambiguity, architecture/public-contract limitation, or a task that cannot be reduced further. Strong Planner returns a revised task contract; it does not implement it.
+
+Run Router initially, after the short plan, after any verifier failure, when scope expands, and when a root cause repeats. Router chooses cheap continuation, cheap re-planning/splitting, a specific specification question, or Strong Planner. A material approved-design change returns the change record to `Proposed`; internal task/scope refinement that preserves approved acceptance does not require a user question.
+
+The Lead reviews at decomposition, before integration, and after final verification as accountable owner; this does not require a high-capability reviewer. Review the integrated attributable diff and executable evidence by AC group, including invariants, non-regression, scope, and open failures. Drill down only when group evidence fails/conflicts, a frozen decision or scope changes, or risk-sensitive independent proof is missing. Resolve the cause and rerun the affected gate before acceptance.
 
 ## Outcome and cost measurement
 
@@ -98,11 +99,11 @@ Use observable gates for routing decisions:
 - **Rework gate**: count retries, escalations, and lead fixes attributable to the worker.
 - **Efficiency gate**: compare elapsed time and measured usage/cost to the lead-only baseline when available. Track `cost per successful outcome = total measured delegated + review cost / outcomes passing quality and scope gates`; if cost data is unavailable, record that limitation and use effort/rework as a proxy.
 
-Keep a worker tier only when it passes quality and scope gates with acceptable rework and improves outcome cost or throughput. Otherwise narrow the task, strengthen the prompt, serialize the work, or promote it to the lead/review tier. These are routing decisions, not permanent model rankings.
+Keep the user-directed cheap route as the default; use outcome data to improve task boundaries, prompts, sequencing, and verification. Rework by itself does not automatically promote implementation to Strong. If repeated comparable evidence shows that a route harms successful-outcome quality or total effort, the Lead may re-plan the task or recommend revising the user-directed route under the recorded rollback conditions.
 
-Count the full cost of a successful result: task/prompt preparation, worker usage, integration, acceptance-group review, conditional detail review, automated review, human active review time when supplied, retries, lead corrections, promotions, re-verification, and audit overhead. Keep unavailable units separate; do not invent currency conversion or labor rates. Compare routes only across similar task difficulty and attributable patches. If fragmentation makes this total worse, combine slices or promote the route. Fewer than five comparable successes may inform a note but may not change a persistent default.
+Count the full cost of a successful result: task/prompt preparation, worker usage, integration, acceptance-group review, conditional detail review, automated review, human active review time when supplied, retries, lead corrections, any planning escalation, re-verification, and audit overhead. Keep unavailable units separate; do not invent currency conversion or labor rates. Compare routes only across similar task difficulty and attributable patches. If fragmentation makes this total worse, combine slices. Do not infer model, token, time, or cost data that telemetry does not provide.
 
-Persistent routing, prompt, reasoning, or budget improvements require repeated comparable evidence, one material security/data/scope/false-completion failure, or at least five successful samples. Change one bounded factor, validate it, run an independent forward test, define an observation period and rollback condition, and record escaped defects. Generate recommendations autonomously, but do not expand approved scope or silently rewrite unrelated policy.
+An explicit user-directed model/reasoning preference may be applied without five prior samples, but must not be described as a measured efficiency improvement. An efficiency recommendation requires at least five comparable successful outcomes or other approval-changing evidence such as a material security/data/scope/false-completion failure. Record one bounded adjustment, independent forward test, observation period, rollback conditions, and escaped defects. Recommendations do not authorize silently changing the approved policy.
 
 ## Handoff record
 
