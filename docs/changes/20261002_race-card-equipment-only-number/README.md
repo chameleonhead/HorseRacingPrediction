@@ -1,6 +1,6 @@
 # 装具表示だけの出馬表馬番セルを未確定として扱う
 
-- Status: Proposed
+- Status: Approved
 - Change record schema: 2
 - Owner: Main/Lead
 - Created: 2026-10-02
@@ -94,8 +94,8 @@ material concernは上記で設計上解消しており、Open decisionはない
 
 | ID | Task | Owner | Model tier | Routing | Depends on | Write scope | Verification | Completion evidence | Audit | Result metrics | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | 専用馬番解析と実DOM形状の回帰テストを実装 | Bounded coding worker | Worker tier | Luna/high — frozen parser rule、局所・可逆・独立検証可能 | Approval | `src/HorseRacingPrediction.Scraping/Jra/Parsing/RaceCardPageParser.cs`; `tests/HorseRacingPrediction.Scraping.Tests/Parsing/RaceCardPublicationTests.cs` | 対象test classとScraping tests | attributable diff、成功コマンド、agent audit | planned T1-A1 | unavailable; retries 0; corrections 0; reviews 0 | Proposed |
-| T2 | 統合結果を反証レビューし、全gateを検証して記録 | Main/Lead | Lead tier | Lead — 独立受入・統合・最終判定は委譲しない | T1 | このchange recordのみ | counterexample確認、関連test/build/format/diff/status | Verification recordとfinal review | none | unavailable; retries 0; corrections 0; reviews 0 | Proposed |
+| T1 | 専用馬番解析と実DOM形状の回帰テストを実装 | Bounded coding worker | Worker tier | Luna/high — frozen parser rule、局所・可逆・独立検証可能 | Approval | `src/HorseRacingPrediction.Scraping/Jra/Parsing/RaceCardPageParser.cs`; `tests/HorseRacingPrediction.Scraping.Tests/Parsing/RaceCardPublicationTests.cs` | 対象test classとScraping tests | attributable diff、成功コマンド、[T1-A1 audit](agent-audits/T1-A1.json) | T1-A1 | unavailable; retries 0; corrections 0; reviews 0 | Runnable |
+| T2 | 統合結果を反証レビューし、全gateを検証して記録 | Main/Lead | Lead tier | Lead — 独立受入・統合・最終判定は委譲しない | T1 | このchange recordのみ | counterexample確認、関連test/build/format/diff/status | Verification recordとfinal review | none | unavailable; retries 0; corrections 0; reviews 0 | Dependent |
 
 T1 workerはテスト作成と最小・関連regressionを実行する。T2 Leadがworker自己申告とは独立にテスト、差分、スコープを確認する。T1が共通snapshotter、公開契約、永続化へ拡張を要する場合、またはfocused correction後も検証不能の場合はLeadへ戻す。
 
@@ -103,7 +103,8 @@ T1 workerはテスト作成と最小・関連regressionを実行する。T2 Lead
 
 - **Design and task-split review (2026-10-02, Main/Lead):** 公式HTML、現行parser、snapshot投影、既存回帰テストを入力として確認。意味判断はLeadが保持し、凍結した局所実装だけをworkerへ委譲する。書込scopeは直列かつ排他的。AC↔task↔verificationは全件対応。
 - **Concern and agreement review (2026-10-02, Main/Lead):** caller assumption、外部DOM、誤null化、回帰blind spot、データ・セキュリティ・移行・復旧・cost/review burdenを確認。C1～C4を設計で解消し、Open decisionなし。ユーザー承認待ち。
-- **Pre-implementation review:** 承認後に記録する。
+- **User approval (2026-10-02):** ユーザーが提示した設計、AC1～AC4、C1～C4の処置を「お願いします」と明示承認。
+- **Pre-implementation review (2026-10-02, Main/Lead):** T1をRunnable、T2をT1依存のDependentと分類。T1のexclusive write scope、既存の数字+装具・AccessibleName・取消/除外・garbage反例、最小test class、Scraping regressionをworker契約へ固定した。共通snapshotter、公開契約、永続化へ変更が必要ならLeadへ戻す。
 - **Checkpoint review:** T1統合後にACグループ単位で記録する。
 - **Final review:** 全ACとtaskの証拠を照合後に記録する。
 

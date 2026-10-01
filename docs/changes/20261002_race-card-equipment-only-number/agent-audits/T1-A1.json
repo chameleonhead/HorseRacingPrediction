@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261002_race-card-equipment-only-number",
+  "taskId": "T1",
+  "attemptId": "T1-A1",
+  "state": "active",
+  "taskDifficulty": "low",
+  "acceptanceCriteria": ["AC1", "AC2", "AC3", "AC4"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime has not reported observed worker model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime has not exposed per-worker usage"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.Scraping/Jra/Parsing/RaceCardPageParser.cs",
+    "tests/HorseRacingPrediction.Scraping.Tests/Parsing/RaceCardPublicationTests.cs"
+  ],
+  "review": null,
+  "overhead": null,
+  "elapsed": null,
+  "startRevision": "bc31dd0a12faaa40c9fb44e91652db3326c9728d",
+  "endRevisionOrPatch": null,
+  "outcome": null
+}
