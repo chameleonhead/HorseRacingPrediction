@@ -125,9 +125,9 @@ public sealed class SharedCollectionIdentityTests
         (await http.PostAsJsonAsync("/api/races", new CreateRaceRequest(new(date, "TOKYO", 1, "旧ID", id)))).EnsureSuccessStatusCode();
         foreach (var course in new[] { "東京", "Tokyo", "tokyo" })
         {
-            var resolved = await http.PostAsJsonAsync("/api/identity/race", new ResolveRaceIdentityRequest(date, course, 1));
+            var resolved = await http.PostAsJsonAsync("/api/identity/race", new ResolveRaceIdentityRequest(new(date, course, 1)));
             resolved.EnsureSuccessStatusCode();
-            Assert.AreEqual(id, (await resolved.Content.ReadFromJsonAsync<ResolvedIdentityDto>())!.Id);
+            Assert.AreEqual(id, (await resolved.Content.ReadFromJsonAsync<ResolveRaceIdentityResponse>())!.Identity.Id);
         }
         var store = app.Services.GetRequiredService<CollectionPlatformStore>();
         await store.RegisterDefinitionAsync(new("race-detail"), "Race", CollectionResourceType.Race, CollectionDefinitionRevisions.RaceDetail, "test", true);
@@ -161,7 +161,7 @@ public sealed class SharedCollectionIdentityTests
         var date = new DateOnly(2037, 10, 1);
         foreach (var course in new[] { "東京", "TOKYO" })
             (await http.PostAsJsonAsync("/api/races", new CreateRaceRequest(new(date, course, 2, "duplicate", "race-" + Guid.NewGuid())))).EnsureSuccessStatusCode();
-        Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync("/api/identity/race", new ResolveRaceIdentityRequest(date, "Tokyo", 2))).StatusCode);
+        Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync("/api/identity/race", new ResolveRaceIdentityRequest(new(date, "Tokyo", 2)))).StatusCode);
     }
 
     [TestMethod]
@@ -175,23 +175,23 @@ public sealed class SharedCollectionIdentityTests
         var legacy = DeterministicIdGenerator.BuildEntityId("horse", DeterministicIdGenerator.NormalizeKey(raw));
         (await http.PostAsJsonAsync("/api/horses", SubjectRequestFactory.RegisterHorse(raw, raw, "M", new(2024, 1, 1), legacy))).EnsureSuccessStatusCode();
         Assert.AreEqual(DeterministicIdGenerator.BuildHorseId(raw), DeterministicIdGenerator.BuildHorseId("ABC"));
-        var resolved = await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("ABC", BirthDate: new(2024, 1, 1)));
+        var resolved = await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest(new("ABC", BirthDate: new(2024, 1, 1))));
         resolved.EnsureSuccessStatusCode();
-        Assert.AreEqual(legacy, (await resolved.Content.ReadFromJsonAsync<ResolvedIdentityDto>())!.Id);
+        Assert.AreEqual(legacy, (await resolved.Content.ReadFromJsonAsync<ResolveHorseIdentityResponse>())!.Identity.Id);
         (await http.PutAsJsonAsync($"/api/horses/{legacy}", new UpdateHorseProfileRequest { HorseId = legacy, Horse = new("ABC", "ABC", "M", new(2024, 1, 1)) })).EnsureSuccessStatusCode();
-        var afterNameCorrection = await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("ABC"));
+        var afterNameCorrection = await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest(new("ABC")));
         afterNameCorrection.EnsureSuccessStatusCode();
-        Assert.AreEqual(legacy, (await afterNameCorrection.Content.ReadFromJsonAsync<ResolvedIdentityDto>())!.Id);
-        Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("ABC", BirthDate: new(2023, 1, 1)))).StatusCode);
-        Assert.AreEqual(HttpStatusCode.UnprocessableEntity, (await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("ABC", "https://www.jra.go.jp/JRADB/accessU.html?CNAME=other"))).StatusCode);
+        Assert.AreEqual(legacy, (await afterNameCorrection.Content.ReadFromJsonAsync<ResolveHorseIdentityResponse>())!.Identity.Id);
+        Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest(new("ABC", BirthDate: new(2023, 1, 1))))).StatusCode);
+        Assert.AreEqual(HttpStatusCode.UnprocessableEntity, (await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest(new("ABC", "https://www.jra.go.jp/JRADB/accessU.html?CNAME=other")))).StatusCode);
         (await http.PostAsJsonAsync("/api/horses", SubjectRequestFactory.RegisterHorse("ABC", "ABC", "M", new(2020, 1, 1), DeterministicIdGenerator.BuildHorseId("ABC")))).EnsureSuccessStatusCode();
-        var ambiguous = await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("ABC"));
+        var ambiguous = await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest(new("ABC")));
         Assert.AreEqual(HttpStatusCode.UnprocessableEntity, ambiguous.StatusCode);
         Assert.AreEqual("AmbiguousHorseIdentity", (await ambiguous.Content.ReadFromJsonAsync<Dictionary<string, string>>())!["code"]);
         var collisionId = DeterministicIdGenerator.BuildHorseId("ABC-DEF");
         (await http.PostAsJsonAsync("/api/horses", SubjectRequestFactory.RegisterHorse("ABC-DEF", "ABC-DEF", null, null, collisionId))).EnsureSuccessStatusCode();
         Assert.AreEqual(collisionId, DeterministicIdGenerator.BuildHorseId("ABCDEF"));
-        Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("ABCDEF"))).StatusCode);
+        Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest(new("ABCDEF")))).StatusCode);
     }
 
     [TestMethod]
@@ -207,13 +207,13 @@ public sealed class SharedCollectionIdentityTests
         var path = $"/api/v2/admin/subjects/Horse/{id}/profile";
         var profile = new JraSubjectProfileDto("Horse", "マル外 サンプル", source, source,
             new() { ["生年月日"] = "2024年1月1日" }, DateTimeOffset.UtcNow);
-        (await http.PutAsJsonAsync(path, profile)).EnsureSuccessStatusCode();
-        (await http.PutAsJsonAsync(path, profile with { SourceIdentity = source + "&extra=1" })).EnsureSuccessStatusCode();
-        var resolved = await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("サンプル", source));
+        (await http.PutAsJsonAsync(path, new PutSubjectProfileRequest("Horse", id, profile))).EnsureSuccessStatusCode();
+        (await http.PutAsJsonAsync(path, new PutSubjectProfileRequest("Horse", id, profile with { SourceIdentity = source + "&extra=1" }))).EnsureSuccessStatusCode();
+        var resolved = await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest(new("サンプル", source)));
         resolved.EnsureSuccessStatusCode();
-        Assert.AreEqual(id, (await resolved.Content.ReadFromJsonAsync<ResolvedIdentityDto>())!.Id);
-        Assert.AreEqual(HttpStatusCode.UnprocessableEntity, (await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("サンプル"))).StatusCode);
-        Assert.AreEqual(HttpStatusCode.Conflict, (await http.PutAsJsonAsync(path, profile with { SourceIdentity = source.Replace("123456", "654321"), SourceUrl = source.Replace("123456", "654321") })).StatusCode);
-        Assert.AreEqual(HttpStatusCode.BadRequest, (await http.PutAsJsonAsync(path, profile with { SourceUrl = source.Replace("www.jra.go.jp", "example.com") })).StatusCode);
+        Assert.AreEqual(id, (await resolved.Content.ReadFromJsonAsync<ResolveHorseIdentityResponse>())!.Identity.Id);
+        Assert.AreEqual(HttpStatusCode.UnprocessableEntity, (await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest(new("サンプル")))).StatusCode);
+        Assert.AreEqual(HttpStatusCode.Conflict, (await http.PutAsJsonAsync(path, new PutSubjectProfileRequest("Horse", id, profile with { SourceIdentity = source.Replace("123456", "654321"), SourceUrl = source.Replace("123456", "654321") }))).StatusCode);
+        Assert.AreEqual(HttpStatusCode.BadRequest, (await http.PutAsJsonAsync(path, new PutSubjectProfileRequest("Horse", id, profile with { SourceUrl = source.Replace("www.jra.go.jp", "example.com") }))).StatusCode);
     }
 }

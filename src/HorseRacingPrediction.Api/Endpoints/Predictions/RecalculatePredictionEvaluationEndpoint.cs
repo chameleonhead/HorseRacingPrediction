@@ -15,15 +15,18 @@ internal static class RecalculatePredictionEvaluationEndpoint
                     [SwaggerOperation(Summary = "Recalculate prediction evaluation", Description = "Recalculates evaluation of a prediction ticket with updated data")]
         async (string predictionTicketId, RecalculatePredictionEvaluationRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        if (request.Evaluation is not { } evaluation)
+                            return Results.BadRequest(new[] { "Command execution failed." });
+
                         var command = new RecalculatePredictionEvaluationCommand(
                             new PredictionTicketId(predictionTicketId),
-                            request.RaceId,
-                            request.EvaluatedAt,
-                            request.EvaluationRevision,
-                            request.HitTypeCodes,
-                            request.ScoreSummary,
-                            request.ReturnAmount,
-                            request.Roi);
+                            evaluation.RaceId,
+                            evaluation.EvaluatedAt,
+                            evaluation.EvaluationRevision,
+                            evaluation.HitTypeCodes,
+                            evaluation.ScoreSummary,
+                            evaluation.ReturnAmount,
+                            evaluation.Roi);
 
                         var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                         return result.IsSuccess

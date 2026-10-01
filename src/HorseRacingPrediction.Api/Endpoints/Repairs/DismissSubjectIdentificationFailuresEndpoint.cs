@@ -40,7 +40,10 @@ internal static class DismissSubjectIdentificationFailuresEndpoint
                             return Results.Conflict(new[] { "再収集が開始された対象が含まれています。再読込してください。" });
 
                         return Results.Ok(new DismissSubjectIdentificationFailuresResponse(
-                            result.SelectedCount, result.DismissedCount, result.AlreadyClosedCount));
-                    });
+                            new SubjectIdentificationDismissalDto(result.SelectedCount, result.DismissedCount, result.AlreadyClosedCount)));
+                    })
+                    .Produces<DismissSubjectIdentificationFailuresResponse>(StatusCodes.Status200OK)
+                    .Produces(StatusCodes.Status400BadRequest)
+                    .Produces(StatusCodes.Status409Conflict);
     }
 }

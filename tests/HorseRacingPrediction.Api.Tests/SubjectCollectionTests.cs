@@ -24,10 +24,10 @@ public sealed class SubjectCollectionTests
         const string horseUrl = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=public-horse-id";
         var profile = new JraSubjectProfileDto("Horse", "エンジャムメント", horseUrl, horseUrl,
             new() { ["生年月日"] = "2024年4月11日", ["性別"] = "牝", ["馬主名"] = "新馬主", ["生産牧場"] = "新生産者", ["父"] = "父馬", ["母"] = "母馬(母の父：母父馬)", ["毛色"] = "栗毛" }, DateTimeOffset.UtcNow);
-        (await client.PutAsJsonAsync(path, profile)).EnsureSuccessStatusCode();
+        (await client.PutAsJsonAsync(path, new PutSubjectProfileRequest("Horse", id, profile))).EnsureSuccessStatusCode();
         var next = profile with { Fields = new() { ["生年月日"] = "2024年4月11日", ["毛色"] = "鹿毛" } };
-        (await client.PutAsJsonAsync(path, next)).EnsureSuccessStatusCode();
-        var saved = (await client.GetFromJsonAsync<JraSubjectProfileDto>($"/api/v2/admin/subjects/Horse/{id}/profiles/current"))!;
+        (await client.PutAsJsonAsync(path, new PutSubjectProfileRequest("Horse", id, next))).EnsureSuccessStatusCode();
+        var saved = (await client.GetFromJsonAsync<GetSubjectProfileResponse>($"/api/v2/admin/subjects/Horse/{id}/profiles/current"))!.Profile;
         Assert.AreEqual("鹿毛", saved.Fields["毛色"]); Assert.AreEqual("父馬", saved.Fields["父"]);
         var horse = (await client.GetFromJsonAsync<GetHorseProfileResponse>($"/api/horses/{id}"))!.Horse;
         Assert.AreEqual("新馬主", horse.OwnerName);
@@ -36,9 +36,12 @@ public sealed class SubjectCollectionTests
         Assert.AreEqual("母馬", horse.DamName);
         Assert.AreEqual("母父馬", horse.DamsireName);
         Assert.AreEqual("鹿毛", horse.CoatColor);
-        Assert.AreEqual(HttpStatusCode.Conflict, (await client.PutAsJsonAsync(path, profile with { SourceIdentity = horseUrl + "different", SourceUrl = horseUrl + "different" })).StatusCode);
-        Assert.AreEqual(HttpStatusCode.Conflict, (await client.PutAsJsonAsync(path, profile with { Fields = new() { ["生年月日"] = "2023年4月11日" } })).StatusCode);
-        Assert.AreEqual(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync(path, profile with { Name = "別の馬" })).StatusCode);
+        Assert.AreEqual(HttpStatusCode.Conflict, (await client.PutAsJsonAsync(path, new PutSubjectProfileRequest("Horse", id,
+            profile with { SourceIdentity = horseUrl + "different", SourceUrl = horseUrl + "different" }))).StatusCode);
+        Assert.AreEqual(HttpStatusCode.Conflict, (await client.PutAsJsonAsync(path, new PutSubjectProfileRequest("Horse", id,
+            profile with { Fields = new() { ["生年月日"] = "2023年4月11日" } }))).StatusCode);
+        Assert.AreEqual(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync(path,
+            new PutSubjectProfileRequest("Horse", id, profile with { Name = "別の馬" }))).StatusCode);
     }
 
     [TestMethod]
@@ -50,7 +53,7 @@ public sealed class SubjectCollectionTests
         (await client.PostAsJsonAsync("/api/trainers", SubjectRequestFactory.RegisterTrainer("中舘 英二", "中舘英二", null, trainerId))).EnsureSuccessStatusCode();
         var profile = new JraSubjectProfileDto("Trainer", "中舘 英二", "trainer-key", "https://www.jra.go.jp/JRADB/accessC.html",
             new() { ["生年月日"] = "1965年7月22日", ["所属"] = "美浦", ["免許取得年"] = "2015年" }, DateTimeOffset.UtcNow);
-        (await client.PutAsJsonAsync($"/api/v2/admin/subjects/Trainer/{trainerId}/profile", profile)).EnsureSuccessStatusCode();
+        (await client.PutAsJsonAsync($"/api/v2/admin/subjects/Trainer/{trainerId}/profile", new PutSubjectProfileRequest("Trainer", trainerId, profile))).EnsureSuccessStatusCode();
         Assert.AreEqual("美浦", (await client.GetFromJsonAsync<GetTrainerProfileResponse>($"/api/trainers/{trainerId}"))!.Trainer.AffiliationCode);
         var raceId = "race-" + Guid.NewGuid(); var date = new DateOnly(2026, 9, 6);
         (await client.PostAsJsonAsync("/api/races", new CreateRaceRequest(new(date, "NAKAYAMA", 6, "旧名", raceId)))).EnsureSuccessStatusCode();
@@ -76,13 +79,13 @@ public sealed class SubjectCollectionTests
             new() { ["生年月日"] = "1980年3月27日", ["所属"] = "美浦" }, DateTimeOffset.UtcNow);
 
         var response = await client.PutAsJsonAsync(
-            $"/api/v2/admin/subjects/Trainer/{trainerId}/profile", profile);
+            $"/api/v2/admin/subjects/Trainer/{trainerId}/profile", new PutSubjectProfileRequest("Trainer", trainerId, profile));
 
         response.EnsureSuccessStatusCode();
-        var saved = await client.GetFromJsonAsync<JraSubjectProfileDto>(
+        var saved = await client.GetFromJsonAsync<GetSubjectProfileResponse>(
             $"/api/v2/admin/subjects/Trainer/{trainerId}/profiles/current");
         Assert.IsNotNull(saved);
-        Assert.AreEqual("黒岩 陽一", saved.Name);
+        Assert.AreEqual("黒岩 陽一", saved.Profile.Name);
     }
     [TestMethod]
     public async Task HistoryResult_AttachesNewRaceToOriginHorseAndRejectsWrongHorse()

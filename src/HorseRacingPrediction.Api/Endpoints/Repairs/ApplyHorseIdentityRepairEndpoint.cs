@@ -103,8 +103,11 @@ internal static class ApplyHorseIdentityRepairEndpoint
                             disabled += suppression.CancelledTasks;
                             running += suppression.RunningCancellationRequests;
                         }
-                        return Results.Ok(new ApplyHorseIdentityRepairResponse(HorseIdentityRepairId, applied,
-                            completed.Length, disabled, running));
-                    });
+                        return Results.Ok(new ApplyHorseIdentityRepairResponse(new HorseIdentityRepairApplicationDto(
+                            HorseIdentityRepairId, applied, completed.Length, disabled, running)));
+                    })
+                    .Produces<ApplyHorseIdentityRepairResponse>(StatusCodes.Status200OK)
+                    .Produces(StatusCodes.Status400BadRequest)
+                    .Produces(StatusCodes.Status409Conflict);
     }
 }

@@ -303,14 +303,14 @@ public sealed class HorseIdentityRepairSettingsComponentTests
                             "RaceEntryが残っています。", "同名馬", "同名馬", "別レース", 1)
                     }
                     : [];
-                return Ok(new HorseIdentityRepairPreviewDto(
-                    "20260913-jra-horse-identity-repair", candidates));
+                return Ok(new GetHorseIdentityRepairResponse(new HorseIdentityRepairPreviewDto(
+                    "20260913-jra-horse-identity-repair", candidates)));
             }
             var body = await request.Content!.ReadFromJsonAsync<ApplyHorseIdentityRepairRequest>(
                 cancellationToken: cancellationToken);
             AppliedCandidateIds = body!.CandidateIds.ToArray();
-            return Ok(new ApplyHorseIdentityRepairResponse(
-                "20260913-jra-horse-identity-repair", 1, 0, 2, 0));
+            return Ok(new ApplyHorseIdentityRepairResponse(new HorseIdentityRepairApplicationDto(
+                "20260913-jra-horse-identity-repair", 1, 0, 2, 0)));
         }
     }
 
@@ -323,20 +323,20 @@ public sealed class HorseIdentityRepairSettingsComponentTests
         {
             var path = request.RequestUri?.AbsolutePath ?? string.Empty;
             if (request.Method == HttpMethod.Get && path.EndsWith("subject-name-normalization", StringComparison.Ordinal))
-                return Ok(new SubjectNameNormalizationPageDto([
+                return Ok(new GetSubjectNameNormalizationResponse(new SubjectNameNormalizationPageDto([
                     new(CollectionResourceType.Trainer, "trainer-1", "村山 明（栗東）", "むらやまあきら", "村山 明", "村山明",
-                        true, true, "Ready", null, [], "manifest-1")], 1, 1, 25));
+                        true, true, "Ready", null, [], "manifest-1")], 1, 1, 25)));
             if (request.Method == HttpMethod.Post && path.EndsWith("subject-name-normalization/apply", StringComparison.Ordinal))
             {
                 var body = await request.Content!.ReadFromJsonAsync<ApplySubjectNameNormalizationRequest>(
                     cancellationToken: cancellationToken);
                 Applied = body?.Items.Single().ManifestToken == "manifest-1";
-                return Ok(new SubjectNameNormalizationApplyResultDto(1, 1, 0, 0,
-                    [new(CollectionResourceType.Trainer, "trainer-1", "Applied", "名称を補正しました。")]));
+                return Ok(new ApplySubjectNameNormalizationResponse(new SubjectNameNormalizationApplyResultDto(1, 1, 0, 0,
+                    [new(CollectionResourceType.Trainer, "trainer-1", "Applied", "名称を補正しました。")])));
             }
             if (path.EndsWith("subject-identification", StringComparison.Ordinal))
-                return Ok(new SubjectIdentificationRepairPreviewDto([]));
-            return Ok(new HorseIdentityRepairPreviewDto("20260913-jra-horse-identity-repair", []));
+                return Ok(new GetSubjectIdentificationRepairResponse(new SubjectIdentificationRepairPreviewDto([])));
+            return Ok(new GetHorseIdentityRepairResponse(new HorseIdentityRepairPreviewDto("20260913-jra-horse-identity-repair", [])));
         }
     }
 
@@ -361,8 +361,8 @@ public sealed class HorseIdentityRepairSettingsComponentTests
                 return Ok(progress);
             }
             if (path.EndsWith("subject-identification", StringComparison.Ordinal))
-                return Ok(new SubjectIdentificationRepairPreviewDto([]));
-            return Ok(new HorseIdentityRepairPreviewDto("20260913-jra-horse-identity-repair", []));
+                return Ok(new GetSubjectIdentificationRepairResponse(new SubjectIdentificationRepairPreviewDto([])));
+            return Ok(new GetHorseIdentityRepairResponse(new HorseIdentityRepairPreviewDto("20260913-jra-horse-identity-repair", [])));
         }
     }
 
@@ -370,7 +370,7 @@ public sealed class HorseIdentityRepairSettingsComponentTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken) => Task.FromResult(Ok(
-            new HorseIdentityRepairPreviewDto("20260913-jra-horse-identity-repair", [])));
+            new GetHorseIdentityRepairResponse(new HorseIdentityRepairPreviewDto("20260913-jra-horse-identity-repair", []))));
     }
 
     private sealed class FailureHandler : HttpMessageHandler
@@ -402,25 +402,25 @@ public sealed class HorseIdentityRepairSettingsComponentTests
                         Subject("trainer-1", CollectionResourceType.Trainer, "RetryReady", true, null, null, 3),
                         Subject("owner-1", CollectionResourceType.Owner, "RetryReady", true, null, null, 4)
                     };
-                return Ok(new SubjectIdentificationRepairPreviewDto(
-                    items.Where(x => !Dismissed.Contains(x.NotificationId)).ToArray()));
+                return Ok(new GetSubjectIdentificationRepairResponse(new SubjectIdentificationRepairPreviewDto(
+                    items.Where(x => !Dismissed.Contains(x.NotificationId)).ToArray())));
             }
             if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.EndsWith("subject-identification/execute", StringComparison.Ordinal) == true)
             {
                 var body = await request.Content!.ReadFromJsonAsync<ExecuteSubjectIdentificationRepairRequest>(cancellationToken: cancellationToken);
                 Executed.AddRange(body!.Items);
-                return Accepted(new ExecuteSubjectIdentificationRepairResponse(body.Items.Count, body.Items.Count, 0,
-                    body.Items.Select(x => Guid.NewGuid()).ToArray()));
+                return Accepted(new ExecuteSubjectIdentificationRepairResponse(new SubjectIdentificationExecutionDto(
+                    body.Items.Count, body.Items.Count, 0, body.Items.Select(x => Guid.NewGuid()).ToArray())));
             }
             if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.EndsWith("subject-identification/dismiss", StringComparison.Ordinal) == true)
             {
                 var body = await request.Content!.ReadFromJsonAsync<DismissSubjectIdentificationFailuresRequest>(
                     cancellationToken: cancellationToken);
                 Dismissed.AddRange(body!.NotificationIds);
-                return Ok(new DismissSubjectIdentificationFailuresResponse(
-                    body.NotificationIds.Count, body.NotificationIds.Count, 0));
+                return Ok(new DismissSubjectIdentificationFailuresResponse(new SubjectIdentificationDismissalDto(
+                    body.NotificationIds.Count, body.NotificationIds.Count, 0)));
             }
-            return Ok(new HorseIdentityRepairPreviewDto("20260913-jra-horse-identity-repair", []));
+            return Ok(new GetHorseIdentityRepairResponse(new HorseIdentityRepairPreviewDto("20260913-jra-horse-identity-repair", [])));
         }
 
         private static SubjectIdentificationRepairCandidateDto Subject(string id, CollectionResourceType type,
@@ -435,8 +435,8 @@ public sealed class HorseIdentityRepairSettingsComponentTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken) => Task.FromResult(
                 request.RequestUri?.AbsolutePath.EndsWith("subject-identification", StringComparison.Ordinal) == true
-                    ? Ok(new SubjectIdentificationRepairPreviewDto([]))
-                    : Ok(new HorseIdentityRepairPreviewDto("20260913-jra-horse-identity-repair", [])));
+                    ? Ok(new GetSubjectIdentificationRepairResponse(new SubjectIdentificationRepairPreviewDto([])))
+                    : Ok(new GetHorseIdentityRepairResponse(new HorseIdentityRepairPreviewDto("20260913-jra-horse-identity-repair", []))));
     }
 
     private sealed class SubjectFailureHandler : HttpMessageHandler

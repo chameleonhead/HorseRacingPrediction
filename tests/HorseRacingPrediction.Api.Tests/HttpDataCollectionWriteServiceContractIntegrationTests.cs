@@ -5,15 +5,21 @@ using EventFlow.EntityFramework;
 using EventFlow.EntityFramework.EventStores;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Collector.Http;
+using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Contracts.Common;
 using HorseRacingPrediction.Contracts.Horses;
 using HorseRacingPrediction.Contracts.Identity;
 using HorseRacingPrediction.Contracts.Jockeys;
+using HorseRacingPrediction.Contracts.Memos;
+using HorseRacingPrediction.Contracts.Predictions;
 using HorseRacingPrediction.Contracts.Races;
 using HorseRacingPrediction.Contracts.Trainers;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Hosting.Server;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -60,9 +66,9 @@ public sealed class HttpDataCollectionWriteServiceContractIntegrationTests
             var jockeyName = $"Missing jockey {token}";
             var trainerName = $"Missing trainer {token}";
             using var identityResponse = await http.PostAsJsonAsync(
-                "/api/identity/horse", new ResolveHorseIdentityRequest(horseName));
+                "/api/identity/horse", new ResolveHorseIdentityRequest(new(horseName)));
             identityResponse.EnsureSuccessStatusCode();
-            var resolved = await identityResponse.Content.ReadFromJsonAsync<ResolvedIdentityDto>();
+            var resolved = (await identityResponse.Content.ReadFromJsonAsync<ResolveHorseIdentityResponse>())?.Identity;
             Assert.IsNotNull(resolved);
             var jockeyId = $"jockey-{Guid.NewGuid():D}";
             var trainerId = $"trainer-{Guid.NewGuid():D}";
@@ -224,6 +230,93 @@ public sealed class HttpDataCollectionWriteServiceContractIntegrationTests
             Assert.AreEqual(21.5m, raceResponse.Race.WeatherObservations.Single().TemperatureCelsius);
             Assert.AreEqual("GOOD", raceResponse.Race.TrackConditionObservations.Single().TurfConditionCode);
             Assert.AreEqual("FAST", raceResponse.Race.TrackConditionObservations.Single().DirtConditionCode);
+        }
+    }
+
+    [TestMethod]
+    public async Task PublicMemoAdapters_CreateConflictUpdateAndReadPersistedMemoThroughApiServer()
+    {
+        var (app, http) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using (http)
+        {
+            http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+            var api = new AdminApiClient(http,
+                new AdminApiBaseAddressResolver(app.Services.GetRequiredService<IServer>()),
+                Options.Create(new ApiKeyOptions { HeaderName = "X-Api-Key", Key = TestApplicationFactory.TestApiKey }));
+            var raceId = $"race-{Guid.NewGuid():D}";
+            var memoId = $"memo-{Guid.NewGuid():D}";
+            var created = await api.CreateMemoAsync(new CreateMemoRequest(new CreateMemoInputDto(
+                "adapter-test", "RaceNote", "initial content", DateTimeOffset.UtcNow,
+                [new MemoSubjectDto("Race", raceId)], MemoId: memoId)));
+            Assert.IsTrue(created.Success, string.Join(";", created.Errors));
+            Assert.AreEqual(memoId, created.Value);
+
+            var writer = new HttpMemoWriteService(http);
+            Assert.AreEqual(memoId, await writer.CreateOrUpdateRaceMemoAsync(
+                raceId, "RaceNote", "updated by collector", "adapter-test", memoId));
+
+            var memos = await api.GetMemosBySubjectAsync("Race", raceId);
+            var memo = memos.Single(x => x.MemoId == memoId);
+            Assert.AreEqual("updated by collector", memo.Content);
+            Assert.AreEqual("RaceNote", memo.MemoType);
+            CollectionAssert.AreEquivalent(new[] { raceId }, memo.Subjects.Select(x => x.SubjectId).ToArray());
+        }
+    }
+
+    [TestMethod]
+    public async Task PublicPredictionWriteAdapter_CreatesMarksAddsRationaleAndFinalizesPersistedTicket()
+    {
+        var (app, http) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using (http)
+        {
+            http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+            var token = Guid.NewGuid().ToString("N");
+            var raceId = $"race-{Guid.NewGuid():D}";
+            var horseId = $"horse-{Guid.NewGuid():D}";
+            var horseName = $"Adapter prediction horse {token}";
+            (await http.PostAsJsonAsync("/api/races", new CreateRaceRequest(new(
+                new DateOnly(2045, 5, 20), "TOKYO", 8, $"Prediction adapter race {token}", raceId))))
+                .EnsureSuccessStatusCode();
+            Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync(
+                "/api/horses", SubjectRequestFactory.RegisterHorse(horseName, horseName, "M",
+                    new DateOnly(2021, 4, 12), horseId))).StatusCode);
+            Assert.AreEqual(HttpStatusCode.OK, (await http.PostAsJsonAsync($"/api/races/{raceId}/card/publish",
+                new PublishRaceCardRequest(new(1)) { RaceId = raceId })).StatusCode);
+            var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, horseId);
+            Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
+                new RegisterEntryRequest(new RegisterEntryInputDto(
+                    horseId, 1, null, null, 1, 56m, "M", 5, 451m, 1m,
+                    EntryId: entryId, HorseName: horseName))
+                { RaceId = raceId })).StatusCode);
+            var context = await http.GetFromJsonAsync<GetRacePredictionContextResponse>($"/api/races/{raceId}/context");
+            Assert.IsNotNull(context);
+
+            var writer = new HttpPredictionWriteService(http);
+            var ticketId = await writer.CreateBoundPredictionTicketAsync(
+                raceId, "Human", "adapter-test", 0.83m, "persisted collector ticket",
+                context.Context.EntryAssignmentFingerprint);
+            await writer.AddPredictionMarkAsync(ticketId, entryId, "◎", 1, 91.5m, "distinct persisted mark");
+            await writer.AddPredictionRationaleAsync(ticketId, "Horse", horseId, "SPEED_INDEX", "117",
+                "persisted rationale");
+            await writer.FinalizePredictionTicketAsync(ticketId);
+
+            var persisted = await http.GetFromJsonAsync<GetPredictionTicketResponse>($"/api/predictions/{ticketId}");
+            Assert.IsNotNull(persisted);
+            Assert.AreEqual(ticketId, persisted.PredictionTicket.PredictionTicketId);
+            Assert.AreEqual(raceId, persisted.PredictionTicket.RaceId);
+            Assert.AreEqual(TicketStatus.Finalized, persisted.PredictionTicket.TicketStatus);
+            var mark = persisted.PredictionTicket.Marks.Single();
+            Assert.AreEqual(entryId, mark.EntryId);
+            Assert.AreEqual("◎", mark.MarkCode);
+            Assert.AreEqual(91.5m, mark.Score);
+            Assert.AreEqual("distinct persisted mark", mark.Comment);
+            using var db = app.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext();
+            var ticketEvents = await db.Set<EventEntity>().Where(x => x.AggregateId == ticketId)
+                .Select(x => x.Data).ToArrayAsync();
+            Assert.IsTrue(ticketEvents.Any(x => x.Contains("SPEED_INDEX", StringComparison.Ordinal)
+                && x.Contains("persisted rationale", StringComparison.Ordinal)));
         }
     }
 }

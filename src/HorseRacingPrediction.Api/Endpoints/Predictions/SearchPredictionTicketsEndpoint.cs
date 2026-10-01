@@ -93,7 +93,7 @@ internal static class SearchPredictionTicketsEndpoint
                             });
                         }
 
-                        return Results.Ok(ToPagedResponse(
+                        var paged = ToPagedResponse(
                             sorted,
                             page,
                             pageSize,
@@ -117,11 +117,14 @@ internal static class SearchPredictionTicketsEndpoint
                                 x.Marks.Count,
                                 race?.RaceName, race?.RaceDate, race?.RacecourseCode, race?.RaceNumber,
                                 primaryHorseId is null ? null : horseNames.GetValueOrDefault(primaryHorseId));
-                            }));
+                            });
+                        return Results.Ok(new SearchPredictionTicketsResponse(
+                            paged.Items,
+                            new PaginationDto(paged.Page, paged.PageSize, paged.TotalCount, paged.TotalPages)));
                     })
                     .WithName("SearchPredictionTickets")
                     .WithTags("Prediction API")
-                    .Produces<PagedResponse<PredictionTicketSummaryDto>>(StatusCodes.Status200OK)
+                    .Produces<SearchPredictionTicketsResponse>(StatusCodes.Status200OK)
                     .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest);
     }
 }

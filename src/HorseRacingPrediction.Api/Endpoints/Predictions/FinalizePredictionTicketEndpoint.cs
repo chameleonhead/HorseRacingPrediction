@@ -1,6 +1,7 @@
 using EventFlow;
 using HorseRacingPrediction.Application.Commands.Predictions;
 using HorseRacingPrediction.Domain.Predictions;
+using HorseRacingPrediction.Contracts.Predictions;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace HorseRacingPrediction.Api.Endpoints.Predictions;
@@ -11,8 +12,9 @@ internal static class FinalizePredictionTicketEndpoint
     {
         group.MapPost("/predictions/{predictionTicketId}/finalize",
                     [SwaggerOperation(Summary = "Finalize prediction ticket", Description = "Moves prediction ticket from Draft to Finalized")]
-        async (string predictionTicketId, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async ([AsParameters] FinalizePredictionTicketRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        var predictionTicketId = request.PredictionTicketId;
                         var command = new FinalizePredictionTicketCommand(new PredictionTicketId(predictionTicketId));
                         var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                         return result.IsSuccess

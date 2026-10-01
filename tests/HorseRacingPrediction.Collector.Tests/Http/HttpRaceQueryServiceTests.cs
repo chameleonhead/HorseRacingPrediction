@@ -16,16 +16,19 @@ public sealed class HttpRaceQueryServiceTests
         {
             Content = JsonContent.Create(new
             {
-                predictionTicketId = "prediction-001",
-                raceId = "race-001",
-                predictorType = "ApiOnlyPredictor",
-                predictorId = "api-only-v1",
-                confidenceScore = 80.5m,
-                summaryComment = "テスト予想",
-                predictedAt = DateTimeOffset.Parse("2026-07-09T00:00:00Z"),
-                marks = new[]
+                predictionTicket = new
+                {
+                    predictionTicketId = "prediction-001",
+                    raceId = "race-001",
+                    predictorType = "ApiOnlyPredictor",
+                    predictorId = "api-only-v1",
+                    confidenceScore = 80.5m,
+                    summaryComment = "テスト予想",
+                    predictedAt = DateTimeOffset.Parse("2026-07-09T00:00:00Z"),
+                    marks = new[]
                 {
                     new { entryId = "entry-01", markCode = "◎", predictedRank = 1, score = 90m, comment = "本命" }
+                }
                 }
             })
         });
@@ -94,7 +97,9 @@ public sealed class HttpRaceQueryServiceTests
         var handler = new StubHttpMessageHandler();
         handler.Add(HttpMethod.Get, "/api/memos/by-subject/Race/race-001", new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = JsonContent.Create(new[]
+            Content = JsonContent.Create(new
+            {
+                memos = new[]
             {
                 new
                 {
@@ -113,6 +118,7 @@ public sealed class HttpRaceQueryServiceTests
                         new { linkId = "link-001", linkType = "web", title = "Article", url = (string?)null, storageKey = "storage-001" }
                     }
                 }
+            }
             })
         });
 

@@ -15,9 +15,12 @@ internal static class WithdrawPredictionTicketEndpoint
                     [SwaggerOperation(Summary = "Withdraw prediction ticket", Description = "Withdraws a prediction ticket with an optional reason")]
         async (string predictionTicketId, WithdrawPredictionTicketRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        if (request.Withdrawal is not { } withdrawal)
+                            return Results.BadRequest(new[] { "Command execution failed." });
+
                         var command = new WithdrawPredictionTicketCommand(
                             new PredictionTicketId(predictionTicketId),
-                            request.Reason);
+                            withdrawal.Reason);
 
                         var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                         return result.IsSuccess

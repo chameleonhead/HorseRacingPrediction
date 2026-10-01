@@ -78,10 +78,10 @@ public sealed class SubjectNameNormalizationEndpointsTests
 
         var firstResponse = await _client.PostAsJsonAsync(
             "/api/admin/repairs/subject-name-normalization/apply", request);
-        var first = await firstResponse.Content.ReadFromJsonAsync<SubjectNameNormalizationApplyResultDto>();
+        var first = (await firstResponse.Content.ReadFromJsonAsync<ApplySubjectNameNormalizationResponse>())!.Normalization;
         var secondResponse = await _client.PostAsJsonAsync(
             "/api/admin/repairs/subject-name-normalization/apply", request);
-        var second = await secondResponse.Content.ReadFromJsonAsync<SubjectNameNormalizationApplyResultDto>();
+        var second = (await secondResponse.Content.ReadFromJsonAsync<ApplySubjectNameNormalizationResponse>())!.Normalization;
         var profile = await _client.GetFromJsonAsync<GetTrainerProfileResponse>($"/api/trainers/{trainerId}");
 
         Assert.AreEqual(HttpStatusCode.OK, firstResponse.StatusCode);
@@ -106,7 +106,7 @@ public sealed class SubjectNameNormalizationEndpointsTests
             "/api/admin/repairs/subject-name-normalization/apply",
             new ApplySubjectNameNormalizationRequest(
                 [new(CollectionResourceType.Trainer, trainerId, candidate.ManifestToken)]));
-        var result = await response.Content.ReadFromJsonAsync<SubjectNameNormalizationApplyResultDto>();
+        var result = (await response.Content.ReadFromJsonAsync<ApplySubjectNameNormalizationResponse>())!.Normalization;
 
         Assert.AreEqual(1, result!.SkippedCount);
         StringAssert.Contains(result.Items.Single().Message, "検索後に名称が変更");
@@ -125,8 +125,8 @@ public sealed class SubjectNameNormalizationEndpointsTests
     }
 
     private async Task<SubjectNameNormalizationPageDto> SearchAsync(CollectionResourceType type, string query) =>
-        (await _client.GetFromJsonAsync<SubjectNameNormalizationPageDto>(
-            $"/api/admin/repairs/subject-name-normalization?subjectType={type}&query={Uri.EscapeDataString(query)}"))!;
+        (await _client.GetFromJsonAsync<GetSubjectNameNormalizationResponse>(
+            $"/api/admin/repairs/subject-name-normalization?subjectType={type}&query={Uri.EscapeDataString(query)}"))!.Page;
 
     private async Task RegisterHorseAsync(string id, string display, string normalized) =>
         (await _client.PostAsJsonAsync("/api/horses",

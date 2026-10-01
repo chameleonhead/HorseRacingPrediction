@@ -16,8 +16,9 @@ internal static class GetPredictionTicketEndpoint
     {
         group.MapGet("/predictions/{predictionTicketId}",
                     [SwaggerOperation(Summary = "Get prediction ticket", Description = "Returns prediction ticket read model")]
-        async (string predictionTicketId, IQueryProcessor queryProcessor, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
+        async ([AsParameters] GetPredictionTicketRequest request, IQueryProcessor queryProcessor, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
                     {
+                        var predictionTicketId = request.PredictionTicketId;
                         var query = new ReadModelByIdQuery<PredictionTicketReadModel>(predictionTicketId);
                         var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
 
@@ -46,11 +47,11 @@ internal static class GetPredictionTicketEndpoint
                             (HorseRacingPrediction.Contracts.Predictions.EvaluationStatus)(int)readModel.EvaluationStatus,
                             race?.RaceName, race?.RaceDate, race?.RacecourseCode, race?.RaceNumber);
 
-                        return Results.Ok(response);
+                        return Results.Ok(new GetPredictionTicketResponse(response));
                     })
                     .WithName("GetPredictionTicket")
                     .WithTags("Prediction API")
-                    .Produces<PredictionTicketDto>(StatusCodes.Status200OK)
+                    .Produces<GetPredictionTicketResponse>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

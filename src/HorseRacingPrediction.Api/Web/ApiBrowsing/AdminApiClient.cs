@@ -140,16 +140,26 @@ public sealed partial class AdminApiClient
     public Task<AdminApiResult> UpdateOwnerAsync(string ownerId, UpdateOwnerRequest request, CancellationToken cancellationToken = default)
         => SendAsync(HttpMethod.Put, $"/api/owners/{Uri.EscapeDataString(ownerId)}", request, cancellationToken);
 
-    public Task<PagedResponse<PredictionTicketSummaryDto>?> SearchPredictionsAsync(SearchPredictionTicketsRequest request, CancellationToken cancellationToken = default)
-        => GetJsonAsync<PagedResponse<PredictionTicketSummaryDto>>($"/api/predictions?{BuildQueryString(request)}", cancellationToken);
+    public async Task<PagedResponse<PredictionTicketSummaryDto>?> SearchPredictionsAsync(SearchPredictionTicketsRequest request, CancellationToken cancellationToken = default)
+    {
+        var response = await GetJsonAsync<SearchPredictionTicketsResponse>(
+            $"/api/predictions?{BuildQueryString(request)}", cancellationToken).ConfigureAwait(false);
+        return response is null ? null : new PagedResponse<PredictionTicketSummaryDto>(
+            response.PredictionTickets,
+            response.Pagination.Page,
+            response.Pagination.PageSize,
+            response.Pagination.TotalCount,
+            response.Pagination.TotalPages);
+    }
 
-    public Task<PredictionTicketDto?> GetPredictionAsync(string predictionTicketId, CancellationToken cancellationToken = default)
-        => GetJsonAsync<PredictionTicketDto>($"/api/predictions/{Uri.EscapeDataString(predictionTicketId)}", cancellationToken);
+    public async Task<PredictionTicketDto?> GetPredictionAsync(string predictionTicketId, CancellationToken cancellationToken = default)
+        => (await GetJsonAsync<GetPredictionTicketResponse>(
+            $"/api/predictions/{Uri.EscapeDataString(predictionTicketId)}", cancellationToken).ConfigureAwait(false))?.PredictionTicket;
 
     public async Task<IReadOnlyList<MemoDto>> GetMemosBySubjectAsync(string subjectType, string subjectId, CancellationToken cancellationToken = default)
-        => await GetJsonAsync<IReadOnlyList<MemoDto>>(
+        => (await GetJsonAsync<GetMemosBySubjectResponse>(
             $"/api/memos/by-subject/{Uri.EscapeDataString(subjectType)}/{Uri.EscapeDataString(subjectId)}",
-            cancellationToken).ConfigureAwait(false) ?? Array.Empty<MemoDto>();
+            cancellationToken).ConfigureAwait(false))?.Memos ?? Array.Empty<MemoDto>();
 
     // ------------------------------------------------------------------ //
     // 馬
@@ -221,7 +231,7 @@ public sealed partial class AdminApiClient
     // ------------------------------------------------------------------ //
 
     public Task<AdminApiResult<string>> CreateMemoAsync(CreateMemoRequest request, CancellationToken cancellationToken = default)
-        => SendForIdAsync(HttpMethod.Post, "/api/memos", request, (MemoIdResponse r) => r.MemoId, cancellationToken);
+        => SendForIdAsync(HttpMethod.Post, "/api/memos", request, (CreateMemoResponse r) => r.MemoId, cancellationToken);
 
     public Task<AdminApiResult> UpdateMemoAsync(string memoId, UpdateMemoRequest request, CancellationToken cancellationToken = default)
         => SendAsync(HttpMethod.Put, $"/api/memos/{Uri.EscapeDataString(memoId)}", request, cancellationToken);
@@ -324,7 +334,6 @@ public sealed partial class AdminApiClient
         return string.IsNullOrWhiteSpace(query) ? path : $"{path}?{query}";
     }
 
-    private sealed record MemoIdResponse(string MemoId);
     private sealed record RaceDayReacquisitionIdResponse(string JobId);
 }
 

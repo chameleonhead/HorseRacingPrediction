@@ -1,7 +1,8 @@
 
+using System.Text.Json.Serialization;
+
 namespace HorseRacingPrediction.Contracts.Predictions;
 
 public sealed record CorrectPredictionMetadataRequest(
-    decimal? ConfidenceScore,
-    string? SummaryComment,
-    string? Reason);
+    [property: JsonIgnore] string PredictionTicketId,
+    CorrectPredictionMetadataInputDto? Metadata);

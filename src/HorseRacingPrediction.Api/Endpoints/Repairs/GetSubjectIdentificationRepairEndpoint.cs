@@ -20,7 +20,8 @@ internal static class GetSubjectIdentificationRepairEndpoint
                         using var db = provider.CreateContext();
                         var candidates = await BuildSubjectIdentificationRepairPreviewAsync(db, collectionStore, token)
                             .ConfigureAwait(false);
-                        return Results.Ok(new SubjectIdentificationRepairPreviewDto(candidates));
-                    });
+                        return Results.Ok(new GetSubjectIdentificationRepairResponse(new SubjectIdentificationRepairPreviewDto(candidates)));
+                    })
+                    .Produces<GetSubjectIdentificationRepairResponse>(StatusCodes.Status200OK);
     }
 }

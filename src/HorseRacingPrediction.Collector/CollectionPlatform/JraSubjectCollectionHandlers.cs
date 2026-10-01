@@ -61,7 +61,7 @@ public sealed class JraSubjectProfileApiClient(HttpClient client) : IJraSubjectP
         using var request = new HttpRequestMessage(HttpMethod.Put,
             $"api/v2/admin/subjects/{subjectType}/{Uri.EscapeDataString(subjectId)}/profile")
         {
-            Content = JsonContent.Create(profile),
+            Content = JsonContent.Create(new PutSubjectProfileRequest(subjectType, subjectId, profile)),
         };
         using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();

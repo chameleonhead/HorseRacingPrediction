@@ -16,7 +16,9 @@ internal static class GetHorseIdentityRepairEndpoint
                         CancellationToken token) =>
                     {
                         using var db = provider.CreateContext();
-                        return Results.Ok(await BuildHorseIdentityRepairPreviewAsync(db, collectionStore, token).ConfigureAwait(false));
-                    });
+                        return Results.Ok(new HorseRacingPrediction.Contracts.Repairs.GetHorseIdentityRepairResponse(
+                            await BuildHorseIdentityRepairPreviewAsync(db, collectionStore, token).ConfigureAwait(false)));
+                    })
+                    .Produces<HorseRacingPrediction.Contracts.Repairs.GetHorseIdentityRepairResponse>(StatusCodes.Status200OK);
     }
 }

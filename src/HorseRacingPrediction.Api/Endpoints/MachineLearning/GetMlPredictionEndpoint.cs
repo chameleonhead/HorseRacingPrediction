@@ -15,8 +15,9 @@ internal static class GetMlPredictionEndpoint
     {
         group.MapGet("/races/{raceId}/ml-prediction",
                     [SwaggerOperation(Summary = "ML予測", Description = "ML.NETモデルを使って出走馬の予測着順を返します。訓練済みモデルがない場合は統計スコアで代替します。")]
-        async (string raceId, IQueryProcessor queryProcessor, IRacePredictor predictor, RaceWriteCoordinator coordinator, CancellationToken cancellationToken) =>
+        async ([AsParameters] HorseRacingPrediction.Contracts.MachineLearning.GetMlPredictionRequest request, IQueryProcessor queryProcessor, IRacePredictor predictor, RaceWriteCoordinator coordinator, CancellationToken cancellationToken) =>
                     {
+                        var raceId = request.RaceId;
                         if (await coordinator.ReadBarrierAsync(raceId, cancellationToken) is { Verified: false })
                             return Results.Conflict(new { code = "RaceRepairPending" });
                         var raceQuery = new ReadModelByIdQuery<AppReadModels.RacePredictionContextReadModel>(raceId);
@@ -38,12 +39,12 @@ internal static class GetMlPredictionEndpoint
                             result.Rankings.Select(r => new HorseRacingPrediction.Contracts.MachineLearning.MlHorsePredictionDto(
                                 r.EntryId, r.HorseId, r.HorseNumber, r.PredictedScore, r.PredictedRank)).ToList());
 
-                        return Results.Ok(response);
+                        return Results.Ok(new HorseRacingPrediction.Contracts.MachineLearning.GetMlPredictionResponse(response));
                     })
                     .AddEndpointFilter<RacePredictionReadEndpointFilter>()
                     .WithName("GetMlPrediction")
                     .WithTags("Race API")
-                    .Produces<HorseRacingPrediction.Contracts.MachineLearning.MlPredictionDto>(StatusCodes.Status200OK)
+                    .Produces<HorseRacingPrediction.Contracts.MachineLearning.GetMlPredictionResponse>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

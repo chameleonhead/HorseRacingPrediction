@@ -1,0 +1,3 @@
+namespace HorseRacingPrediction.Contracts.Repairs;
+
+public sealed record ApplySubjectNameNormalizationResponse(SubjectNameNormalizationApplyResultDto Normalization);

@@ -15,11 +15,14 @@ internal static class CorrectPredictionMetadataEndpoint
                     [SwaggerOperation(Summary = "Correct prediction metadata", Description = "Corrects confidence score or summary comment of a prediction ticket")]
         async (string predictionTicketId, CorrectPredictionMetadataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        if (request.Metadata is not { } metadata)
+                            return Results.BadRequest(new[] { "Command execution failed." });
+
                         var command = new CorrectPredictionMetadataCommand(
                             new PredictionTicketId(predictionTicketId),
-                            request.ConfidenceScore,
-                            request.SummaryComment,
-                            request.Reason);
+                            metadata.ConfidenceScore,
+                            metadata.SummaryComment,
+                            metadata.Reason);
 
                         var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                         return result.IsSuccess

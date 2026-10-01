@@ -1,0 +1,3 @@
+namespace HorseRacingPrediction.Contracts.PredictionScheduling;
+
+public sealed record EnqueuePredictionCandidatesRequest(EnqueuePredictionCandidatesInputDto? Candidates);

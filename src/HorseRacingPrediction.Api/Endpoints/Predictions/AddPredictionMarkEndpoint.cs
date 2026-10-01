@@ -15,13 +15,16 @@ internal static class AddPredictionMarkEndpoint
                     [SwaggerOperation(Summary = "Add prediction mark", Description = "Appends a mark record to prediction ticket")]
         async (string predictionTicketId, AddPredictionMarkRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        if (request.Mark is not { } mark)
+                            return Results.BadRequest(new[] { "Command execution failed." });
+
                         var command = new AddPredictionMarkCommand(
                             new PredictionTicketId(predictionTicketId),
-                            request.EntryId,
-                            request.MarkCode,
-                            request.PredictedRank,
-                            request.Score,
-                            request.Comment);
+                            mark.EntryId,
+                            mark.MarkCode,
+                            mark.PredictedRank,
+                            mark.Score,
+                            mark.Comment);
 
                         var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                         return result.IsSuccess

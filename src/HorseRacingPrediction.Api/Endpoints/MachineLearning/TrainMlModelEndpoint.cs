@@ -39,11 +39,13 @@ internal static class TrainMlModelEndpoint
                                 new ReadModelByIdQuery<AppReadModels.JockeyRaceHistoryReadModel>(jockeyId), ct).ConfigureAwait(false),
                             cancellationToken).ConfigureAwait(false);
 
-                        return Results.Ok(new { TrainedRaceCount = finishedRaces.Count, IsModelTrained = predictor.IsModelTrained });
+                        return Results.Ok(new HorseRacingPrediction.Contracts.MachineLearning.TrainMlModelResponse(
+                            new HorseRacingPrediction.Contracts.MachineLearning.MlModelTrainingResultDto(
+                                finishedRaces.Count, predictor.IsModelTrained)));
                     })
                     .WithName("TrainMlModel")
                     .WithTags("Race API")
-                    .Produces(StatusCodes.Status200OK)
+                    .Produces<HorseRacingPrediction.Contracts.MachineLearning.TrainMlModelResponse>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status400BadRequest);
     }
 }

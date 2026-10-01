@@ -14,8 +14,10 @@ internal static class GetMemosBySubjectEndpoint
     {
         group.MapGet("/memos/by-subject/{subjectType}/{subjectId}",
                     [SwaggerOperation(Summary = "Get memos by subject", Description = "Returns all memos for a given subject (e.g. Horse, Trainer, Jockey, Race). Use subjectType=Horse and subjectId=<horseId>.")]
-        async (string subjectType, string subjectId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async ([AsParameters] GetMemosBySubjectRequest request, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
                     {
+                        var subjectType = request.SubjectType;
+                        var subjectId = request.SubjectId;
                         if (!Enum.TryParse<MemoSubjectType>(subjectType, ignoreCase: true, out var parsedType))
                             return Results.BadRequest(new[] { $"Unknown subjectType '{subjectType}'." });
 
@@ -32,11 +34,11 @@ internal static class GetMemosBySubjectEndpoint
                             m.Links.Select(l => new MemoLinkDto(l.LinkId, l.LinkType, l.Title, l.Url, l.StorageKey)).ToList()))
                             .ToList();
 
-                        return Results.Ok(response);
+                        return Results.Ok(new GetMemosBySubjectResponse(response));
                     })
                     .WithName("GetMemosBySubject")
                     .WithTags("Memo API")
-                    .Produces<IReadOnlyList<MemoDto>>(StatusCodes.Status200OK)
+                    .Produces<GetMemosBySubjectResponse>(StatusCodes.Status200OK)
                     .Produces(StatusCodes.Status404NotFound);
     }
 }

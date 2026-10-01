@@ -1,0 +1,3 @@
+namespace HorseRacingPrediction.Contracts.MachineLearning;
+
+public sealed record TrainMlModelResponse(MlModelTrainingResultDto TrainingResult);

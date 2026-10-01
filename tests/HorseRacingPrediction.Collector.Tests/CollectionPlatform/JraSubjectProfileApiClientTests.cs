@@ -31,9 +31,10 @@ public sealed class JraSubjectProfileApiClientTests
             Assert.AreEqual("/api/v2/admin/subjects/Horse/horse%2F1/profile", request.RequestUri!.AbsolutePath);
             Assert.AreEqual("application/json", request.Content!.Headers.ContentType!.MediaType);
             using var body = JsonDocument.Parse(await request.Content.ReadAsStringAsync(cancellationToken));
-            Assert.AreEqual("Horse", body.RootElement.GetProperty("subjectType").GetString());
-            Assert.AreEqual("テスト馬", body.RootElement.GetProperty("name").GetString());
-            Assert.AreEqual("父馬", body.RootElement.GetProperty("fields").GetProperty("父").GetString());
+            var profile = body.RootElement.GetProperty("profile");
+            Assert.AreEqual("Horse", profile.GetProperty("subjectType").GetString());
+            Assert.AreEqual("テスト馬", profile.GetProperty("name").GetString());
+            Assert.AreEqual("父馬", profile.GetProperty("fields").GetProperty("父").GetString());
             return new HttpResponseMessage(HttpStatusCode.OK);
         }
     }

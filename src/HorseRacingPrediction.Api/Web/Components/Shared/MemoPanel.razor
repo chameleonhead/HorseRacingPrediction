@@ -142,12 +142,12 @@
         saving = true;
         try
         {
-            var request = new CreateMemoRequest(
+            var request = new CreateMemoRequest(new CreateMemoInputDto(
                 AuthorId: null,
                 MemoType: newMemoType!,
                 Content: newContent!,
                 CreatedAt: JstTime.Now(),
-                Subjects: new[] { new MemoSubjectDto(SubjectType, SubjectId) });
+                Subjects: new[] { new MemoSubjectDto(SubjectType, SubjectId) }));
 
             var result = await Api.CreateMemoAsync(request);
             if (result.Success)
@@ -183,7 +183,7 @@
 
     private async Task SaveEditAsync(string memoId)
     {
-        var request = new UpdateMemoRequest(MemoType: editMemoType, Content: editContent);
+        var request = new UpdateMemoRequest(memoId, new UpdateMemoInputDto(MemoType: editMemoType, Content: editContent));
         var result = await Api.UpdateMemoAsync(memoId, request);
         if (result.Success)
         {

@@ -96,9 +96,11 @@ internal static class ApplySubjectNameNormalizationEndpoint
                         }
                     }
 
-                    return Results.Ok(new SubjectNameNormalizationApplyResultDto(request.Items.Count,
+                    return Results.Ok(new ApplySubjectNameNormalizationResponse(new SubjectNameNormalizationApplyResultDto(request.Items.Count,
                         results.Count(x => x.Status == "Applied"), results.Count(x => x.Status == "Skipped"),
-                        results.Count(x => x.Status == "Failed"), results));
-                });
+                        results.Count(x => x.Status == "Failed"), results)));
+                })
+                .Produces<ApplySubjectNameNormalizationResponse>(StatusCodes.Status200OK)
+                .Produces(StatusCodes.Status400BadRequest);
     }
 }

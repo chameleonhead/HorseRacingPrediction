@@ -83,7 +83,8 @@ public sealed class RaceAssignmentRepairTests
         var preview = await PostPreviewAsync(http, raceId, manifest);
         var ticketId = "predictionticket-" + Guid.NewGuid();
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync("/api/predictions",
-            new HorseRacingPrediction.Contracts.Predictions.CreatePredictionTicketRequest(raceId, "AI", "local", 0.5m, null, ticketId))).StatusCode);
+            new CreatePredictionTicketRequest(new CreatePredictionTicketInputDto(
+                raceId, "AI", "local", 0.5m, null, ticketId)))).StatusCode);
         // Simulate an independent legacy writer bypassing HTTP after the preview.
         var bus = app.Services.GetRequiredService<EventFlow.ICommandBus>();
         await bus.PublishAsync(new HorseRacingPrediction.Application.Commands.Predictions.CreatePredictionTicketCommand(
@@ -141,8 +142,8 @@ public sealed class RaceAssignmentRepairTests
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         Assert.ThrowsExactly<ArgumentException>(() => new HorseRacingPrediction.Domain.Memos.MemoId("notes-1"));
         var memoId = "memo-" + Guid.NewGuid();
-        var memo = new HorseRacingPrediction.Contracts.Memos.CreateMemoRequest("human", "Note", "1番を注目", DateTimeOffset.UtcNow,
-            [new("Horse", DeterministicIdGenerator.BuildHorseId("", HorseA))], MemoId: memoId);
+        var memo = new HorseRacingPrediction.Contracts.Memos.CreateMemoRequest(new("human", "Note", "1番を注目", DateTimeOffset.UtcNow,
+            [new("Horse", DeterministicIdGenerator.BuildHorseId("", HorseA))], MemoId: memoId));
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/memos", memo)).StatusCode);
         (await http.DeleteAsync("/api/memos/" + memoId)).EnsureSuccessStatusCode();
         var inspection = await GetInspectionAsync(http, raceId);
@@ -287,8 +288,9 @@ public sealed class RaceAssignmentRepairTests
         Assert.AreEqual("馬主B", entries.Single(x => x.HorseNumber == 1).OwnerName);
         Assert.AreEqual(await app.Services.GetRequiredService<RaceWriteCoordinator>().AssignmentFingerprintAsync(raceId, CancellationToken.None),
             context.EntryAssignmentFingerprint);
-        var stalePrediction = await http.PostAsJsonAsync("/api/predictions", new
-        { raceId, predictorType = "Human", predictorId = "local-test", confidenceScore = 0.5m, summaryComment = "old context" });
+        var stalePrediction = await http.PostAsJsonAsync("/api/predictions",
+            new CreatePredictionTicketRequest(new CreatePredictionTicketInputDto(
+                raceId, "Human", "local-test", 0.5m, "old context")));
         Assert.AreEqual(HttpStatusCode.Conflict, stalePrediction.StatusCode);
         var predicted = await predictor.RunAsync(raceId);
         Assert.IsFalse(string.IsNullOrWhiteSpace(predicted.PredictionTicketId));

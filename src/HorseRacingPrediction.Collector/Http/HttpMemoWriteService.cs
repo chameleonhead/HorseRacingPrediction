@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
-using System.Text.Json.Serialization;
+
+using HorseRacingPrediction.Contracts.Memos;
 
 namespace HorseRacingPrediction.Collector.Http;
 
@@ -20,7 +21,7 @@ public sealed class HttpMemoWriteService : IMemoWriteService
         string? memoId,
         CancellationToken cancellationToken = default)
     {
-        var request = new CreateMemoRequestDto(
+        var request = new CreateMemoRequest(new CreateMemoInputDto(
             AuthorId: authorId,
             MemoType: memoType,
             Content: content,
@@ -30,7 +31,7 @@ public sealed class HttpMemoWriteService : IMemoWriteService
                 new MemoSubjectDto("Race", raceId)
             ],
             Links: null,
-            MemoId: memoId);
+            MemoId: memoId));
 
         var response = await _httpClient
             .PostAsJsonAsync("/api/memos", request, cancellationToken)
@@ -43,7 +44,7 @@ public sealed class HttpMemoWriteService : IMemoWriteService
         }
 
         var payload = await response.Content
-            .ReadFromJsonAsync<CreateMemoResponseDto>(cancellationToken: cancellationToken)
+            .ReadFromJsonAsync<CreateMemoResponse>(cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
         return payload?.MemoId;
@@ -57,14 +58,14 @@ public sealed class HttpMemoWriteService : IMemoWriteService
         string memoId,
         CancellationToken cancellationToken = default)
     {
-        var createRequest = new CreateMemoRequestDto(
+        var createRequest = new CreateMemoRequest(new CreateMemoInputDto(
             AuthorId: authorId,
             MemoType: memoType,
             Content: content,
             CreatedAt: HorseRacingPrediction.Contracts.Common.Time.JstTime.Now(),
             Subjects: [new MemoSubjectDto("Race", raceId)],
             Links: null,
-            MemoId: memoId);
+            MemoId: memoId));
 
         var createResponse = await _httpClient
             .PostAsJsonAsync("/api/memos", createRequest, cancellationToken)
@@ -81,7 +82,8 @@ public sealed class HttpMemoWriteService : IMemoWriteService
             return memoId;
         }
 
-        var updateRequest = new UpdateMemoRequestDto(MemoType: null, Content: content, Links: null);
+        var updateRequest = new UpdateMemoRequest(memoId,
+            new UpdateMemoInputDto(MemoType: null, Content: content, Links: null));
         var updateResponse = await _httpClient
             .PutAsJsonAsync($"/api/memos/{Uri.EscapeDataString(memoId)}", updateRequest, cancellationToken)
             .ConfigureAwait(false);
@@ -95,22 +97,4 @@ public sealed class HttpMemoWriteService : IMemoWriteService
         return memoId;
     }
 
-    private sealed record UpdateMemoRequestDto(string? MemoType, string? Content, object? Links);
-
-    private sealed record CreateMemoRequestDto(
-        string? AuthorId,
-        string MemoType,
-        string Content,
-        DateTimeOffset CreatedAt,
-        IReadOnlyList<MemoSubjectDto> Subjects,
-        object? Links,
-        string? MemoId);
-
-    private sealed record MemoSubjectDto(string SubjectType, string SubjectId);
-
-    private sealed class CreateMemoResponseDto
-    {
-        [JsonPropertyName("memoId")]
-        public string? MemoId { get; init; }
-    }
 }

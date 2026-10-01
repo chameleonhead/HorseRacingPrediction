@@ -34,13 +34,16 @@ public class PredictionEndpointsTests
     {
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         var request = new CreatePredictionTicketRequest(
-            "race-abc", "AI", "model-v1", 0.85m, "高確率予想", ticketId);
+            new CreatePredictionTicketInputDto("race-abc", "AI", "model-v1", 0.85m, "高確率予想", ticketId));
 
         var response = await _client.PostAsJsonAsync(
             "/api/predictions", request, JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
         Assert.IsTrue(response.Headers.Location?.ToString().Contains($"/api/predictions/{ticketId}"));
+        var receipt = await response.Content.ReadFromJsonAsync<CreatePredictionTicketResponse>(JsonOptions);
+        Assert.IsNotNull(receipt);
+        Assert.AreEqual(ticketId, receipt.PredictionTicketId);
     }
 
     [TestMethod]
@@ -49,13 +52,14 @@ public class PredictionEndpointsTests
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/predictions",
-            new CreatePredictionTicketRequest("race-abc", "AI", "model-v1", 0.85m, "高確率予想", ticketId),
+            new CreatePredictionTicketRequest(new("race-abc", "AI", "model-v1", 0.85m, "高確率予想", ticketId)),
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/predictions/{ticketId}");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        var ticket = await response.Content.ReadFromJsonAsync<PredictionTicketDto>(JsonOptions);
+        var envelope = await response.Content.ReadFromJsonAsync<GetPredictionTicketResponse>(JsonOptions);
+        var ticket = envelope?.PredictionTicket;
         Assert.IsNotNull(ticket);
         Assert.AreEqual(ticketId, ticket.PredictionTicketId);
         Assert.AreEqual("race-abc", ticket.RaceId);
@@ -72,24 +76,24 @@ public class PredictionEndpointsTests
 
         await _client.PostAsJsonAsync(
             "/api/predictions",
-            new CreatePredictionTicketRequest(raceId, "AI", "model-v1", 0.91m, "search-1", ticketId1),
+            new CreatePredictionTicketRequest(new(raceId, "AI", "model-v1", 0.91m, "search-1", ticketId1)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/predictions",
-            new CreatePredictionTicketRequest(raceId, "AI", "model-v1", 0.72m, "search-2", ticketId2),
+            new CreatePredictionTicketRequest(new(raceId, "AI", "model-v1", 0.72m, "search-2", ticketId2)),
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/predictions?raceId={raceId}&predictorType=AI&page=2&pageSize=1&sortBy=confidenceScore&sortDescending=true");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<PredictionTicketSummaryDto>>(JsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<SearchPredictionTicketsResponse>(JsonOptions);
         Assert.IsNotNull(result);
-        Assert.AreEqual(2, result.TotalCount);
-        Assert.AreEqual(2, result.TotalPages);
-        Assert.AreEqual(1, result.Items.Count);
-        Assert.AreEqual(ticketId2, result.Items[0].PredictionTicketId);
-        Assert.AreEqual(0.72m, result.Items[0].ConfidenceScore);
+        Assert.AreEqual(2, result.Pagination.TotalCount);
+        Assert.AreEqual(2, result.Pagination.TotalPages);
+        Assert.AreEqual(1, result.PredictionTickets.Count);
+        Assert.AreEqual(ticketId2, result.PredictionTickets[0].PredictionTicketId);
+        Assert.AreEqual(0.72m, result.PredictionTickets[0].ConfidenceScore);
     }
 
     [TestMethod]
@@ -99,12 +103,12 @@ public class PredictionEndpointsTests
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/predictions",
-            new CreatePredictionTicketRequest(raceId, "AI", "model-v1", 0.85m, null, ticketId),
+            new CreatePredictionTicketRequest(new(raceId, "AI", "model-v1", 0.85m, null, ticketId)),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/marks",
-            new AddPredictionMarkRequest(entries[0], "◎", 1, 90.5m, "本命"),
+            new AddPredictionMarkRequest(ticketId, new(entries[0], "◎", 1, 90.5m, "本命")),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -118,19 +122,20 @@ public class PredictionEndpointsTests
 
         await _client.PostAsJsonAsync(
             "/api/predictions",
-            new CreatePredictionTicketRequest(raceId, "AI", "model-v1", 0.92m, "精密予測", ticketId),
+            new CreatePredictionTicketRequest(new(raceId, "AI", "model-v1", 0.92m, "精密予測", ticketId)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/marks",
-            new AddPredictionMarkRequest(entries[0], "◎", 1, 95.0m, "本命"),
+            new AddPredictionMarkRequest(ticketId, new(entries[0], "◎", 1, 95.0m, "本命")),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/marks",
-            new AddPredictionMarkRequest(entries[1], "○", 2, 80.0m, "対抗"),
+            new AddPredictionMarkRequest(ticketId, new(entries[1], "○", 2, 80.0m, "対抗")),
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/predictions/{ticketId}");
-        var ticket = await response.Content.ReadFromJsonAsync<PredictionTicketDto>(JsonOptions);
+        var envelope = await response.Content.ReadFromJsonAsync<GetPredictionTicketResponse>(JsonOptions);
+        var ticket = envelope?.PredictionTicket;
 
         Assert.IsNotNull(ticket);
         Assert.AreEqual(raceId, ticket.RaceId);
@@ -161,12 +166,12 @@ public class PredictionEndpointsTests
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/predictions",
-            new CreatePredictionTicketRequest("race-xyz", "AI", "model-v1", 0.8m, null, ticketId),
+            new CreatePredictionTicketRequest(new("race-xyz", "AI", "model-v1", 0.8m, null, ticketId)),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/betting-suggestions",
-            new AddBettingSuggestionRequest("WIN", "1", 1000m, null),
+            new AddBettingSuggestionRequest(ticketId, new("WIN", "1", 1000m, null)),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -178,12 +183,12 @@ public class PredictionEndpointsTests
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/predictions",
-            new CreatePredictionTicketRequest("race-xyz", "AI", "model-v1", 0.8m, null, ticketId),
+            new CreatePredictionTicketRequest(new("race-xyz", "AI", "model-v1", 0.8m, null, ticketId)),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/rationales",
-            new AddPredictionRationaleRequest("Horse", "entry-1", "SPEED", "120", "スピード指数が高い"),
+            new AddPredictionRationaleRequest(ticketId, new("Horse", "entry-1", "SPEED", "120", "スピード指数が高い")),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -195,7 +200,7 @@ public class PredictionEndpointsTests
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/predictions",
-            new CreatePredictionTicketRequest("race-xyz", "AI", "model-v1", 0.8m, null, ticketId),
+            new CreatePredictionTicketRequest(new("race-xyz", "AI", "model-v1", 0.8m, null, ticketId)),
             JsonOptions);
 
         var response = await _client.PostAsync(
@@ -210,12 +215,12 @@ public class PredictionEndpointsTests
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/predictions",
-            new CreatePredictionTicketRequest("race-xyz", "AI", "model-v1", 0.8m, null, ticketId),
+            new CreatePredictionTicketRequest(new("race-xyz", "AI", "model-v1", 0.8m, null, ticketId)),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/withdraw",
-            new WithdrawPredictionTicketRequest("予測精度が低いため取り下げ"),
+            new WithdrawPredictionTicketRequest(ticketId, new("予測精度が低いため取り下げ")),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -227,12 +232,12 @@ public class PredictionEndpointsTests
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/predictions",
-            new CreatePredictionTicketRequest("race-xyz", "AI", "model-v1", 0.8m, null, ticketId),
+            new CreatePredictionTicketRequest(new("race-xyz", "AI", "model-v1", 0.8m, null, ticketId)),
             JsonOptions);
 
         var response = await _client.PatchAsJsonAsync(
             $"/api/predictions/{ticketId}",
-            new CorrectPredictionMetadataRequest(0.75m, "修正後コメント", "信頼スコア誤り修正"),
+            new CorrectPredictionMetadataRequest(ticketId, new(0.75m, "修正後コメント", "信頼スコア誤り修正")),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -244,19 +249,19 @@ public class PredictionEndpointsTests
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/predictions",
-            new CreatePredictionTicketRequest("race-eval", "AI", "model-v1", 0.9m, null, ticketId),
+            new CreatePredictionTicketRequest(new("race-eval", "AI", "model-v1", 0.9m, null, ticketId)),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/evaluate",
-            new EvaluatePredictionTicketRequest(
+            new EvaluatePredictionTicketRequest(ticketId, new(
                 "race-eval",
                 DateTimeOffset.UtcNow,
                 1,
                 new[] { "WIN" },
                 95.0m,
                 1200m,
-                1.2m),
+                1.2m)),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -268,26 +273,26 @@ public class PredictionEndpointsTests
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/predictions",
-            new CreatePredictionTicketRequest("race-recalc", "AI", "model-v1", 0.9m, null, ticketId),
+            new CreatePredictionTicketRequest(new("race-recalc", "AI", "model-v1", 0.9m, null, ticketId)),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/evaluate",
-            new EvaluatePredictionTicketRequest(
+            new EvaluatePredictionTicketRequest(ticketId, new(
                 "race-recalc",
                 DateTimeOffset.UtcNow,
                 1,
                 new[] { "WIN" },
-                null, null, null),
+                null, null, null)),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/recalculate-evaluation",
-            new RecalculatePredictionEvaluationRequest(
+            new RecalculatePredictionEvaluationRequest(ticketId, new(
                 "race-recalc",
                 DateTimeOffset.UtcNow,
                 2,
                 new[] { "WIN", "PLACE" },
-                100m, 1500m, 1.5m),
+                100m, 1500m, 1.5m)),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);

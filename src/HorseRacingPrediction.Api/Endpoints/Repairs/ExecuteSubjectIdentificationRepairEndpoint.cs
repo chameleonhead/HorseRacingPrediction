@@ -92,9 +92,9 @@ internal static class ExecuteSubjectIdentificationRepairEndpoint
                                 issueReceipts.Add(receipt);
                             }
                             await db.SaveChangesAsync(token).ConfigureAwait(false);
-                            return Results.Accepted(value: new ExecuteSubjectIdentificationRepairResponse(
+                            return Results.Accepted(value: new ExecuteSubjectIdentificationRepairResponse(new SubjectIdentificationExecutionDto(
                                 request.Items.Count, issueReceipts.Count(x => x.CreatedTask),
-                                issueReceipts.Count(x => !x.CreatedTask), issueReceipts.Where(x => x.TaskId.HasValue).Select(x => x.TaskId!.Value).ToArray()));
+                                issueReceipts.Count(x => !x.CreatedTask), issueReceipts.Where(x => x.TaskId.HasValue).Select(x => x.TaskId!.Value).ToArray())));
                         }
 
                         var horsePreview = await BuildHorseIdentityRepairPreviewAsync(db, collectionStore, token)
@@ -191,9 +191,12 @@ internal static class ExecuteSubjectIdentificationRepairEndpoint
                             }
                         }
 
-                        return Results.Accepted(value: new ExecuteSubjectIdentificationRepairResponse(
+                        return Results.Accepted(value: new ExecuteSubjectIdentificationRepairResponse(new SubjectIdentificationExecutionDto(
                             request.Items.Count, receipts.Count(x => x.CreatedTask), receipts.Count(x => !x.CreatedTask),
-                            receipts.Where(x => x.TaskId.HasValue).Select(x => x.TaskId!.Value).Distinct().ToArray(), merged, disabled, running));
-                    });
+                            receipts.Where(x => x.TaskId.HasValue).Select(x => x.TaskId!.Value).Distinct().ToArray(), merged, disabled, running)));
+                    })
+                    .Produces<ExecuteSubjectIdentificationRepairResponse>(StatusCodes.Status202Accepted)
+                    .Produces(StatusCodes.Status400BadRequest)
+                    .Produces(StatusCodes.Status409Conflict);
     }
 }

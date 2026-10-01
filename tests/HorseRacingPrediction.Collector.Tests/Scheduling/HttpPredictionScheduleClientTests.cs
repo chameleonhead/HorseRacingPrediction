@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using HorseRacingPrediction.PredictionScheduling;
+using HorseRacingPrediction.Contracts.PredictionScheduling;
 
 namespace HorseRacingPrediction.Collector.Tests.Scheduling;
 
@@ -19,11 +20,11 @@ public sealed class HttpPredictionScheduleClientTests
         handler.Responses.Enqueue(new(HttpStatusCode.Accepted));
         handler.Responses.Enqueue(new(HttpStatusCode.OK)
         {
-            Content = JsonContent.Create(new[]
+            Content = JsonContent.Create(new AcquirePredictionCandidateLeasesResponse(new[]
             {
-                new PredictionCandidateLease("race-1", "lease-1"),
-                new PredictionCandidateLease("race-2", "lease-2"),
-            }),
+                new PredictionCandidateLeaseDto("race-1", "lease-1"),
+                new PredictionCandidateLeaseDto("race-2", "lease-2"),
+            })),
         });
         handler.Responses.Enqueue(new(HttpStatusCode.NoContent));
         handler.Responses.Enqueue(new(HttpStatusCode.NoContent));
@@ -39,7 +40,7 @@ public sealed class HttpPredictionScheduleClientTests
         using (var enqueue = JsonDocument.Parse(handler.Requests[0].Body!))
         {
             CollectionAssert.AreEqual(new[] { "race-1", "race-2" },
-                enqueue.RootElement.GetProperty("raceIds").EnumerateArray()
+                enqueue.RootElement.GetProperty("candidates").GetProperty("raceIds").EnumerateArray()
                     .Select(x => x.GetString()).ToArray());
         }
 
@@ -52,18 +53,19 @@ public sealed class HttpPredictionScheduleClientTests
         Assert.AreEqual("/api/v2/internal/prediction-candidates/race-1", handler.Requests[2].Uri!.AbsolutePath);
         using (var complete = JsonDocument.Parse(handler.Requests[2].Body!))
         {
-            Assert.AreEqual("Complete", complete.RootElement.GetProperty("mode").GetString());
-            Assert.AreEqual("lease-1", complete.RootElement.GetProperty("leaseToken").GetString());
+            Assert.AreEqual("Complete", complete.RootElement.GetProperty("transition").GetProperty("mode").GetString());
+            Assert.AreEqual("lease-1", complete.RootElement.GetProperty("transition").GetProperty("leaseToken").GetString());
         }
 
         Assert.AreEqual(HttpMethod.Patch, handler.Requests[3].Method);
         Assert.AreEqual("/api/v2/internal/prediction-candidates/race-2", handler.Requests[3].Uri!.AbsolutePath);
         using (var requeue = JsonDocument.Parse(handler.Requests[3].Body!))
         {
-            Assert.AreEqual("Requeue", requeue.RootElement.GetProperty("mode").GetString());
-            Assert.AreEqual("lease-2", requeue.RootElement.GetProperty("leaseToken").GetString());
-            Assert.AreEqual("temporary failure", requeue.RootElement.GetProperty("error").GetString());
-            Assert.AreEqual(availableAt, requeue.RootElement.GetProperty("availableAt").GetDateTimeOffset());
+            var transition = requeue.RootElement.GetProperty("transition");
+            Assert.AreEqual("Requeue", transition.GetProperty("mode").GetString());
+            Assert.AreEqual("lease-2", transition.GetProperty("leaseToken").GetString());
+            Assert.AreEqual("temporary failure", transition.GetProperty("error").GetString());
+            Assert.AreEqual(availableAt, transition.GetProperty("availableAt").GetDateTimeOffset());
         }
         Assert.IsTrue(completed);
         Assert.IsTrue(requeued);

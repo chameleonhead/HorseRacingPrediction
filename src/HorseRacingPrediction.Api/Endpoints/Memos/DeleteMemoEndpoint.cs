@@ -1,6 +1,7 @@
 using EventFlow;
 using HorseRacingPrediction.Application.Commands.Memos;
 using HorseRacingPrediction.Domain.Memos;
+using HorseRacingPrediction.Contracts.Memos;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace HorseRacingPrediction.Api.Endpoints.Memos;
@@ -12,8 +13,9 @@ internal static class DeleteMemoEndpoint
     {
         group.MapDelete("/memos/{memoId}",
                     [SwaggerOperation(Summary = "Delete memo", Description = "Deletes a memo")]
-        async (string memoId, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async ([AsParameters] DeleteMemoRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        var memoId = request.MemoId;
                         var command = new DeleteMemoCommand(new MemoId(memoId));
                         var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                         return result.IsSuccess

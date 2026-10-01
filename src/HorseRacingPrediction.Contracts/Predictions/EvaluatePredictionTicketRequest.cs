@@ -1,12 +1,7 @@
-using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace HorseRacingPrediction.Contracts.Predictions;
 
 public sealed record EvaluatePredictionTicketRequest(
-    [property: Required] string RaceId,
-    DateTimeOffset EvaluatedAt,
-    int EvaluationRevision,
-    [property: Required] IReadOnlyList<string> HitTypeCodes,
-    decimal? ScoreSummary,
-    decimal? ReturnAmount,
-    decimal? Roi);
+    [property: JsonIgnore] string PredictionTicketId,
+    PredictionEvaluationInputDto? Evaluation);

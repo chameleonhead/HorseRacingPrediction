@@ -158,7 +158,7 @@ public class WeekendRacePredictionScenarioTests
 
         // --- 初期観察メモを記録する ---
         var memo1Response = await _client.PostAsJsonAsync("/api/memos",
-            new CreateMemoRequest(
+            new CreateMemoRequest(new(
                 AuthorId: "analyst-1",
                 MemoType: "InitialObservation",
                 Content: "サニーブレイズは先週の調教で動きが良く、状態上向き。前走の皐月賞で2着からの巻き返しに期待。",
@@ -168,12 +168,12 @@ public class WeekendRacePredictionScenarioTests
                     new MemoSubjectDto("Horse", horse1Id),
                     new MemoSubjectDto("Race", raceId)
                 },
-                MemoId: memo1Id),
+                MemoId: memo1Id)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, memo1Response.StatusCode, "初期観察メモ1の記録に失敗");
 
         var memo2Response = await _client.PostAsJsonAsync("/api/memos",
-            new CreateMemoRequest(
+            new CreateMemoRequest(new(
                 AuthorId: "analyst-1",
                 MemoType: "InitialObservation",
                 Content: "スターライトランナーは距離延長がカギ。2000mまでは好走しているが、2400mは初距離。",
@@ -183,7 +183,7 @@ public class WeekendRacePredictionScenarioTests
                     new MemoSubjectDto("Horse", horse2Id),
                     new MemoSubjectDto("Race", raceId)
                 },
-                MemoId: memo2Id),
+                MemoId: memo2Id)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, memo2Response.StatusCode, "初期観察メモ2の記録に失敗");
 
@@ -220,86 +220,86 @@ public class WeekendRacePredictionScenarioTests
 
         // --- 予想チケットを作成する ---
         var createTicket = await _client.PostAsJsonAsync("/api/predictions",
-            new CreatePredictionTicketRequest(
+            new CreatePredictionTicketRequest(new(
                 RaceId: raceId,
                 PredictorType: "Human",
                 PredictorId: "analyst-1",
                 ConfidenceScore: 0.82m,
                 SummaryComment: "本命サニーブレイズ。内枠利で先行有利の展開が見込まれる。",
-                PredictionTicketId: ticketId),
+                PredictionTicketId: ticketId)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, createTicket.StatusCode, "予想チケット作成に失敗");
 
         // --- 印を追加する（◎○▲） ---
         var mark1 = await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/marks",
-            new AddPredictionMarkRequest(entry1WithGate, "◎", 1, 88.0m, "内枠先行で展開が向く。前走惜敗で反動なし。"),
+            new AddPredictionMarkRequest(ticketId, new(entry1WithGate, "◎", 1, 88.0m, "内枠先行で展開が向く。前走惜敗で反動なし。")),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, mark1.StatusCode, "◎印の追加に失敗");
 
         var mark2 = await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/marks",
-            new AddPredictionMarkRequest(entry2WithGate, "○", 2, 72.0m, "距離延長は懸念だが末脚は確か。"),
+            new AddPredictionMarkRequest(ticketId, new(entry2WithGate, "○", 2, 72.0m, "距離延長は懸念だが末脚は確か。")),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, mark2.StatusCode, "○印の追加に失敗");
 
         var mark3 = await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/marks",
-            new AddPredictionMarkRequest(entry3WithGate, "▲", 3, 60.0m, "外枠も機動力でカバーできるか。"),
+            new AddPredictionMarkRequest(ticketId, new(entry3WithGate, "▲", 3, 60.0m, "外枠も機動力でカバーできるか。")),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, mark3.StatusCode, "▲印の追加に失敗");
 
         // --- 予想根拠を追加する ---
         var rationale1 = await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/rationales",
-            new AddPredictionRationaleRequest(
+            new AddPredictionRationaleRequest(ticketId, new(
                 SubjectType: "Horse",
                 SubjectId: horse1Id,
                 SignalType: "SPEED_INDEX",
                 SignalValue: "118",
-                ExplanationText: "スピード指数118はクラス上位水準。前走2着から上積みが見込める。"),
+                ExplanationText: "スピード指数118はクラス上位水準。前走2着から上積みが見込める。")),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, rationale1.StatusCode, "根拠1の追加に失敗");
 
         var rationale2 = await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/rationales",
-            new AddPredictionRationaleRequest(
+            new AddPredictionRationaleRequest(ticketId, new(
                 SubjectType: "Race",
                 SubjectId: raceId,
                 SignalType: "TRACK_BIAS",
                 SignalValue: "INNER_ADVANTAGE",
-                ExplanationText: "東京2400mは前半ペース次第で内枠先行が有利な傾向。"),
+                ExplanationText: "東京2400mは前半ペース次第で内枠先行が有利な傾向。")),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, rationale2.StatusCode, "根拠2の追加に失敗");
 
         // --- 馬券提案を追加する ---
         var suggestion1 = await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/betting-suggestions",
-            new AddBettingSuggestionRequest("WIN", "4", 2000m, null),
+            new AddBettingSuggestionRequest(ticketId, new("WIN", "4", 2000m, null)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, suggestion1.StatusCode, "単勝馬券提案の追加に失敗");
 
         var suggestion2 = await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/betting-suggestions",
-            new AddBettingSuggestionRequest("EXACTA", "4-7", 1000m, null),
+            new AddBettingSuggestionRequest(ticketId, new("EXACTA", "4-7", 1000m, null)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, suggestion2.StatusCode, "馬連馬券提案の追加に失敗");
 
         // 金曜時点での予想チケット内容を確認する
         var ticketAfterFriday = await _client.GetAsync($"/api/predictions/{ticketId}");
         Assert.AreEqual(HttpStatusCode.OK, ticketAfterFriday.StatusCode);
-        var ticketFriday = await ticketAfterFriday.Content.ReadFromJsonAsync<PredictionTicketDto>(JsonOptions);
+        var ticketFriday = (await ticketAfterFriday.Content.ReadFromJsonAsync<GetPredictionTicketResponse>(JsonOptions))?.PredictionTicket;
         Assert.IsNotNull(ticketFriday);
         Assert.AreEqual(raceId, ticketFriday.RaceId);
         Assert.AreEqual(3, ticketFriday.Marks.Count, "3頭分の印が登録されているべき");
         Assert.AreEqual(0.82m, ticketFriday.ConfidenceScore);
         Assert.AreEqual("東京優駿（日本ダービー）", ticketFriday.RaceName);
 
-        var namedSearch = await _client.GetFromJsonAsync<PagedResponse<PredictionTicketSummaryDto>>(
+        var namedSearch = await _client.GetFromJsonAsync<SearchPredictionTicketsResponse>(
             "/api/predictions?query=%E6%9D%B1%E4%BA%AC%E5%84%AA%E9%A7%BF&page=1&pageSize=20",
             JsonOptions);
         Assert.IsNotNull(namedSearch);
-        var namedSummary = namedSearch.Items.Single(x => x.PredictionTicketId == ticketId);
+        var namedSummary = namedSearch.PredictionTickets.Single(x => x.PredictionTicketId == ticketId);
         Assert.AreEqual("東京優駿（日本ダービー）", namedSummary.RaceName);
 
         // ═══════════════════════════════════════════════════
@@ -336,7 +336,7 @@ public class WeekendRacePredictionScenarioTests
 
         // --- 調教後の最終確認メモを記録する ---
         var memo3Response = await _client.PostAsJsonAsync("/api/memos",
-            new CreateMemoRequest(
+            new CreateMemoRequest(new(
                 AuthorId: "analyst-1",
                 MemoType: "TrainingNote",
                 Content: "サニーブレイズ最終追い切りで馬なりで余裕十分。状態は申し分なし。当日は晴れ予報で馬場は良が続く見込み。",
@@ -346,7 +346,7 @@ public class WeekendRacePredictionScenarioTests
                     new MemoSubjectDto("Horse", horse1Id),
                     new MemoSubjectDto("Race", raceId)
                 },
-                MemoId: memo3Id),
+                MemoId: memo3Id)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, memo3Response.StatusCode, "土曜調教メモの記録に失敗");
 
@@ -471,14 +471,14 @@ public class WeekendRacePredictionScenarioTests
         // --- 予想チケットを評価する（本命的中・馬連的中） ---
         var evaluateTicket = await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/evaluate",
-            new EvaluatePredictionTicketRequest(
+            new EvaluatePredictionTicketRequest(ticketId, new(
                 RaceId: raceId,
                 EvaluatedAt: DateTimeOffset.UtcNow,
                 EvaluationRevision: 1,
                 HitTypeCodes: new[] { "WIN", "EXACTA" },
                 ScoreSummary: 95.0m,
                 ReturnAmount: 2380m,
-                Roi: 1.19m),
+                Roi: 1.19m)),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, evaluateTicket.StatusCode, "予想評価に失敗");
 
@@ -500,7 +500,7 @@ public class WeekendRacePredictionScenarioTests
         Assert.AreEqual(HttpStatusCode.OK, horse1Memos.StatusCode, "馬メモ取得に失敗");
         var horse1MemosJson = await horse1Memos.Content.ReadAsStringAsync();
         using var horse1MemosDoc = JsonDocument.Parse(horse1MemosJson);
-        var horse1MemosArray = horse1MemosDoc.RootElement.EnumerateArray().ToList();
+        var horse1MemosArray = horse1MemosDoc.RootElement.GetProperty("memos").EnumerateArray().ToList();
         Assert.IsTrue(horse1MemosArray.Count >= 2, "本命馬には少なくとも2件のメモが記録されているべき");
     }
 }

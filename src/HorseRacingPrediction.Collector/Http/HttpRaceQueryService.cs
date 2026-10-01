@@ -100,7 +100,8 @@ public sealed class HttpRaceQueryService : IRaceQueryService
             return null;
 
         response.EnsureSuccessStatusCode();
-        var memos = await response.Content.ReadFromJsonAsync<List<MemoResponseDto>>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        var payload = await response.Content.ReadFromJsonAsync<GetMemosBySubjectResponse>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        var memos = payload?.Memos;
         if (memos is null || memos.Count == 0)
             return null;
 
@@ -113,8 +114,8 @@ public sealed class HttpRaceQueryService : IRaceQueryService
                 m.MemoType,
                 m.Content,
                 m.CreatedAt,
-                m.Subjects.Select(s => new HorseRacingPrediction.Contracts.Memos.MemoSubjectDto(s.SubjectType, s.SubjectId)).ToList(),
-                m.Links.Select(l => new HorseRacingPrediction.Contracts.Memos.MemoLinkDto(l.LinkId, l.LinkType, l.Title, l.Url, l.StorageKey)).ToList())).ToList()
+                m.Subjects,
+                m.Links)).ToList()
         };
     }
 
@@ -145,18 +146,12 @@ public sealed class HttpRaceQueryService : IRaceQueryService
             return null;
 
         response.EnsureSuccessStatusCode();
-        var dto = await response.Content.ReadFromJsonAsync<MlPredictionResponseDto>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        var payload = await response.Content.ReadFromJsonAsync<GetMlPredictionResponse>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        var dto = payload?.Prediction;
         if (dto is null || string.IsNullOrWhiteSpace(dto.RaceId))
             return null;
 
-        return new MlPredictionDto(
-            dto.RaceId,
-            dto.Rankings.Select(x => new HorseRacingPrediction.Contracts.MachineLearning.MlHorsePredictionDto(
-                x.EntryId,
-                x.HorseId,
-                x.HorseNumber,
-                x.PredictedScore,
-                x.PredictedRank)).ToList());
+        return dto;
     }
 
     public async Task<PredictionTicketWithMarksDto?> GetPredictionTicketAsync(string predictionTicketId, CancellationToken cancellationToken = default)
@@ -166,7 +161,8 @@ public sealed class HttpRaceQueryService : IRaceQueryService
             return null;
 
         response.EnsureSuccessStatusCode();
-        var dto = await response.Content.ReadFromJsonAsync<PredictionTicketResponseDto>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        var payload = await response.Content.ReadFromJsonAsync<GetPredictionTicketResponse>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        var dto = payload?.PredictionTicket;
         if (dto is null || string.IsNullOrWhiteSpace(dto.PredictionTicketId))
             return null;
 
@@ -182,69 +178,4 @@ public sealed class HttpRaceQueryService : IRaceQueryService
                 x.EntryId, x.MarkCode, x.PredictedRank, x.Score, x.Comment)).ToList());
     }
 
-    private sealed record PagedResponseDto<T>(IReadOnlyList<T> Items);
-
-    private sealed record RaceSummaryDto(string RaceId, DateOnly? RaceDate, string? RacecourseCode, int? RaceNumber);
-}
-
-internal sealed class PredictionTicketResponseDto
-{
-    public string PredictionTicketId { get; set; } = string.Empty;
-    public string? RaceId { get; set; }
-    public string? PredictorType { get; set; }
-    public string? PredictorId { get; set; }
-    public decimal ConfidenceScore { get; set; }
-    public string? SummaryComment { get; set; }
-    public DateTimeOffset? PredictedAt { get; set; }
-    public List<PredictionMarkResponseDto> Marks { get; set; } = [];
-}
-
-internal sealed class PredictionMarkResponseDto
-{
-    public string EntryId { get; set; } = string.Empty;
-    public string MarkCode { get; set; } = string.Empty;
-    public int PredictedRank { get; set; }
-    public decimal Score { get; set; }
-    public string? Comment { get; set; }
-}
-
-internal sealed class MemoResponseDto
-{
-    public string MemoId { get; set; } = string.Empty;
-    public string? AuthorId { get; set; }
-    public string MemoType { get; set; } = string.Empty;
-    public string Content { get; set; } = string.Empty;
-    public DateTimeOffset CreatedAt { get; set; }
-    public List<MemoSubjectDto> Subjects { get; set; } = [];
-    public List<MemoLinkDto> Links { get; set; } = [];
-}
-
-internal sealed class MemoSubjectDto
-{
-    public string SubjectType { get; set; } = string.Empty;
-    public string SubjectId { get; set; } = string.Empty;
-}
-
-internal sealed class MemoLinkDto
-{
-    public string LinkId { get; set; } = string.Empty;
-    public string LinkType { get; set; } = string.Empty;
-    public string Title { get; set; } = string.Empty;
-    public string? Url { get; set; }
-    public string? StorageKey { get; set; }
-}
-
-internal sealed class MlPredictionResponseDto
-{
-    public string RaceId { get; set; } = string.Empty;
-    public List<MlHorsePredictionDto> Rankings { get; set; } = [];
-}
-
-internal sealed class MlHorsePredictionDto
-{
-    public string EntryId { get; set; } = string.Empty;
-    public string HorseId { get; set; } = string.Empty;
-    public int HorseNumber { get; set; }
-    public float PredictedScore { get; set; }
-    public int PredictedRank { get; set; }
 }

@@ -1,0 +1,3 @@
+namespace HorseRacingPrediction.Contracts.PredictionScheduling;
+
+public sealed record AcquirePredictionCandidateLeasesRequest(AcquirePredictionCandidatesInputDto? Acquisition);

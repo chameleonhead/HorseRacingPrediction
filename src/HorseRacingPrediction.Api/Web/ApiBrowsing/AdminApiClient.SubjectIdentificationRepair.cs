@@ -10,9 +10,12 @@ public sealed partial class AdminApiClient
 
     public Task<SubjectIdentificationRepairPreviewDto?> GetSubjectIdentificationRepairPreviewAsync(
         CancellationToken cancellationToken = default)
-        => GetJsonAsync<SubjectIdentificationRepairPreviewDto>(SubjectIdentificationRepairPath, cancellationToken);
+        => GetSubjectIdentificationRepairPreviewCoreAsync(cancellationToken);
 
-    public async Task<AdminApiResult<ExecuteSubjectIdentificationRepairResponse>>
+    private async Task<SubjectIdentificationRepairPreviewDto?> GetSubjectIdentificationRepairPreviewCoreAsync(CancellationToken token)
+        => (await GetJsonAsync<GetSubjectIdentificationRepairResponse>(SubjectIdentificationRepairPath, token).ConfigureAwait(false))?.Preview;
+
+    public async Task<AdminApiResult<SubjectIdentificationExecutionDto>>
         ExecuteSubjectIdentificationRepairAsync(
             IReadOnlyList<SubjectIdentificationRepairInputDto> items,
             CancellationToken cancellationToken = default)
@@ -21,17 +24,17 @@ public sealed partial class AdminApiClient
             $"{SubjectIdentificationRepairPath}/execute",
             new ExecuteSubjectIdentificationRepairRequest(items), JsonOptions, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            return AdminApiResult<ExecuteSubjectIdentificationRepairResponse>.Fail(
+            return AdminApiResult<SubjectIdentificationExecutionDto>.Fail(
                 await ReadErrorsAsync(response, cancellationToken).ConfigureAwait(false));
 
         var value = await response.Content.ReadFromJsonAsync<ExecuteSubjectIdentificationRepairResponse>(
             JsonOptions, cancellationToken).ConfigureAwait(false);
         return value is null
-            ? AdminApiResult<ExecuteSubjectIdentificationRepairResponse>.Fail(["補正結果を確認できませんでした。"])
-            : AdminApiResult<ExecuteSubjectIdentificationRepairResponse>.Ok(value);
+            ? AdminApiResult<SubjectIdentificationExecutionDto>.Fail(["補正結果を確認できませんでした。"])
+            : AdminApiResult<SubjectIdentificationExecutionDto>.Ok(value.Execution);
     }
 
-    public async Task<AdminApiResult<DismissSubjectIdentificationFailuresResponse>>
+    public async Task<AdminApiResult<SubjectIdentificationDismissalDto>>
         DismissSubjectIdentificationFailuresAsync(
             IReadOnlyList<Guid> notificationIds, CancellationToken cancellationToken = default)
     {
@@ -40,13 +43,13 @@ public sealed partial class AdminApiClient
             new DismissSubjectIdentificationFailuresRequest(notificationIds), JsonOptions, cancellationToken)
             .ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            return AdminApiResult<DismissSubjectIdentificationFailuresResponse>.Fail(
+            return AdminApiResult<SubjectIdentificationDismissalDto>.Fail(
                 await ReadErrorsAsync(response, cancellationToken).ConfigureAwait(false));
 
         var value = await response.Content.ReadFromJsonAsync<DismissSubjectIdentificationFailuresResponse>(
             JsonOptions, cancellationToken).ConfigureAwait(false);
         return value is null
-            ? AdminApiResult<DismissSubjectIdentificationFailuresResponse>.Fail(["対応不要化の結果を確認できませんでした。"])
-            : AdminApiResult<DismissSubjectIdentificationFailuresResponse>.Ok(value);
+            ? AdminApiResult<SubjectIdentificationDismissalDto>.Fail(["対応不要化の結果を確認できませんでした。"])
+            : AdminApiResult<SubjectIdentificationDismissalDto>.Ok(value.Dismissal);
     }
 }

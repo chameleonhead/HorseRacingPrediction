@@ -50,9 +50,9 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
                 var barrier = await coordinator.ReadBarrierAsync(raceId, token);
                 if (barrier is { Verified: false })
                     return Results.Conflict(new { code = "RaceRepairPending", raceId });
-                if (context.Arguments.OfType<CreatePredictionTicketRequest>().FirstOrDefault() is { } create
-                    && (barrier is { Verified: true } || !string.IsNullOrWhiteSpace(create.EntryAssignmentFingerprint))
-                    && create.EntryAssignmentFingerprint != await coordinator.AssignmentFingerprintAsync(raceId, token))
+                if (context.Arguments.OfType<CreatePredictionTicketRequest>().FirstOrDefault() is { Ticket: { } ticket }
+                    && (barrier is { Verified: true } || !string.IsNullOrWhiteSpace(ticket.EntryAssignmentFingerprint))
+                    && ticket.EntryAssignmentFingerprint != await coordinator.AssignmentFingerprintAsync(raceId, token))
                     return Results.Conflict(new { code = "StalePredictionAssignment", raceId });
             }
             if (await ValidatePredictionParticipationAsync(context, token) is { } participationError)
@@ -64,9 +64,10 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
 
     private async Task<IResult?> ValidatePredictionParticipationAsync(EndpointFilterInvocationContext context, CancellationToken token)
     {
-        var mark = context.Arguments.OfType<AddPredictionMarkRequest>().FirstOrDefault();
+        var markRequest = context.Arguments.OfType<AddPredictionMarkRequest>().FirstOrDefault();
+        var mark = markRequest?.Mark;
         var finalize = context.HttpContext.Request.Path.Value?.EndsWith("/finalize", StringComparison.Ordinal) == true;
-        if (mark is null && !finalize) return null;
+        if ((markRequest is null && !finalize) || markRequest?.Mark is null && markRequest is not null) return null;
         if (context.HttpContext.Request.RouteValues["predictionTicketId"]?.ToString() is not { } ticketId) return null;
         using var db = provider.CreateContext();
         var ticket = await db.PredictionTickets.AsNoTracking().SingleOrDefaultAsync(x => x.PredictionTicketId == ticketId, token);
@@ -172,7 +173,7 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
                 foreach (var memo in subject.Memos.Where(x => x.MemoId == memoId)) AddText(JsonSerializer.Serialize(memo));
         }
         foreach (var memo in context.Arguments.OfType<CreateMemoRequest>())
-            if (memo.MemoId is not null) keys.Add("memo-id:" + memo.MemoId);
+            if (memo.Memo?.MemoId is { } requestedMemoId) keys.Add("memo-id:" + requestedMemoId);
         foreach (var raceId in keys.Where(x => x.StartsWith("race-", StringComparison.Ordinal)).ToArray())
         {
             var race = await db.RacePredictionContexts.AsNoTracking().SingleOrDefaultAsync(x => x.RaceId == raceId, token);
@@ -188,6 +189,14 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
 
     private static object? GetContractInput(object argument) => argument switch
     {
+        CreatePredictionTicketRequest { Ticket: { } input } => input,
+        AddPredictionMarkRequest { Mark: { } input } => input,
+        AddBettingSuggestionRequest { Suggestion: { } input } => input,
+        AddPredictionRationaleRequest { Rationale: { } input } => input,
+        CorrectPredictionMetadataRequest { Metadata: { } input } => input,
+        CreateMemoRequest { Memo: { } input } => input,
+        UpdateMemoRequest { Memo: { } input } => input,
+        ChangeMemoSubjectsRequest { Subjects: { } input } => input,
         CreateRaceRequest { Race: { } input } => input,
         CreateRaceFromScheduleRequest { Schedule: { } input } => input,
         CorrectRaceDataRequest { Race: { } input } => input,

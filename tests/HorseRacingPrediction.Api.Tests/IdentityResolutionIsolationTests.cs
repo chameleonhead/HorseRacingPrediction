@@ -80,9 +80,10 @@ public sealed class IdentityResolutionIsolationTests
         foreach (var resource in resources.Skip(1))
             Assert.AreEqual(CollectionTaskStatus.Succeeded, (await store.GetResourceDetailAsync(resource, definition))!.LatestTask!.Status);
         Assert.IsNull(await store.AcquireAsync(ids[0], 1, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(5)));
-        var resolved = await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest("マテラスカイ", source));
+        var resolved = await http.PostAsJsonAsync("/api/identity/horse",
+            new ResolveHorseIdentityRequest(new("マテラスカイ", source)));
         resolved.EnsureSuccessStatusCode();
-        Assert.AreEqual(parentId, (await resolved.Content.ReadFromJsonAsync<ResolvedIdentityDto>())!.Id);
+        Assert.AreEqual(parentId, (await resolved.Content.ReadFromJsonAsync<ResolveHorseIdentityResponse>())!.Identity.Id);
     }
 
     private sealed class WakeQueue : ICollectionPlatformTaskQueue

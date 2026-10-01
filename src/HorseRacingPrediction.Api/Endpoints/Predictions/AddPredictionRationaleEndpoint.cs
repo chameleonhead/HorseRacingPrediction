@@ -15,13 +15,16 @@ internal static class AddPredictionRationaleEndpoint
                     [SwaggerOperation(Summary = "Add prediction rationale", Description = "Appends a rationale entry to prediction ticket")]
         async (string predictionTicketId, AddPredictionRationaleRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
+                        if (request.Rationale is not { } rationale)
+                            return Results.BadRequest(new[] { "Command execution failed." });
+
                         var command = new AddPredictionRationaleCommand(
                             new PredictionTicketId(predictionTicketId),
-                            request.SubjectType,
-                            request.SubjectId,
-                            request.SignalType,
-                            request.SignalValue,
-                            request.ExplanationText);
+                            rationale.SubjectType,
+                            rationale.SubjectId,
+                            rationale.SignalType,
+                            rationale.SignalValue,
+                            rationale.ExplanationText);
 
                         var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                         return result.IsSuccess

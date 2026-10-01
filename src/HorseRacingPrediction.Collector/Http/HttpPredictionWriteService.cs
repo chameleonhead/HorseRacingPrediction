@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
-using System.Text.Json.Serialization;
 using HorseRacingPrediction.ApiClient;
+
+using HorseRacingPrediction.Contracts.Predictions;
 
 namespace HorseRacingPrediction.Collector.Http;
 
@@ -31,16 +32,9 @@ public sealed class HttpPredictionWriteService : IPredictionWriteService
         CancellationToken cancellationToken = default)
     {
         var predictionTicketId = $"predictionticket-{Guid.NewGuid():D}";
-        var request = new
-        {
-            PredictionTicketId = predictionTicketId,
-            RaceId = raceId,
-            PredictorType = predictorType,
-            PredictorId = predictorId,
-            ConfidenceScore = confidenceScore,
-            SummaryComment = summaryComment,
-            EntryAssignmentFingerprint = entryAssignmentFingerprint
-        };
+        var request = new CreatePredictionTicketRequest(new CreatePredictionTicketInputDto(
+            raceId, predictorType, predictorId, confidenceScore, summaryComment,
+            predictionTicketId, entryAssignmentFingerprint));
 
         var response = await _httpClient
             .PostAsJsonAsync("/api/predictions", request, cancellationToken)
@@ -49,7 +43,7 @@ public sealed class HttpPredictionWriteService : IPredictionWriteService
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content
-            .ReadFromJsonAsync<CreatedIdResponse>(cancellationToken: cancellationToken)
+            .ReadFromJsonAsync<CreatePredictionTicketResponse>(cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
         return result?.PredictionTicketId ?? predictionTicketId;
@@ -64,14 +58,8 @@ public sealed class HttpPredictionWriteService : IPredictionWriteService
         string? comment,
         CancellationToken cancellationToken = default)
     {
-        var request = new
-        {
-            EntryId = entryId,
-            MarkCode = markCode,
-            PredictedRank = predictedRank,
-            Score = score,
-            Comment = comment
-        };
+        var request = new AddPredictionMarkRequest(predictionTicketId,
+            new AddPredictionMarkInputDto(entryId, markCode, predictedRank, score, comment));
 
         var response = await _httpClient
             .PostAsJsonAsync($"/api/predictions/{Uri.EscapeDataString(predictionTicketId)}/marks", request, cancellationToken)
@@ -89,14 +77,8 @@ public sealed class HttpPredictionWriteService : IPredictionWriteService
         string? explanationText,
         CancellationToken cancellationToken = default)
     {
-        var request = new
-        {
-            SubjectType = subjectType,
-            SubjectId = subjectId,
-            SignalType = signalType,
-            SignalValue = signalValue,
-            ExplanationText = explanationText
-        };
+        var request = new AddPredictionRationaleRequest(predictionTicketId,
+            new AddPredictionRationaleInputDto(subjectType, subjectId, signalType, signalValue, explanationText));
 
         var response = await _httpClient
             .PostAsJsonAsync($"/api/predictions/{Uri.EscapeDataString(predictionTicketId)}/rationales", request, cancellationToken)
@@ -114,11 +96,5 @@ public sealed class HttpPredictionWriteService : IPredictionWriteService
             .ConfigureAwait(false);
 
         response.EnsureSuccessStatusCode();
-    }
-
-    private sealed class CreatedIdResponse
-    {
-        [JsonPropertyName("predictionTicketId")]
-        public string? PredictionTicketId { get; init; }
     }
 }

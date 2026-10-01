@@ -16,11 +16,14 @@ internal static class UpdateMemoEndpoint
                     [SwaggerOperation(Summary = "Update memo", Description = "Updates content or links of an existing memo")]
         async (string memoId, UpdateMemoRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
-                        var links = request.Links?.Select(l =>
+                        if (request.Memo is not { } memo)
+                            return Results.BadRequest(new[] { "Command execution failed." });
+
+                        var links = memo.Links?.Select(l =>
                             new MemoLink(l.LinkId, Enum.Parse<MemoLinkType>(l.LinkType, ignoreCase: true), l.Title, l.Url, l.StorageKey))
                             .ToList();
 
-                        var command = new UpdateMemoCommand(new MemoId(memoId), request.MemoType, request.Content, links);
+                        var command = new UpdateMemoCommand(new MemoId(memoId), memo.MemoType, memo.Content, links);
                         var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                         return result.IsSuccess
                             ? Results.Ok()

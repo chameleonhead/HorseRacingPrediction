@@ -16,25 +16,28 @@ internal static class CreatePredictionTicketEndpoint
                     [SwaggerOperation(Summary = "Create prediction ticket", Description = "Creates one prediction ticket for a race")]
         async (CreatePredictionTicketRequest request, ICommandBus commandBus, RaceWriteCoordinator coordinator, CancellationToken cancellationToken) =>
                     {
-                        var predictionTicketId = string.IsNullOrWhiteSpace(request.PredictionTicketId)
-                            ? PredictionTicketId.New : new PredictionTicketId(request.PredictionTicketId);
+                        if (request.Ticket is not { } ticket)
+                            return Results.BadRequest(new[] { "Command execution failed." });
+
+                        var predictionTicketId = string.IsNullOrWhiteSpace(ticket.PredictionTicketId)
+                            ? PredictionTicketId.New : new PredictionTicketId(ticket.PredictionTicketId);
                         var command = new CreatePredictionTicketCommand(
                             predictionTicketId,
-                            request.RaceId,
-                            request.PredictorType,
-                            request.PredictorId,
-                            request.ConfidenceScore,
-                            request.SummaryComment,
-                            await coordinator.AssignmentFingerprintAsync(request.RaceId, cancellationToken));
+                            ticket.RaceId,
+                            ticket.PredictorType,
+                            ticket.PredictorId,
+                            ticket.ConfidenceScore,
+                            ticket.SummaryComment,
+                            await coordinator.AssignmentFingerprintAsync(ticket.RaceId, cancellationToken));
 
                         var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                         return result.IsSuccess
-                            ? Results.Created($"/api/predictions/{predictionTicketId.Value}", new { PredictionTicketId = predictionTicketId.Value })
+                            ? Results.Created($"/api/predictions/{predictionTicketId.Value}", new CreatePredictionTicketResponse(predictionTicketId.Value))
                             : Results.BadRequest(new[] { "Command execution failed." });
                     })
                     .WithName("CreatePredictionTicket")
                     .WithTags("Prediction API")
-                    .Produces(StatusCodes.Status201Created)
+                    .Produces<CreatePredictionTicketResponse>(StatusCodes.Status201Created)
                     .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
                     .Produces(StatusCodes.Status401Unauthorized);
     }

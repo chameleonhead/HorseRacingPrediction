@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using HorseRacingPrediction.Contracts.PredictionScheduling;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -10,7 +11,8 @@ public sealed class HttpPredictionSchedule(HttpClient client) : IPredictionSched
     public async Task EnqueueAsync(IEnumerable<string> raceIds, DateTimeOffset now, CancellationToken cancellationToken = default)
     {
         using var response = await client.PostAsJsonAsync("api/v2/internal/prediction-candidates",
-            new EnqueuePredictionCandidatesRequest(raceIds.ToArray(), now), cancellationToken).ConfigureAwait(false);
+            new HorseRacingPrediction.Contracts.PredictionScheduling.EnqueuePredictionCandidatesRequest(
+                new EnqueuePredictionCandidatesInputDto(raceIds.ToArray(), now)), cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }
 
@@ -18,19 +20,22 @@ public sealed class HttpPredictionSchedule(HttpClient client) : IPredictionSched
         int maxCount, TimeSpan leaseDuration, CancellationToken cancellationToken = default)
     {
         using var response = await client.PostAsJsonAsync("api/v2/internal/prediction-candidate-leases",
-            new AcquirePredictionCandidatesRequest(now, minAge, maxCount, leaseDuration), cancellationToken).ConfigureAwait(false);
+            new AcquirePredictionCandidateLeasesRequest(new AcquirePredictionCandidatesInputDto(now, minAge, maxCount, leaseDuration)), cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NoContent) return [];
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<List<PredictionCandidateLease>>(cancellationToken)
-                   .ConfigureAwait(false) ?? [];
+        var payload = await response.Content.ReadFromJsonAsync<AcquirePredictionCandidateLeasesResponse>(cancellationToken)
+            .ConfigureAwait(false);
+        return payload?.Leases.Select(lease => new PredictionCandidateLease(lease.RaceId, lease.LeaseToken)).ToArray() ?? [];
     }
 
     public Task<bool> CompleteAsync(string raceId, string leaseToken, CancellationToken cancellationToken = default)
-        => PatchResultAsync(raceId, new PredictionCandidateTransitionRequest("Complete", leaseToken), cancellationToken);
+        => PatchResultAsync(raceId, new HorseRacingPrediction.Contracts.PredictionScheduling.TransitionPredictionCandidateRequest(
+            raceId, new PredictionCandidateTransitionInputDto("Complete", leaseToken)), cancellationToken);
 
     public Task<bool> RequeueAsync(string raceId, string leaseToken, DateTimeOffset availableAt, string? error,
         CancellationToken cancellationToken = default)
-        => PatchResultAsync(raceId, new PredictionCandidateTransitionRequest("Requeue", leaseToken, availableAt, error), cancellationToken);
+        => PatchResultAsync(raceId, new HorseRacingPrediction.Contracts.PredictionScheduling.TransitionPredictionCandidateRequest(
+            raceId, new PredictionCandidateTransitionInputDto("Requeue", leaseToken, availableAt, error)), cancellationToken);
 
     private async Task<bool> PatchResultAsync(string raceId, object request, CancellationToken cancellationToken)
     {
@@ -42,8 +47,3 @@ public sealed class HttpPredictionSchedule(HttpClient client) : IPredictionSched
         return true;
     }
 }
-
-public sealed record EnqueuePredictionCandidatesRequest(string[] RaceIds, DateTimeOffset Now);
-public sealed record AcquirePredictionCandidatesRequest(DateTimeOffset Now, TimeSpan MinAge, int MaxCount, TimeSpan LeaseDuration);
-public sealed record PredictionCandidateTransitionRequest(string Mode, string LeaseToken,
-    DateTimeOffset? AvailableAt = null, string? Error = null);

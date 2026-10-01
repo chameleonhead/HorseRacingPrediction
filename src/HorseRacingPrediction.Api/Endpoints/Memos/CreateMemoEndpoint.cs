@@ -16,26 +16,26 @@ internal static class CreateMemoEndpoint
                     [SwaggerOperation(Summary = "Create memo", Description = "Creates a memo that can be attached to any combination of subjects (horse, trainer, jockey, race)")]
         async (CreateMemoRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
                     {
-                        if (request.Subjects is null || request.Subjects.Count == 0)
+                        if (request.Memo is not { } memo || memo.Subjects is null || memo.Subjects.Count == 0)
                             return Results.BadRequest(new[] { "At least one subject is required." });
 
-                        var memoId = string.IsNullOrWhiteSpace(request.MemoId)
-                            ? MemoId.New : new MemoId(request.MemoId);
+                        var memoId = string.IsNullOrWhiteSpace(memo.MemoId)
+                            ? MemoId.New : new MemoId(memo.MemoId);
 
-                        var subjects = request.Subjects
+                        var subjects = memo.Subjects
                             .Select(s => new MemoSubject(Enum.Parse<MemoSubjectType>(s.SubjectType, ignoreCase: true), s.SubjectId))
                             .ToList();
 
-                        var links = (request.Links ?? Array.Empty<MemoLinkDto>())
+                        var links = (memo.Links ?? Array.Empty<MemoLinkDto>())
                             .Select(l => new MemoLink(l.LinkId, Enum.Parse<MemoLinkType>(l.LinkType, ignoreCase: true), l.Title, l.Url, l.StorageKey))
                             .ToList();
 
                         var command = new CreateMemoCommand(
                             memoId,
-                            request.AuthorId,
-                            request.MemoType,
-                            request.Content,
-                            request.CreatedAt,
+                            memo.AuthorId,
+                            memo.MemoType,
+                            memo.Content,
+                            memo.CreatedAt,
                             subjects,
                             links);
 
@@ -43,7 +43,7 @@ internal static class CreateMemoEndpoint
                         {
                             var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                             return result.IsSuccess
-                                ? Results.Created($"/api/memos/{memoId.Value}", new { MemoId = memoId.Value })
+                                ? Results.Created($"/api/memos/{memoId.Value}", new CreateMemoResponse(memoId.Value))
                                 : Results.BadRequest(new[] { "Command execution failed." });
                         }
                         catch (InvalidOperationException ex) when (string.Equals(ex.Message, "Memo is already created.", StringComparison.Ordinal))
@@ -53,7 +53,7 @@ internal static class CreateMemoEndpoint
                     })
                     .WithName("CreateMemo")
                     .WithTags("Memo API")
-                    .Produces(StatusCodes.Status201Created)
+                    .Produces<CreateMemoResponse>(StatusCodes.Status201Created)
                     .Produces<IEnumerable<string>>(StatusCodes.Status409Conflict)
                     .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
                     .Produces(StatusCodes.Status401Unauthorized);

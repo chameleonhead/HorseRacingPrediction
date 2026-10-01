@@ -1,7 +1,8 @@
 
+using System.Text.Json.Serialization;
+
 namespace HorseRacingPrediction.Contracts.Memos;
 
 public sealed record UpdateMemoRequest(
-    string? MemoType = null,
-    string? Content = null,
-    IReadOnlyList<MemoLinkDto>? Links = null);
+    [property: JsonIgnore] string MemoId,
+    UpdateMemoInputDto? Memo);

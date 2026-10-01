@@ -32,7 +32,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
     private readonly AgentAcquisitionStatusRecorder _statusRecorder;
 
     public Task<string> ResolveRaceIdentityAsync(DateOnly date, string course, int number, CancellationToken cancellationToken = default)
-        => ResolveIdentityAsync("race", new ResolveRaceIdentityRequest(date, course, number), cancellationToken);
+        => ResolveIdentityAsync("race", new ResolveRaceIdentityRequest(new ResolveRaceIdentityInputDto(date, course, number)), cancellationToken);
 
     private async Task<string> ResolveIdentityAsync<T>(string kind, T request, CancellationToken token)
     {
@@ -51,11 +51,13 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             }
             catch (JsonException) { /* An unrecognized response retains the normal safety stop. */ }
             if (SubjectIdentityResolutionException.IsKnownCode(code))
-                throw new SubjectIdentityResolutionException(code!, horse.Name, response.StatusCode);
+                throw new SubjectIdentityResolutionException(code!, horse.Horse?.Name ?? string.Empty, response.StatusCode);
         }
         response.EnsureSuccessStatusCode();
-        return (await response.Content.ReadFromJsonAsync<ResolvedIdentityDto>(cancellationToken: token).ConfigureAwait(false))?.Id
-            ?? throw new InvalidOperationException("Identity resolution returned no identity.");
+        var identity = kind == "horse"
+            ? (await response.Content.ReadFromJsonAsync<ResolveHorseIdentityResponse>(cancellationToken: token).ConfigureAwait(false))?.Identity
+            : (await response.Content.ReadFromJsonAsync<ResolveRaceIdentityResponse>(cancellationToken: token).ConfigureAwait(false))?.Identity;
+        return identity?.Id ?? throw new InvalidOperationException("Identity resolution returned no identity.");
     }
 
     public HttpDataCollectionWriteService(HttpClient httpClient, AgentAcquisitionStatusRecorder statusRecorder)
@@ -89,7 +91,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         }
 
         var parsedRaceDate = DateOnly.Parse(raceDate, CultureInfo.InvariantCulture);
-        var raceId = await ResolveIdentityAsync("race", new ResolveRaceIdentityRequest(parsedRaceDate, racecourseCode, raceNumber), cancellationToken);
+        var raceId = await ResolveIdentityAsync("race", new ResolveRaceIdentityRequest(
+            new ResolveRaceIdentityInputDto(parsedRaceDate, racecourseCode, raceNumber)), cancellationToken);
 
         var existing = await GetRacePredictionContextAsync(raceId, cancellationToken).ConfigureAwait(false);
 
@@ -232,7 +235,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         {
             var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? registeredName);
             var parsedBirthDate = TryParseDateOnly(birthDate);
-            var horseId = await ResolveIdentityAsync("horse", new ResolveHorseIdentityRequest(registeredName, jraSourceIdentity, parsedBirthDate), cancellationToken);
+            var horseId = await ResolveIdentityAsync("horse", new ResolveHorseIdentityRequest(
+                new ResolveHorseIdentityInputDto(registeredName, jraSourceIdentity, parsedBirthDate)), cancellationToken);
 
             await UpdateHorseAsync(horseId, registeredName, normalized, sexCode, parsedBirthDate, ownerName,
                 breederName, sireName, damName, damsireName, coatColor, cancellationToken).ConfigureAwait(false);
@@ -442,7 +446,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             : JockeyNameNormalizer.Normalize(jockeyName);
 
         var race = await GetRacePredictionContextAsync(raceId, cancellationToken).ConfigureAwait(false);
-        var incomingHorseId = await ResolveIdentityAsync("horse", new ResolveHorseIdentityRequest(horseName, jraHorseSourceIdentity), cancellationToken);
+        var incomingHorseId = await ResolveIdentityAsync("horse", new ResolveHorseIdentityRequest(
+            new ResolveHorseIdentityInputDto(horseName, jraHorseSourceIdentity)), cancellationToken);
         var existingEntry = race?.Entries.FirstOrDefault(e => e.HorseId == incomingHorseId);
         if (existingEntry is not null)
         {

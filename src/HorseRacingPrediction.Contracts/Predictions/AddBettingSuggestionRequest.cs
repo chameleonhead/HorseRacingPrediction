@@ -1,9 +1,7 @@
-using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace HorseRacingPrediction.Contracts.Predictions;
 
 public sealed record AddBettingSuggestionRequest(
-    [property: Required, StringLength(16, MinimumLength = 1)] string BetTypeCode,
-    [property: Required, StringLength(200, MinimumLength = 1)] string SelectionExpression,
-    [property: Range(0, double.MaxValue)] decimal? StakeAmount,
-    decimal? ExpectedValue);
+    [property: JsonIgnore] string PredictionTicketId,
+    AddBettingSuggestionInputDto? Suggestion);
