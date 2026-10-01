@@ -1,0 +1,3266 @@
+{
+  "schemaVersion": 1,
+  "changeId": "20260930_refit-api-clients",
+  "taskId": "T4-A1",
+  "source": "http-contract-inventory.json (135 frozen operation rows)",
+  "methodNaming": "Endpoint filename stem with Endpoint suffix removed and one Async suffix appended (already-Async stems are unchanged).",
+  "interfaceSemantics": "Each method takes CancellationToken; it takes the operation Request iff requestPresent, split by the facade into path/query scalars and/or typed body. Data methods return Task<ApiResponse<Response>>; no-data methods return Task<IApiResponse>.",
+  "interfaces": [
+    {
+      "name": "IRacesApi",
+      "namespace": "HorseRacingPrediction.ApiClient.Races",
+      "operationCount": 29,
+      "operations": [
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "ApplyRaceEntryRepairAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/races/{raceId}/entry-repairs",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "ApplyRaceEntryRepairRequest",
+          "bodyInputType": "ApplyRaceEntryRepairRequest",
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "ApplyRaceEntryRepairResponse",
+              "status": 200
+            },
+            {
+              "type": null,
+              "status": 400
+            },
+            {
+              "type": null,
+              "status": 409
+            }
+          ],
+          "endpointFile": "ApplyRaceEntryRepairEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "CloseRaceLifecycleAsync",
+          "httpMethod": "POST",
+          "path": "/api/races/{raceId}/close",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "CloseRaceLifecycleRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "CloseRaceLifecycleEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "CorrectRaceDataAsync",
+          "httpMethod": "PATCH",
+          "path": "/api/races/{raceId}",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CorrectRaceDataRequest",
+          "bodyInputType": "CorrectRaceDataRequest",
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "CorrectRaceDataEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "CreateRaceAsync",
+          "httpMethod": "POST",
+          "path": "/api/races",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CreateRaceRequest",
+          "bodyInputType": "CreateRaceRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Races.CreateRaceResponse",
+              "status": 201
+            }
+          ],
+          "endpointFile": "CreateRaceEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "CreateRaceFromScheduleAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/races",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CreateRaceFromScheduleRequest",
+          "bodyInputType": "PrepareHorseHistoryRaceRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Races.CreateRaceFromScheduleResponse",
+              "status": 200
+            },
+            {
+              "type": "HorseRacingPrediction.Contracts.Races.CreateRaceFromScheduleResponse",
+              "status": 201
+            }
+          ],
+          "endpointFile": "CreateRaceFromScheduleEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "CreateRaceOddsSnapshotAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/races/{raceId}/odds-snapshot-records",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CreateRaceOddsSnapshotRequest",
+          "bodyInputType": "CreateRaceOddsSnapshotRequest",
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [
+            {
+              "type": null,
+              "status": 201
+            },
+            {
+              "type": null,
+              "status": 400
+            },
+            {
+              "type": null,
+              "status": 404
+            },
+            {
+              "type": null,
+              "status": 409
+            }
+          ],
+          "endpointFile": "CreateRaceOddsSnapshotEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "DeclareEntryResultAsync",
+          "httpMethod": "POST",
+          "path": "/api/races/{raceId}/entries/{entryId}/result",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "DeclareEntryResultRequest",
+          "bodyInputType": "DeclareEntryResultRequest",
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            },
+            {
+              "name": "entryId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "DeclareEntryResultEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "DeclarePayoutResultAsync",
+          "httpMethod": "POST",
+          "path": "/api/races/{raceId}/payout",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "DeclarePayoutResultRequest",
+          "bodyInputType": "ApiContracts.DeclarePayoutResultRequest",
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "DeclarePayoutResultEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "DeclareRaceResultBulkAsync",
+          "httpMethod": "POST",
+          "path": "/api/races/result-bulk",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "DeclareRaceResultBulkRequest",
+          "bodyInputType": "ApiContracts.DeclareRaceResultBulkRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "DeclareRaceResultBulkEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "DeclareRaceResultAsync",
+          "httpMethod": "POST",
+          "path": "/api/races/{raceId}/result",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "DeclareRaceResultRequest",
+          "bodyInputType": "DeclareRaceResultRequest",
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "DeclareRaceResultEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "GetPredictionComparisonAsync",
+          "httpMethod": "GET",
+          "path": "/api/races/{raceId}/comparison",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetPredictionComparisonRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetPredictionComparisonResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetPredictionComparisonEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "GetRaceAssignmentFenceAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/races/{raceId}/entry-repair/assignment-fence-state",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetRaceAssignmentFenceRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetRaceAssignmentFenceResponse",
+              "status": 200
+            },
+            {
+              "type": null,
+              "status": 409
+            }
+          ],
+          "endpointFile": "GetRaceAssignmentFenceEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "GetRaceAsync",
+          "httpMethod": "GET",
+          "path": "/api/races/{raceId}",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetRaceRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Races.GetRaceResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetRaceEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "GetRaceEntryRepairAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/races/{raceId}/entry-repair/inspection",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetRaceEntryRepairRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetRaceEntryRepairResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetRaceEntryRepairEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "GetRaceEntryRepairHoldAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/races/{raceId}/entry-repair/hold-state",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetRaceEntryRepairHoldRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetRaceEntryRepairHoldResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetRaceEntryRepairHoldEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "GetRacePredictionContextAsync",
+          "httpMethod": "GET",
+          "path": "/api/races/{raceId}/context",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetRacePredictionContextRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Races.GetRacePredictionContextResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetRacePredictionContextEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "ListRaceOddsSnapshotsAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/races/{raceId}/odds-snapshot-records",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "ListRaceOddsSnapshotsRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "ListRaceOddsSnapshotsResponse",
+              "status": 200
+            },
+            {
+              "type": null,
+              "status": 404
+            }
+          ],
+          "endpointFile": "ListRaceOddsSnapshotsEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "MarkRaceRescheduledAsync",
+          "httpMethod": "POST",
+          "path": "/api/races/{raceId}/reschedule",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "MarkRaceRescheduledRequest",
+          "bodyInputType": "MarkRaceRescheduledRequest",
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "MarkRaceRescheduledEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "OpenPreRaceAsync",
+          "httpMethod": "POST",
+          "path": "/api/races/{raceId}/open-pre-race",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "OpenPreRaceRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "OpenPreRaceEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "PreviewRaceEntryRepairAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/races/{raceId}/entry-repair-previews",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "PreviewRaceEntryRepairRequest",
+          "bodyInputType": "PreviewRaceEntryRepairRequest",
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "PreviewRaceEntryRepairResponse",
+              "status": 200
+            },
+            {
+              "type": null,
+              "status": 400
+            }
+          ],
+          "endpointFile": "PreviewRaceEntryRepairEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "PublishRaceCardAsync",
+          "httpMethod": "POST",
+          "path": "/api/races/{raceId}/card/publish",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "PublishRaceCardRequest",
+          "bodyInputType": "PublishRaceCardRequest",
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "PublishRaceCardEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "RecordTrackConditionAsync",
+          "httpMethod": "POST",
+          "path": "/api/races/{raceId}/track-condition",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "RecordTrackConditionRequest",
+          "bodyInputType": "ApiContracts.RecordTrackConditionRequest",
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "RecordTrackConditionEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "RecordWeatherObservationAsync",
+          "httpMethod": "POST",
+          "path": "/api/races/{raceId}/weather",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "RecordWeatherObservationRequest",
+          "bodyInputType": "ApiContracts.RecordWeatherObservationRequest",
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "RecordWeatherObservationEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "RegisterEntryAsync",
+          "httpMethod": "POST",
+          "path": "/api/races/{raceId}/entries",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "RegisterEntryRequest",
+          "bodyInputType": "RegisterEntryRequest",
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Races.RegisterEntryResponse",
+              "status": 201
+            }
+          ],
+          "endpointFile": "RegisterEntryEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "ReleaseRaceEntryRepairHoldAsync",
+          "httpMethod": "PATCH",
+          "path": "/api/v2/admin/races/{raceId}/entry-repair/hold",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "ReleaseRaceEntryRepairHoldRequest",
+          "bodyInputType": "ReleaseRaceEntryRepairRequest",
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "ReleaseRaceEntryRepairHoldResponse",
+              "status": 200
+            },
+            {
+              "type": null,
+              "status": 400
+            },
+            {
+              "type": null,
+              "status": 409
+            }
+          ],
+          "endpointFile": "ReleaseRaceEntryRepairHoldEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "SearchRacesAsync",
+          "httpMethod": "GET",
+          "path": "/api/races",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "SearchRacesRequest",
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Races.SearchRacesResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "SearchRacesEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "StartRaceAsync",
+          "httpMethod": "POST",
+          "path": "/api/races/{raceId}/start",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "StartRaceRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "StartRaceEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "UpdateEntryCollectedDataAsync",
+          "httpMethod": "PUT",
+          "path": "/api/races/{raceId}/entries/{entryId}",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "UpdateEntryCollectedDataRequest",
+          "bodyInputType": "UpdateEntryCollectedDataRequest",
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            },
+            {
+              "name": "entryId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Races.UpdateEntryCollectedDataResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "UpdateEntryCollectedDataEndpoint.cs"
+        },
+        {
+          "family": "Races",
+          "interface": "IRacesApi",
+          "method": "UpdateRaceEntryRepairHoldAsync",
+          "httpMethod": "PUT",
+          "path": "/api/v2/admin/races/{raceId}/entry-repair/hold",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "UpdateRaceEntryRepairHoldRequest",
+          "bodyInputType": "HoldRaceEntryRepairRequest",
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "UpdateRaceEntryRepairHoldResponse",
+              "status": 200
+            },
+            {
+              "type": null,
+              "status": 400
+            },
+            {
+              "type": null,
+              "status": 409
+            }
+          ],
+          "endpointFile": "UpdateRaceEntryRepairHoldEndpoint.cs"
+        }
+      ]
+    },
+    {
+      "name": "IHorsesApi",
+      "namespace": "HorseRacingPrediction.ApiClient.Horses",
+      "operationCount": 9,
+      "operations": [
+        {
+          "family": "Horses",
+          "interface": "IHorsesApi",
+          "method": "CorrectHorseDataAsync",
+          "httpMethod": "PATCH",
+          "path": "/api/horses/{horseId}",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CorrectHorseDataRequest",
+          "bodyInputType": "HorseRacingPrediction.Contracts.Horses.CorrectHorseDataRequest",
+          "routeParameters": [
+            {
+              "name": "horseId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "CorrectHorseDataEndpoint.cs"
+        },
+        {
+          "family": "Horses",
+          "interface": "IHorsesApi",
+          "method": "GetHorseParticipationsAsync",
+          "httpMethod": "GET",
+          "path": "/api/horses/{horseId}/participations",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetHorseParticipationsRequest",
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Horses.GetHorseParticipationsResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetHorseParticipationsEndpoint.cs"
+        },
+        {
+          "family": "Horses",
+          "interface": "IHorsesApi",
+          "method": "GetHorseProfileAsync",
+          "httpMethod": "GET",
+          "path": "/api/horses/{horseId}",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetHorseProfileRequest",
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Horses.GetHorseProfileResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetHorseProfileEndpoint.cs"
+        },
+        {
+          "family": "Horses",
+          "interface": "IHorsesApi",
+          "method": "GetHorseRaceHistoryAsync",
+          "httpMethod": "GET",
+          "path": "/api/horses/{horseId}/race-history",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetHorseRaceHistoryRequest",
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Horses.GetHorseRaceHistoryResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetHorseRaceHistoryEndpoint.cs"
+        },
+        {
+          "family": "Horses",
+          "interface": "IHorsesApi",
+          "method": "GetHorseWeightHistoryAsync",
+          "httpMethod": "GET",
+          "path": "/api/horses/{horseId}/weight-history",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetHorseWeightHistoryRequest",
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Horses.GetHorseWeightHistoryResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetHorseWeightHistoryEndpoint.cs"
+        },
+        {
+          "family": "Horses",
+          "interface": "IHorsesApi",
+          "method": "MergeHorseAliasAsync",
+          "httpMethod": "POST",
+          "path": "/api/horses/{horseId}/aliases",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "MergeHorseAliasRequest",
+          "bodyInputType": "HorseRacingPrediction.Contracts.Horses.MergeHorseAliasRequest",
+          "routeParameters": [
+            {
+              "name": "horseId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "MergeHorseAliasEndpoint.cs"
+        },
+        {
+          "family": "Horses",
+          "interface": "IHorsesApi",
+          "method": "RegisterHorseAsync",
+          "httpMethod": "POST",
+          "path": "/api/horses",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "RegisterHorseRequest",
+          "bodyInputType": "HorseRacingPrediction.Contracts.Horses.RegisterHorseRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Horses.RegisterHorseResponse",
+              "status": 201
+            }
+          ],
+          "endpointFile": "RegisterHorseEndpoint.cs"
+        },
+        {
+          "family": "Horses",
+          "interface": "IHorsesApi",
+          "method": "SearchHorsesAsync",
+          "httpMethod": "GET",
+          "path": "/api/horses",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "SearchHorsesRequest",
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Horses.SearchHorsesResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "SearchHorsesEndpoint.cs"
+        },
+        {
+          "family": "Horses",
+          "interface": "IHorsesApi",
+          "method": "UpdateHorseProfileAsync",
+          "httpMethod": "PUT",
+          "path": "/api/horses/{horseId}",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "UpdateHorseProfileRequest",
+          "bodyInputType": "HorseRacingPrediction.Contracts.Horses.UpdateHorseProfileRequest",
+          "routeParameters": [
+            {
+              "name": "horseId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "UpdateHorseProfileEndpoint.cs"
+        }
+      ]
+    },
+    {
+      "name": "IJockeysApi",
+      "namespace": "HorseRacingPrediction.ApiClient.Jockeys",
+      "operationCount": 8,
+      "operations": [
+        {
+          "family": "Jockeys",
+          "interface": "IJockeysApi",
+          "method": "CorrectJockeyDataAsync",
+          "httpMethod": "PATCH",
+          "path": "/api/jockeys/{jockeyId}",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CorrectJockeyDataRequest",
+          "bodyInputType": "HorseRacingPrediction.Contracts.Jockeys.CorrectJockeyDataRequest",
+          "routeParameters": [
+            {
+              "name": "jockeyId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "CorrectJockeyDataEndpoint.cs"
+        },
+        {
+          "family": "Jockeys",
+          "interface": "IJockeysApi",
+          "method": "GetJockeyParticipationsAsync",
+          "httpMethod": "GET",
+          "path": "/api/jockeys/{jockeyId}/participations",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetJockeyParticipationsRequest",
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Jockeys.GetJockeyParticipationsResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetJockeyParticipationsEndpoint.cs"
+        },
+        {
+          "family": "Jockeys",
+          "interface": "IJockeysApi",
+          "method": "GetJockeyProfileAsync",
+          "httpMethod": "GET",
+          "path": "/api/jockeys/{jockeyId}",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetJockeyProfileRequest",
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Jockeys.GetJockeyProfileResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetJockeyProfileEndpoint.cs"
+        },
+        {
+          "family": "Jockeys",
+          "interface": "IJockeysApi",
+          "method": "GetJockeyRaceHistoryAsync",
+          "httpMethod": "GET",
+          "path": "/api/jockeys/{jockeyId}/race-history",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetJockeyRaceHistoryRequest",
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Jockeys.GetJockeyRaceHistoryResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetJockeyRaceHistoryEndpoint.cs"
+        },
+        {
+          "family": "Jockeys",
+          "interface": "IJockeysApi",
+          "method": "MergeJockeyAliasAsync",
+          "httpMethod": "POST",
+          "path": "/api/jockeys/{jockeyId}/aliases",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "MergeJockeyAliasRequest",
+          "bodyInputType": "HorseRacingPrediction.Contracts.Jockeys.MergeJockeyAliasRequest",
+          "routeParameters": [
+            {
+              "name": "jockeyId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "MergeJockeyAliasEndpoint.cs"
+        },
+        {
+          "family": "Jockeys",
+          "interface": "IJockeysApi",
+          "method": "RegisterJockeyAsync",
+          "httpMethod": "POST",
+          "path": "/api/jockeys",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "RegisterJockeyRequest",
+          "bodyInputType": "HorseRacingPrediction.Contracts.Jockeys.RegisterJockeyRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Jockeys.RegisterJockeyResponse",
+              "status": 201
+            }
+          ],
+          "endpointFile": "RegisterJockeyEndpoint.cs"
+        },
+        {
+          "family": "Jockeys",
+          "interface": "IJockeysApi",
+          "method": "SearchJockeysAsync",
+          "httpMethod": "GET",
+          "path": "/api/jockeys",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "SearchJockeysRequest",
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Jockeys.SearchJockeysResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "SearchJockeysEndpoint.cs"
+        },
+        {
+          "family": "Jockeys",
+          "interface": "IJockeysApi",
+          "method": "UpdateJockeyProfileAsync",
+          "httpMethod": "PUT",
+          "path": "/api/jockeys/{jockeyId}",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "UpdateJockeyProfileRequest",
+          "bodyInputType": "HorseRacingPrediction.Contracts.Jockeys.UpdateJockeyProfileRequest",
+          "routeParameters": [
+            {
+              "name": "jockeyId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "UpdateJockeyProfileEndpoint.cs"
+        }
+      ]
+    },
+    {
+      "name": "ITrainersApi",
+      "namespace": "HorseRacingPrediction.ApiClient.Trainers",
+      "operationCount": 7,
+      "operations": [
+        {
+          "family": "Trainers",
+          "interface": "ITrainersApi",
+          "method": "CorrectTrainerDataAsync",
+          "httpMethod": "PATCH",
+          "path": "/api/trainers/{trainerId}",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CorrectTrainerDataRequest",
+          "bodyInputType": "HorseRacingPrediction.Contracts.Trainers.CorrectTrainerDataRequest",
+          "routeParameters": [
+            {
+              "name": "trainerId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "CorrectTrainerDataEndpoint.cs"
+        },
+        {
+          "family": "Trainers",
+          "interface": "ITrainersApi",
+          "method": "GetTrainerParticipationsAsync",
+          "httpMethod": "GET",
+          "path": "/api/trainers/{trainerId}/participations",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetTrainerParticipationsRequest",
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Trainers.GetTrainerParticipationsResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetTrainerParticipationsEndpoint.cs"
+        },
+        {
+          "family": "Trainers",
+          "interface": "ITrainersApi",
+          "method": "GetTrainerProfileAsync",
+          "httpMethod": "GET",
+          "path": "/api/trainers/{trainerId}",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetTrainerProfileRequest",
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Trainers.GetTrainerProfileResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetTrainerProfileEndpoint.cs"
+        },
+        {
+          "family": "Trainers",
+          "interface": "ITrainersApi",
+          "method": "MergeTrainerAliasAsync",
+          "httpMethod": "POST",
+          "path": "/api/trainers/{trainerId}/aliases",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "MergeTrainerAliasRequest",
+          "bodyInputType": "HorseRacingPrediction.Contracts.Trainers.MergeTrainerAliasRequest",
+          "routeParameters": [
+            {
+              "name": "trainerId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "MergeTrainerAliasEndpoint.cs"
+        },
+        {
+          "family": "Trainers",
+          "interface": "ITrainersApi",
+          "method": "RegisterTrainerAsync",
+          "httpMethod": "POST",
+          "path": "/api/trainers",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "RegisterTrainerRequest",
+          "bodyInputType": "HorseRacingPrediction.Contracts.Trainers.RegisterTrainerRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Trainers.RegisterTrainerResponse",
+              "status": 201
+            }
+          ],
+          "endpointFile": "RegisterTrainerEndpoint.cs"
+        },
+        {
+          "family": "Trainers",
+          "interface": "ITrainersApi",
+          "method": "SearchTrainersAsync",
+          "httpMethod": "GET",
+          "path": "/api/trainers",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "SearchTrainersRequest",
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Trainers.SearchTrainersResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "SearchTrainersEndpoint.cs"
+        },
+        {
+          "family": "Trainers",
+          "interface": "ITrainersApi",
+          "method": "UpdateTrainerProfileAsync",
+          "httpMethod": "PUT",
+          "path": "/api/trainers/{trainerId}",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "UpdateTrainerProfileRequest",
+          "bodyInputType": "HorseRacingPrediction.Contracts.Trainers.UpdateTrainerProfileRequest",
+          "routeParameters": [
+            {
+              "name": "trainerId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "UpdateTrainerProfileEndpoint.cs"
+        }
+      ]
+    },
+    {
+      "name": "IOwnersApi",
+      "namespace": "HorseRacingPrediction.ApiClient.Owners",
+      "operationCount": 6,
+      "operations": [
+        {
+          "family": "Owners",
+          "interface": "IOwnersApi",
+          "method": "ExecuteOwnerIdentityRecoveryAsync",
+          "httpMethod": "POST",
+          "path": "/api/admin/repairs/owner-identity/execute",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "ExecuteOwnerIdentityRecoveryRequest",
+          "bodyInputType": "HorseRacingPrediction.Contracts.Owners.ExecuteOwnerIdentityRecoveryRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Owners.ExecuteOwnerIdentityRecoveryResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "ExecuteOwnerIdentityRecoveryEndpoint.cs"
+        },
+        {
+          "family": "Owners",
+          "interface": "IOwnersApi",
+          "method": "GetOwnerAsync",
+          "httpMethod": "GET",
+          "path": "/api/owners/{ownerId}",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetOwnerRequest",
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Owners.GetOwnerResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetOwnerEndpoint.cs"
+        },
+        {
+          "family": "Owners",
+          "interface": "IOwnersApi",
+          "method": "MergeOwnerAsync",
+          "httpMethod": "POST",
+          "path": "/api/owners/{ownerId}/merge",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "MergeOwnerRequest",
+          "bodyInputType": "HorseRacingPrediction.Contracts.Owners.MergeOwnerRequest",
+          "routeParameters": [
+            {
+              "name": "ownerId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "MergeOwnerEndpoint.cs"
+        },
+        {
+          "family": "Owners",
+          "interface": "IOwnersApi",
+          "method": "PreviewOwnerIdentityRecoveryAsync",
+          "httpMethod": "GET",
+          "path": "/api/admin/repairs/owner-identity",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Owners.PreviewOwnerIdentityRecoveryResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "PreviewOwnerIdentityRecoveryEndpoint.cs"
+        },
+        {
+          "family": "Owners",
+          "interface": "IOwnersApi",
+          "method": "SearchOwnersAsync",
+          "httpMethod": "GET",
+          "path": "/api/owners",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "SearchOwnersRequest",
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Owners.SearchOwnersResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "SearchOwnersEndpoint.cs"
+        },
+        {
+          "family": "Owners",
+          "interface": "IOwnersApi",
+          "method": "UpdateOwnerAsync",
+          "httpMethod": "PUT",
+          "path": "/api/owners/{ownerId}",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "UpdateOwnerRequest",
+          "bodyInputType": "HorseRacingPrediction.Contracts.Owners.UpdateOwnerRequest",
+          "routeParameters": [
+            {
+              "name": "ownerId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "UpdateOwnerEndpoint.cs"
+        }
+      ]
+    },
+    {
+      "name": "IPredictionsApi",
+      "namespace": "HorseRacingPrediction.ApiClient.Predictions",
+      "operationCount": 11,
+      "operations": [
+        {
+          "family": "Predictions",
+          "interface": "IPredictionsApi",
+          "method": "AddBettingSuggestionAsync",
+          "httpMethod": "POST",
+          "path": "/api/predictions/{predictionTicketId}/betting-suggestions",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "AddBettingSuggestionRequest",
+          "bodyInputType": "AddBettingSuggestionRequest",
+          "routeParameters": [
+            {
+              "name": "predictionTicketId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "AddBettingSuggestionEndpoint.cs"
+        },
+        {
+          "family": "Predictions",
+          "interface": "IPredictionsApi",
+          "method": "AddPredictionMarkAsync",
+          "httpMethod": "POST",
+          "path": "/api/predictions/{predictionTicketId}/marks",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "AddPredictionMarkRequest",
+          "bodyInputType": "AddPredictionMarkRequest",
+          "routeParameters": [
+            {
+              "name": "predictionTicketId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "AddPredictionMarkEndpoint.cs"
+        },
+        {
+          "family": "Predictions",
+          "interface": "IPredictionsApi",
+          "method": "AddPredictionRationaleAsync",
+          "httpMethod": "POST",
+          "path": "/api/predictions/{predictionTicketId}/rationales",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "AddPredictionRationaleRequest",
+          "bodyInputType": "AddPredictionRationaleRequest",
+          "routeParameters": [
+            {
+              "name": "predictionTicketId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "AddPredictionRationaleEndpoint.cs"
+        },
+        {
+          "family": "Predictions",
+          "interface": "IPredictionsApi",
+          "method": "CorrectPredictionMetadataAsync",
+          "httpMethod": "PATCH",
+          "path": "/api/predictions/{predictionTicketId}",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CorrectPredictionMetadataRequest",
+          "bodyInputType": "CorrectPredictionMetadataRequest",
+          "routeParameters": [
+            {
+              "name": "predictionTicketId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "CorrectPredictionMetadataEndpoint.cs"
+        },
+        {
+          "family": "Predictions",
+          "interface": "IPredictionsApi",
+          "method": "CreatePredictionTicketAsync",
+          "httpMethod": "POST",
+          "path": "/api/predictions",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CreatePredictionTicketRequest",
+          "bodyInputType": "CreatePredictionTicketRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [],
+          "endpointFile": "CreatePredictionTicketEndpoint.cs"
+        },
+        {
+          "family": "Predictions",
+          "interface": "IPredictionsApi",
+          "method": "EvaluatePredictionTicketAsync",
+          "httpMethod": "POST",
+          "path": "/api/predictions/{predictionTicketId}/evaluate",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "EvaluatePredictionTicketRequest",
+          "bodyInputType": "EvaluatePredictionTicketRequest",
+          "routeParameters": [
+            {
+              "name": "predictionTicketId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "EvaluatePredictionTicketEndpoint.cs"
+        },
+        {
+          "family": "Predictions",
+          "interface": "IPredictionsApi",
+          "method": "FinalizePredictionTicketAsync",
+          "httpMethod": "POST",
+          "path": "/api/predictions/{predictionTicketId}/finalize",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "FinalizePredictionTicketRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "predictionTicketId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "FinalizePredictionTicketEndpoint.cs"
+        },
+        {
+          "family": "Predictions",
+          "interface": "IPredictionsApi",
+          "method": "GetPredictionTicketAsync",
+          "httpMethod": "GET",
+          "path": "/api/predictions/{predictionTicketId}",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetPredictionTicketRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "predictionTicketId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "PredictionTicketResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetPredictionTicketEndpoint.cs"
+        },
+        {
+          "family": "Predictions",
+          "interface": "IPredictionsApi",
+          "method": "RecalculatePredictionEvaluationAsync",
+          "httpMethod": "POST",
+          "path": "/api/predictions/{predictionTicketId}/recalculate-evaluation",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "RecalculatePredictionEvaluationRequest",
+          "bodyInputType": "RecalculatePredictionEvaluationRequest",
+          "routeParameters": [
+            {
+              "name": "predictionTicketId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "RecalculatePredictionEvaluationEndpoint.cs"
+        },
+        {
+          "family": "Predictions",
+          "interface": "IPredictionsApi",
+          "method": "SearchPredictionTicketsAsync",
+          "httpMethod": "GET",
+          "path": "/api/predictions",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "SearchPredictionTicketsRequest",
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [],
+          "endpointFile": "SearchPredictionTicketsEndpoint.cs"
+        },
+        {
+          "family": "Predictions",
+          "interface": "IPredictionsApi",
+          "method": "WithdrawPredictionTicketAsync",
+          "httpMethod": "POST",
+          "path": "/api/predictions/{predictionTicketId}/withdraw",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "WithdrawPredictionTicketRequest",
+          "bodyInputType": "WithdrawPredictionTicketRequest",
+          "routeParameters": [
+            {
+              "name": "predictionTicketId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "WithdrawPredictionTicketEndpoint.cs"
+        }
+      ]
+    },
+    {
+      "name": "IMemosApi",
+      "namespace": "HorseRacingPrediction.ApiClient.Memos",
+      "operationCount": 5,
+      "operations": [
+        {
+          "family": "Memos",
+          "interface": "IMemosApi",
+          "method": "ChangeMemoSubjectsAsync",
+          "httpMethod": "PUT",
+          "path": "/api/memos/{memoId}/subjects",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "ChangeMemoSubjectsRequest",
+          "bodyInputType": "ChangeMemoSubjectsRequest",
+          "routeParameters": [
+            {
+              "name": "memoId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "ChangeMemoSubjectsEndpoint.cs"
+        },
+        {
+          "family": "Memos",
+          "interface": "IMemosApi",
+          "method": "CreateMemoAsync",
+          "httpMethod": "POST",
+          "path": "/api/memos",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CreateMemoRequest",
+          "bodyInputType": "CreateMemoRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [],
+          "endpointFile": "CreateMemoEndpoint.cs"
+        },
+        {
+          "family": "Memos",
+          "interface": "IMemosApi",
+          "method": "DeleteMemoAsync",
+          "httpMethod": "DELETE",
+          "path": "/api/memos/{memoId}",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "DeleteMemoRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "memoId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "DeleteMemoEndpoint.cs"
+        },
+        {
+          "family": "Memos",
+          "interface": "IMemosApi",
+          "method": "GetMemosBySubjectAsync",
+          "httpMethod": "GET",
+          "path": "/api/memos/by-subject/{subjectType}/{subjectId}",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetMemosBySubjectRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "subjectType",
+              "kind": "path",
+              "type": "string"
+            },
+            {
+              "name": "subjectId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [],
+          "endpointFile": "GetMemosBySubjectEndpoint.cs"
+        },
+        {
+          "family": "Memos",
+          "interface": "IMemosApi",
+          "method": "UpdateMemoAsync",
+          "httpMethod": "PUT",
+          "path": "/api/memos/{memoId}",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "UpdateMemoRequest",
+          "bodyInputType": "UpdateMemoRequest",
+          "routeParameters": [
+            {
+              "name": "memoId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "UpdateMemoEndpoint.cs"
+        }
+      ]
+    },
+    {
+      "name": "IMachineLearningApi",
+      "namespace": "HorseRacingPrediction.ApiClient.MachineLearning",
+      "operationCount": 2,
+      "operations": [
+        {
+          "family": "MachineLearning",
+          "interface": "IMachineLearningApi",
+          "method": "GetMlPredictionAsync",
+          "httpMethod": "GET",
+          "path": "/api/races/{raceId}/ml-prediction",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetMlPredictionRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "ApiContracts.MlPredictionResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetMlPredictionEndpoint.cs"
+        },
+        {
+          "family": "MachineLearning",
+          "interface": "IMachineLearningApi",
+          "method": "TrainMlModelAsync",
+          "httpMethod": "POST",
+          "path": "/api/ml/train",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [],
+          "endpointFile": "TrainMlModelEndpoint.cs"
+        }
+      ]
+    },
+    {
+      "name": "IPredictionSchedulingApi",
+      "namespace": "HorseRacingPrediction.ApiClient.PredictionScheduling",
+      "operationCount": 3,
+      "operations": [
+        {
+          "family": "PredictionScheduling",
+          "interface": "IPredictionSchedulingApi",
+          "method": "AcquirePredictionCandidateLeasesAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/internal/prediction-candidate-leases",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "AcquirePredictionCandidateLeasesRequest",
+          "bodyInputType": "AcquirePredictionCandidatesRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [],
+          "endpointFile": "AcquirePredictionCandidateLeasesEndpoint.cs"
+        },
+        {
+          "family": "PredictionScheduling",
+          "interface": "IPredictionSchedulingApi",
+          "method": "EnqueuePredictionCandidatesAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/internal/prediction-candidates",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "EnqueuePredictionCandidatesRequest",
+          "bodyInputType": "EnqueuePredictionCandidatesRequest",
+          "routeParameters": [],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "EnqueuePredictionCandidatesEndpoint.cs"
+        },
+        {
+          "family": "PredictionScheduling",
+          "interface": "IPredictionSchedulingApi",
+          "method": "TransitionPredictionCandidateAsync",
+          "httpMethod": "PATCH",
+          "path": "/api/v2/internal/prediction-candidates/{raceId}",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "TransitionPredictionCandidateRequest",
+          "bodyInputType": "PredictionCandidateTransitionRequest",
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "TransitionPredictionCandidateEndpoint.cs"
+        }
+      ]
+    },
+    {
+      "name": "IRepairsApi",
+      "namespace": "HorseRacingPrediction.ApiClient.Repairs",
+      "operationCount": 7,
+      "operations": [
+        {
+          "family": "Repairs",
+          "interface": "IRepairsApi",
+          "method": "ApplyHorseIdentityRepairAsync",
+          "httpMethod": "POST",
+          "path": "/api/admin/repairs/20260913-jra-horse-identity/apply",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "ApplyHorseIdentityRepairRequest",
+          "bodyInputType": "ApplyHorseIdentityRepairRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [],
+          "endpointFile": "ApplyHorseIdentityRepairEndpoint.cs"
+        },
+        {
+          "family": "Repairs",
+          "interface": "IRepairsApi",
+          "method": "ApplySubjectNameNormalizationAsync",
+          "httpMethod": "POST",
+          "path": "/api/admin/repairs/subject-name-normalization/apply",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "ApplySubjectNameNormalizationRequest",
+          "bodyInputType": "ApplySubjectNameNormalizationRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [],
+          "endpointFile": "ApplySubjectNameNormalizationEndpoint.cs"
+        },
+        {
+          "family": "Repairs",
+          "interface": "IRepairsApi",
+          "method": "DismissSubjectIdentificationFailuresAsync",
+          "httpMethod": "POST",
+          "path": "/api/admin/repairs/subject-identification/dismiss",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "DismissSubjectIdentificationFailuresRequest",
+          "bodyInputType": "DismissSubjectIdentificationFailuresRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [],
+          "endpointFile": "DismissSubjectIdentificationFailuresEndpoint.cs"
+        },
+        {
+          "family": "Repairs",
+          "interface": "IRepairsApi",
+          "method": "ExecuteSubjectIdentificationRepairAsync",
+          "httpMethod": "POST",
+          "path": "/api/admin/repairs/subject-identification/execute",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "ExecuteSubjectIdentificationRepairRequest",
+          "bodyInputType": "ExecuteSubjectIdentificationRepairRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [],
+          "endpointFile": "ExecuteSubjectIdentificationRepairEndpoint.cs"
+        },
+        {
+          "family": "Repairs",
+          "interface": "IRepairsApi",
+          "method": "GetHorseIdentityRepairAsync",
+          "httpMethod": "GET",
+          "path": "/api/admin/repairs/20260913-jra-horse-identity",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [],
+          "endpointFile": "GetHorseIdentityRepairEndpoint.cs"
+        },
+        {
+          "family": "Repairs",
+          "interface": "IRepairsApi",
+          "method": "GetSubjectIdentificationRepairAsync",
+          "httpMethod": "GET",
+          "path": "/api/admin/repairs/subject-identification",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [],
+          "endpointFile": "GetSubjectIdentificationRepairEndpoint.cs"
+        },
+        {
+          "family": "Repairs",
+          "interface": "IRepairsApi",
+          "method": "GetSubjectNameNormalizationAsync",
+          "httpMethod": "GET",
+          "path": "/api/admin/repairs/subject-name-normalization",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetSubjectNameNormalizationRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "subjectType",
+              "kind": "query",
+              "type": "CollectionResourceType"
+            },
+            {
+              "name": "query",
+              "kind": "query",
+              "type": "string?"
+            },
+            {
+              "name": "page",
+              "kind": "query",
+              "type": "int?"
+            },
+            {
+              "name": "pageSize",
+              "kind": "query",
+              "type": "int?"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [],
+          "endpointFile": "GetSubjectNameNormalizationEndpoint.cs"
+        }
+      ]
+    },
+    {
+      "name": "IIdentityApi",
+      "namespace": "HorseRacingPrediction.ApiClient.Identity",
+      "operationCount": 2,
+      "operations": [
+        {
+          "family": "Identity",
+          "interface": "IIdentityApi",
+          "method": "ResolveHorseIdentityAsync",
+          "httpMethod": "POST",
+          "path": "/api/identity/horse",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "ResolveHorseIdentityRequest",
+          "bodyInputType": "ResolveHorseIdentityRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [],
+          "endpointFile": "ResolveHorseIdentityEndpoint.cs"
+        },
+        {
+          "family": "Identity",
+          "interface": "IIdentityApi",
+          "method": "ResolveRaceIdentityAsync",
+          "httpMethod": "POST",
+          "path": "/api/identity/race",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "ResolveRaceIdentityRequest",
+          "bodyInputType": "HorseRacingPrediction.Contracts.ResolveRaceIdentityRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [],
+          "endpointFile": "ResolveRaceIdentityEndpoint.cs"
+        }
+      ]
+    },
+    {
+      "name": "ISubjectsApi",
+      "namespace": "HorseRacingPrediction.ApiClient.Subjects",
+      "operationCount": 2,
+      "operations": [
+        {
+          "family": "Subjects",
+          "interface": "ISubjectsApi",
+          "method": "GetSubjectProfileAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/subjects/{kind}/{subjectId}/profiles/current",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetSubjectProfileRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "kind",
+              "kind": "path",
+              "type": "string"
+            },
+            {
+              "name": "subjectId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [],
+          "endpointFile": "GetSubjectProfileEndpoint.cs"
+        },
+        {
+          "family": "Subjects",
+          "interface": "ISubjectsApi",
+          "method": "PutSubjectProfileAsync",
+          "httpMethod": "PUT",
+          "path": "/api/v2/admin/subjects/{kind}/{subjectId}/profile",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "PutSubjectProfileRequest",
+          "bodyInputType": "JraSubjectProfileDto",
+          "routeParameters": [
+            {
+              "name": "kind",
+              "kind": "path",
+              "type": "string"
+            },
+            {
+              "name": "subjectId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "PutSubjectProfileEndpoint.cs"
+        }
+      ]
+    },
+    {
+      "name": "ICollectionApi",
+      "namespace": "HorseRacingPrediction.ApiClient.Collection",
+      "operationCount": 44,
+      "operations": [
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "AcquireCollectionTaskAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/internal/collection/tasks/{id:guid}/leases",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "AcquireCollectionTaskRequest",
+          "bodyInputType": "AcquireCollectionTaskRequest",
+          "routeParameters": [
+            {
+              "name": "id",
+              "kind": "path",
+              "type": "Guid"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "AcquireCollectionTaskResponse",
+              "status": 200
+            },
+            {
+              "type": "AcquireCollectionTaskResponse",
+              "status": 201
+            }
+          ],
+          "endpointFile": "AcquireCollectionTaskEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "AcquireNextExecutionAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/internal/collection/execution-leases",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "AcquireNextExecutionRequest",
+          "bodyInputType": "CollectionExecutionAcquireRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "AcquireNextExecutionResponse",
+              "status": 200
+            },
+            {
+              "type": "AcquireNextExecutionResponse",
+              "status": 201
+            }
+          ],
+          "endpointFile": "AcquireNextExecutionEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "ApplyRaceDetailMigrationAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/collection/migrations/race-detail",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "ApplyRaceDetailMigrationResponse",
+              "status": 200
+            },
+            {
+              "type": "ApplyRaceDetailMigrationResponse",
+              "status": 409
+            }
+          ],
+          "endpointFile": "ApplyRaceDetailMigrationEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "ApplyRaceEntryOwnerMigrationAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/collection/migrations/race-entry-owner-repair",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "ApplyRaceEntryOwnerMigrationResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "ApplyRaceEntryOwnerMigrationEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "CancelCollectionTaskAsync",
+          "httpMethod": "PATCH",
+          "path": "/api/v2/admin/collection/tasks/{taskId:guid}",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CancelCollectionTaskRequest",
+          "bodyInputType": "CollectionTaskCancellationRequest",
+          "routeParameters": [
+            {
+              "name": "taskId",
+              "kind": "path",
+              "type": "Guid"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "CancelCollectionTaskEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "CompleteCollectionTaskAttemptAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/internal/collection/tasks/{id:guid}/attempts",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CompleteCollectionTaskAttemptRequest",
+          "bodyInputType": "CompleteCollectionAttemptRequest",
+          "routeParameters": [
+            {
+              "name": "id",
+              "kind": "path",
+              "type": "Guid"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "CompleteCollectionTaskAttemptEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "CreateBackfillBatchAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/collection/backfill-batches",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CreateBackfillBatchRequest",
+          "bodyInputType": "CreateBackfillBatchRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "CreateBackfillBatchResponse",
+              "status": 202
+            }
+          ],
+          "endpointFile": "CreateBackfillBatchEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "CreateCollectionRecoveryBatchAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/collection/recovery-batches",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CreateCollectionRecoveryBatchRequest",
+          "bodyInputType": "CollectionRecoveryBatchRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "CreateCollectionRecoveryBatchResponse",
+              "status": 202
+            }
+          ],
+          "endpointFile": "CreateCollectionRecoveryBatchEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "CreateCollectionRevisionAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/collection/definitions/{definition}/revisions",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CreateCollectionRevisionRequest",
+          "bodyInputType": "CreateCollectionRevisionRequest",
+          "routeParameters": [
+            {
+              "name": "definition",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "CreateCollectionRevisionResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "CreateCollectionRevisionEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "CreateCollectionTaskBatchAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/collection/task-batches",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CreateCollectionTaskBatchRequest",
+          "bodyInputType": "CollectionTaskBatchRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "CreateCollectionTaskBatchResponse",
+              "status": 202
+            },
+            {
+              "type": "CreateCollectionTaskBatchResponse",
+              "status": 207
+            }
+          ],
+          "endpointFile": "CreateCollectionTaskBatchEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "CreateCollectionTaskAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/collection/tasks",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CreateCollectionTaskRequest",
+          "bodyInputType": "CollectionTaskRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "CreateCollectionTaskResponse",
+              "status": 200
+            },
+            {
+              "type": "CreateCollectionTaskResponse",
+              "status": 202
+            }
+          ],
+          "endpointFile": "CreateCollectionTaskEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "CreateKnownRecoveryBatchAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/collection/known-recovery-batches",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "CreateKnownRecoveryBatchResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "CreateKnownRecoveryBatchEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "CreateRaceEntryOwnerRepairBatchAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/collection/race-entry-owner-repair-batches",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CreateRaceEntryOwnerRepairBatchRequest",
+          "bodyInputType": "RaceEntryOwnerRepairRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "CreateRaceEntryOwnerRepairBatchResponse",
+              "status": 202
+            }
+          ],
+          "endpointFile": "CreateRaceEntryOwnerRepairBatchEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "CreateRecollectionBatchAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/collection/recollection-batches",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "CreateRecollectionBatchRequest",
+          "bodyInputType": "CollectionRecollectionBatchRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "CreateRecollectionBatchResponse",
+              "status": 202
+            }
+          ],
+          "endpointFile": "CreateRecollectionBatchEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "GetBackfillBatchAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/backfill-batches/{id}",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetBackfillBatchRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "id",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetBackfillBatchResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetBackfillBatchEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "GetCollectionDashboardAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/operations/dashboard",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetCollectionDashboardResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetCollectionDashboardEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "GetCollectionMonitoringFindingsAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/operations/monitoring-findings",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetCollectionMonitoringFindingsResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetCollectionMonitoringFindingsEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "GetCollectionPipelineAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/pipeline-state",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetCollectionPipelineResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetCollectionPipelineEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "GetCollectionProgressAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/operations/progress",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetCollectionProgressResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetCollectionProgressEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "GetCollectionResourceDetailAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/resources/{type}/{provider}/{resourceId}/definitions/{definition}",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetCollectionResourceDetailRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "type",
+              "kind": "path",
+              "type": "CollectionResourceType"
+            },
+            {
+              "name": "provider",
+              "kind": "path",
+              "type": "string"
+            },
+            {
+              "name": "resourceId",
+              "kind": "path",
+              "type": "string"
+            },
+            {
+              "name": "definition",
+              "kind": "path",
+              "type": "string"
+            },
+            {
+              "name": "historyPage",
+              "kind": "query",
+              "type": "int?"
+            },
+            {
+              "name": "requestHistoryPage",
+              "kind": "query",
+              "type": "int?"
+            },
+            {
+              "name": "taskHistoryPage",
+              "kind": "query",
+              "type": "int?"
+            },
+            {
+              "name": "attemptHistoryPage",
+              "kind": "query",
+              "type": "int?"
+            },
+            {
+              "name": "historyPageSize",
+              "kind": "query",
+              "type": "int?"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetCollectionResourceDetailResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetCollectionResourceDetailEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "GetCollectionResourceStateAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/resources/{type}/{provider}/{resourceId}/definitions/{definition}/state",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetCollectionResourceStateRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "type",
+              "kind": "path",
+              "type": "CollectionResourceType"
+            },
+            {
+              "name": "provider",
+              "kind": "path",
+              "type": "string"
+            },
+            {
+              "name": "resourceId",
+              "kind": "path",
+              "type": "string"
+            },
+            {
+              "name": "definition",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetCollectionResourceStateResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetCollectionResourceStateEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "GetExecutionBatchAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/execution-batches/{id:guid}",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetExecutionBatchRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "id",
+              "kind": "path",
+              "type": "Guid"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetExecutionBatchResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetExecutionBatchEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "GetFailureNotificationGroupAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/failure-notification-groups/{groupKey}",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetFailureNotificationGroupRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "groupKey",
+              "kind": "path",
+              "type": "string"
+            },
+            {
+              "name": "search",
+              "kind": "query",
+              "type": "string?"
+            },
+            {
+              "name": "page",
+              "kind": "query",
+              "type": "int?"
+            },
+            {
+              "name": "pageSize",
+              "kind": "query",
+              "type": "int?"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetFailureNotificationGroupResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetFailureNotificationGroupEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "GetKnownRecoveryPreviewAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/recovery-previews/known",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetKnownRecoveryPreviewResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetKnownRecoveryPreviewEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "GetOwnerIdentityMigrationPreviewAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/migration-previews/owner-identity",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetOwnerIdentityMigrationPreviewResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetOwnerIdentityMigrationPreviewEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "GetRaceCollectionReadinessAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/races/{raceId}/readiness",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetRaceCollectionReadinessRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "raceId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetRaceCollectionReadinessResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetRaceCollectionReadinessEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "GetRaceEntryOwnerMigrationAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/migrations/race-entry-owner-repair",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetRaceEntryOwnerMigrationResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetRaceEntryOwnerMigrationEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "GetRevisionRecollectionProgressAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/recollection-batches",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "GetRevisionRecollectionProgressRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "definition",
+              "kind": "query",
+              "type": "string"
+            },
+            {
+              "name": "revision",
+              "kind": "query",
+              "type": "int"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetRevisionRecollectionProgressResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetRevisionRecollectionProgressEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "GetTaskViewCountsAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/operations/task-view-counts",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "GetTaskViewCountsResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetTaskViewCountsEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "HeartbeatCollectionTaskLeaseAsync",
+          "httpMethod": "PATCH",
+          "path": "/api/v2/internal/collection/tasks/{id:guid}/leases/{leaseId}",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "HeartbeatCollectionTaskLeaseRequest",
+          "bodyInputType": "HeartbeatCollectionTaskRequest",
+          "routeParameters": [
+            {
+              "name": "id",
+              "kind": "path",
+              "type": "Guid"
+            },
+            {
+              "name": "leaseId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HeartbeatCollectionTaskLeaseResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "HeartbeatCollectionTaskLeaseEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "ListBackfillBatchesAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/backfill-batches",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "ListBackfillBatchesResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "ListBackfillBatchesEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "ListCollectionTasksAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/tasks",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "ListCollectionTasksRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "status",
+              "kind": "query",
+              "type": "CollectionTaskStatus?"
+            },
+            {
+              "name": "limit",
+              "kind": "query",
+              "type": "int?"
+            },
+            {
+              "name": "statuses",
+              "kind": "query",
+              "type": "string?"
+            },
+            {
+              "name": "resourceType",
+              "kind": "query",
+              "type": "CollectionResourceType?"
+            },
+            {
+              "name": "provider",
+              "kind": "query",
+              "type": "string?"
+            },
+            {
+              "name": "definitionId",
+              "kind": "query",
+              "type": "string?"
+            },
+            {
+              "name": "lane",
+              "kind": "query",
+              "type": "CollectionLane?"
+            },
+            {
+              "name": "search",
+              "kind": "query",
+              "type": "string?"
+            },
+            {
+              "name": "errorSearch",
+              "kind": "query",
+              "type": "string?"
+            },
+            {
+              "name": "createdFrom",
+              "kind": "query",
+              "type": "DateTimeOffset?"
+            },
+            {
+              "name": "createdTo",
+              "kind": "query",
+              "type": "DateTimeOffset?"
+            },
+            {
+              "name": "actionableOnly",
+              "kind": "query",
+              "type": "bool?"
+            },
+            {
+              "name": "latestOnly",
+              "kind": "query",
+              "type": "bool?"
+            },
+            {
+              "name": "page",
+              "kind": "query",
+              "type": "int?"
+            },
+            {
+              "name": "pageSize",
+              "kind": "query",
+              "type": "int?"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "ListCollectionTasksResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "ListCollectionTasksEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "ListFailureNotificationGroupsAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/failure-notification-groups",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "ListFailureNotificationGroupsRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "limit",
+              "kind": "query",
+              "type": "int?"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "ListFailureNotificationGroupsResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "ListFailureNotificationGroupsEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "ListFailureNotificationsAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/failure-notifications",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "ListFailureNotificationsRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "view",
+              "kind": "query",
+              "type": "string?"
+            },
+            {
+              "name": "published",
+              "kind": "query",
+              "type": "bool?"
+            },
+            {
+              "name": "deliveryState",
+              "kind": "query",
+              "type": "string?"
+            },
+            {
+              "name": "limit",
+              "kind": "query",
+              "type": "int?"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "ListFailureNotificationsResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "ListFailureNotificationsEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "ListRaceEntryOwnerRepairCandidatesAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/race-entry-owner-repair-candidates",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "ListRaceEntryOwnerRepairCandidatesRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "date",
+              "kind": "query",
+              "type": "DateOnly"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "ListRaceEntryOwnerRepairCandidatesResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "ListRaceEntryOwnerRepairCandidatesEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "PreviewCollectionTaskBatchAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/collection/task-batch-previews",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "PreviewCollectionTaskBatchRequest",
+          "bodyInputType": "BulkCollectionOperationRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "PreviewCollectionTaskBatchResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "PreviewCollectionTaskBatchEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "PreviewRaceDetailMigrationAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/collection/migration-previews/race-detail",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "PreviewRaceDetailMigrationResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "PreviewRaceDetailMigrationEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "PreviewRaceEntryOwnerMigrationAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/collection/migration-previews/race-entry-owner-repair",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "PreviewRaceEntryOwnerMigrationResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "PreviewRaceEntryOwnerMigrationEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "PreviewRacePeriodRecollectionAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/collection/recollection-previews",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "PreviewRacePeriodRecollectionRequest",
+          "bodyInputType": "CreateRacePeriodRecollectionRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "PreviewRacePeriodRecollectionResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "PreviewRacePeriodRecollectionEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "PreviewRevisionImpactAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/collection/revision-impact-previews",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "PreviewRevisionImpactRequest",
+          "bodyInputType": "RevisionImpactPreviewRequest",
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "PreviewRevisionImpactResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "PreviewRevisionImpactEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "RecoverBackfillHolesAsync",
+          "httpMethod": "POST",
+          "path": "/api/v2/admin/collection/backfill-batches/{id}/recovery-batches",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "RecoverBackfillHolesRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "id",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "RecoverBackfillHolesResponse",
+              "status": 202
+            }
+          ],
+          "endpointFile": "RecoverBackfillHolesEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "SearchCollectionStatesAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/states",
+          "requestPresent": true,
+          "requestBodyPresent": false,
+          "requestContract": "SearchCollectionStatesRequest",
+          "bodyInputType": null,
+          "routeParameters": [
+            {
+              "name": "statuses",
+              "kind": "query",
+              "type": "string?"
+            },
+            {
+              "name": "resourceType",
+              "kind": "query",
+              "type": "CollectionResourceType?"
+            },
+            {
+              "name": "provider",
+              "kind": "query",
+              "type": "string?"
+            },
+            {
+              "name": "definitionId",
+              "kind": "query",
+              "type": "string?"
+            },
+            {
+              "name": "search",
+              "kind": "query",
+              "type": "string?"
+            },
+            {
+              "name": "page",
+              "kind": "query",
+              "type": "int?"
+            },
+            {
+              "name": "pageSize",
+              "kind": "query",
+              "type": "int?"
+            }
+          ],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "SearchCollectionStatesResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "SearchCollectionStatesEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "SetCollectionPipelineAsync",
+          "httpMethod": "PUT",
+          "path": "/api/v2/admin/collection/pipeline",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "SetCollectionPipelineRequest",
+          "bodyInputType": "SetCollectionPipelineRequest",
+          "routeParameters": [],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "SetCollectionPipelineEndpoint.cs"
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "TransitionCollectionExecutionAsync",
+          "httpMethod": "PATCH",
+          "path": "/api/v2/internal/collection/execution-batches/{id:guid}",
+          "requestPresent": true,
+          "requestBodyPresent": true,
+          "requestContract": "TransitionCollectionExecutionRequest",
+          "bodyInputType": "CollectionExecutionTransitionRequest",
+          "routeParameters": [
+            {
+              "name": "id",
+              "kind": "path",
+              "type": "Guid"
+            }
+          ],
+          "responsePresent": false,
+          "responseContracts": [],
+          "endpointFile": "TransitionCollectionExecutionEndpoint.cs"
+        }
+      ]
+    }
+  ]
+}
