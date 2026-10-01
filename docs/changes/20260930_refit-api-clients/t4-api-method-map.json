@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "changeId": "20260930_refit-api-clients",
   "taskId": "T4-A1",
-  "source": "http-contract-inventory.json (135 frozen operation rows)",
+  "source": "http-contract-inventory.json operation rows; contract roots resolved by endpoint stem under Contracts.{family}",
   "methodNaming": "Endpoint filename stem with Endpoint suffix removed and one Async suffix appended (already-Async stems are unchanged).",
   "interfaceSemantics": "Each method takes CancellationToken; it takes the operation Request iff requestPresent, split by the facade into path/query scalars and/or typed body. Data methods return Task<ApiResponse<Response>>; no-data methods return Task<IApiResponse>.",
   "interfaces": [
@@ -31,19 +31,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "ApplyRaceEntryRepairResponse",
+              "type": "HorseRacingPrediction.Contracts.Races.ApplyRaceEntryRepairResponse",
               "status": 200
-            },
-            {
-              "type": null,
-              "status": 400
-            },
-            {
-              "type": null,
-              "status": 409
             }
           ],
-          "endpointFile": "ApplyRaceEntryRepairEndpoint.cs"
+          "endpointFile": "ApplyRaceEntryRepairEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -64,7 +57,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "CloseRaceLifecycleEndpoint.cs"
+          "endpointFile": "CloseRaceLifecycleEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -85,7 +79,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "CorrectRaceDataEndpoint.cs"
+          "endpointFile": "CorrectRaceDataEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -105,7 +100,8 @@
               "status": 201
             }
           ],
-          "endpointFile": "CreateRaceEndpoint.cs"
+          "endpointFile": "CreateRaceEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -129,7 +125,8 @@
               "status": 201
             }
           ],
-          "endpointFile": "CreateRaceFromScheduleEndpoint.cs"
+          "endpointFile": "CreateRaceFromScheduleEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -149,25 +146,9 @@
             }
           ],
           "responsePresent": false,
-          "responseContracts": [
-            {
-              "type": null,
-              "status": 201
-            },
-            {
-              "type": null,
-              "status": 400
-            },
-            {
-              "type": null,
-              "status": 404
-            },
-            {
-              "type": null,
-              "status": 409
-            }
-          ],
-          "endpointFile": "CreateRaceOddsSnapshotEndpoint.cs"
+          "responseContracts": [],
+          "endpointFile": "CreateRaceOddsSnapshotEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -193,7 +174,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "DeclareEntryResultEndpoint.cs"
+          "endpointFile": "DeclareEntryResultEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -214,7 +196,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "DeclarePayoutResultEndpoint.cs"
+          "endpointFile": "DeclarePayoutResultEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -234,7 +217,8 @@
               "status": 200
             }
           ],
-          "endpointFile": "DeclareRaceResultBulkEndpoint.cs"
+          "endpointFile": "DeclareRaceResultBulkEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -255,7 +239,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "DeclareRaceResultEndpoint.cs"
+          "endpointFile": "DeclareRaceResultEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -277,11 +262,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetPredictionComparisonResponse",
+              "type": "HorseRacingPrediction.Contracts.Races.GetPredictionComparisonResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetPredictionComparisonEndpoint.cs"
+          "endpointFile": "GetPredictionComparisonEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -303,15 +289,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetRaceAssignmentFenceResponse",
+              "type": "HorseRacingPrediction.Contracts.Races.GetRaceAssignmentFenceResponse",
               "status": 200
-            },
-            {
-              "type": null,
-              "status": 409
             }
           ],
-          "endpointFile": "GetRaceAssignmentFenceEndpoint.cs"
+          "endpointFile": "GetRaceAssignmentFenceEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -337,7 +320,8 @@
               "status": 200
             }
           ],
-          "endpointFile": "GetRaceEndpoint.cs"
+          "endpointFile": "GetRaceEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -359,11 +343,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetRaceEntryRepairResponse",
+              "type": "HorseRacingPrediction.Contracts.Races.GetRaceEntryRepairResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetRaceEntryRepairEndpoint.cs"
+          "endpointFile": "GetRaceEntryRepairEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -385,11 +370,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetRaceEntryRepairHoldResponse",
+              "type": "HorseRacingPrediction.Contracts.Races.GetRaceEntryRepairHoldResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetRaceEntryRepairHoldEndpoint.cs"
+          "endpointFile": "GetRaceEntryRepairHoldEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -415,7 +401,8 @@
               "status": 200
             }
           ],
-          "endpointFile": "GetRacePredictionContextEndpoint.cs"
+          "endpointFile": "GetRacePredictionContextEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -437,15 +424,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "ListRaceOddsSnapshotsResponse",
+              "type": "HorseRacingPrediction.Contracts.Races.ListRaceOddsSnapshotsResponse",
               "status": 200
-            },
-            {
-              "type": null,
-              "status": 404
             }
           ],
-          "endpointFile": "ListRaceOddsSnapshotsEndpoint.cs"
+          "endpointFile": "ListRaceOddsSnapshotsEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -466,7 +450,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "MarkRaceRescheduledEndpoint.cs"
+          "endpointFile": "MarkRaceRescheduledEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -487,7 +472,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "OpenPreRaceEndpoint.cs"
+          "endpointFile": "OpenPreRaceEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -509,15 +495,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "PreviewRaceEntryRepairResponse",
+              "type": "HorseRacingPrediction.Contracts.Races.PreviewRaceEntryRepairResponse",
               "status": 200
-            },
-            {
-              "type": null,
-              "status": 400
             }
           ],
-          "endpointFile": "PreviewRaceEntryRepairEndpoint.cs"
+          "endpointFile": "PreviewRaceEntryRepairEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -538,7 +521,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "PublishRaceCardEndpoint.cs"
+          "endpointFile": "PublishRaceCardEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -559,7 +543,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "RecordTrackConditionEndpoint.cs"
+          "endpointFile": "RecordTrackConditionEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -580,7 +565,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "RecordWeatherObservationEndpoint.cs"
+          "endpointFile": "RecordWeatherObservationEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -606,7 +592,8 @@
               "status": 201
             }
           ],
-          "endpointFile": "RegisterEntryEndpoint.cs"
+          "endpointFile": "RegisterEntryEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -628,19 +615,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "ReleaseRaceEntryRepairHoldResponse",
+              "type": "HorseRacingPrediction.Contracts.Races.ReleaseRaceEntryRepairHoldResponse",
               "status": 200
-            },
-            {
-              "type": null,
-              "status": 400
-            },
-            {
-              "type": null,
-              "status": 409
             }
           ],
-          "endpointFile": "ReleaseRaceEntryRepairHoldEndpoint.cs"
+          "endpointFile": "ReleaseRaceEntryRepairHoldEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -660,7 +640,57 @@
               "status": 200
             }
           ],
-          "endpointFile": "SearchRacesEndpoint.cs"
+          "endpointFile": "SearchRacesEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "RaceId",
+              "name": "raceId"
+            },
+            {
+              "property": "RaceDateFrom",
+              "name": "raceDateFrom"
+            },
+            {
+              "property": "RaceDateTo",
+              "name": "raceDateTo"
+            },
+            {
+              "property": "RacecourseCode",
+              "name": "racecourseCode"
+            },
+            {
+              "property": "RaceNumber",
+              "name": "raceNumber"
+            },
+            {
+              "property": "RaceName",
+              "name": "raceName"
+            },
+            {
+              "property": "Status",
+              "name": "status"
+            },
+            {
+              "property": "WinningHorseName",
+              "name": "winningHorseName"
+            },
+            {
+              "property": "Page",
+              "name": "page"
+            },
+            {
+              "property": "PageSize",
+              "name": "pageSize"
+            },
+            {
+              "property": "SortBy",
+              "name": "sortBy"
+            },
+            {
+              "property": "SortDescending",
+              "name": "sortDescending"
+            }
+          ]
         },
         {
           "family": "Races",
@@ -681,7 +711,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "StartRaceEndpoint.cs"
+          "endpointFile": "StartRaceEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -712,7 +743,8 @@
               "status": 200
             }
           ],
-          "endpointFile": "UpdateEntryCollectedDataEndpoint.cs"
+          "endpointFile": "UpdateEntryCollectedDataEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Races",
@@ -734,19 +766,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "UpdateRaceEntryRepairHoldResponse",
+              "type": "HorseRacingPrediction.Contracts.Races.UpdateRaceEntryRepairHoldResponse",
               "status": 200
-            },
-            {
-              "type": null,
-              "status": 400
-            },
-            {
-              "type": null,
-              "status": 409
             }
           ],
-          "endpointFile": "UpdateRaceEntryRepairHoldEndpoint.cs"
+          "endpointFile": "UpdateRaceEntryRepairHoldEndpoint.cs",
+          "queryParameters": []
         }
       ]
     },
@@ -774,7 +799,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "CorrectHorseDataEndpoint.cs"
+          "endpointFile": "CorrectHorseDataEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Horses",
@@ -786,7 +812,13 @@
           "requestBodyPresent": false,
           "requestContract": "GetHorseParticipationsRequest",
           "bodyInputType": null,
-          "routeParameters": [],
+          "routeParameters": [
+            {
+              "name": "horseId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
           "responsePresent": true,
           "responseContracts": [
             {
@@ -794,7 +826,17 @@
               "status": 200
             }
           ],
-          "endpointFile": "GetHorseParticipationsEndpoint.cs"
+          "endpointFile": "GetHorseParticipationsEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "Take",
+              "name": "take"
+            },
+            {
+              "property": "Skip",
+              "name": "skip"
+            }
+          ]
         },
         {
           "family": "Horses",
@@ -806,7 +848,13 @@
           "requestBodyPresent": false,
           "requestContract": "GetHorseProfileRequest",
           "bodyInputType": null,
-          "routeParameters": [],
+          "routeParameters": [
+            {
+              "name": "horseId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
           "responsePresent": true,
           "responseContracts": [
             {
@@ -814,7 +862,8 @@
               "status": 200
             }
           ],
-          "endpointFile": "GetHorseProfileEndpoint.cs"
+          "endpointFile": "GetHorseProfileEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Horses",
@@ -826,7 +875,13 @@
           "requestBodyPresent": false,
           "requestContract": "GetHorseRaceHistoryRequest",
           "bodyInputType": null,
-          "routeParameters": [],
+          "routeParameters": [
+            {
+              "name": "horseId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
           "responsePresent": true,
           "responseContracts": [
             {
@@ -834,7 +889,8 @@
               "status": 200
             }
           ],
-          "endpointFile": "GetHorseRaceHistoryEndpoint.cs"
+          "endpointFile": "GetHorseRaceHistoryEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Horses",
@@ -846,7 +902,13 @@
           "requestBodyPresent": false,
           "requestContract": "GetHorseWeightHistoryRequest",
           "bodyInputType": null,
-          "routeParameters": [],
+          "routeParameters": [
+            {
+              "name": "horseId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
           "responsePresent": true,
           "responseContracts": [
             {
@@ -854,7 +916,8 @@
               "status": 200
             }
           ],
-          "endpointFile": "GetHorseWeightHistoryEndpoint.cs"
+          "endpointFile": "GetHorseWeightHistoryEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Horses",
@@ -875,7 +938,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "MergeHorseAliasEndpoint.cs"
+          "endpointFile": "MergeHorseAliasEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Horses",
@@ -895,7 +959,8 @@
               "status": 201
             }
           ],
-          "endpointFile": "RegisterHorseEndpoint.cs"
+          "endpointFile": "RegisterHorseEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Horses",
@@ -915,7 +980,57 @@
               "status": 200
             }
           ],
-          "endpointFile": "SearchHorsesEndpoint.cs"
+          "endpointFile": "SearchHorsesEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "HorseId",
+              "name": "horseId"
+            },
+            {
+              "property": "Query",
+              "name": "query"
+            },
+            {
+              "property": "RegisteredName",
+              "name": "registeredName"
+            },
+            {
+              "property": "NormalizedName",
+              "name": "normalizedName"
+            },
+            {
+              "property": "SexCode",
+              "name": "sexCode"
+            },
+            {
+              "property": "BirthDateFrom",
+              "name": "birthDateFrom"
+            },
+            {
+              "property": "BirthDateTo",
+              "name": "birthDateTo"
+            },
+            {
+              "property": "AliasValue",
+              "name": "aliasValue"
+            },
+            {
+              "property": "Page",
+              "name": "page"
+            },
+            {
+              "property": "PageSize",
+              "name": "pageSize"
+            },
+            {
+              "property": "SortBy",
+              "name": "sortBy"
+            },
+            {
+              "property": "SortDescending",
+              "name": "sortDescending"
+            }
+          ]
         },
         {
           "family": "Horses",
@@ -936,7 +1051,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "UpdateHorseProfileEndpoint.cs"
+          "endpointFile": "UpdateHorseProfileEndpoint.cs",
+          "queryParameters": []
         }
       ]
     },
@@ -964,7 +1080,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "CorrectJockeyDataEndpoint.cs"
+          "endpointFile": "CorrectJockeyDataEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Jockeys",
@@ -976,7 +1093,13 @@
           "requestBodyPresent": false,
           "requestContract": "GetJockeyParticipationsRequest",
           "bodyInputType": null,
-          "routeParameters": [],
+          "routeParameters": [
+            {
+              "name": "jockeyId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
           "responsePresent": true,
           "responseContracts": [
             {
@@ -984,7 +1107,17 @@
               "status": 200
             }
           ],
-          "endpointFile": "GetJockeyParticipationsEndpoint.cs"
+          "endpointFile": "GetJockeyParticipationsEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "Take",
+              "name": "take"
+            },
+            {
+              "property": "Skip",
+              "name": "skip"
+            }
+          ]
         },
         {
           "family": "Jockeys",
@@ -996,7 +1129,13 @@
           "requestBodyPresent": false,
           "requestContract": "GetJockeyProfileRequest",
           "bodyInputType": null,
-          "routeParameters": [],
+          "routeParameters": [
+            {
+              "name": "jockeyId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
           "responsePresent": true,
           "responseContracts": [
             {
@@ -1004,7 +1143,8 @@
               "status": 200
             }
           ],
-          "endpointFile": "GetJockeyProfileEndpoint.cs"
+          "endpointFile": "GetJockeyProfileEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Jockeys",
@@ -1016,7 +1156,13 @@
           "requestBodyPresent": false,
           "requestContract": "GetJockeyRaceHistoryRequest",
           "bodyInputType": null,
-          "routeParameters": [],
+          "routeParameters": [
+            {
+              "name": "jockeyId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
           "responsePresent": true,
           "responseContracts": [
             {
@@ -1024,7 +1170,8 @@
               "status": 200
             }
           ],
-          "endpointFile": "GetJockeyRaceHistoryEndpoint.cs"
+          "endpointFile": "GetJockeyRaceHistoryEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Jockeys",
@@ -1045,7 +1192,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "MergeJockeyAliasEndpoint.cs"
+          "endpointFile": "MergeJockeyAliasEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Jockeys",
@@ -1065,7 +1213,8 @@
               "status": 201
             }
           ],
-          "endpointFile": "RegisterJockeyEndpoint.cs"
+          "endpointFile": "RegisterJockeyEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Jockeys",
@@ -1085,7 +1234,49 @@
               "status": 200
             }
           ],
-          "endpointFile": "SearchJockeysEndpoint.cs"
+          "endpointFile": "SearchJockeysEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "JockeyId",
+              "name": "jockeyId"
+            },
+            {
+              "property": "Query",
+              "name": "query"
+            },
+            {
+              "property": "DisplayName",
+              "name": "displayName"
+            },
+            {
+              "property": "NormalizedName",
+              "name": "normalizedName"
+            },
+            {
+              "property": "AffiliationCode",
+              "name": "affiliationCode"
+            },
+            {
+              "property": "AliasValue",
+              "name": "aliasValue"
+            },
+            {
+              "property": "Page",
+              "name": "page"
+            },
+            {
+              "property": "PageSize",
+              "name": "pageSize"
+            },
+            {
+              "property": "SortBy",
+              "name": "sortBy"
+            },
+            {
+              "property": "SortDescending",
+              "name": "sortDescending"
+            }
+          ]
         },
         {
           "family": "Jockeys",
@@ -1106,7 +1297,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "UpdateJockeyProfileEndpoint.cs"
+          "endpointFile": "UpdateJockeyProfileEndpoint.cs",
+          "queryParameters": []
         }
       ]
     },
@@ -1134,7 +1326,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "CorrectTrainerDataEndpoint.cs"
+          "endpointFile": "CorrectTrainerDataEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Trainers",
@@ -1146,7 +1339,13 @@
           "requestBodyPresent": false,
           "requestContract": "GetTrainerParticipationsRequest",
           "bodyInputType": null,
-          "routeParameters": [],
+          "routeParameters": [
+            {
+              "name": "trainerId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
           "responsePresent": true,
           "responseContracts": [
             {
@@ -1154,7 +1353,17 @@
               "status": 200
             }
           ],
-          "endpointFile": "GetTrainerParticipationsEndpoint.cs"
+          "endpointFile": "GetTrainerParticipationsEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "Take",
+              "name": "take"
+            },
+            {
+              "property": "Skip",
+              "name": "skip"
+            }
+          ]
         },
         {
           "family": "Trainers",
@@ -1166,7 +1375,13 @@
           "requestBodyPresent": false,
           "requestContract": "GetTrainerProfileRequest",
           "bodyInputType": null,
-          "routeParameters": [],
+          "routeParameters": [
+            {
+              "name": "trainerId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
           "responsePresent": true,
           "responseContracts": [
             {
@@ -1174,7 +1389,8 @@
               "status": 200
             }
           ],
-          "endpointFile": "GetTrainerProfileEndpoint.cs"
+          "endpointFile": "GetTrainerProfileEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Trainers",
@@ -1195,7 +1411,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "MergeTrainerAliasEndpoint.cs"
+          "endpointFile": "MergeTrainerAliasEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Trainers",
@@ -1215,7 +1432,8 @@
               "status": 201
             }
           ],
-          "endpointFile": "RegisterTrainerEndpoint.cs"
+          "endpointFile": "RegisterTrainerEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Trainers",
@@ -1235,7 +1453,49 @@
               "status": 200
             }
           ],
-          "endpointFile": "SearchTrainersEndpoint.cs"
+          "endpointFile": "SearchTrainersEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "TrainerId",
+              "name": "trainerId"
+            },
+            {
+              "property": "Query",
+              "name": "query"
+            },
+            {
+              "property": "DisplayName",
+              "name": "displayName"
+            },
+            {
+              "property": "NormalizedName",
+              "name": "normalizedName"
+            },
+            {
+              "property": "AffiliationCode",
+              "name": "affiliationCode"
+            },
+            {
+              "property": "AliasValue",
+              "name": "aliasValue"
+            },
+            {
+              "property": "Page",
+              "name": "page"
+            },
+            {
+              "property": "PageSize",
+              "name": "pageSize"
+            },
+            {
+              "property": "SortBy",
+              "name": "sortBy"
+            },
+            {
+              "property": "SortDescending",
+              "name": "sortDescending"
+            }
+          ]
         },
         {
           "family": "Trainers",
@@ -1256,7 +1516,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "UpdateTrainerProfileEndpoint.cs"
+          "endpointFile": "UpdateTrainerProfileEndpoint.cs",
+          "queryParameters": []
         }
       ]
     },
@@ -1283,7 +1544,8 @@
               "status": 200
             }
           ],
-          "endpointFile": "ExecuteOwnerIdentityRecoveryEndpoint.cs"
+          "endpointFile": "ExecuteOwnerIdentityRecoveryEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Owners",
@@ -1295,7 +1557,13 @@
           "requestBodyPresent": false,
           "requestContract": "GetOwnerRequest",
           "bodyInputType": null,
-          "routeParameters": [],
+          "routeParameters": [
+            {
+              "name": "ownerId",
+              "kind": "path",
+              "type": "string"
+            }
+          ],
           "responsePresent": true,
           "responseContracts": [
             {
@@ -1303,7 +1571,17 @@
               "status": 200
             }
           ],
-          "endpointFile": "GetOwnerEndpoint.cs"
+          "endpointFile": "GetOwnerEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "Take",
+              "name": "take"
+            },
+            {
+              "property": "Skip",
+              "name": "skip"
+            }
+          ]
         },
         {
           "family": "Owners",
@@ -1324,7 +1602,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "MergeOwnerEndpoint.cs"
+          "endpointFile": "MergeOwnerEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Owners",
@@ -1344,7 +1623,8 @@
               "status": 200
             }
           ],
-          "endpointFile": "PreviewOwnerIdentityRecoveryEndpoint.cs"
+          "endpointFile": "PreviewOwnerIdentityRecoveryEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Owners",
@@ -1364,7 +1644,13 @@
               "status": 200
             }
           ],
-          "endpointFile": "SearchOwnersEndpoint.cs"
+          "endpointFile": "SearchOwnersEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "Query",
+              "name": "query"
+            }
+          ]
         },
         {
           "family": "Owners",
@@ -1385,7 +1671,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "UpdateOwnerEndpoint.cs"
+          "endpointFile": "UpdateOwnerEndpoint.cs",
+          "queryParameters": []
         }
       ]
     },
@@ -1413,7 +1700,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "AddBettingSuggestionEndpoint.cs"
+          "endpointFile": "AddBettingSuggestionEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Predictions",
@@ -1434,7 +1722,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "AddPredictionMarkEndpoint.cs"
+          "endpointFile": "AddPredictionMarkEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Predictions",
@@ -1455,7 +1744,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "AddPredictionRationaleEndpoint.cs"
+          "endpointFile": "AddPredictionRationaleEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Predictions",
@@ -1476,7 +1766,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "CorrectPredictionMetadataEndpoint.cs"
+          "endpointFile": "CorrectPredictionMetadataEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Predictions",
@@ -1490,8 +1781,14 @@
           "bodyInputType": "CreatePredictionTicketRequest",
           "routeParameters": [],
           "responsePresent": true,
-          "responseContracts": [],
-          "endpointFile": "CreatePredictionTicketEndpoint.cs"
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Predictions.CreatePredictionTicketResponse",
+              "status": 201
+            }
+          ],
+          "endpointFile": "CreatePredictionTicketEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Predictions",
@@ -1512,7 +1809,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "EvaluatePredictionTicketEndpoint.cs"
+          "endpointFile": "EvaluatePredictionTicketEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Predictions",
@@ -1533,7 +1831,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "FinalizePredictionTicketEndpoint.cs"
+          "endpointFile": "FinalizePredictionTicketEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Predictions",
@@ -1555,11 +1854,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "PredictionTicketResponse",
+              "type": "HorseRacingPrediction.Contracts.Predictions.GetPredictionTicketResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetPredictionTicketEndpoint.cs"
+          "endpointFile": "GetPredictionTicketEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Predictions",
@@ -1580,7 +1880,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "RecalculatePredictionEvaluationEndpoint.cs"
+          "endpointFile": "RecalculatePredictionEvaluationEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Predictions",
@@ -1594,8 +1895,79 @@
           "bodyInputType": null,
           "routeParameters": [],
           "responsePresent": true,
-          "responseContracts": [],
-          "endpointFile": "SearchPredictionTicketsEndpoint.cs"
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Predictions.SearchPredictionTicketsResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "SearchPredictionTicketsEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "Query",
+              "name": "query"
+            },
+            {
+              "property": "PredictionTicketId",
+              "name": "predictionTicketId"
+            },
+            {
+              "property": "RaceId",
+              "name": "raceId"
+            },
+            {
+              "property": "PredictorType",
+              "name": "predictorType"
+            },
+            {
+              "property": "PredictorId",
+              "name": "predictorId"
+            },
+            {
+              "property": "TicketStatus",
+              "name": "ticketStatus"
+            },
+            {
+              "property": "EvaluationStatus",
+              "name": "evaluationStatus"
+            },
+            {
+              "property": "PredictedAtFrom",
+              "name": "predictedAtFrom"
+            },
+            {
+              "property": "PredictedAtTo",
+              "name": "predictedAtTo"
+            },
+            {
+              "property": "MinConfidenceScore",
+              "name": "minConfidenceScore"
+            },
+            {
+              "property": "MaxConfidenceScore",
+              "name": "maxConfidenceScore"
+            },
+            {
+              "property": "SummaryComment",
+              "name": "summaryComment"
+            },
+            {
+              "property": "Page",
+              "name": "page"
+            },
+            {
+              "property": "PageSize",
+              "name": "pageSize"
+            },
+            {
+              "property": "SortBy",
+              "name": "sortBy"
+            },
+            {
+              "property": "SortDescending",
+              "name": "sortDescending"
+            }
+          ]
         },
         {
           "family": "Predictions",
@@ -1616,7 +1988,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "WithdrawPredictionTicketEndpoint.cs"
+          "endpointFile": "WithdrawPredictionTicketEndpoint.cs",
+          "queryParameters": []
         }
       ]
     },
@@ -1644,7 +2017,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "ChangeMemoSubjectsEndpoint.cs"
+          "endpointFile": "ChangeMemoSubjectsEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Memos",
@@ -1658,8 +2032,14 @@
           "bodyInputType": "CreateMemoRequest",
           "routeParameters": [],
           "responsePresent": true,
-          "responseContracts": [],
-          "endpointFile": "CreateMemoEndpoint.cs"
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Memos.CreateMemoResponse",
+              "status": 201
+            }
+          ],
+          "endpointFile": "CreateMemoEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Memos",
@@ -1680,7 +2060,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "DeleteMemoEndpoint.cs"
+          "endpointFile": "DeleteMemoEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Memos",
@@ -1705,8 +2086,14 @@
             }
           ],
           "responsePresent": true,
-          "responseContracts": [],
-          "endpointFile": "GetMemosBySubjectEndpoint.cs"
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Memos.GetMemosBySubjectResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetMemosBySubjectEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Memos",
@@ -1727,7 +2114,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "UpdateMemoEndpoint.cs"
+          "endpointFile": "UpdateMemoEndpoint.cs",
+          "queryParameters": []
         }
       ]
     },
@@ -1756,11 +2144,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "ApiContracts.MlPredictionResponse",
+              "type": "HorseRacingPrediction.Contracts.MachineLearning.GetMlPredictionResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetMlPredictionEndpoint.cs"
+          "endpointFile": "GetMlPredictionEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "MachineLearning",
@@ -1774,8 +2163,14 @@
           "bodyInputType": null,
           "routeParameters": [],
           "responsePresent": true,
-          "responseContracts": [],
-          "endpointFile": "TrainMlModelEndpoint.cs"
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.MachineLearning.TrainMlModelResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "TrainMlModelEndpoint.cs",
+          "queryParameters": []
         }
       ]
     },
@@ -1796,8 +2191,14 @@
           "bodyInputType": "AcquirePredictionCandidatesRequest",
           "routeParameters": [],
           "responsePresent": true,
-          "responseContracts": [],
-          "endpointFile": "AcquirePredictionCandidateLeasesEndpoint.cs"
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.PredictionScheduling.AcquirePredictionCandidateLeasesResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "AcquirePredictionCandidateLeasesEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "PredictionScheduling",
@@ -1812,7 +2213,8 @@
           "routeParameters": [],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "EnqueuePredictionCandidatesEndpoint.cs"
+          "endpointFile": "EnqueuePredictionCandidatesEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "PredictionScheduling",
@@ -1833,7 +2235,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "TransitionPredictionCandidateEndpoint.cs"
+          "endpointFile": "TransitionPredictionCandidateEndpoint.cs",
+          "queryParameters": []
         }
       ]
     },
@@ -1854,8 +2257,14 @@
           "bodyInputType": "ApplyHorseIdentityRepairRequest",
           "routeParameters": [],
           "responsePresent": true,
-          "responseContracts": [],
-          "endpointFile": "ApplyHorseIdentityRepairEndpoint.cs"
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Repairs.ApplyHorseIdentityRepairResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "ApplyHorseIdentityRepairEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Repairs",
@@ -1869,8 +2278,14 @@
           "bodyInputType": "ApplySubjectNameNormalizationRequest",
           "routeParameters": [],
           "responsePresent": true,
-          "responseContracts": [],
-          "endpointFile": "ApplySubjectNameNormalizationEndpoint.cs"
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Repairs.ApplySubjectNameNormalizationResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "ApplySubjectNameNormalizationEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Repairs",
@@ -1884,8 +2299,14 @@
           "bodyInputType": "DismissSubjectIdentificationFailuresRequest",
           "routeParameters": [],
           "responsePresent": true,
-          "responseContracts": [],
-          "endpointFile": "DismissSubjectIdentificationFailuresEndpoint.cs"
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Repairs.DismissSubjectIdentificationFailuresResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "DismissSubjectIdentificationFailuresEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Repairs",
@@ -1899,8 +2320,14 @@
           "bodyInputType": "ExecuteSubjectIdentificationRepairRequest",
           "routeParameters": [],
           "responsePresent": true,
-          "responseContracts": [],
-          "endpointFile": "ExecuteSubjectIdentificationRepairEndpoint.cs"
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Repairs.ExecuteSubjectIdentificationRepairResponse",
+              "status": 202
+            }
+          ],
+          "endpointFile": "ExecuteSubjectIdentificationRepairEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Repairs",
@@ -1914,8 +2341,14 @@
           "bodyInputType": null,
           "routeParameters": [],
           "responsePresent": true,
-          "responseContracts": [],
-          "endpointFile": "GetHorseIdentityRepairEndpoint.cs"
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Repairs.GetHorseIdentityRepairResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetHorseIdentityRepairEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Repairs",
@@ -1929,8 +2362,14 @@
           "bodyInputType": null,
           "routeParameters": [],
           "responsePresent": true,
-          "responseContracts": [],
-          "endpointFile": "GetSubjectIdentificationRepairEndpoint.cs"
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Repairs.GetSubjectIdentificationRepairResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetSubjectIdentificationRepairEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Repairs",
@@ -1965,8 +2404,31 @@
             }
           ],
           "responsePresent": true,
-          "responseContracts": [],
-          "endpointFile": "GetSubjectNameNormalizationEndpoint.cs"
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Repairs.GetSubjectNameNormalizationResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetSubjectNameNormalizationEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "SubjectType",
+              "name": "subjectType"
+            },
+            {
+              "property": "Query",
+              "name": "query"
+            },
+            {
+              "property": "Page",
+              "name": "page"
+            },
+            {
+              "property": "PageSize",
+              "name": "pageSize"
+            }
+          ]
         }
       ]
     },
@@ -1987,8 +2449,14 @@
           "bodyInputType": "ResolveHorseIdentityRequest",
           "routeParameters": [],
           "responsePresent": true,
-          "responseContracts": [],
-          "endpointFile": "ResolveHorseIdentityEndpoint.cs"
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Identity.ResolveHorseIdentityResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "ResolveHorseIdentityEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Identity",
@@ -2002,8 +2470,14 @@
           "bodyInputType": "HorseRacingPrediction.Contracts.ResolveRaceIdentityRequest",
           "routeParameters": [],
           "responsePresent": true,
-          "responseContracts": [],
-          "endpointFile": "ResolveRaceIdentityEndpoint.cs"
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Identity.ResolveRaceIdentityResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "ResolveRaceIdentityEndpoint.cs",
+          "queryParameters": []
         }
       ]
     },
@@ -2035,8 +2509,14 @@
             }
           ],
           "responsePresent": true,
-          "responseContracts": [],
-          "endpointFile": "GetSubjectProfileEndpoint.cs"
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Subjects.GetSubjectProfileResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetSubjectProfileEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Subjects",
@@ -2062,7 +2542,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "PutSubjectProfileEndpoint.cs"
+          "endpointFile": "PutSubjectProfileEndpoint.cs",
+          "queryParameters": []
         }
       ]
     },
@@ -2091,15 +2572,16 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "AcquireCollectionTaskResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.AcquireCollectionTaskResponse",
               "status": 200
             },
             {
-              "type": "AcquireCollectionTaskResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.AcquireCollectionTaskResponse",
               "status": 201
             }
           ],
-          "endpointFile": "AcquireCollectionTaskEndpoint.cs"
+          "endpointFile": "AcquireCollectionTaskEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2115,15 +2597,16 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "AcquireNextExecutionResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.AcquireNextExecutionResponse",
               "status": 200
             },
             {
-              "type": "AcquireNextExecutionResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.AcquireNextExecutionResponse",
               "status": 201
             }
           ],
-          "endpointFile": "AcquireNextExecutionEndpoint.cs"
+          "endpointFile": "AcquireNextExecutionEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2139,15 +2622,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "ApplyRaceDetailMigrationResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.ApplyRaceDetailMigrationResponse",
               "status": 200
-            },
-            {
-              "type": "ApplyRaceDetailMigrationResponse",
-              "status": 409
             }
           ],
-          "endpointFile": "ApplyRaceDetailMigrationEndpoint.cs"
+          "endpointFile": "ApplyRaceDetailMigrationEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2163,11 +2643,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "ApplyRaceEntryOwnerMigrationResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.ApplyRaceEntryOwnerMigrationResponse",
               "status": 200
             }
           ],
-          "endpointFile": "ApplyRaceEntryOwnerMigrationEndpoint.cs"
+          "endpointFile": "ApplyRaceEntryOwnerMigrationEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2188,7 +2669,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "CancelCollectionTaskEndpoint.cs"
+          "endpointFile": "CancelCollectionTaskEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2209,7 +2691,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "CompleteCollectionTaskAttemptEndpoint.cs"
+          "endpointFile": "CompleteCollectionTaskAttemptEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2225,11 +2708,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "CreateBackfillBatchResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.CreateBackfillBatchResponse",
               "status": 202
             }
           ],
-          "endpointFile": "CreateBackfillBatchEndpoint.cs"
+          "endpointFile": "CreateBackfillBatchEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2245,11 +2729,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "CreateCollectionRecoveryBatchResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.CreateCollectionRecoveryBatchResponse",
               "status": 202
             }
           ],
-          "endpointFile": "CreateCollectionRecoveryBatchEndpoint.cs"
+          "endpointFile": "CreateCollectionRecoveryBatchEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2271,11 +2756,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "CreateCollectionRevisionResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.CreateCollectionRevisionResponse",
               "status": 200
             }
           ],
-          "endpointFile": "CreateCollectionRevisionEndpoint.cs"
+          "endpointFile": "CreateCollectionRevisionEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2291,15 +2777,16 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "CreateCollectionTaskBatchResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.CreateCollectionTaskBatchResponse",
               "status": 202
             },
             {
-              "type": "CreateCollectionTaskBatchResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.CreateCollectionTaskBatchResponse",
               "status": 207
             }
           ],
-          "endpointFile": "CreateCollectionTaskBatchEndpoint.cs"
+          "endpointFile": "CreateCollectionTaskBatchEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2315,15 +2802,20 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "CreateCollectionTaskResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.CreateCollectionTaskResponse",
               "status": 200
             },
             {
-              "type": "CreateCollectionTaskResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.CreateCollectionTaskResponse",
               "status": 202
+            },
+            {
+              "type": "HorseRacingPrediction.Contracts.Collection.CreateCollectionTaskResponse",
+              "status": 422
             }
           ],
-          "endpointFile": "CreateCollectionTaskEndpoint.cs"
+          "endpointFile": "CreateCollectionTaskEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2339,11 +2831,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "CreateKnownRecoveryBatchResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.CreateKnownRecoveryBatchResponse",
               "status": 200
             }
           ],
-          "endpointFile": "CreateKnownRecoveryBatchEndpoint.cs"
+          "endpointFile": "CreateKnownRecoveryBatchEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2359,11 +2852,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "CreateRaceEntryOwnerRepairBatchResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.CreateRaceEntryOwnerRepairBatchResponse",
               "status": 202
             }
           ],
-          "endpointFile": "CreateRaceEntryOwnerRepairBatchEndpoint.cs"
+          "endpointFile": "CreateRaceEntryOwnerRepairBatchEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2379,11 +2873,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "CreateRecollectionBatchResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.CreateRecollectionBatchResponse",
               "status": 202
             }
           ],
-          "endpointFile": "CreateRecollectionBatchEndpoint.cs"
+          "endpointFile": "CreateRecollectionBatchEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2405,11 +2900,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetBackfillBatchResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.GetBackfillBatchResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetBackfillBatchEndpoint.cs"
+          "endpointFile": "GetBackfillBatchEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2425,11 +2921,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetCollectionDashboardResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.GetCollectionDashboardResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetCollectionDashboardEndpoint.cs"
+          "endpointFile": "GetCollectionDashboardEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2445,11 +2942,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetCollectionMonitoringFindingsResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.GetCollectionMonitoringFindingsResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetCollectionMonitoringFindingsEndpoint.cs"
+          "endpointFile": "GetCollectionMonitoringFindingsEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2465,11 +2963,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetCollectionPipelineResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.GetCollectionPipelineResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetCollectionPipelineEndpoint.cs"
+          "endpointFile": "GetCollectionPipelineEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2485,11 +2984,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetCollectionProgressResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.GetCollectionProgressResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetCollectionProgressEndpoint.cs"
+          "endpointFile": "GetCollectionProgressEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2551,11 +3051,33 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetCollectionResourceDetailResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.GetCollectionResourceDetailResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetCollectionResourceDetailEndpoint.cs"
+          "endpointFile": "GetCollectionResourceDetailEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "HistoryPage",
+              "name": "historyPage"
+            },
+            {
+              "property": "RequestHistoryPage",
+              "name": "requestHistoryPage"
+            },
+            {
+              "property": "TaskHistoryPage",
+              "name": "taskHistoryPage"
+            },
+            {
+              "property": "AttemptHistoryPage",
+              "name": "attemptHistoryPage"
+            },
+            {
+              "property": "HistoryPageSize",
+              "name": "historyPageSize"
+            }
+          ]
         },
         {
           "family": "Collection",
@@ -2592,11 +3114,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetCollectionResourceStateResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.GetCollectionResourceStateResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetCollectionResourceStateEndpoint.cs"
+          "endpointFile": "GetCollectionResourceStateEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2618,11 +3141,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetExecutionBatchResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.GetExecutionBatchResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetExecutionBatchEndpoint.cs"
+          "endpointFile": "GetExecutionBatchEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2659,11 +3183,25 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetFailureNotificationGroupResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.GetFailureNotificationGroupResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetFailureNotificationGroupEndpoint.cs"
+          "endpointFile": "GetFailureNotificationGroupEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "Search",
+              "name": "search"
+            },
+            {
+              "property": "Page",
+              "name": "page"
+            },
+            {
+              "property": "PageSize",
+              "name": "pageSize"
+            }
+          ]
         },
         {
           "family": "Collection",
@@ -2679,11 +3217,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetKnownRecoveryPreviewResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.GetKnownRecoveryPreviewResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetKnownRecoveryPreviewEndpoint.cs"
+          "endpointFile": "GetKnownRecoveryPreviewEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2699,11 +3238,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetOwnerIdentityMigrationPreviewResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.GetOwnerIdentityMigrationPreviewResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetOwnerIdentityMigrationPreviewEndpoint.cs"
+          "endpointFile": "GetOwnerIdentityMigrationPreviewEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2725,11 +3265,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetRaceCollectionReadinessResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.GetRaceCollectionReadinessResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetRaceCollectionReadinessEndpoint.cs"
+          "endpointFile": "GetRaceCollectionReadinessEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2745,11 +3286,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetRaceEntryOwnerMigrationResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.GetRaceEntryOwnerMigrationResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetRaceEntryOwnerMigrationEndpoint.cs"
+          "endpointFile": "GetRaceEntryOwnerMigrationEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2776,11 +3318,21 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetRevisionRecollectionProgressResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.GetRevisionRecollectionProgressResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetRevisionRecollectionProgressEndpoint.cs"
+          "endpointFile": "GetRevisionRecollectionProgressEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "Definition",
+              "name": "definition"
+            },
+            {
+              "property": "Revision",
+              "name": "revision"
+            }
+          ]
         },
         {
           "family": "Collection",
@@ -2796,11 +3348,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "GetTaskViewCountsResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.GetTaskViewCountsResponse",
               "status": 200
             }
           ],
-          "endpointFile": "GetTaskViewCountsEndpoint.cs"
+          "endpointFile": "GetTaskViewCountsEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2827,11 +3380,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "HeartbeatCollectionTaskLeaseResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.HeartbeatCollectionTaskLeaseResponse",
               "status": 200
             }
           ],
-          "endpointFile": "HeartbeatCollectionTaskLeaseEndpoint.cs"
+          "endpointFile": "HeartbeatCollectionTaskLeaseEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2847,11 +3401,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "ListBackfillBatchesResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.ListBackfillBatchesResponse",
               "status": 200
             }
           ],
-          "endpointFile": "ListBackfillBatchesEndpoint.cs"
+          "endpointFile": "ListBackfillBatchesEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -2943,11 +3498,73 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "ListCollectionTasksResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.ListCollectionTasksResponse",
               "status": 200
             }
           ],
-          "endpointFile": "ListCollectionTasksEndpoint.cs"
+          "endpointFile": "ListCollectionTasksEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "Status",
+              "name": "status"
+            },
+            {
+              "property": "Limit",
+              "name": "limit"
+            },
+            {
+              "property": "Statuses",
+              "name": "statuses"
+            },
+            {
+              "property": "ResourceType",
+              "name": "resourceType"
+            },
+            {
+              "property": "Provider",
+              "name": "provider"
+            },
+            {
+              "property": "DefinitionId",
+              "name": "definitionId"
+            },
+            {
+              "property": "Lane",
+              "name": "lane"
+            },
+            {
+              "property": "Search",
+              "name": "search"
+            },
+            {
+              "property": "ErrorSearch",
+              "name": "errorSearch"
+            },
+            {
+              "property": "CreatedFrom",
+              "name": "createdFrom"
+            },
+            {
+              "property": "CreatedTo",
+              "name": "createdTo"
+            },
+            {
+              "property": "ActionableOnly",
+              "name": "actionableOnly"
+            },
+            {
+              "property": "LatestOnly",
+              "name": "latestOnly"
+            },
+            {
+              "property": "Page",
+              "name": "page"
+            },
+            {
+              "property": "PageSize",
+              "name": "pageSize"
+            }
+          ]
         },
         {
           "family": "Collection",
@@ -2969,11 +3586,17 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "ListFailureNotificationGroupsResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.ListFailureNotificationGroupsResponse",
               "status": 200
             }
           ],
-          "endpointFile": "ListFailureNotificationGroupsEndpoint.cs"
+          "endpointFile": "ListFailureNotificationGroupsEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "Limit",
+              "name": "limit"
+            }
+          ]
         },
         {
           "family": "Collection",
@@ -3010,11 +3633,29 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "ListFailureNotificationsResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.ListFailureNotificationsResponse",
               "status": 200
             }
           ],
-          "endpointFile": "ListFailureNotificationsEndpoint.cs"
+          "endpointFile": "ListFailureNotificationsEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "View",
+              "name": "view"
+            },
+            {
+              "property": "Published",
+              "name": "published"
+            },
+            {
+              "property": "DeliveryState",
+              "name": "deliveryState"
+            },
+            {
+              "property": "Limit",
+              "name": "limit"
+            }
+          ]
         },
         {
           "family": "Collection",
@@ -3036,11 +3677,17 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "ListRaceEntryOwnerRepairCandidatesResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.ListRaceEntryOwnerRepairCandidatesResponse",
               "status": 200
             }
           ],
-          "endpointFile": "ListRaceEntryOwnerRepairCandidatesEndpoint.cs"
+          "endpointFile": "ListRaceEntryOwnerRepairCandidatesEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "Date",
+              "name": "date"
+            }
+          ]
         },
         {
           "family": "Collection",
@@ -3056,11 +3703,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "PreviewCollectionTaskBatchResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.PreviewCollectionTaskBatchResponse",
               "status": 200
             }
           ],
-          "endpointFile": "PreviewCollectionTaskBatchEndpoint.cs"
+          "endpointFile": "PreviewCollectionTaskBatchEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -3076,11 +3724,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "PreviewRaceDetailMigrationResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.PreviewRaceDetailMigrationResponse",
               "status": 200
             }
           ],
-          "endpointFile": "PreviewRaceDetailMigrationEndpoint.cs"
+          "endpointFile": "PreviewRaceDetailMigrationEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -3096,11 +3745,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "PreviewRaceEntryOwnerMigrationResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.PreviewRaceEntryOwnerMigrationResponse",
               "status": 200
             }
           ],
-          "endpointFile": "PreviewRaceEntryOwnerMigrationEndpoint.cs"
+          "endpointFile": "PreviewRaceEntryOwnerMigrationEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -3116,11 +3766,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "PreviewRacePeriodRecollectionResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.PreviewRacePeriodRecollectionResponse",
               "status": 200
             }
           ],
-          "endpointFile": "PreviewRacePeriodRecollectionEndpoint.cs"
+          "endpointFile": "PreviewRacePeriodRecollectionEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -3136,11 +3787,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "PreviewRevisionImpactResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.PreviewRevisionImpactResponse",
               "status": 200
             }
           ],
-          "endpointFile": "PreviewRevisionImpactEndpoint.cs"
+          "endpointFile": "PreviewRevisionImpactEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -3162,11 +3814,12 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "RecoverBackfillHolesResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.RecoverBackfillHolesResponse",
               "status": 202
             }
           ],
-          "endpointFile": "RecoverBackfillHolesEndpoint.cs"
+          "endpointFile": "RecoverBackfillHolesEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -3218,11 +3871,41 @@
           "responsePresent": true,
           "responseContracts": [
             {
-              "type": "SearchCollectionStatesResponse",
+              "type": "HorseRacingPrediction.Contracts.Collection.SearchCollectionStatesResponse",
               "status": 200
             }
           ],
-          "endpointFile": "SearchCollectionStatesEndpoint.cs"
+          "endpointFile": "SearchCollectionStatesEndpoint.cs",
+          "queryParameters": [
+            {
+              "property": "Statuses",
+              "name": "statuses"
+            },
+            {
+              "property": "ResourceType",
+              "name": "resourceType"
+            },
+            {
+              "property": "Provider",
+              "name": "provider"
+            },
+            {
+              "property": "DefinitionId",
+              "name": "definitionId"
+            },
+            {
+              "property": "Search",
+              "name": "search"
+            },
+            {
+              "property": "Page",
+              "name": "page"
+            },
+            {
+              "property": "PageSize",
+              "name": "pageSize"
+            }
+          ]
         },
         {
           "family": "Collection",
@@ -3237,7 +3920,8 @@
           "routeParameters": [],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "SetCollectionPipelineEndpoint.cs"
+          "endpointFile": "SetCollectionPipelineEndpoint.cs",
+          "queryParameters": []
         },
         {
           "family": "Collection",
@@ -3258,7 +3942,8 @@
           ],
           "responsePresent": false,
           "responseContracts": [],
-          "endpointFile": "TransitionCollectionExecutionEndpoint.cs"
+          "endpointFile": "TransitionCollectionExecutionEndpoint.cs",
+          "queryParameters": []
         }
       ]
     }

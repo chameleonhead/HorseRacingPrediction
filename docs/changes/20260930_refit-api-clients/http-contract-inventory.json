@@ -2251,7 +2251,7 @@
     ],
     "produces": [
       {
-        "type": "ApiContracts.MlPredictionResponse",
+        "type": "GetMlPredictionResponse",
         "status": 200
       }
     ],
@@ -2861,7 +2861,7 @@
     ],
     "produces": [
       {
-        "type": "PredictionTicketResponse",
+        "type": "GetPredictionTicketResponse",
         "status": 200
       }
     ],
