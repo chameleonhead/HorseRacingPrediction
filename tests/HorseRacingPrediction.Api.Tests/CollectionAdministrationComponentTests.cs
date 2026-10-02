@@ -172,6 +172,7 @@ public sealed class CollectionAdministrationComponentTests
         await SelectAsync(cut, "対象の選び方", "SpecificResources");
         var ids = cut.FindComponents<FluentTextField>()
             .Single(x => x.Instance.Label?.ToString() == "対象ID（カンマ区切り）");
+        Assert.IsTrue(ids.Instance.Immediate);
         await cut.InvokeAsync(() => ids.Instance.ValueChanged.InvokeAsync("H001"));
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
             .Single(x => x.Markup.Contains("対象を確認</")).Instance.OnClick.InvokeAsync());

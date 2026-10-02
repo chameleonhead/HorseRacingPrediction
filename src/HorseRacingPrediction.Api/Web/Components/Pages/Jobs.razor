@@ -199,7 +199,7 @@ else
         <div class="collection-request-form">
             <label class="filter-select">対象の選び方<select aria-label="対象の選び方" @bind="bulkSelection" @bind:after="ResetBulkPreview"><option value="Failed">失敗したデータ</option><option value="Stale">古くなったデータ</option><option value="LastCollectedBefore">最終取得日時より前</option><option value="HorsesRacedInDateRange">指定期間に出走した競走馬</option><option value="HorsesByTrainer">調教師に所属する競走馬</option><option value="SpecificResources">対象IDを指定</option></select></label>
             <label class="filter-select">情報の種類<select aria-label="情報の種類" @bind="bulkType" @bind:after="BulkTypeChanged">@foreach(var kind in collectionKinds){<option value="@kind.Type">@kind.Label</option>}</select></label>
-            @if (bulkSelection == "SpecificResources") { <FluentTextField Label="対象ID（カンマ区切り）" @bind-Value="ids" /> }
+            @if (bulkSelection == "SpecificResources") { <FluentTextField Label="対象ID（カンマ区切り）" Immediate="true" @bind-Value="ids" /> }
             @if (bulkSelection == "HorsesRacedInDateRange") { <div class="date-fields"><label>開始日<input type="date" @bind="bulkFrom" /></label><label>終了日<input type="date" @bind="bulkTo" /></label></div> }
             @if (bulkSelection == "HorsesByTrainer") { <FluentTextField Label="調教師ID" @bind-Value="bulkTrainerId" /> }
             @if (bulkSelection == "LastCollectedBefore") { <label>最終取得日時<input type="datetime-local" @bind="bulkLastCollectedBefore" /></label> }

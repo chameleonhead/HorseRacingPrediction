@@ -137,6 +137,7 @@ before any retry or repair decision.
 | T4 | Inventory and classify the 12 no-candidate resources read-only. | Cheap investigator | gpt-6-luna high; read-only evidence gathering | authenticated session | production GET/repair preview only | exact 12-item reconciliation | all 12 are name-only pedigree expansions; 10 no-candidate and 2 ambiguous namesakes | Verified | Cheap investigator - bounded read-only inventory | none | unavailable; retries 0; corrections 0; reviews 1 |
 | T5 | Diagnose the three race write failures and choose controlled recovery per item. | Cheap investigator, Lead accepts recovery | gpt-6-luna high; read-only first, Lead owns mutation decision | authenticated session | production GET and isolated live probe | three complete result identity inventories | all official rows carry normalized Horse identity; timestamps and inner codes recorded | Verified | Cheap investigator for evidence; Lead for mutation decision | none | unavailable; retries 1; corrections 0; reviews 1 |
 | T6 | Final integrated regression, deployment, bounded recovery, and production verification. | Cheap verifier and Lead | gpt-6-luna high for mechanical gates; Lead for acceptance/operation | T1,T2,T3,T4,T5 and approval | tests/workflows/approved production operation | CI/deploy plus terminal resource evidence | passing gates and production terminal evidence | Dependent | Cheap verifier for gates; Lead for final acceptance | pending dispatch | unavailable; retries 0; corrections 0; reviews 0 |
+| T7 | Correct the bulk specific-resource input discovered during production recovery. | Cheap executor/verifier | gpt-6-luna high; local UI binding fix | T6 production exercise | Jobs UI and component test | component regression plus production browser verification | `Immediate` binding assertion and live preview/submit | In progress | Cheap executor/verifier - closure item within approved operator recovery | no delegated patch | unavailable; retries 1; corrections 1; reviews 1 |
 
 The read/write scopes overlap across the collection identity and persistence path, so implementation is
 serialized. No subagent was dispatched for the current bounded investigation; the Lead retained the
@@ -177,13 +178,17 @@ verification use the repository's requested cheap route after approval.
 - `dotnet test tests/HorseRacingPrediction.Api.Tests/... --filter CollectionIdentityResolverTests`: 13 passed.
 - `dotnet test tests/HorseRacingPrediction.Collector.Tests/... --filter JraSubjectCollectionHandlerTests`: 45 passed.
 - Full API suite: 407 passed, 1 skipped. Full Collector suite: 411 passed.
+- CI run 36958984104 and deployment run 36958984094 passed; the deployment drain step and API health check succeeded.
+- Production recovery closed exactly 12 obsolete pedigree failures, queued 11 parent profiles and three races,
+  resumed the pipeline, and reconciled zero actionable failure groups. Exercising the bulk specific-resource
+  flow then reproduced a stale UI binding: the visible IDs were not available to preview validation. T7 makes
+  the Fluent input immediate and adds a component assertion for that interaction contract.
 - Solution build completed with zero warnings and errors; `dotnet format --verify-no-changes --no-restore`,
   `git diff --check`, and the change-record audit validator passed.
 - No secret was written to commands, logs, documentation, or commits.
 
 ## Deviations and follow-up
 
-The authenticated production inventory is complete. The pipeline is intentionally paused by the latest
-`DomainWriteRejected / HorseIdentityConflict` safety stop. Next: implement and deploy, close exactly the
-12 obsolete pedigree tasks, recover the 11 parent profiles and three races, verify terminal data, then
-resume the pipeline and observe progress.
+The bounded recovery operations are submitted and the pipeline is running. T7 must be deployed and verified
+through the production bulk preview before final terminal evidence is accepted. The 14 recovery targets remain
+under observation; no new actionable failure group is present.
