@@ -68,6 +68,8 @@ This prevents a second Horse record from being created, but currently provides n
 | Every runner has a different stored/result Horse ID | Controlled production recollection reports 11/11 to 16/16 collisions in each affected race, not an isolated number shift | Treat this as legacy identity cutover, never as a horse-number correction. Enrich a unique source-less name-derived record only when no official record exists; otherwise require fenced repair | Replace entries by horse number alone | Same-name horses remain blocked whenever uniqueness or provenance cannot be proven | Resolved in design |
 | Name equality alone can conflate different horses | `20201206:Chukyo:11` reached `HorseIdentityEvidenceRequired`; the current guard intentionally refuses name-only promotion | Require exact normalized name, exactly one provably name-derived/source-less candidate, no official/source-bound match, and compatible birth date when present | Always prefer the old record, or always create the official-ID record | A historical namesake without birth evidence remains possible; ambiguity stays blocked and is surfaced for repair | Resolved in design |
 | Identity enrichment and profile persistence are separate writes | Resolver selection happens before the race envelope; source identity is persisted by the existing profile collection path | Make recollection success require source identity read-back; retry remains idempotent and a crash before profile persistence leaves the same safe candidate | Rewrite Horse aggregate identity during race ingestion | A transient failure can leave an enriched race reference with profile work pending, but cannot create a second Horse or silently merge records | Resolved in design |
+| JRA exposes the same horse through multiple CNAME route families | Production read-back for `ゴールドドリーム` showed `pw01dud00.../DD` while the official result supplied `pw01dud10.../C4`; whole-CNAME comparison incorrectly raised `HorseIdentityConflict` | Normalize recognized JRA horse routes to the stable ten-digit horse number while preserving the navigable URL; retain legacy behavior for unrecognized forms | Add route-family aliases one by one | A future JRA route without the stable number remains fail-closed under the legacy identity | Resolved in design |
+| The eight 2026 recoveries can be delayed by the upstream site independently of this defect | Post-deployment controlled recovery no longer returned `InvalidHorseNumber`; all eight entered automatic retry after JRA access-limit or transient-server responses | Leave the pipeline running and allow bounded automatic backoff; do not amplify the upstream limit with repeated manual retries | Cancel and recreate as realtime work | Result persistence remains externally pending, so AC-06/07 and T-04/05 stay incomplete | Externally blocked |
 
 ## Hypothesis ledger
 
@@ -84,12 +86,12 @@ This prevents a second Horse record from being created, but currently provides n
 | AC-01 | Read-only diagnostics identify every affected 2026-09-26/27 race, its failure/task IDs, existing assignments, incoming official assignments, and the exact collision without exposing secrets. | Verified |
 | AC-02 | The pre-send and API validation boundaries reject outgoing duplicates and persisted/incoming identity collisions atomically, with structured repair evidence. | Verified |
 | AC-03 | A unique exact-name, source-less, provably name-derived Horse is reused for a new official JRA identity without changing Horse ID; zero/multiple/source-bound/conflicting-birth candidates remain blocked. | Verified |
-| AC-04 | The official source identity is persisted and read back through the real profile path; repeated collection is idempotent and an interrupted profile write creates neither a duplicate Horse nor an unsafe alias. | Connected |
+| AC-04 | The official source identity is persisted and read back through the real profile path; repeated collection is idempotent and an interrupted profile write creates neither a duplicate Horse nor an unsafe alias. | Verified |
 | AC-05 | Each affected race with two existing identities is placed on repair hold; an official snapshot is inspected; only mismatched assignments are repaired atomically; concurrent/stale apply attempts fail closed. | Not started |
-| AC-06 | Controlled recollection succeeds for `20201206:Chukyo:11` and the repaired 2026 races, with unique effective horse numbers and neither `HorseIdentityEvidenceRequired` nor `InvalidHorseNumber`. | Not started |
-| AC-07 | Completed races persist result evidence and show `ResultDeclared` or a later valid lifecycle status; cancelled races retain cancellation semantics. | Not started |
-| AC-08 | No unrelated race assignments, horse identities, or pipeline state are changed. | Not started |
-| AC-09 | Relevant focused tests, full build/test/format gates, `git diff --check`, CodeGraph sync, deployment, and post-deployment evidence checks pass. | Not started |
+| AC-06 | Controlled recollection succeeds for `20201206:Chukyo:11` and the repaired 2026 races, with unique effective horse numbers and neither `HorseIdentityEvidenceRequired` nor `InvalidHorseNumber`. | Connected: 2020 race verified; eight 2026 races are in upstream-backoff recovery without the original error |
+| AC-07 | Completed races persist result evidence and show `ResultDeclared` or a later valid lifecycle status; cancelled races retain cancellation semantics. | Connected: 2020 race verified; eight 2026 results remain pending |
+| AC-08 | No unrelated race assignments, horse identities, or pipeline state are changed. | Verified |
+| AC-09 | Relevant focused tests, full build/test/format gates, `git diff --check`, CodeGraph sync, deployment, and post-deployment evidence checks pass. | Verified |
 
 ## Task plan
 
@@ -98,11 +100,11 @@ This prevents a second Horse record from being created, but currently provides n
 | T-01 | Verified | Capture production failure and race evidence read-only | Group `0FB0D54D5B4D2FAA`: 8 deterministic failures on 2026-09-26; 2026-09-27 races currently have result timestamps/status |
 | T-02 | Verified | Add the smallest structured collision evidence / repair handoff needed after T-01 | Collision outcome now includes horse number plus existing/incoming Horse IDs; 17 API tests pass |
 | T-03 | Verified | Verify and deploy the approved implementation | Run `36920958445`: verification, image/Lambda deployment, API restart, and health check passed; restore intentionally kept the pipeline paused while actionable failures existed |
-| T-04 | Runnable | Execute fenced repair and controlled recollection for affected races | Eight controlled recollections completed and produced exact collision pairs; repair mutation awaits the identity-promotion decision |
-| T-05 | Dependent | Verify result persistence and lifecycle states for both dates | Post-recovery API evidence |
+| T-04 | Externally blocked | Execute fenced repair and controlled recollection for affected races | Eight new recovery tasks no longer reproduce `InvalidHorseNumber`, but JRA access-limit/transient-server responses placed them in automatic backoff |
+| T-05 | Dependent | Verify result persistence and lifecycle states for both dates | Await terminal completion of the eight upstream-backoff recoveries |
 | T-06 | Dependent | Final review: AC/task traceability, scope, security, rollback, regression | Review section update |
 | T-07 | Verified | Implement unique legacy Horse identity enrichment and its resolver/profile integration tests | 14 focused tests and all 406 API tests pass; official URL is attached to the legacy Horse resource location |
-| T-08 | Runnable | Deploy and recover `20201206:Chukyo:11`, then verify Horse source identity, race persistence, and idempotent retry | AC-06/08/09 production read-back |
+| T-08 | Verified | Deploy and recover `20201206:Chukyo:11`, then verify Horse source identity, race persistence, and idempotent retry | Runs `36955021342` and `36955021189` passed; production race is complete with persisted result, applied revision 6/6, no unresolved failure, and a second idempotent recovery also completed |
 
 ## Documentation updates
 
@@ -124,6 +126,8 @@ This prevents a second Horse record from being created, but currently provides n
 | VF-08 | First T-07 focused run failed three conflict tests after the resolver returned the earlier, more specific `HorseIdentityConflict` | Expected failure classification changed while atomic no-write behavior remained intact | Assert the structured conflict and unchanged event/context/task evidence | Verified |
 | VF-09 | First T-07 integration run produced `IdempotencyMismatch` when the same race gained official source evidence | The race-subject batch fingerprint covered only item key/revision, so changed URL/metadata reused an incompatible batch key | Include the complete stable request content in the batch fingerprint; verify URL location attachment and replay idempotency | Verified |
 | VF-10 | First full API run retained the old expectation that official identity enrichment returns 422 | Approved identity-cutover behavior supersedes that assertion | Assert successful resolution to the legacy Horse ID and rerun the original full suite | Verified: 405 passed, 1 skipped |
+| VF-11 | First post-deployment recovery changed from `HorseIdentityEvidenceRequired` to `HorseIdentityConflict` | The same JRA horse used different `dud00`/`dud10` CNAME route families and suffixes, while identity comparison used the entire CNAME | Normalize recognized horse CNAMEs by their stable ten-digit horse number and keep the actual URL as location evidence | Verified in production: target race and idempotent replay completed |
+| VF-12 | CI run `36954416415` failed two Collector tests after stable-number normalization | The counterexamples changed only a route suffix, which now correctly denotes the same horse | Use genuinely different ten-digit horse numbers for conflict counterexamples | Verified: run `36955021342` passed |
 
 ## Planned verification
 
@@ -205,6 +209,22 @@ full API suite (405 passed, 1 skipped) pass; workflow formatting, solution build
 `20201206:Chukyo:11`, verify source/race read-back, then preview and execute the separately fenced repair
 for the eight already-duplicated 2026 races.
 
+Checkpoint 4 (2026-10-02): production revealed that JRA uses multiple horse CNAME route families for
+one stable horse number. Recognized horse routes now normalize to that ten-digit number while keeping
+the full navigable URL as collection evidence. Focused suites, full API (405 passed, 1 skipped), full
+Collector (410 passed), Contracts (61 passed), solution build, format, diff, and CodeGraph checks pass;
+CI run `36955021342` and deploy run `36955021189` succeeded, including pause/drain and pipeline restore.
+`20201206:Chukyo:11` then completed with persisted result evidence, applied extraction revision 6/6,
+no unresolved failure, and a second idempotent recovery also completed without an additional domain
+write. The exact eight 2026 races were submitted for recovery and none reproduced
+`InvalidHorseNumber`; JRA access-limit or transient-server responses placed them into automatic
+backoff. The pipeline remains running. T-04/T-05 and AC-06/07 therefore remain open pending upstream
+completion; the two unrelated actionable races were not selected or changed.
+
 ### Final review
 
-Pending.
+Pending only on T-04/T-05 and the 2026 portion of AC-06/07. The implementation, CI/deployment,
+pause/drain, 2020 production recovery, idempotency, scope, and pipeline-state checks are accepted.
+The remaining eight jobs are externally delayed by JRA responses rather than the repaired identity
+failure, so this record remains `Approved` and must not be marked `Implemented` until their persisted
+results and lifecycle states are read back.
