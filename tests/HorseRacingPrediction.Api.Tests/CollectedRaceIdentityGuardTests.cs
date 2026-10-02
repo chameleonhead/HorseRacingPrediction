@@ -128,12 +128,8 @@ public sealed class CollectedRaceIdentityGuardTests
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsFalse(body.Result.CorePersisted);
         var outcomes = body.Result.Outcomes!;
-        Assert.IsTrue(outcomes.Any(x => x.ErrorCode is "RaceEntryIdentityMismatch" or "InvalidHorseNumber"),
+        Assert.IsTrue(outcomes.Any(x => x.ErrorCode == "HorseIdentityConflict"),
             string.Join(" | ", body.Result.Errors));
-        var collision = outcomes.Single(x => x.ErrorCode == "InvalidHorseNumber");
-        Assert.AreEqual("HorseNumber=1", collision.Key);
-        StringAssert.Contains(collision.Message, "ExistingHorseId=");
-        StringAssert.Contains(collision.Message, "IncomingHorseId=");
         Assert.AreEqual(eventsBefore, CountStoredEvents(app));
         Assert.AreEqual(tasksBefore, await CountTasksAsync(app));
         Assert.AreEqual(beforeContext, await GetContextJsonAsync(http, initialBody.Result.RaceId));
@@ -198,7 +194,7 @@ public sealed class CollectedRaceIdentityGuardTests
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsFalse(body.Result.CorePersisted);
-        Assert.IsTrue(body.Result.Outcomes!.Any(x => x.ErrorCode is "RaceEntryIdentityMismatch" or "InvalidHorseNumber"),
+        Assert.IsTrue(body.Result.Outcomes!.Any(x => x.ErrorCode == "HorseIdentityConflict"),
             string.Join(" | ", body.Result.Errors));
         Assert.AreEqual(eventsBefore, CountStoredEvents(app));
         Assert.AreEqual(tasksBefore, await CountTasksAsync(app));
@@ -233,7 +229,11 @@ public sealed class CollectedRaceIdentityGuardTests
                 Entries = [Entry(1, "同名馬", SourceIdentity("140002"))],
             },
         }, JsonOptions);
-        Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        var changed = await ReadBodyAsync(response);
+        Assert.IsFalse(changed.Result.CorePersisted);
+        Assert.IsTrue(changed.Result.Outcomes!.Any(x => x.ErrorCode == "HorseIdentityConflict"),
+            string.Join(" | ", changed.Result.Errors));
         Assert.AreEqual(eventsBefore, CountStoredEvents(app));
     }
 

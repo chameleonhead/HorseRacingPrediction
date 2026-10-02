@@ -295,7 +295,7 @@ public class RaceEndpointsTests
     }
 
     [TestMethod]
-    public async Task DeclareRaceResultBulk_PreflightMismatchRejectsBeforeAnyWrite()
+    public async Task DeclareRaceResultBulk_UniqueLegacyHorseAcceptsOfficialIdentityWithoutChangingHorseId()
     {
         var date = new DateOnly(2026, 9, 20);
         var course = $"PREFLIGHT-{Guid.NewGuid():N}";
@@ -315,19 +315,28 @@ public class RaceEndpointsTests
             },
         };
 
-        var eventsBefore = CountStoredEvents();
         var response = await _client.PostAsJsonAsync("/api/races/result-bulk", second, JsonOptions);
         var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        Assert.IsTrue(body!.Result.Errors.Any(x => x.Contains("HorseIdentityEvidenceRequired", StringComparison.Ordinal)), string.Join(" | ", body.Result.Errors));
-        Assert.IsFalse(body.Result.CorePersisted);
-        Assert.AreEqual(eventsBefore, CountStoredEvents());
-        using var db = _app.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext();
-        Assert.AreEqual(0, await db.SubjectIdentificationRepairIssues.CountAsync(x => x.RequestedByRaceId == body.Result.RaceId));
+        Assert.IsNotNull(body);
+        Assert.IsEmpty(body.Result.Errors, string.Join(" | ", body.Result.Errors));
+        Assert.IsTrue(body.Result.CorePersisted);
+        var expectedHorseId = DeterministicIdGenerator.BuildHorseId(name);
+        var race = await _client.GetFromJsonAsync<GetRaceResponse>($"/api/races/{body.Result.RaceId}", JsonOptions);
+        Assert.AreEqual(expectedHorseId, race!.Race.Entries.Single().HorseId);
+        var tasks = await _client.GetFromJsonAsync<ListCollectionTasksResponse>(
+            "/api/v2/admin/collection/tasks?limit=1000", JsonOptions);
+        var horseTask = tasks!.Page.Items.Single(x => x.Resource.Id == expectedHorseId
+            && x.Definition.Value == "horse-profile");
+        var store = _app.Services.GetRequiredService<CollectionPlatformStore>();
+        var detail = await store.GetResourceDetailAsync(
+            new(CollectionResourceType.Horse, "JRA", horseTask.Resource.Id), new("horse-profile"));
+        Assert.IsTrue(detail!.Locations.Any(location => location.Url.AbsoluteUri == identity));
 
+        var eventsBeforeReplay = CountStoredEvents();
         var repeated = await _client.PostAsJsonAsync("/api/races/result-bulk", second, JsonOptions);
         repeated.EnsureSuccessStatusCode();
-        Assert.AreEqual(eventsBefore, CountStoredEvents());
+        Assert.AreEqual(eventsBeforeReplay, CountStoredEvents());
     }
 
     [TestMethod]
@@ -359,8 +368,8 @@ public class RaceEndpointsTests
 
         Assert.AreEqual(HttpStatusCode.OK, refreshResponse.StatusCode);
         Assert.IsNotNull(race);
-        Assert.IsFalse(refreshBody!.Result.CorePersisted);
-        Assert.IsTrue(refreshBody.Result.Errors.Any(error => error.Contains("HorseIdentityEvidenceRequired")), string.Join(" | ", refreshBody.Result.Errors));
+        Assert.IsTrue(refreshBody!.Result.CorePersisted);
+        Assert.IsEmpty(refreshBody.Result.Errors, string.Join(" | ", refreshBody.Result.Errors));
         Assert.AreEqual(DeterministicIdGenerator.BuildHorseId(horseName),
             race.Entries.Single().HorseId);
     }

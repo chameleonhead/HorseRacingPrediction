@@ -398,7 +398,13 @@ internal static partial class RaceResultBulkService
                 CollectionReason.Discovery, lane, priority, explicitUrl, raceDate, attributes);
         }).ToArray();
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n',
-            items.Select(item => $"{item.ItemKey}:{item.RequestedRevision}"))))).ToLowerInvariant()[..24];
+            items.Select(item => string.Join('|', item.ItemKey, item.Resource.Type, item.Resource.Provider,
+                item.Resource.Id, item.Definition.Value, item.RequestedRevision, item.Reason, item.Lane,
+                item.Priority, item.ExplicitUrl?.AbsoluteUri, item.EffectiveDate,
+                string.Join(';', (item.Attributes ?? new Dictionary<string, string>())
+                    .OrderBy(attribute => attribute.Key, StringComparer.Ordinal)
+                    .Select(attribute => $"{attribute.Key}={attribute.Value}"))))))))
+            .ToLowerInvariant()[..24];
         var accepted = items.Length == 0 ? [] : await store.RequestManyAsync(
             $"race-subjects:{raceId}:{fingerprint}", items, JstTime.Now(), cancellationToken)
             .ConfigureAwait(false);

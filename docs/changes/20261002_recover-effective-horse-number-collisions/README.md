@@ -1,6 +1,6 @@
 # Effective horse number collision recovery
 
-Status: Proposed
+Status: Approved
 
 ## Incident summary
 
@@ -30,6 +30,13 @@ The affected race IDs and the exact conflicting old/new Horse IDs still require 
 diagnostics before mutation. Replaying the failed task before repair is intentionally prohibited
 because this is a deterministic validation failure.
 
+The later failure for `20201206:Chukyo:11` is the same identity-cutover boundary at an earlier stage.
+Its production attempt failed at `2026-10-02 05:57:40 JST` with
+`HorseIdentityEvidenceRequired`. The resource was discovered from the horse named `ゴールドドリーム`,
+has no persisted race detail, and was requested from the official JRA race page. The API rejects an
+official source identity when the only same-name record is a source-less, name-derived legacy Horse ID.
+This prevents a second Horse record from being created, but currently provides no safe promotion path.
+
 ## Frozen decisions
 
 1. Do not weaken or bypass the effective-number uniqueness guard.
@@ -40,6 +47,15 @@ because this is a deterministic validation failure.
 4. Recollect results only after the repaired assignment fingerprint is verified.
 5. A result is considered recovered only when both persisted entry/result evidence and lifecycle
    status are verified; task success alone is insufficient.
+6. When an official JRA horse identity arrives and there is exactly one normalized-name match whose
+   Horse ID is provably name-derived and whose source identity is empty, preserve that Horse ID and
+   attach the official source identity through the existing profile write path. This is identity
+   enrichment, not a merge or a new Horse registration.
+7. Do not apply decision 6 when an official/source-bound Horse already matches, when more than one
+   normalized-name candidate exists, when birth-date evidence conflicts, or when the candidate ID is
+   not provably name-derived. Those cases remain blocked for explicit repair.
+8. If both a legacy Horse and a separate official-identity Horse already exist, keep automatic
+   resolution fail-closed and use the fenced assignment/identity repair workflow before recollection.
 
 ## Material concerns
 
@@ -49,25 +65,31 @@ because this is a deterministic validation failure.
 | Blind retry cannot succeed | Validation failure is deterministic and writes nothing | Diagnose, repair, then create one controlled recollection | Retry the failure group now | Repeated notifications and unchanged race status | Resolved in design |
 | Scope of affected races is not yet known | Operator identified dates, not race IDs/group key | Query actionable failures and race evidence read-only before repair | Assume every race on both dates is corrupt | Unnecessary repair surface | Resolved in design |
 | Existing source data may already contain duplicate persisted assignments | Effective-set validation includes untouched existing entries | Inspection must distinguish stale identity alias from pre-existing duplicate number | Relax uniqueness | Silent corruption | Resolved in design |
-| Every runner has a different stored/result Horse ID | Controlled production recollection reports 11/11 to 16/16 collisions in each affected race, not an isolated number shift | Treat this as legacy name-derived identity promotion, never as a horse-number correction; require an official source identity, exact normalized name, exactly one source-less name-derived candidate, and the fenced repair boundary | Replace entries by horse number alone | Same-name horses could be conflated without the uniqueness and source-less gates | Open decision |
+| Every runner has a different stored/result Horse ID | Controlled production recollection reports 11/11 to 16/16 collisions in each affected race, not an isolated number shift | Treat this as legacy identity cutover, never as a horse-number correction. Enrich a unique source-less name-derived record only when no official record exists; otherwise require fenced repair | Replace entries by horse number alone | Same-name horses remain blocked whenever uniqueness or provenance cannot be proven | Resolved in design |
+| Name equality alone can conflate different horses | `20201206:Chukyo:11` reached `HorseIdentityEvidenceRequired`; the current guard intentionally refuses name-only promotion | Require exact normalized name, exactly one provably name-derived/source-less candidate, no official/source-bound match, and compatible birth date when present | Always prefer the old record, or always create the official-ID record | A historical namesake without birth evidence remains possible; ambiguity stays blocked and is surfaced for repair | Resolved in design |
+| Identity enrichment and profile persistence are separate writes | Resolver selection happens before the race envelope; source identity is persisted by the existing profile collection path | Make recollection success require source identity read-back; retry remains idempotent and a crash before profile persistence leaves the same safe candidate | Rewrite Horse aggregate identity during race ingestion | A transient failure can leave an enriched race reference with profile work pending, but cannot create a second Horse or silently merge records | Resolved in design |
+
+## Hypothesis ledger
+
+| Claim | Fact / inference boundary | Supporting and contradicting evidence | Falsification | Result | Disposition |
+|---|---|---|---|---|---|
+| The 2020 failure is caused by the legacy-to-official Horse identity boundary | Fact: production error is `HorseIdentityEvidenceRequired`; fact: the resolver emits it for source-less name-derived conflicts. Inference: the subject is the discovery horse until per-subject evidence is read back | The job was discovered from `ゴールドドリーム`; no race data was written. The group UI does not expose the subject name without the technical detail expander | Reproduce with a production-shaped official-source request against one source-less name-derived horse and inspect the structured subject failure | The existing resolver test and source path reproduce the terminal code; production subject read-back remains a pre-mutation verification | Design valid; operation remains gated by preview |
+| A unique source-less name-derived record can be reused without changing its Horse ID | Fact: `LoadHorsesAsync` proves name-derived IDs from registration history; fact: profile writes accept a previously empty matching source identity. Inference: this closes the 2020 path | Current code deliberately blocks this candidate at `CollectionIdentityResolver.ResolveHorse`; profile endpoint rejects conflicting but not empty source identity | Integration test race ingestion, profile persistence, read-back, repeat ingestion, and conflicting-source counterexample | Isolated code paths support the design; integrated test is required before deployment | Resolved in design |
+| The eight 2026 collisions need repair rather than resolver fallback | Fact: controlled recollection found distinct existing and incoming Horse IDs for every runner | An already-created official Horse causes the resolver to select it, leaving the legacy RaceEntry collision intact | Preview each race and verify both identities before any apply | Production evidence already shows both IDs; exact repair preview is still required | Repair remains fenced |
 
 ## Acceptance criteria
 
-- **AC-01** Read-only diagnostics identify every affected 2026-09-26/27 race, its failure/task IDs,
-  existing assignments, incoming official assignments, and the exact collision without exposing secrets.
-- **AC-02** The pre-send and API validation boundaries are covered by regression tests: outgoing
-  duplicates fail locally; a persisted/incoming identity collision fails atomically and names enough
-  structured evidence to drive repair.
-- **AC-03** Each affected race is placed on a repair hold; the official card snapshot is inspected;
-  only mismatched assignments are repaired atomically; concurrent/stale apply attempts fail closed.
-- **AC-04** Controlled recollection succeeds after repair, with unique effective horse numbers and no
-  `InvalidHorseNumber` outcome.
-- **AC-05** Officially completed races from 2026-09-26 and 2026-09-27 persist result evidence and show
-  `ResultDeclared` or a later valid lifecycle status. Officially cancelled races remain governed by
-  cancellation semantics and are not falsely marked as results.
-- **AC-06** No unrelated race assignments, horse identities, or pipeline state are changed.
-- **AC-07** Relevant tests, build, `git diff --check`, CodeGraph sync, deployment, and post-deployment
-  evidence checks pass before completion.
+| ID | Criterion | State |
+|---|---|---|
+| AC-01 | Read-only diagnostics identify every affected 2026-09-26/27 race, its failure/task IDs, existing assignments, incoming official assignments, and the exact collision without exposing secrets. | Verified |
+| AC-02 | The pre-send and API validation boundaries reject outgoing duplicates and persisted/incoming identity collisions atomically, with structured repair evidence. | Verified |
+| AC-03 | A unique exact-name, source-less, provably name-derived Horse is reused for a new official JRA identity without changing Horse ID; zero/multiple/source-bound/conflicting-birth candidates remain blocked. | Verified |
+| AC-04 | The official source identity is persisted and read back through the real profile path; repeated collection is idempotent and an interrupted profile write creates neither a duplicate Horse nor an unsafe alias. | Connected |
+| AC-05 | Each affected race with two existing identities is placed on repair hold; an official snapshot is inspected; only mismatched assignments are repaired atomically; concurrent/stale apply attempts fail closed. | Not started |
+| AC-06 | Controlled recollection succeeds for `20201206:Chukyo:11` and the repaired 2026 races, with unique effective horse numbers and neither `HorseIdentityEvidenceRequired` nor `InvalidHorseNumber`. | Not started |
+| AC-07 | Completed races persist result evidence and show `ResultDeclared` or a later valid lifecycle status; cancelled races retain cancellation semantics. | Not started |
+| AC-08 | No unrelated race assignments, horse identities, or pipeline state are changed. | Not started |
+| AC-09 | Relevant focused tests, full build/test/format gates, `git diff --check`, CodeGraph sync, deployment, and post-deployment evidence checks pass. | Not started |
 
 ## Task plan
 
@@ -76,9 +98,17 @@ because this is a deterministic validation failure.
 | T-01 | Verified | Capture production failure and race evidence read-only | Group `0FB0D54D5B4D2FAA`: 8 deterministic failures on 2026-09-26; 2026-09-27 races currently have result timestamps/status |
 | T-02 | Verified | Add the smallest structured collision evidence / repair handoff needed after T-01 | Collision outcome now includes horse number plus existing/incoming Horse IDs; 17 API tests pass |
 | T-03 | Verified | Verify and deploy the approved implementation | Run `36920958445`: verification, image/Lambda deployment, API restart, and health check passed; restore intentionally kept the pipeline paused while actionable failures existed |
-| T-04 | In progress | Execute fenced repair and controlled recollection for affected races | Eight controlled recollections completed and produced exact collision pairs; repair mutation awaits the identity-promotion decision |
+| T-04 | Runnable | Execute fenced repair and controlled recollection for affected races | Eight controlled recollections completed and produced exact collision pairs; repair mutation awaits the identity-promotion decision |
 | T-05 | Dependent | Verify result persistence and lifecycle states for both dates | Post-recovery API evidence |
-| T-06 | Runnable | Final review: AC/task traceability, scope, security, rollback, regression | Review section update |
+| T-06 | Dependent | Final review: AC/task traceability, scope, security, rollback, regression | Review section update |
+| T-07 | Verified | Implement unique legacy Horse identity enrichment and its resolver/profile integration tests | 14 focused tests and all 406 API tests pass; official URL is attached to the legacy Horse resource location |
+| T-08 | Runnable | Deploy and recover `20201206:Chukyo:11`, then verify Horse source identity, race persistence, and idempotent retry | AC-06/08/09 production read-back |
+
+## Documentation updates
+
+- No canonical architecture or operator document requires a pre-approval update. The identity-cutover
+  rule is change-specific until implementation proves the integrated behavior; after implementation,
+  any enduring operator recovery steps will be added to the applicable collection operations guide.
 
 ## Verification failure ledger
 
@@ -90,6 +120,10 @@ because this is a deterministic validation failure.
 | VF-04 | Planned `codegraph index --update` is unsupported; full `codegraph index` then encountered the live index database lock | Verification environment mismatch; this CodeGraph version journals live changes and does not expose `--update` | `codegraph status` reported up to date and a fresh explore returned the edited source; no index files were removed | Verified |
 | VF-05 | Deploy run `36918563467` failed while pausing collection: `PUT /pipeline` returned HTTP 400 | Deterministic workflow/API contract drift; workflow sent a flat body while the endpoint requires `SetCollectionPipelineRequest.pipeline` | Send `{pipeline:{paused,...}}` for pause and resume, strengthen the shell contract test, rerun its original command, then push and monitor a new deploy | Verified by production pause/drain in run `36920958445` |
 | VF-06 | Deploy run `36919986834` failed in the full test suite before deployment because `CollectionQueueCutoverContractTests` still asserted the obsolete flat pipeline request | Deterministic incomplete test-contract update; the focused shell test passed but a second independent contract test retained the old body | Update both pause and resume assertions, run the focused collector contract tests, then rerun CI/deploy | Verified: 14 focused tests passed locally |
+| VF-07 | First T-07 compile failed because `CollectionTaskSummaryDto` does not expose `ExplicitUrl` | Test inspected the task summary instead of the persisted collection location used by dispatch | Assert the official URL through `CollectionResourceDetail.Locations`; focused test then passed | Verified |
+| VF-08 | First T-07 focused run failed three conflict tests after the resolver returned the earlier, more specific `HorseIdentityConflict` | Expected failure classification changed while atomic no-write behavior remained intact | Assert the structured conflict and unchanged event/context/task evidence | Verified |
+| VF-09 | First T-07 integration run produced `IdempotencyMismatch` when the same race gained official source evidence | The race-subject batch fingerprint covered only item key/revision, so changed URL/metadata reused an incompatible batch key | Include the complete stable request content in the batch fingerprint; verify URL location attachment and replay idempotency | Verified |
+| VF-10 | First full API run retained the old expectation that official identity enrichment returns 422 | Approved identity-cutover behavior supersedes that assertion | Assert successful resolution to the legacy Horse ID and rerun the original full suite | Verified: 405 passed, 1 skipped |
 
 ## Planned verification
 
@@ -123,8 +157,19 @@ fail-closed and uses the repository's existing repair boundary.
 
 ### Pre-implementation
 
-Approved by the user on 2026-10-02. Production evidence capture is the first execution step;
-production code and data had not been changed at approval time.
+Approved by the user on 2026-10-02, including the unique-candidate enrichment boundary, explicit
+ambiguity/conflict exclusions, fenced repair requirement for already-duplicated identities, and
+AC-01 through AC-09. Production code and data had not been changed at approval time.
+
+Pre-implementation review (identity enrichment slice): T-07 is `In progress`; T-04 is `Runnable` but
+depends operationally on deployment of T-07 and a successful repair preview; T-05, T-06, and T-08 are
+`Dependent`. The lead owns `CollectionIdentityResolver.cs`, focused API tests, and this change record;
+no parallel write owner is useful because the resolver and integration assertions form one small,
+shared-state slice. Required counterexamples are zero/multiple normalized-name candidates, an existing
+source-bound candidate, conflicting birth evidence, and repeated resolution. Minimum verification is
+the focused identity/race API tests; handoff requires workflow-equivalent format, build, and test gates.
+Any need to accept a non-name-derived candidate, overwrite a conflicting source identity, or merge two
+existing Horse aggregates returns the record to `Proposed` rather than widening this implementation.
 
 ### Checkpoint
 
@@ -148,6 +193,17 @@ This disproves the isolated `ブリンカー`-adjacent-number hypothesis. The re
 whether to extend the fenced repair to promote a unique source-less, name-derived Horse identity from
 the official source identity while preserving the existing Horse ID. No automatic promotion or
 assignment mutation has been performed.
+
+Checkpoint 3 (2026-10-02): the approved unique-candidate enrichment is implemented. The resolver
+preserves the single provably name-derived/source-less Horse ID, rejects ambiguity, conflicting birth
+evidence, and different source-bound identities, and leaves already-duplicated official/legacy records
+for fenced repair. Race subject batch identity now includes URL and metadata, so newly discovered
+official evidence does not collide with an earlier name-only request; the explicit JRA URL is added to
+the legacy Horse resource location and repeat ingestion is idempotent. Fourteen focused tests and the
+full API suite (405 passed, 1 skipped) pass; workflow formatting, solution build (0 warnings/errors),
+`git diff --check`, CodeGraph sync/status, and post-change caller exploration pass. Next: deploy, recover
+`20201206:Chukyo:11`, verify source/race read-back, then preview and execute the separately fenced repair
+for the eight already-duplicated 2026 races.
 
 ### Final review
 

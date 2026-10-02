@@ -165,7 +165,7 @@ public sealed class SharedCollectionIdentityTests
     }
 
     [TestMethod]
-    public async Task HorseFallback_PreservesLegacyIdAndRejectsAmbiguityAndUnprovenPromotion()
+    public async Task HorseFallback_PreservesLegacyIdPromotesOfficialEvidenceAndRejectsAmbiguity()
     {
         var (app, client) = await TestApplicationFactory.CreateAsync();
         await using var application = app;
@@ -183,7 +183,11 @@ public sealed class SharedCollectionIdentityTests
         afterNameCorrection.EnsureSuccessStatusCode();
         Assert.AreEqual(legacy, (await afterNameCorrection.Content.ReadFromJsonAsync<ResolveHorseIdentityResponse>())!.Identity.Id);
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest(new("ABC", BirthDate: new(2023, 1, 1))))).StatusCode);
-        Assert.AreEqual(HttpStatusCode.UnprocessableEntity, (await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest(new("ABC", "https://www.jra.go.jp/JRADB/accessU.html?CNAME=other")))).StatusCode);
+        var promoted = await http.PostAsJsonAsync("/api/identity/horse",
+            new ResolveHorseIdentityRequest(new("ABC", "https://www.jra.go.jp/JRADB/accessU.html?CNAME=other")));
+        promoted.EnsureSuccessStatusCode();
+        Assert.AreEqual(legacy,
+            (await promoted.Content.ReadFromJsonAsync<ResolveHorseIdentityResponse>())!.Identity.Id);
         (await http.PostAsJsonAsync("/api/horses", SubjectRequestFactory.RegisterHorse("ABC", "ABC", "M", new(2020, 1, 1), DeterministicIdGenerator.BuildHorseId("ABC")))).EnsureSuccessStatusCode();
         var ambiguous = await http.PostAsJsonAsync("/api/identity/horse", new ResolveHorseIdentityRequest(new("ABC")));
         Assert.AreEqual(HttpStatusCode.UnprocessableEntity, ambiguous.StatusCode);

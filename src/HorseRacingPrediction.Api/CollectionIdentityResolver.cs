@@ -92,11 +92,23 @@ internal static class CollectionIdentityResolver
                 throw new InvalidOperationException("HorseIdentityConflict");
             return found.HorseId;
         }
-        // A name-only legacy record cannot be promoted to an official identity by guessing.
-        if (hasSource && horses.Any(x => JraSubjectNameNormalizer.NormalizeIdentityName("Horse", x.RegisteredName) == canonical
-                && x.HasNameDerivedIdentity
-                && string.IsNullOrWhiteSpace(x.SourceIdentity) && x.HorseId != id))
-            throw new InvalidOperationException("HorseIdentityEvidenceRequired");
+        if (hasSource)
+        {
+            var legacyCandidates = named.Where(x => x.HasNameDerivedIdentity
+                && string.IsNullOrWhiteSpace(x.SourceIdentity) && x.HorseId != id).ToArray();
+            if (legacyCandidates.Length > 1)
+                throw new InvalidOperationException("AmbiguousHorseIdentity");
+            if (legacyCandidates.Length == 1)
+            {
+                if (named.Any(x => x.HorseId != legacyCandidates[0].HorseId)
+                    || birth is not null && legacyCandidates[0].BirthDate is not null
+                        && legacyCandidates[0].BirthDate != birth)
+                    throw new InvalidOperationException("HorseIdentityConflict");
+                return legacyCandidates[0].HorseId;
+            }
+            if (named.Length > 0)
+                throw new InvalidOperationException("HorseIdentityConflict");
+        }
         return id;
     }
 }
