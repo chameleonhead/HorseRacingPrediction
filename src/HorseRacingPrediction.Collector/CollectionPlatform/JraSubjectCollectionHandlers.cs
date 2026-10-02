@@ -162,8 +162,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             }
             catch (JraSubjectIdentificationException ex)
             {
-                if (descriptor.ResourceType is CollectionResourceType.Jockey or CollectionResourceType.Trainer
-                    && ex.Kind == JraSubjectIdentificationFailureKind.NoCandidate)
+                if (ex.Kind == JraSubjectIdentificationFailureKind.NoCandidate)
                     return new(CollectionAttemptResult.NotApplicable, "SubjectNotInProviderDirectory", ex.Message,
                         ToUri(ex.RequestedUrl), ToUri(ex.FinalUrl),
                         PageIdentification: $"SubjectIdentification:{ex.Kind}",

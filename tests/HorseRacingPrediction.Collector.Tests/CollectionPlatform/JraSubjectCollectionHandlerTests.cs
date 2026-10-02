@@ -530,6 +530,27 @@ public sealed class JraSubjectCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task HorseAbsentFromJraDirectory_IsNotAnActionableFailure()
+    {
+        var navigator = new FakeJraNavigator
+        {
+            SubjectFactory = identity => throw new JraSubjectIdentificationException(
+                JraSubjectIdentificationFailureKind.NoCandidate, identity.SubjectType, identity.Name),
+        };
+        var handler = new JraSubjectProfileCollectionHandler(
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse),
+            new FakeJraSessionFactory { ConfigureNavigator = () => navigator },
+            new RecordingProfileSink());
+
+        var completion = await handler.CollectAsync(
+            SubjectTask("horse-missing", "登録抹消馬", new Dictionary<string, string>()), CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.NotApplicable, completion.Result);
+        Assert.AreEqual("SubjectNotInProviderDirectory", completion.ErrorCode);
+        Assert.AreEqual("SubjectIdentification:NoCandidate", completion.PageIdentification);
+    }
+
+    [TestMethod]
     public async Task HorseHistory_SeventyUniqueRacesUseOneBatchAndNoSingleRequests()
     {
         var page = SubjectPage("A", Enumerable.Range(0, 70).Select(HistoryRace).ToArray());
