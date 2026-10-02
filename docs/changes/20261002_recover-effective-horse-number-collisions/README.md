@@ -1,6 +1,14 @@
 # Effective horse number collision recovery
 
-Status: Approved
+Status: Implemented
+
+## Completion summary
+
+| Dimension | State | Evidence |
+|---|---|---|
+| Code | Implemented | Legacy Horse identity enrichment and stable JRA horse-route normalization are deployed. |
+| Verification | Verified | Focused/full suites, build, format, CodeGraph, CI, deployment, production recovery, and idempotent replay passed as recorded below. |
+| Deployment/operation | Verified | The pipeline is running; all eight target tasks succeeded; no failure group remains; all 48 races on 2026-09-26/27 are payout-declared with winning-horse and result timestamps. |
 
 ## Incident summary
 
@@ -87,24 +95,24 @@ This prevents a second Horse record from being created, but currently provides n
 | AC-02 | The pre-send and API validation boundaries reject outgoing duplicates and persisted/incoming identity collisions atomically, with structured repair evidence. | Verified |
 | AC-03 | A unique exact-name, source-less, provably name-derived Horse is reused for a new official JRA identity without changing Horse ID; zero/multiple/source-bound/conflicting-birth candidates remain blocked. | Verified |
 | AC-04 | The official source identity is persisted and read back through the real profile path; repeated collection is idempotent and an interrupted profile write creates neither a duplicate Horse nor an unsafe alias. | Verified |
-| AC-05 | Each affected race with two existing identities is placed on repair hold; an official snapshot is inspected; only mismatched assignments are repaired atomically; concurrent/stale apply attempts fail closed. | Not started |
-| AC-06 | Controlled recollection succeeds for `20201206:Chukyo:11` and the repaired 2026 races, with unique effective horse numbers and neither `HorseIdentityEvidenceRequired` nor `InvalidHorseNumber`. | Connected: 2020 race verified; eight 2026 races are in upstream-backoff recovery without the original error |
-| AC-07 | Completed races persist result evidence and show `ResultDeclared` or a later valid lifecycle status; cancelled races retain cancellation semantics. | Connected: 2020 race verified; eight 2026 results remain pending |
+| AC-05 | Each affected race with two existing identities is placed on repair hold; an official snapshot is inspected; only mismatched assignments are repaired atomically; concurrent/stale apply attempts fail closed. | Verified: production-shaped diagnostics proved the apparent second IDs were computed incoming IDs, not second persisted Horse records; the unique legacy identities were enriched, so no assignment repair mutation was eligible or performed. Existing fenced-repair regressions remain green for a true two-record case. |
+| AC-06 | Controlled recollection succeeds for `20201206:Chukyo:11` and the repaired 2026 races, with unique effective horse numbers and neither `HorseIdentityEvidenceRequired` nor `InvalidHorseNumber`. | Verified: all nine target recoveries succeeded and no actionable failure group remains. |
+| AC-07 | Completed races persist result evidence and show `ResultDeclared` or a later valid lifecycle status; cancelled races retain cancellation semantics. | Verified: all 24 races on each of 2026-09-26 and 2026-09-27 report status 5, a winning horse, and `ResultDeclaredAt`. |
 | AC-08 | No unrelated race assignments, horse identities, or pipeline state are changed. | Verified |
 | AC-09 | Relevant focused tests, full build/test/format gates, `git diff --check`, CodeGraph sync, deployment, and post-deployment evidence checks pass. | Verified |
 
 ## Task plan
 
-| ID | State | Work | Evidence |
-|---|---|---|---|
-| T-01 | Verified | Capture production failure and race evidence read-only | Group `0FB0D54D5B4D2FAA`: 8 deterministic failures on 2026-09-26; 2026-09-27 races currently have result timestamps/status |
-| T-02 | Verified | Add the smallest structured collision evidence / repair handoff needed after T-01 | Collision outcome now includes horse number plus existing/incoming Horse IDs; 17 API tests pass |
-| T-03 | Verified | Verify and deploy the approved implementation | Run `36920958445`: verification, image/Lambda deployment, API restart, and health check passed; restore intentionally kept the pipeline paused while actionable failures existed |
-| T-04 | Externally blocked | Execute fenced repair and controlled recollection for affected races | Eight new recovery tasks no longer reproduce `InvalidHorseNumber`, but JRA access-limit/transient-server responses placed them in automatic backoff |
-| T-05 | Dependent | Verify result persistence and lifecycle states for both dates | Await terminal completion of the eight upstream-backoff recoveries |
-| T-06 | Dependent | Final review: AC/task traceability, scope, security, rollback, regression | Review section update |
-| T-07 | Verified | Implement unique legacy Horse identity enrichment and its resolver/profile integration tests | 14 focused tests and all 406 API tests pass; official URL is attached to the legacy Horse resource location |
-| T-08 | Verified | Deploy and recover `20201206:Chukyo:11`, then verify Horse source identity, race persistence, and idempotent retry | Runs `36955021342` and `36955021189` passed; production race is complete with persisted result, applied revision 6/6, no unresolved failure, and a second idempotent recovery also completed |
+| ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State | Routing | Audit | Result metrics |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T-01 | Capture production failure and race evidence read-only. | Lead investigator | Lead-only | none | read only | authenticated production diagnostics | failure group `0FB0D54D5B4D2FAA` reconciled to eight races | Verified | Lead - production access and incident scope | none | unavailable; retries 0; corrections 0; reviews 1 |
+| T-02 | Add structured collision evidence and repair handoff. | Cheap executor/verifier | gpt-6-luna high | T-01 and approval | API collision outcome and focused tests | focused API regressions | horse number and both Horse IDs emitted; 17 tests passed | Verified | Cheap executor - bounded diagnostics | requested model not externally observable; patch reviewed by Lead | unavailable; retries 0; corrections 0; reviews 1 |
+| T-03 | Verify and deploy the approved implementation. | Cheap verifier and Lead | gpt-6-luna high for gates; Lead for operation | T-02 | workflows and approved production operation | CI, deployment, health and pipeline checks | run `36920958445` passed deployment and health gates | Verified | Cheap verifier for gates; Lead for production acceptance | no delegated patch | unavailable; retries 2; corrections 2; reviews 1 |
+| T-04 | Check fenced-repair eligibility and recollect affected races. | Lead operator | Lead-only | T-03 | approved production operation only | terminal task and failure-group reads | all eight tasks succeeded in one attempt; no two-record repair was eligible | Verified | Lead - authenticated production mutation and safety decision | none | unavailable; retries 0; corrections 0; reviews 1 |
+| T-05 | Verify result persistence and lifecycle states for both dates. | Lead verifier | Lead-only | T-04 | read only | exact-date race API reconciliation | 24/24 races on each date have status 5, winning horse, and result timestamp | Verified | Lead - final production evidence | none | unavailable; retries 1 diagnostic correction; corrections 1; reviews 1 |
+| T-06 | Perform final AC/task, scope, security, rollback, and regression review. | Lead | Lead-only | T-01,T-02,T-03,T-04,T-05,T-07,T-08 | change record only | audit script, diff check, production evidence reconciliation | AC-01 through AC-09 reconciled; pipeline running; failure groups empty | Verified | Lead - final acceptance | none | unavailable; retries 0; corrections 0; reviews 1 |
+| T-07 | Implement unique legacy Horse identity enrichment and integration tests. | Cheap executor/verifier | gpt-6-luna high | T-03 production evidence and approval | Horse identity resolver, profile integration, focused tests | focused and full API suites | 14 focused and 406 API tests passed; official URL persisted as location evidence | Verified | Cheap executor - bounded identity compatibility fix | requested model not externally observable; patch reviewed by Lead | unavailable; retries 3; corrections 3; reviews 2 |
+| T-08 | Deploy and recover `20201206:Chukyo:11`, including idempotent retry. | Cheap verifier and Lead | gpt-6-luna high for gates; Lead for operation | T-07 | workflows and approved production operation | CI/deploy plus persisted race and repeat-task evidence | runs `36955021342` and `36955021189` passed; revision 6/6 and repeat recovery succeeded | Verified | Cheap verifier for gates; Lead for production acceptance | no delegated patch | unavailable; retries 2; corrections 2; reviews 2 |
 
 ## Documentation updates
 
@@ -112,13 +120,13 @@ This prevents a second Horse record from being created, but currently provides n
   rule is change-specific until implementation proves the integrated behavior; after implementation,
   any enduring operator recovery steps will be added to the applicable collection operations guide.
 
-## Verification failure ledger
+## Failure ledger
 
 | ID | Command / failure | Classification and cause | Disposition | State |
 |---|---|---|---|---|
 | VF-01 | `Get-CollectionFailureDiagnostics.ps1` failed before its first HTTP request because `$escapedGroupKey?page` was parsed as one variable | Deterministic repository helper defect; missing PowerShell variable boundary | `${escapedGroupKey}` applied; validator/contract test passed; original command then advanced to HTTP | Verified |
 | VF-02 | The corrected helper reached production but received HTTP 404 from `/api/admin/...` | Deterministic repository helper contract drift; current API uses `/api/v2/admin/collection/...` and response envelopes | v2 routes/envelopes applied; validator/contract test passed; original diagnostic completed for 8 resources and 3 execution batches | Verified |
-| VF-03 | Entry-repair inspection for an affected race returned HTTP 500 | Deterministic production-path defect or unsupported corrupted state; response body was not emitted | Keep repair mutation blocked, add collision identity evidence first, deploy, and recollect once to identify the exact safe repair target | In progress |
+| VF-03 | Entry-repair inspection for an affected race returned HTTP 500 | The apparent second IDs were computed incoming identities, not second persisted Horse records; assignment repair was therefore ineligible | Keep repair mutation blocked, enrich the unique legacy identity, and verify controlled recollection instead | Verified by all eight terminal recoveries and the empty failure-group list |
 | VF-04 | Planned `codegraph index --update` is unsupported; full `codegraph index` then encountered the live index database lock | Verification environment mismatch; this CodeGraph version journals live changes and does not expose `--update` | `codegraph status` reported up to date and a fresh explore returned the edited source; no index files were removed | Verified |
 | VF-05 | Deploy run `36918563467` failed while pausing collection: `PUT /pipeline` returned HTTP 400 | Deterministic workflow/API contract drift; workflow sent a flat body while the endpoint requires `SetCollectionPipelineRequest.pipeline` | Send `{pipeline:{paused,...}}` for pause and resume, strengthen the shell contract test, rerun its original command, then push and monitor a new deploy | Verified by production pause/drain in run `36920958445` |
 | VF-06 | Deploy run `36919986834` failed in the full test suite before deployment because `CollectionQueueCutoverContractTests` still asserted the obsolete flat pipeline request | Deterministic incomplete test-contract update; the focused shell test passed but a second independent contract test retained the old body | Update both pause and resume assertions, run the focused collector contract tests, then rerun CI/deploy | Verified: 14 focused tests passed locally |
@@ -128,6 +136,7 @@ This prevents a second Horse record from being created, but currently provides n
 | VF-10 | First full API run retained the old expectation that official identity enrichment returns 422 | Approved identity-cutover behavior supersedes that assertion | Assert successful resolution to the legacy Horse ID and rerun the original full suite | Verified: 405 passed, 1 skipped |
 | VF-11 | First post-deployment recovery changed from `HorseIdentityEvidenceRequired` to `HorseIdentityConflict` | The same JRA horse used different `dud00`/`dud10` CNAME route families and suffixes, while identity comparison used the entire CNAME | Normalize recognized horse CNAMEs by their stable ten-digit horse number and keep the actual URL as location evidence | Verified in production: target race and idempotent replay completed |
 | VF-12 | CI run `36954416415` failed two Collector tests after stable-number normalization | The counterexamples changed only a route suffix, which now correctly denotes the same horse | Use genuinely different ten-digit horse numbers for conflict counterexamples | Verified: run `36955021342` passed |
+| VF-13 | First final race-status read constructed an invalid URI because PowerShell parsed `$base?` as a variable name | Local diagnostic interpolation error; no request or mutation occurred | Use `${base}` and then the actual `races` response envelope; rerun returned all 48 race summaries | Verified |
 
 ## Planned verification
 
@@ -223,8 +232,15 @@ completion; the two unrelated actionable races were not selected or changed.
 
 ### Final review
 
-Pending only on T-04/T-05 and the 2026 portion of AC-06/07. The implementation, CI/deployment,
-pause/drain, 2020 production recovery, idempotency, scope, and pipeline-state checks are accepted.
-The remaining eight jobs are externally delayed by JRA responses rather than the repaired identity
-failure, so this record remains `Approved` and must not be marked `Implemented` until their persisted
-results and lifecycle states are read back.
+Accepted on 2026-10-03. All eight 2026 target tasks reached `Succeeded` with one attempt, the pipeline
+is unpaused, and the actionable failure-group list is empty. All 24 races on 2026-09-26 and all 24 on
+2026-09-27 report payout-declared status with a winning horse and result timestamp. This closes the
+original `InvalidHorseNumber` symptom, the stale 出馬表公開 display, the later 2020 identity-cutover
+counterexample, deployment, and production verification. No horse-number inference, bulk assignment
+rewrite, queue purge, unrelated failure recovery, or pipeline-state divergence was introduced.
+
+Focused self-audit: the final evidence follows the real trigger → API validation → persisted result →
+task terminal state → operator-visible lifecycle path. The approved cheap route was used for routine
+implementation and verification; observed model/usage telemetry remains unavailable and no efficiency
+claim is made. The only current unrelated working-tree modification is the dispatcher incident record
+owned by another change and was not included here.
