@@ -345,7 +345,7 @@ public sealed class JraSubjectCollectionHandlerTests
             ["discoveredFromId"] = "race-current",
             ["requestedByRaceId"] = "race-current",
         };
-        if (scenario == "conflicting-url") attributes["sourceUrl"] = url + "X";
+        if (scenario == "conflicting-url") attributes["sourceUrl"] = url.Replace("100699", "100698");
         if (scenario == "untrusted-host") attributes["sourceUrl"] = url.Replace("www.jra.go.jp", "evil.test");
         if (scenario == "conflicting-origin") attributes["discoveredFromId"] = "race-other";
         JraSubjectIdentity? observed = null;
@@ -358,7 +358,7 @@ public sealed class JraSubjectCollectionHandlerTests
                 SubjectFactory = identity =>
                 {
                     observed = identity;
-                    var actual = scenario == "other-horse" ? url + "X" : url;
+                    var actual = scenario == "other-horse" ? url.Replace("100699", "100698") : url;
                     return new JraSubjectPage(new JraSubjectProfileDto("Horse", "レジームチェンジ", actual, actual,
                         new Dictionary<string, string> { ["生年月日"] = scenario == "birth-mismatch" ? "2005年1月1日" : "2024年1月1日" },
                         DateTimeOffset.UtcNow), [], null);
