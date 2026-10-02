@@ -126,6 +126,31 @@ public sealed partial class CollectionPlatformStore
             ?? throw new InvalidOperationException($"Collection definition {definition} is not registered.");
     }
 
+    public async Task<IReadOnlyDictionary<string, string>> GetHorseSourceIdentitiesAsync(
+        IEnumerable<string> resourceIds, CancellationToken cancellationToken = default)
+    {
+        var ids = resourceIds.Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal).ToArray();
+        if (ids.Length == 0) return new Dictionary<string, string>(StringComparer.Ordinal);
+
+        await using var db = CreateDbContext();
+        var rows = await db.Resources.AsNoTracking()
+            .Where(resource => resource.Type == CollectionResourceType.Horse
+                && resource.Provider == "JRA" && ids.Contains(resource.ResourceId))
+            .Select(resource => new { resource.ResourceId, resource.AttributesJson })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var row in rows)
+        {
+            var attributes = DeserializeTaskMetadata(row.AttributesJson);
+            if (attributes.GetValueOrDefault("sourceIdentity") is { Length: > 0 } sourceIdentity)
+                result[row.ResourceId] = sourceIdentity;
+            else if (attributes.GetValueOrDefault("sourceUrl") is { Length: > 0 } sourceUrl)
+                result[row.ResourceId] = sourceUrl;
+        }
+        return result;
+    }
+
     public async Task<CollectionRequestReceipt> RequestAsync(ResourceKey resource, CollectionDefinitionId definition,
         int requestedRevision, CollectionReason reason, DateTimeOffset requestedAt,
         CollectionLane lane = CollectionLane.Normal, int priority = (int)CollectionPriority.Normal,

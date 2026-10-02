@@ -1,5 +1,6 @@
 using EventFlow.EntityFramework;
 using HorseRacingPrediction.Infrastructure.Persistence;
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 using HorseRacingPrediction.Contracts.Identity;
 
@@ -10,7 +11,8 @@ internal static class ResolveHorseIdentityEndpoint
 {
     internal static void Map(RouteGroupBuilder group)
     {
-        group.MapPost("/identity/horse", async (ResolveHorseIdentityRequest request, IDbContextProvider<EventStoreDbContext> provider, CancellationToken token) =>
+        group.MapPost("/identity/horse", async (ResolveHorseIdentityRequest request, IDbContextProvider<EventStoreDbContext> provider,
+            CollectionPlatformStore collection, CancellationToken token) =>
                 {
                     if (request.Horse is not { } horse)
                         return Results.BadRequest(new[] { "馬の同定情報を指定してください。" });
@@ -18,7 +20,7 @@ internal static class ResolveHorseIdentityEndpoint
                     try
                     {
                         return Results.Ok(new ResolveHorseIdentityResponse(new ResolvedIdentityDto(
-                        await CollectionIdentityResolver.HorseAsync(db, horse.Name, horse.SourceIdentity, horse.BirthDate, token))));
+                        await CollectionIdentityResolver.HorseAsync(db, collection, horse.Name, horse.SourceIdentity, horse.BirthDate, token))));
                     }
                     catch (InvalidOperationException ex) when (SubjectIdentityResolutionException.IsKnownCode(ex.Message))
                     { return Results.UnprocessableEntity(new { code = ex.Message }); }

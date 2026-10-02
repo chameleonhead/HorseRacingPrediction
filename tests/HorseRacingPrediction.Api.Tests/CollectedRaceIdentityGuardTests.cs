@@ -136,6 +136,56 @@ public sealed class CollectedRaceIdentityGuardTests
     }
 
     [TestMethod]
+    public async Task LegacyHorseUsesExactCollectionResourceSourceBeforeProfileProjectionExists()
+    {
+        var (app, client) = await CreateApplicationAsync();
+        await using var application = app;
+        using var http = client;
+        const string name = "プロフィール未取得馬";
+        var legacyHorseId = $"horse-{Guid.NewGuid()}";
+        using var registration = await http.PostAsJsonAsync("/api/horses",
+            SubjectRequestFactory.RegisterHorse(name, name, null, null, horseId: legacyHorseId), JsonOptions);
+        registration.EnsureSuccessStatusCode();
+
+        var existingSource = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002023105429/FC";
+        var incomingSource = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud102023105429/E3";
+        var store = app.Services.GetRequiredService<CollectionPlatformStore>();
+        await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", legacyHorseId), new("horse-profile"), 3,
+            CollectionReason.Discovery, DateTimeOffset.UtcNow, attributes: new Dictionary<string, string>
+            {
+                ["name"] = name,
+                ["sourceIdentity"] = existingSource,
+                ["sourceUrl"] = existingSource,
+            });
+
+        var request = new DeclareRaceResultBulkRequest(new(new DateOnly(2036, 9, 23), "東京", 11,
+            "資源証拠検証", EntryCount: 1, IsRaceCard: true,
+            Entries: [Entry(1, name, incomingSource)]));
+        using var response = await http.PostAsJsonAsync("/api/races/result-bulk", request, JsonOptions);
+        var body = await ReadBodyAsync(response);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsTrue(body.Result.CorePersisted, string.Join(" | ", body.Result.Errors));
+        var entries = await GetEntriesAsync(http, body.Result.RaceId);
+        Assert.IsTrue(entries.ContainsKey(legacyHorseId));
+
+        var eventsBefore = CountStoredEvents(app);
+        using var conflict = await http.PostAsJsonAsync("/api/races/result-bulk", request with
+        {
+            Result = request.Result! with
+            {
+                Entries = [Entry(1, name,
+                    "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud102023999999/E3")],
+            },
+        }, JsonOptions);
+        var conflictBody = await ReadBodyAsync(conflict);
+        Assert.IsFalse(conflictBody.Result.CorePersisted);
+        Assert.IsTrue(conflictBody.Result.Outcomes!.Any(x => x.ErrorCode == "InvalidHorseNumber"),
+            string.Join(" | ", conflictBody.Result.Errors));
+        Assert.AreEqual(eventsBefore, CountStoredEvents(app));
+    }
+
+    [TestMethod]
     public async Task InvalidHorseSourceIdentityIsRejectedBeforeAnyRelatedWrite()
     {
         var (app, client) = await CreateApplicationAsync();

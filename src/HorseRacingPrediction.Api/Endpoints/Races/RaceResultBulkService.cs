@@ -36,7 +36,7 @@ internal static partial class RaceResultBulkService
         CancellationToken cancellationToken)
     {
         if (request.RefreshExistingData)
-            return await RefreshCollectedRaceAsync(request, commandBus, queryProcessor, dbContextProvider, cancellationToken);
+            return await RefreshCollectedRaceAsync(request, commandBus, queryProcessor, dbContextProvider, collectionStore, cancellationToken);
 
         using var identityDb = dbContextProvider.CreateContext();
         string raceIdValue;
@@ -46,7 +46,7 @@ internal static partial class RaceResultBulkService
             raceIdValue = await CollectionIdentityResolver.RaceAsync(identityDb, request.RaceDate, request.RacecourseCode, request.RaceNumber, cancellationToken);
         }
         catch (InvalidOperationException ex) { return Results.Conflict(new { code = ex.Message }); }
-        try { horseIdentities = await ResolveCollectedHorseIdentitiesAsync(request, identityDb, cancellationToken); }
+        try { horseIdentities = await ResolveCollectedHorseIdentitiesAsync(request, identityDb, collectionStore, cancellationToken); }
         catch (InvalidOperationException ex) { return CollectedIdentityRejection(raceIdValue, ex.Message); }
         var raceId = new RaceId(raceIdValue);
         var existing = await queryProcessor.ProcessAsync(
@@ -269,7 +269,7 @@ internal static partial class RaceResultBulkService
         var trainers = await db.Set<TrainerReadModel>().AsNoTracking().Where(x => trainerIds.Contains(x.TrainerId))
             .ToDictionaryAsync(x => x.TrainerId, cancellationToken).ConfigureAwait(false);
         var resolvedHorseJobs = new Dictionary<string, string>(StringComparer.Ordinal);
-        var horseIdentities = await CollectionIdentityResolver.LoadHorsesAsync(db, cancellationToken);
+        var horseIdentities = await CollectionIdentityResolver.LoadHorsesAsync(db, store, cancellationToken);
         foreach (var subject in candidates.Where(x => x.Type == CollectionResourceType.Horse))
             resolvedHorseJobs[subject.Id!] = CollectionIdentityResolver.ResolveHorse(horseIdentities, subject.Name!, subject.SourceIdentity, null);
         var rejected = new List<CollectionRequestBatchOutcome>();

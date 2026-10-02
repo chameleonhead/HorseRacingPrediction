@@ -16,7 +16,8 @@ namespace HorseRacingPrediction.Api.Endpoints.Races;
 internal static partial class RaceResultBulkService
 {
     internal static async Task<IResult> RefreshCollectedRaceAsync(DeclareRaceResultBulkInputDto request,
-        ICommandBus commands, IQueryProcessor queries, IDbContextProvider<EventStoreDbContext> dbProvider, CancellationToken token)
+        ICommandBus commands, IQueryProcessor queries, IDbContextProvider<EventStoreDbContext> dbProvider,
+        HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionPlatformStore collection, CancellationToken token)
     {
         var id = request.TargetRaceId;
         if (string.IsNullOrWhiteSpace(id)) return Results.BadRequest(new[] { "対象レースが指定されていません。" });
@@ -34,7 +35,7 @@ internal static partial class RaceResultBulkService
             : await queries.ProcessAsync(new ReadModelByIdQuery<HorseReadModel>(request.SourceHorseId), token);
         using var identityDb = dbProvider.CreateContext();
         Dictionary<RaceResultEntryBulkDto, string> horseIdentities;
-        try { horseIdentities = await ResolveCollectedHorseIdentitiesAsync(request, identityDb, token); }
+        try { horseIdentities = await ResolveCollectedHorseIdentitiesAsync(request, identityDb, collection, token); }
         catch (InvalidOperationException ex) { return CollectedIdentityRejection(id, ex.Message); }
         if (request.SourceHorseId is not null && (originHorse is null
             || !horseIdentities.Values.Contains(originHorse.HorseId, StringComparer.Ordinal)))

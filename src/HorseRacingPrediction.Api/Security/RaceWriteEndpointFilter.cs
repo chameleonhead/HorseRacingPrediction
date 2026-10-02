@@ -131,7 +131,7 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
         var bulkInputs = context.Arguments.Where(x => x is not null).Select(x => GetContractInput(x!))
             .OfType<DeclareRaceResultBulkInputDto>().ToArray();
         var horseIdentities = bulkInputs.Length > 0
-            ? await CollectionIdentityResolver.LoadHorsesAsync(db, token) : [];
+            ? await CollectionIdentityResolver.LoadHorsesAsync(db, collection, token) : [];
         foreach (var argument in context.Arguments.Where(x => x is not null))
         {
             var contractInput = GetContractInput(argument!);

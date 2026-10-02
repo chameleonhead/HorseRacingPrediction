@@ -1,4 +1,5 @@
 using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,7 +31,8 @@ internal static class CollectionIdentityResolver
     internal sealed record HorseIdentityRow(string HorseId, string RegisteredName, DateOnly? BirthDate, string? SourceIdentity,
         bool HasNameDerivedIdentity = false);
 
-    internal static async Task<List<HorseIdentityRow>> LoadHorsesAsync(EventStoreDbContext db, CancellationToken token)
+    internal static async Task<List<HorseIdentityRow>> LoadHorsesAsync(EventStoreDbContext db,
+        CollectionPlatformStore? collection, CancellationToken token)
     {
         var rows = await (from horse in db.Horses.AsNoTracking()
                           join profile in db.Set<HorseRacingPrediction.Application.Queries.ReadModels.JraSubjectProfileReadModel>().AsNoTracking()
@@ -55,17 +57,31 @@ internal static class CollectionIdentityResolver
             if (name.ValueKind == System.Text.Json.JsonValueKind.String && name.GetString() is { } originalName)
                 originalNames[registration.AggregateId] = originalName;
         }
-        return rows.Select(x => x with
+        rows = rows.Select(x => x with
         {
             HasNameDerivedIdentity = IsNameDerived(x.HorseId, x.RegisteredName)
             || originalNames.TryGetValue(x.HorseId, out var originalName) && IsNameDerived(x.HorseId, originalName)
             && JraSubjectNameNormalizer.NormalizeIdentityName("Horse", originalName)
                 == JraSubjectNameNormalizer.NormalizeIdentityName("Horse", x.RegisteredName)
         }).ToList();
+        if (collection is null) return rows;
+
+        var metadataCandidates = rows.Where(x => string.IsNullOrWhiteSpace(x.SourceIdentity)
+            && !x.HasNameDerivedIdentity).Select(x => x.HorseId).ToArray();
+        var metadataSources = await collection.GetHorseSourceIdentitiesAsync(metadataCandidates, token);
+        return rows.Select(x => metadataSources.TryGetValue(x.HorseId, out var source)
+                && JraSourceIdentity.TryNormalizeHorse(source, out _)
+                && x.HorseId != DeterministicIdGenerator.BuildHorseId(x.RegisteredName, source)
+            ? x with { SourceIdentity = source }
+            : x).ToList();
     }
 
     internal static async Task<string> HorseAsync(EventStoreDbContext db, string name, string? source, DateOnly? birth, CancellationToken token) =>
-        ResolveHorse(await LoadHorsesAsync(db, token), name, source, birth);
+        ResolveHorse(await LoadHorsesAsync(db, null, token), name, source, birth);
+
+    internal static async Task<string> HorseAsync(EventStoreDbContext db, CollectionPlatformStore collection,
+        string name, string? source, DateOnly? birth, CancellationToken token) =>
+        ResolveHorse(await LoadHorsesAsync(db, collection, token), name, source, birth);
 
     internal static string ResolveHorse(IReadOnlyList<HorseIdentityRow> horses, string name, string? source, DateOnly? birth)
     {

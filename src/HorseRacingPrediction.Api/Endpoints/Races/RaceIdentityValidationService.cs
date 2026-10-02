@@ -90,10 +90,11 @@ internal static partial class RaceResultBulkService
     }
 
     internal static async Task<Dictionary<HorseRacingPrediction.Contracts.Races.RaceResultEntryBulkDto, string>> ResolveCollectedHorseIdentitiesAsync(
-        HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkInputDto request, HorseRacingPrediction.Infrastructure.Persistence.EventStoreDbContext db, CancellationToken token)
+        HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkInputDto request, HorseRacingPrediction.Infrastructure.Persistence.EventStoreDbContext db,
+        HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionPlatformStore collection, CancellationToken token)
     {
         var resolved = new Dictionary<HorseRacingPrediction.Contracts.Races.RaceResultEntryBulkDto, string>();
-        var horses = await CollectionIdentityResolver.LoadHorsesAsync(db, token);
+        var horses = await CollectionIdentityResolver.LoadHorsesAsync(db, collection, token);
         foreach (var item in request.Entries ?? [])
             if (!string.IsNullOrWhiteSpace(item.HorseName)
                 && (string.IsNullOrWhiteSpace(item.HorseSourceIdentity) || JraSourceIdentity.TryNormalizeHorse(item.HorseSourceIdentity, out _)))
