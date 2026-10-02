@@ -181,8 +181,9 @@ verification use the repository's requested cheap route after approval.
 - CI run 36958984104 and deployment run 36958984094 passed; the deployment drain step and API health check succeeded.
 - Production recovery closed exactly 12 obsolete pedigree failures, queued 11 parent profiles and three races,
   resumed the pipeline, and reconciled zero actionable failure groups. Exercising the bulk specific-resource
-  flow then reproduced a stale UI binding: the visible IDs were not available to preview validation. T7 makes
-  the Fluent input immediate and adds a component assertion for that interaction contract.
+  flow then reproduced a stale UI binding: the visible IDs were not available to preview validation. An initial
+  `Immediate` correction passed component tests and CI but failed its production browser counterexample. T7
+  therefore uses a native `oninput` binding and exercises that actual DOM event in the component test.
 - Solution build completed with zero warnings and errors; `dotnet format --verify-no-changes --no-restore`,
   `git diff --check`, and the change-record audit validator passed.
 - No secret was written to commands, logs, documentation, or commits.
