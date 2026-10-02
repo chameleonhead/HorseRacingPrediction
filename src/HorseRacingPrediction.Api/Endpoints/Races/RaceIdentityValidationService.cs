@@ -8,10 +8,11 @@ namespace HorseRacingPrediction.Api.Endpoints.Races;
 
 internal static partial class RaceResultBulkService
 {
-    internal static IResult CollectedIdentityRejection(string raceId, string code) =>
+    internal static IResult CollectedIdentityRejection(string raceId, string code, string? detail = null) =>
         Results.Ok(new HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkResponse(
-            new HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkResultDto(raceId, [code],
-                [new("Entry", "HorseIdentity", "Rejected", code, "Horse identity could not be resolved safely; no data was written.")],
+            new HorseRacingPrediction.Contracts.Races.DeclareRaceResultBulkResultDto(raceId, [detail ?? code],
+                [new("Entry", "HorseIdentity", "Rejected", code,
+                    detail ?? "Horse identity could not be resolved safely; no data was written.")],
                 CorePersisted: false)));
 
     // Validate the entire envelope before creating any related subject. Collection cannot repair identity.
@@ -98,7 +99,25 @@ internal static partial class RaceResultBulkService
         foreach (var item in request.Entries ?? [])
             if (!string.IsNullOrWhiteSpace(item.HorseName)
                 && (string.IsNullOrWhiteSpace(item.HorseSourceIdentity) || JraSourceIdentity.TryNormalizeHorse(item.HorseSourceIdentity, out _)))
-                resolved[item] = CollectionIdentityResolver.ResolveHorse(horses, item.HorseName, item.HorseSourceIdentity, null);
+            {
+                try
+                {
+                    resolved[item] = CollectionIdentityResolver.ResolveHorse(
+                        horses, item.HorseName, item.HorseSourceIdentity, null);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    JraSourceIdentity.TryNormalizeHorse(item.HorseSourceIdentity, out var normalizedSource);
+                    throw new CollectedHorseIdentityException(ex.Message,
+                        $"{ex.Message}: Horse={item.HorseName}; Source={normalizedSource}");
+                }
+            }
         return resolved;
+    }
+
+    internal sealed class CollectedHorseIdentityException(string code, string detail) : InvalidOperationException(detail)
+    {
+        internal string Code { get; } = code;
+        internal string Detail { get; } = detail;
     }
 }

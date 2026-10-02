@@ -47,6 +47,7 @@ internal static partial class RaceResultBulkService
         }
         catch (InvalidOperationException ex) { return Results.Conflict(new { code = ex.Message }); }
         try { horseIdentities = await ResolveCollectedHorseIdentitiesAsync(request, identityDb, collectionStore, cancellationToken); }
+        catch (CollectedHorseIdentityException ex) { return CollectedIdentityRejection(raceIdValue, ex.Code, ex.Detail); }
         catch (InvalidOperationException ex) { return CollectedIdentityRejection(raceIdValue, ex.Message); }
         var raceId = new RaceId(raceIdValue);
         var existing = await queryProcessor.ProcessAsync(

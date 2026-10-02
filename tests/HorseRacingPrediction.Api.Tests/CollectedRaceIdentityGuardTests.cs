@@ -130,6 +130,9 @@ public sealed class CollectedRaceIdentityGuardTests
         var outcomes = body.Result.Outcomes!;
         Assert.IsTrue(outcomes.Any(x => x.ErrorCode == "HorseIdentityConflict"),
             string.Join(" | ", body.Result.Errors));
+        Assert.IsTrue(body.Result.Errors.Any(x => x.Contains("Horse=同名馬", StringComparison.Ordinal)
+            && x.Contains("Source=jra-horse:2036110002", StringComparison.Ordinal)),
+            string.Join(" | ", body.Result.Errors));
         Assert.AreEqual(eventsBefore, CountStoredEvents(app));
         Assert.AreEqual(tasksBefore, await CountTasksAsync(app));
         Assert.AreEqual(beforeContext, await GetContextJsonAsync(http, initialBody.Result.RaceId));

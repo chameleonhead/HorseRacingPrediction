@@ -42,6 +42,26 @@ public sealed class CollectionIdentityResolverTests
     }
 
     [TestMethod]
+    public void OfficialIdentity_ChoosesStableHorseBesideNameDerivedDuplicateAcrossJraRoutes()
+    {
+        const string name = "ゴディアンフィンチ";
+        const string stableId = "horse-35add83f-ed13-5299-8970-e0d8939fee9f";
+        var horses = new[]
+        {
+            new CollectionIdentityResolver.HorseIdentityRow(
+                "horse-1f00e5ee-3a55-528b-af51-c9370ae52ddb", name, null, null, true),
+            new CollectionIdentityResolver.HorseIdentityRow(
+                stableId, name, new DateOnly(2023, 1, 24),
+                "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002023103764/B2"),
+        };
+
+        var resolved = CollectionIdentityResolver.ResolveHorse(horses, name,
+            "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud102023103764/99", null);
+
+        Assert.AreEqual(stableId, resolved);
+    }
+
+    [TestMethod]
     public void OfficialIdentity_RejectsMultipleSourceLessOpaqueLegacyHorses()
     {
         const string name = "旧世代同名馬";

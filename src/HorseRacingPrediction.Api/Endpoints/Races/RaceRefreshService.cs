@@ -36,6 +36,7 @@ internal static partial class RaceResultBulkService
         using var identityDb = dbProvider.CreateContext();
         Dictionary<RaceResultEntryBulkDto, string> horseIdentities;
         try { horseIdentities = await ResolveCollectedHorseIdentitiesAsync(request, identityDb, collection, token); }
+        catch (CollectedHorseIdentityException ex) { return CollectedIdentityRejection(id, ex.Code, ex.Detail); }
         catch (InvalidOperationException ex) { return CollectedIdentityRejection(id, ex.Message); }
         if (request.SourceHorseId is not null && (originHorse is null
             || !horseIdentities.Values.Contains(originHorse.HorseId, StringComparer.Ordinal)))
