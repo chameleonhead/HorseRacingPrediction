@@ -89,6 +89,15 @@ internal static class CollectionIdentityResolver
         static bool IsOpaqueLegacyId(string horseId) => horseId.StartsWith("horse-", StringComparison.Ordinal)
             && Guid.TryParse(horseId["horse-".Length..], out var value)
             && value.ToString("D")[14] == '4';
+        static bool IsLegacyRouteDerivedId(string horseId, string? sourceIdentity)
+        {
+            var normalizedUrl = JraSourceIdentity.NormalizeHorseUrl(sourceIdentity);
+            const string prefix = "?CNAME=";
+            if (normalizedUrl is null || !normalizedUrl.Query.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return false;
+            var cname = Uri.UnescapeDataString(normalizedUrl.Query[prefix.Length..]);
+            return horseId == DeterministicIdGenerator.BuildEntityId("horse", $"JRA|{cname}");
+        }
 
         if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("MissingHorseName");
         if (!string.IsNullOrWhiteSpace(source) && !JraSourceIdentity.TryNormalizeHorse(source, out _))
@@ -99,8 +108,13 @@ internal static class CollectionIdentityResolver
         var named = horses.Where(x => JraSubjectNameNormalizer.NormalizeIdentityName("Horse", x.RegisteredName) == canonical).ToArray();
         if (!hasSource && named.Any(x => !string.IsNullOrWhiteSpace(x.SourceIdentity) || !x.HasNameDerivedIdentity))
             throw new InvalidOperationException("HorseIdentityEvidenceRequired");
-        var matches = hasSource
+        var sourceMatches = hasSource
             ? horses.Where(x => x.HorseId == id || JraSourceIdentity.MatchesHorse(x.SourceIdentity, source)).ToArray()
+            : [];
+        var matches = hasSource
+            ? sourceMatches.Length > 0
+                ? sourceMatches
+                : horses.Where(x => IsLegacyRouteDerivedId(x.HorseId, source)).ToArray()
             : horses.Where(x => x.HorseId == id || named.Any(n => n.HorseId == x.HorseId)).ToArray();
         if (matches.Length > 1) throw new InvalidOperationException("AmbiguousHorseIdentity");
         var found = matches.SingleOrDefault();

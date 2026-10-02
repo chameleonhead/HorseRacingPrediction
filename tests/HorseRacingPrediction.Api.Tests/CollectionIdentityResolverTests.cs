@@ -42,6 +42,39 @@ public sealed class CollectionIdentityResolverTests
     }
 
     [TestMethod]
+    public void OfficialIdentity_ReusesSourceLessHorseCreatedFromExactLegacyJraRoute()
+    {
+        const string name = "タイヨウフレア";
+        const string identity =
+            "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud102022105844/FC";
+        var legacyId = DeterministicIdGenerator.BuildEntityId("horse", "JRA|pw01dud102022105844/FC");
+        var horses = new[]
+        {
+            new CollectionIdentityResolver.HorseIdentityRow(legacyId, name, null, null),
+        };
+
+        var resolved = CollectionIdentityResolver.ResolveHorse(horses, name, identity, null);
+
+        Assert.AreEqual(legacyId, resolved);
+    }
+
+    [TestMethod]
+    public void OfficialIdentity_RejectsSourceLessHorseCreatedFromDifferentLegacyJraRoute()
+    {
+        const string name = "同名の別馬";
+        var otherLegacyId = DeterministicIdGenerator.BuildEntityId("horse", "JRA|pw01dud102020654321/FC");
+        var horses = new[]
+        {
+            new CollectionIdentityResolver.HorseIdentityRow(otherLegacyId, name, null, null),
+        };
+
+        var error = Assert.ThrowsExactly<InvalidOperationException>(() =>
+            CollectionIdentityResolver.ResolveHorse(horses, name, OfficialIdentity, null));
+
+        Assert.AreEqual("HorseIdentityConflict", error.Message);
+    }
+
+    [TestMethod]
     public void OfficialIdentity_ChoosesStableHorseBesideNameDerivedDuplicateAcrossJraRoutes()
     {
         const string name = "ゴディアンフィンチ";
