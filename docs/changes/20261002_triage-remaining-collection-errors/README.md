@@ -193,6 +193,8 @@ verification use the repository's requested cheap route after approval.
 - `dotnet test tests/HorseRacingPrediction.Collector.Tests/... --filter JraSubjectCollectionHandlerTests`: 45 passed.
 - Full API suite: 407 passed, 1 skipped. Full Collector suite: 411 passed.
 - Schema-v20 dispatch recovery regression passed; the full API suite then passed 409 tests with 1 skipped.
+- Initial deployment run 36971308157 exposed three Collector migration fixtures still pinned to schema v19;
+  after updating only those fixture expectations/history downgrades, the full Collector suite passed 412 tests.
 - `dotnet build HorseRacingPrediction.sln --no-restore` passed with zero warnings and errors;
   `dotnet format HorseRacingPrediction.sln --verify-no-changes --no-restore` and `git diff --check` passed.
 - CI run 36958984104 and deployment run 36958984094 passed; the deployment drain step and API health check succeeded.

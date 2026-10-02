@@ -188,8 +188,7 @@ public sealed class RaceRepairHoldTests
             using var command = connection.CreateCommand();
             command.CommandText = """
                 BEGIN IMMEDIATE;
-                DELETE FROM collection_schema_history WHERE version = 18;
-                DELETE FROM collection_schema_history WHERE version = 19;
+                DELETE FROM collection_schema_history WHERE version >= 18;
                 DROP TABLE race_repair_holds;
                 ALTER TABLE collection_tasks DROP COLUMN RaceHoldGeneration;
                 CREATE TABLE v17_bindings (BatchItemId TEXT NOT NULL PRIMARY KEY, PayloadFingerprint TEXT NOT NULL, RequestId TEXT NOT NULL, TaskId TEXT NOT NULL);
