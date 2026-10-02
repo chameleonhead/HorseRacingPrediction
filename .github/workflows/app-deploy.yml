@@ -289,6 +289,11 @@ jobs:
           pipeline="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/pipeline-state")"
           jq -e '.pipeline.isPaused == true' <<<"$pipeline" >/dev/null
           case "$ORIGINAL_WAS_PAUSED" in true|false) ;; *) exit 1 ;; esac
+          # Re-assert the pause through the newly deployed API. When SQS is empty this safely
+          # releases Ready dispatch rows whose wake disappeared during the version transition.
+          curl --fail --silent --show-error -X PUT -H "X-Api-Key: $API_KEY" \
+            -H 'Content-Type: application/json' \
+            --data '{"pipeline":{"paused":true,"reason":"deployment version transition"}}' "$base/pipeline" >/dev/null
           running="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/tasks?statuses=Running&pageSize=1")"
           jq -e '.page.items | type == "array" and length == 0' <<<"$running" >/dev/null
           if [ "$ORIGINAL_WAS_PAUSED" = "false" ]; then
