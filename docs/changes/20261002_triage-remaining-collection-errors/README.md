@@ -140,6 +140,7 @@ before any retry or repair decision.
 | T7 | Correct the bulk specific-resource input discovered during production recovery. | Cheap executor/verifier | gpt-6-luna high; local UI binding fix | T6 production exercise | Jobs UI and component test | component regression plus production browser verification | `Immediate` binding assertion and live preview/submit | In progress | Cheap executor/verifier - closure item within approved operator recovery | no delegated patch | unavailable; retries 1; corrections 1; reviews 1 |
 | T8 | Propagate stronger scheduling when a manual recovery reuses an active task. | Cheap executor/verifier | gpt-6-luna high; bounded persistence correction | T7 production exercise | collection platform store and focused regression | store regression plus production task detail | active task changes from Normal/50 to Realtime/100 without mutating its revision | In progress | Cheap executor/verifier - closure item within approved recovery | no delegated patch | unavailable; retries 1; corrections 1; reviews 1 |
 | T9 | Recover legacy official Horse identities from their exact collection-resource metadata before profile projection exists. | Cheap executor/verifier | gpt-6-luna high; bounded identity evidence correction | T8 production exercise | collection platform read API, API identity integration, focused tests | production-shaped legacy-ID regression and mismatched-source counterexample | exact resource metadata resolves the matching official source while a different source remains rejected | Verified | Cheap executor/verifier - closure item within approved identity recovery | no delegated patch | unavailable; retries 1; corrections 1; reviews 2 |
+| T10 | Release legacy dispatched Ready envelopes that permanently consume the single production dispatch slot without an execution lease. | Cheap executor/verifier | gpt-6-luna high; bounded schema recovery | T9 deployment observation | collection schema migration and dispatch regression | v19 fixture with one stranded legacy envelope becomes dispatchable while leased/current envelopes remain unchanged | schema-v20 regression passed; production dispatch resumption remains under T6 | Verified | Cheap executor/verifier - closure item required for production terminal verification | no delegated patch | unavailable; retries 1; corrections 1; reviews 2 |
 
 The read/write scopes overlap across the collection identity and persistence path, so implementation is
 serialized. No subagent was dispatched for the current bounded investigation; the Lead retained the
@@ -164,6 +165,12 @@ verification use the repository's requested cheap route after approval.
   already contain equivalent official JRA source identities, but `LoadHorsesAsync` reads only the not-yet-created
   profile projection. T9 may enrich only by exact `(Horse, JRA, HorseId)` resource metadata and must retain the
   different-source, source-less, and ambiguous fail-closed counterexamples.
+- **Checkpoint review (T10):** After the T9 deployment and pipeline resume, production had zero running tasks,
+  2,806 Ready tasks, and monitoring reported stalled priority-100 race work plus dispatch-order violations.
+  Capacity is one envelope. The compatibility-era capacity query counts a legacy `DispatchedAt` Ready envelope
+  forever when it has no execution lease; the wake protocol cannot reclaim that row because it is already marked
+  dispatched. Schema v20 may reset only current-generation Ready rows with a legacy dispatched envelope, no
+  `WakeId`, and no execution lease for that envelope. Running, leased, pending-wake, and completed rows are excluded.
 - **Final review:** Pending.
 
 ## Documentation updates
@@ -185,6 +192,9 @@ verification use the repository's requested cheap route after approval.
 - `dotnet test tests/HorseRacingPrediction.Api.Tests/... --filter CollectionIdentityResolverTests`: 13 passed.
 - `dotnet test tests/HorseRacingPrediction.Collector.Tests/... --filter JraSubjectCollectionHandlerTests`: 45 passed.
 - Full API suite: 407 passed, 1 skipped. Full Collector suite: 411 passed.
+- Schema-v20 dispatch recovery regression passed; the full API suite then passed 409 tests with 1 skipped.
+- `dotnet build HorseRacingPrediction.sln --no-restore` passed with zero warnings and errors;
+  `dotnet format HorseRacingPrediction.sln --verify-no-changes --no-restore` and `git diff --check` passed.
 - CI run 36958984104 and deployment run 36958984094 passed; the deployment drain step and API health check succeeded.
 - Production recovery closed exactly 12 obsolete pedigree failures, queued 11 parent profiles and three races,
   resumed the pipeline, and reconciled zero actionable failure groups. Exercising the bulk specific-resource

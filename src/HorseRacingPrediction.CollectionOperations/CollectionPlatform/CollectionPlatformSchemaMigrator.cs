@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 internal static class CollectionPlatformSchemaMigrator
 {
-    internal const int CurrentVersion = 19;
+    internal const int CurrentVersion = 20;
     private const string HistoryTable = "collection_schema_history";
 
     private static readonly string[] ModelTables =
@@ -503,6 +503,33 @@ internal static class CollectionPlatformSchemaMigrator
                     HorseRacingPrediction.Contracts.Common.Time.JstTime.Now()))).ConfigureAwait(false);
             await ExecuteAsync(connection, """
                 INSERT INTO collection_schema_history (version, applied_at) VALUES (19, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Common.Time.JstTime.ToDatabaseString(
+                    HorseRacingPrediction.Contracts.Common.Time.JstTime.Now()))).ConfigureAwait(false);
+        }
+
+        if (version < 20)
+        {
+            await ExecuteAsync(connection, """
+                UPDATE collection_task_outbox AS outbox
+                SET DispatchedAt = NULL,
+                    ReservationToken = NULL,
+                    ReservedUntilUnixMilliseconds = NULL,
+                    EnvelopeId = NULL,
+                    WakeId = NULL,
+                    QueueMessageId = NULL
+                WHERE outbox.DispatchedAt IS NOT NULL
+                  AND outbox.EnvelopeId IS NOT NULL
+                  AND outbox.WakeId IS NULL
+                  AND EXISTS (
+                      SELECT 1 FROM collection_tasks AS task
+                      WHERE task.TaskId = outbox.TaskId
+                        AND task.DispatchGeneration = outbox.DispatchGeneration
+                        AND task.Status = 'Ready')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM collection_execution_leases AS lease
+                      WHERE lease.DispatchEnvelopeId = outbox.EnvelopeId);
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (20, $appliedAt);
                 """, cancellationToken, transaction,
                 ("$appliedAt", (object)HorseRacingPrediction.Contracts.Common.Time.JstTime.ToDatabaseString(
                     HorseRacingPrediction.Contracts.Common.Time.JstTime.Now()))).ConfigureAwait(false);

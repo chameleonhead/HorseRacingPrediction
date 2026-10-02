@@ -1031,7 +1031,7 @@ public sealed class CollectionDispatchStarvationReproductionTests
             {
                 await db.Database.ExecuteSqlRawAsync("ALTER TABLE collection_task_outbox DROP COLUMN WakeId; " +
                     "DROP TABLE collection_dispatcher_fairness_state; " +
-                    "DELETE FROM collection_schema_history WHERE version = 19; " +
+                    "DELETE FROM collection_schema_history WHERE version >= 19; " +
                     "INSERT OR IGNORE INTO collection_schema_history (version, applied_at) VALUES (18, 'v18-fixture');");
                 Assert.AreEqual(0, await db.Database.SqlQueryRaw<int>(
                     "SELECT COUNT(*) AS Value FROM pragma_table_info('collection_task_outbox') WHERE name = 'WakeId'")
@@ -1068,14 +1068,59 @@ public sealed class CollectionDispatchStarvationReproductionTests
             Assert.AreEqual(1, await verify.Database.SqlQueryRaw<int>(
                 "SELECT COUNT(*) AS Value FROM collection_dispatcher_fairness_state WHERE StateId = 1")
                 .SingleAsync(), "Schema migration initializes exactly one dispatcher fairness record.");
-            Assert.AreEqual(19, await verify.Database.SqlQueryRaw<int>(
+            Assert.AreEqual(20, await verify.Database.SqlQueryRaw<int>(
                 "SELECT version AS Value FROM collection_schema_history ORDER BY version DESC LIMIT 1")
-                .SingleAsync(), "The genuine v18 fixture must migrate and record schema version 19.");
+                .SingleAsync(), "The genuine v18 fixture must migrate through the current schema.");
         }
         finally
         {
             Directory.Delete(directory, recursive: true);
         }
+    }
+
+    [TestMethod]
+    public async Task Schema20_ReleasesStrandedLegacyReadyEnvelope()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "collection-schema-20", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var options = Options.Create(new CollectionPlatformOptions { StateDirectory = directory });
+            var store = new CollectionPlatformStore(options);
+            await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", CollectionResourceType.Race,
+                1, "initial", false);
+            var now = DateTimeOffset.UtcNow;
+            var receipt = await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "LEGACY-STRANDED"),
+                new("race-detail"), 1, CollectionReason.Initial, now.AddHours(-1),
+                CollectionLane.Realtime, (int)CollectionPriority.Critical);
+            var databasePath = Path.Combine(directory, "collection-platform.db");
+            var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                .UseSqlite($"Data Source={databasePath};Pooling=False;Default Timeout=30").Options;
+            await using (var db = new CollectionPlatformDbContext(dbOptions))
+            {
+                var row = await db.DispatchOutbox.SingleAsync(x => x.TaskId == receipt.TaskId);
+                row.EnvelopeId = Guid.NewGuid();
+                row.DispatchedAt = now.AddMinutes(-30);
+                row.QueueMessageId = "lost-legacy-message";
+                row.WakeId = null;
+                await db.Database.ExecuteSqlRawAsync("DELETE FROM collection_schema_history WHERE version = 20;");
+                await db.SaveChangesAsync();
+            }
+
+            var migrated = new CollectionPlatformStore(options);
+            var pending = (await migrated.GetPendingDispatchesAsync(now, 10))
+                .Single(x => x.Notification.TaskId == receipt.TaskId);
+
+            Assert.AreEqual(receipt.TaskId, pending.Notification.TaskId);
+            await using var verify = new CollectionPlatformDbContext(dbOptions);
+            var released = await verify.DispatchOutbox.SingleAsync(x => x.TaskId == receipt.TaskId);
+            Assert.IsNull(released.DispatchedAt);
+            Assert.IsNull(released.EnvelopeId);
+            Assert.IsNull(released.QueueMessageId);
+            Assert.AreEqual(1, await verify.Database.SqlQueryRaw<int>(
+                "SELECT COUNT(*) AS Value FROM collection_schema_history WHERE version = 20").SingleAsync());
+        }
+        finally { Directory.Delete(directory, recursive: true); }
     }
 
     [TestMethod]
