@@ -1,6 +1,6 @@
 # Remaining collection error triage
 
-- Status: Proposed
+- Status: Approved
 - Change record schema: 2
 - Owner: Collection operations
 - Created: 2026-10-02
@@ -10,9 +10,9 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Not started | No production code change is authorized by this investigation. |
-| Verification | In progress | Current group-level evidence and code paths are classified; per-resource authenticated diagnostics remain. |
-| Deployment/operation | Not started | No retry, dismissal, merge, suppression, or pipeline mutation was performed. |
+| Code | Complete | Unsafe pedigree expansion is removed and official source-bound namesakes remain distinct without weakening source-less ambiguity guards. |
+| Verification | Complete locally | Focused and full suites, build, formatting, diff hygiene, and live parser probes pass. |
+| Deployment/operation | In progress | CI/deployment and exact production recovery remain in T6. |
 
 ## Context
 
@@ -90,52 +90,52 @@ before any retry or repair decision.
 
 ## Proposed corrective design
 
-1. Introduce a separately persisted, idempotent pedigree-reference discovery outcome containing the
-   parent Horse ID, relation (`Sire`/`Dam`), normalized name, source page, and failure code. It must not
-   invent a Horse ID or source identity.
-2. Complete the parent horse-profile task once profile persistence succeeds. A single unresolved optional
-   reference must not prevent the remaining references or race-history discovery. Unresolved references
-   remain operator-visible and independently retryable; they are not silently dropped.
-3. Resolve a pedigree Horse to an authoritative Horse only after official JRA source identity is obtained.
-   The preferred implementation is a two-phase discovery task (name search/profile selection, then
-   source-bound upsert), not a relaxation of `CollectionIdentityResolver`.
-4. Classify the 12 no-candidate resources through the existing repair preview. Apply only evidence-backed
-   outcomes: safe merge, validated official URL, proven obsolete/generated reference dismissal, or remain
-   blocked. Same-revision blind retry remains prohibited.
-5. Diagnose the two race write failures individually. Use the existing fenced assignment/identity repair
-   only when read-back proves two persisted identities; otherwise perform one controlled retry after
-   confirming the failure attempt predates the deployed normalizer.
+1. Stop creating Horse aggregates and `horse-profile` tasks from sire/dam display text. The canonical
+   parent profile already stores sire/dam text; the JRA profile surface does not provide source-bound
+   parent links, and name-only expansion is unsafe for foreign and same-name horses. Trainer and race-history
+   discovery remain enabled.
+2. Complete the parent horse-profile task after profile persistence and continue race-history discovery;
+   removed pedigree expansion must create neither a child task nor an identity API call.
+3. When a new official JRA Horse identity has only other source-bound same-name Horses, create/select its
+   deterministic official identity. Same-name source-bound Horses are legitimate namesakes. If any
+   source-less name-derived candidate also exists, remain fail-closed because its ownership is ambiguous.
+4. Close the 12 existing name-only pedigree tasks as obsolete generated references after deployment.
+   Retry the 11 parent profile tasks under the new revision and verify profile plus race-history completion.
+5. Retry the three race failures once after deployment. The 2016 live parser probe proved all 18 result
+   rows carry official Horse identities and its failure predates the deployed route normalizer. The two
+   2026 conflicts are handled by the official namesake rule; same-race source changes still fail atomically
+   through effective horse-number collision validation.
 
 ## Concern and agreement ledger
 
 | ID | Concern and evidence | Impact | Proposed disposition | AC/task/test | Agent position | User disposition | State |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| C1 | Treating pedigree names as authoritative Horse identity can merge namesakes. | Silent cross-horse corruption. | Keep source-bound resolution and fail closed; separate discovery from upsert. | AC2/T2; namesake counterexample | Evidence-based objection to name-only fallback | Pending | Resolved in design |
-| C2 | Marking the parent successful could hide missing pedigree data. | Partial data becomes invisible. | Persist relation-level outcomes and show unresolved counts before decoupling task success. | AC1/AC3/T1-T3 | Agree only with durable visibility | Pending | Resolved in design |
-| C3 | Twelve no-candidate items may have mixed causes. | Bulk dismissal or retry can lose evidence or create loops. | Require exact per-item classification through the existing preview. | AC4/T4 | Object to group-wide mutation | Pending | Open decision |
-| C4 | The two race errors may be stale or represent real duplicate identities. | Blind retry may repeat deterministic rejection; blind repair may rewrite correct assignments. | Read current attempt and assignment evidence first; use one controlled action per proven class. | AC5/T5 | Object to retry before evidence | Pending | Open decision |
-| C5 | Two-phase JRA discovery increases requests during existing access limiting. | More 429/transient responses and queue pressure. | Cache/deduplicate discovery by normalized name and bound concurrency; verify request counts. | AC6/T2/T3 | Agree with bounded design | Pending | Resolved in design |
+| C1 | Treating pedigree names as authoritative Horse identity can merge namesakes. | Silent cross-horse corruption. | Keep source-bound resolution and remove name-only pedigree upsert. | AC2/T2; namesake counterexample | Agree with removal of name-only fallback | Approved by user instruction to complete recovery | Resolved in design |
+| C2 | Removing pedigree child collection could hide missing pedigree data. | Parent Horse enrichment would be incomplete if sire/dam text were not already canonical profile data. | Preserve sire/dam text in the parent profile; remove only unsafe recursive Horse collection. | AC1/AC3/T1-T3 | Agree; source inspection proves fields are persisted before discovery | Approved by user instruction to complete recovery | Resolved in design |
+| C3 | Twelve no-candidate items may have mixed causes. | Bulk dismissal or retry can lose evidence or create loops. | Inventory proved all 12 are pedigree names, including foreign sires and two ambiguous namesakes; close only these exact generated resources after deployment. | AC4/T4 | Agree with exact-membership closure only | Approved by user instruction to complete recovery | Resolved in design |
+| C4 | Three race errors may be stale or represent real duplicate identities. | Blind retry may repeat deterministic rejection; blind repair may rewrite correct assignments. | Live probes prove official identities on every row; deploy the namesake rule, retry exactly three, and retain atomic same-race collision rejection. | AC5/T5 | Agree with controlled retry after regression coverage | Approved by user instruction to complete recovery | Resolved in design |
+| C5 | Extra JRA discovery would increase requests during existing access limiting. | More 429/transient responses and queue pressure. | Remove pedigree discovery calls entirely; retain existing bounded trainer/race discovery and verify request counts. | AC6/T2/T3 | Agree; the selected design reduces requests | Approved by user instruction to complete recovery | Resolved in design |
 
 ## Acceptance criteria
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | A persisted parent horse profile can finish race-history discovery even when one pedigree reference cannot be resolved; the unresolved relation remains durable and visible. | T1-T3 | Production-shaped handler integration test with one failing and one succeeding reference | Not started |
-| AC2 | No Horse is created, selected, or merged from a pedigree name alone when official/source-bound same-name records exist or candidates are ambiguous. | T2 | resolver/handler counterexamples for namesake, ambiguity, and conflicting birth evidence | Not started |
-| AC3 | Reference discovery is idempotent, independently retryable, and preserves parent/relation/source provenance without duplicate work. | T1-T3 | persistence, replay, partial-failure, and restart tests | Not started |
-| AC4 | All 12 `SubjectNotIdentified` resources are inventoried as safe recovery, obsolete dismissal, or blocked with explicit evidence; no group-wide blind action occurs. | T4 | authenticated read-only diagnostics and repair-preview reconciliation | Not started |
-| AC5 | Both race write failures have individual root-cause evidence and only the matching fenced recovery is executed; persisted result/lifecycle evidence is read back. | T5 | resource/attempt/batch/assignment evidence plus controlled production verification | Not started |
-| AC6 | The correction does not materially amplify JRA requests; concurrency, deduplication, 429 handling, and pipeline safety-stop behavior remain verified. | T2-T3 | request-count, retry classification, dispatcher, and production observation | Not started |
+| AC1 | A persisted parent horse profile completes trainer and race-history discovery without creating sire/dam Horse tasks; sire/dam text remains persisted in the parent profile. | T1-T3 | production-shaped handler integration test | Verified |
+| AC2 | No Horse is created, selected, or merged from a pedigree name alone when official/source-bound same-name records exist or candidates are ambiguous. | T2 | resolver/handler counterexamples for namesake, ambiguity, and conflicting birth evidence | Verified |
+| AC3 | Official source-bound namesakes are distinct Horses, while a source-less same-name candidate or a same-race source change remains fail-closed and atomic. | T1-T3 | resolver and collected-race counterexamples | Verified |
+| AC4 | The exact 12 generated pedigree resources are closed without retry and no unrelated failure is changed. | T4 | exact production membership and post-operation reconciliation | Connected |
+| AC5 | All three race write failures are retried after deployment and persist result/lifecycle evidence without identity or horse-number errors. | T5 | live parser probes plus controlled production verification | Connected |
+| AC6 | The correction does not materially amplify JRA requests; concurrency, deduplication, 429 handling, and pipeline safety-stop behavior remain verified. | T2-T3 | request-count, retry classification, dispatcher, and production observation | Connected |
 
 ## Task plan
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State | Routing | Audit | Result metrics |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | Define relation-level discovery persistence/API and exact operator projection. | Lead planner | High capability; persistence/public-contract decision | T4,T5 | change record and contract design only | schema/entry-point inventory | settled contract and migration/rollback plan | Dependent | Lead - public contract and persistence decision | none | unavailable; retries 0; corrections 0; reviews 1 |
-| T2 | Implement two-phase source-bound pedigree discovery without relaxing identity guards. | Cheap executor | gpt-6-luna high; bounded implementation after contract freeze | T1 | Collector, Contracts, API identity integration, focused tests | focused contract/handler/resolver tests | passing production-shaped counterexamples | Dependent | Cheap executor - frozen, independently testable implementation | pending dispatch | unavailable; retries 0; corrections 0; reviews 0 |
-| T3 | Integrate partial completion, idempotency, retry and operator visibility. | Cheap executor | gpt-6-luna high; bounded implementation after T1/T2 | T1,T2 | Collection Platform and admin projection, tests | persistence/restart/UI contract suites | observable unresolved relation and successful parent continuation | Dependent | Cheap executor - frozen integration after T1/T2 | pending dispatch | unavailable; retries 0; corrections 0; reviews 0 |
-| T4 | Inventory and classify the 12 no-candidate resources read-only. | Cheap investigator | gpt-6-luna high; read-only evidence gathering | authenticated session | production GET/repair preview only | exact 12-item reconciliation | finite inventory with evidence category per resource | Externally blocked | Cheap investigator - bounded read-only inventory | pending dispatch | unavailable; retries 0; corrections 0; reviews 0 |
-| T5 | Diagnose the two race write failures and choose controlled recovery per item. | Cheap investigator, Lead accepts recovery | gpt-6-luna high; read-only first, Lead owns mutation decision | authenticated session | production GET only until evidence is reviewed | two complete resource/attempt/batch/assignment traces | two item-level cause and recovery decisions | Externally blocked | Cheap investigator for evidence; Lead for mutation decision | pending dispatch | unavailable; retries 0; corrections 0; reviews 0 |
+| T1 | Freeze removal of unsafe pedigree expansion and official-namesake behavior. | Lead planner | High capability; identity/public-contract decision | T4,T5 | change record and contract design only | source and production inventory | approved decisions and counterexamples | Verified | Lead - public contract and identity decision | none | unavailable; retries 0; corrections 0; reviews 2 |
+| T2 | Remove unsafe pedigree expansion and allow distinct official source-bound namesakes without relaxing ambiguous legacy guards. | Cheap executor | gpt-6-luna high; bounded implementation after contract freeze | T1 | Collector, API identity integration, focused tests | focused handler/resolver/collected-race tests | focused API 13 passed; focused Collector 45 passed | Verified | Cheap executor - frozen, independently testable implementation | requested model not externally observable; patch attributable to this task | unavailable; retries 0; corrections 0; reviews 1 |
+| T3 | Verify integrated persistence, request volume, idempotency, and existing operator behavior. | Cheap verifier | gpt-6-luna high; mechanical verification after T2 | T1,T2 | tests and verification only | full suites, solution build, formatter | API 407 passed/1 skipped; Collector 411 passed; build and format clean | Verified | Cheap verifier - regression gates | requested model not externally observable; no separate patch | unavailable; retries 0; corrections 0; reviews 1 |
+| T4 | Inventory and classify the 12 no-candidate resources read-only. | Cheap investigator | gpt-6-luna high; read-only evidence gathering | authenticated session | production GET/repair preview only | exact 12-item reconciliation | all 12 are name-only pedigree expansions; 10 no-candidate and 2 ambiguous namesakes | Verified | Cheap investigator - bounded read-only inventory | none | unavailable; retries 0; corrections 0; reviews 1 |
+| T5 | Diagnose the three race write failures and choose controlled recovery per item. | Cheap investigator, Lead accepts recovery | gpt-6-luna high; read-only first, Lead owns mutation decision | authenticated session | production GET and isolated live probe | three complete result identity inventories | all official rows carry normalized Horse identity; timestamps and inner codes recorded | Verified | Cheap investigator for evidence; Lead for mutation decision | none | unavailable; retries 1; corrections 0; reviews 1 |
 | T6 | Final integrated regression, deployment, bounded recovery, and production verification. | Cheap verifier and Lead | gpt-6-luna high for mechanical gates; Lead for acceptance/operation | T1,T2,T3,T4,T5 and approval | tests/workflows/approved production operation | CI/deploy plus terminal resource evidence | passing gates and production terminal evidence | Dependent | Cheap verifier for gates; Lead for final acceptance | pending dispatch | unavailable; retries 0; corrections 0; reviews 0 |
 
 The read/write scopes overlap across the collection identity and persistence path, so implementation is
@@ -148,10 +148,14 @@ verification use the repository's requested cheap route after approval.
 - **Design and task-split review:** Initial classification is complete, but T1 cannot be frozen until
   T4/T5 provide the exact finite production inventory. ACs cover happy path, namesake/ambiguity,
   partial failure/restart, request amplification, controlled recovery, and operator visibility.
-- **Concern and agreement review:** C3 and C4 remain `Open decision`; approval is not requested yet.
-- **Pre-implementation review:** Not applicable until the record is approved.
-- **Checkpoint review:** Group-level production evidence and current source paths were compared. No
-  mutation occurred and no group is claimed recovered.
+- **Concern and agreement review:** Production inventory and live parser probes resolved C3/C4. The
+  user's instruction to perform all corrections and production recovery approves the decisions and ACs.
+- **Pre-implementation review:** Complete. T2 owned the handler, resolver, and focused tests. The frozen
+  decisions required no public contract, schema, or definition-revision change. No production mutation
+  occurs before CI/deployment. Scope expansion beyond exact pedigree tasks and three races returns to design.
+- **Checkpoint review:** Complete for local implementation. Focused identity behavior passed before full
+  regressions. The patch removes outbound pedigree identity calls, so it reduces rather than amplifies JRA/API
+  traffic. No production mutation occurred and no group is claimed recovered yet.
 - **Final review:** Pending.
 
 ## Documentation updates
@@ -166,11 +170,20 @@ verification use the repository's requested cheap route after approval.
 - `codegraph status`: index up to date (1,482 files, 15,914 nodes).
 - CodeGraph trace and literal search confirmed the producer, resolver, handler catch boundary,
   failure-impact classification, existing repair preview, and operator presentation paths.
-- Production dashboard evidence was last captured at 2026-10-02 11:39 JST before the authenticated
-  browser session expired. No secret was written to commands, logs, documentation, or commits.
+- Authenticated production inventory at 2026-10-02 11:56 JST reconciled 12 obsolete pedigree resources,
+  11 parent profiles blocked after persistence, and three race write failures. The safety pause was active.
+- Live parser probes under `probe/` confirmed official Horse identities for all rows of the three affected
+  races: 18 (`20160417:Nakayama:11`), 16 (`20260503:Tokyo:6`), and 14 (`20260531:Kyoto:6`).
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/... --filter CollectionIdentityResolverTests`: 13 passed.
+- `dotnet test tests/HorseRacingPrediction.Collector.Tests/... --filter JraSubjectCollectionHandlerTests`: 45 passed.
+- Full API suite: 407 passed, 1 skipped. Full Collector suite: 411 passed.
+- Solution build completed with zero warnings and errors; `dotnet format --verify-no-changes --no-restore`,
+  `git diff --check`, and the change-record audit validator passed.
+- No secret was written to commands, logs, documentation, or commits.
 
 ## Deviations and follow-up
 
-The current browser session is no longer authenticated. T4 and T5 require a new authenticated read-only
-session to collect the finite item inventory. The next operation is to read the three failure groups and
-their bounded resource/attempt/batch histories; it is not to retry or dismiss them.
+The authenticated production inventory is complete. The pipeline is intentionally paused by the latest
+`DomainWriteRejected / HorseIdentityConflict` safety stop. Next: implement and deploy, close exactly the
+12 obsolete pedigree tasks, recover the 11 parent profiles and three races, verify terminal data, then
+resume the pipeline and observe progress.
