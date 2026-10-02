@@ -183,7 +183,10 @@ verification use the repository's requested cheap route after approval.
   resumed the pipeline, and reconciled zero actionable failure groups. Exercising the bulk specific-resource
   flow then reproduced a stale UI binding: the visible IDs were not available to preview validation. An initial
   `Immediate` correction passed component tests and CI but failed its production browser counterexample. T7
-  therefore uses a native `oninput` binding and exercises that actual DOM event in the component test.
+  therefore uses a native `oninput` binding and exercises that actual DOM event in the component test. The
+  resulting request exposed a second stale default: manual and bulk requests always sent revision 1 although
+  the deployed `race-detail` revision is 6 and subject definitions are also newer. T7 now derives the revision
+  from `CollectionDefinitionRevisions` for both request paths and asserts the serialized request revision.
 - Solution build completed with zero warnings and errors; `dotnet format --verify-no-changes --no-restore`,
   `git diff --check`, and the change-record audit validator passed.
 - No secret was written to commands, logs, documentation, or commits.

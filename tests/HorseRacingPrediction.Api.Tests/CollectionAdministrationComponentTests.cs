@@ -176,6 +176,8 @@ public sealed class CollectionAdministrationComponentTests
         cut.WaitForAssertion(() => Assert.IsFalse(cut.FindComponents<FluentButton>()
             .Last(x => x.Markup.Contains("再取得を依頼</")).Instance.Disabled));
         Assert.AreEqual(1, handler.Previews);
+        Assert.AreEqual(CollectionDefinitionRevisions.HorseProfile,
+            handler.LastBulkPreviewRequest?.Selection?.RequestedRevision);
     }
 
     [TestMethod]
@@ -253,6 +255,7 @@ public sealed class CollectionAdministrationComponentTests
         Assert.AreEqual(CollectionResourceType.Horse, handler.LastManualRequest.ResourceType);
         Assert.AreEqual("H002", handler.LastManualRequest.ResourceId);
         Assert.AreEqual("horse-profile", handler.LastManualRequest.DefinitionId);
+        Assert.AreEqual(CollectionDefinitionRevisions.HorseProfile, handler.LastManualRequest.RequestedRevision);
     }
 
     [TestMethod]
@@ -280,6 +283,7 @@ public sealed class CollectionAdministrationComponentTests
         Assert.IsNotNull(handler.LastManualRequest);
         Assert.AreEqual(CollectionResourceType.Race, handler.LastManualRequest.ResourceType);
         Assert.AreEqual("race-detail", handler.LastManualRequest.DefinitionId);
+        Assert.AreEqual(CollectionDefinitionRevisions.RaceDetail, handler.LastManualRequest.RequestedRevision);
         Assert.AreEqual(CollectionLane.Realtime, handler.LastManualRequest.Lane);
         Assert.AreEqual(100, handler.LastManualRequest.Priority);
     }
@@ -440,6 +444,7 @@ public sealed class CollectionAdministrationComponentTests
         public int TaskViewCountRequests { get; private set; }
         public int LatestOnlyRequests { get; private set; }
         public CreateCollectionRequest? LastManualRequest { get; private set; }
+        public PreviewCollectionTaskBatchRequest? LastBulkPreviewRequest { get; private set; }
         public CreateExplicitUrlCollectionRequest? LastExplicitUrlRequest { get; private set; }
         public CreateRacePeriodRecollectionRequest? LastRacePeriodRequest { get; private set; }
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
@@ -456,6 +461,7 @@ public sealed class CollectionAdministrationComponentTests
             if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/task-batch-previews"))
             {
                 Previews++;
+                LastBulkPreviewRequest = await request.Content!.ReadFromJsonAsync<PreviewCollectionTaskBatchRequest>(cancellationToken);
                 return await Ok(new { preview = new CollectionBulkPreview(Definition, 1, 1, [Resource]) });
             }
             if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/recollection-previews"))
