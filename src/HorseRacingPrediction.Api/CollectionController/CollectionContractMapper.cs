@@ -100,7 +100,9 @@ internal static class CollectionContractMapper
     internal static CollectionTaskViewCountsDto ToDto(CollectionTaskViewCounts value) => new(value.Counts);
     internal static CollectionProgressSnapshotDto ToDto(CollectionProgressSnapshot value)
         => new(value.ResourcesByType, value.StatesByStatus, value.ActiveTasksByLane,
-            value.ActiveTasksByPriority, value.StatesByDefinition, value.RetryWaiting);
+            value.ActiveTasksByPriority, value.StatesByDefinition, value.RetryWaiting,
+            (value.LaneActivity ?? []).Select(x => new CollectionLaneActivityDto(x.Lane, x.DueReady, x.Running,
+                x.LastStartedAt, x.LastCompletedAt)).ToArray());
     internal static CollectionReadinessSnapshotDto ToDto(CollectionReadinessSnapshot value)
         => new(value.PendingHorseRequests, value.PendingJockeyRequests,
             value.PendingRaceResultRequests, value.PendingTrainerRequests);

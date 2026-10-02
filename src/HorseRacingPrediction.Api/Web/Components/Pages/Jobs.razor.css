@@ -32,6 +32,25 @@
     min-width: 0;
 }
 
+.lane-activity {
+    margin: 12px 0 16px;
+}
+
+.lane-activity .section-title {
+    margin-bottom: 8px;
+}
+
+.lane-activity-grid {
+    border: 1px solid var(--neutral-stroke-rest);
+    border-radius: 6px;
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.lane-activity-grid fluent-data-grid {
+    min-width: 680px;
+}
+
 .collection-refreshing {
     align-items: center;
     color: var(--neutral-foreground-hint);

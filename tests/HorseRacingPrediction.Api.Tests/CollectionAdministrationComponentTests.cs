@@ -21,6 +21,53 @@ namespace HorseRacingPrediction.Api.Tests;
 public sealed class CollectionAdministrationComponentTests
 {
     [TestMethod]
+    public async Task Jobs_ShowsEveryLaneWithAuthoritativeActivityTimestamps()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var started = new DateTimeOffset(2026, 10, 2, 23, 39, 0, TimeSpan.FromHours(9));
+        var handler = new ResourceHandler
+        {
+            LaneActivity =
+            [
+                new(CollectionLane.Realtime, 584, 2, started, started.AddMinutes(1)),
+                new(CollectionLane.Normal, 2427, 1, started.AddMinutes(-1), started),
+                new(CollectionLane.Background, 541, 0, null, null)
+            ]
+        };
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+
+        var cut = context.Render<Jobs>();
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "処理区分別の実行状況"));
+        var grid = cut.Find("[aria-label='処理区分別の実行状況']");
+        StringAssert.Contains(grid.TextContent, "リアルタイム");
+        StringAssert.Contains(grid.TextContent, "通常");
+        StringAssert.Contains(grid.TextContent, "バックグラウンド");
+        StringAssert.Contains(grid.TextContent, "584");
+        StringAssert.Contains(grid.TextContent, "2,427");
+        StringAssert.Contains(grid.TextContent, "2026/10/02 23:39:00");
+        StringAssert.Contains(grid.TextContent, "実績なし");
+
+        handler.LaneActivity =
+        [
+            new(CollectionLane.Realtime, 10, 1, started.AddMinutes(5), started.AddMinutes(4)),
+            new(CollectionLane.Normal, 20, 0, started, started),
+            new(CollectionLane.Background, 30, 1, started.AddMinutes(3), started.AddMinutes(2))
+        ];
+        await ClickFluentButtonAsync(cut, "更新");
+
+        cut.WaitForAssertion(() =>
+        {
+            var refreshed = cut.Find("[aria-label='処理区分別の実行状況']").TextContent;
+            StringAssert.Contains(refreshed, "2026/10/02 23:44:00");
+            StringAssert.Contains(refreshed, "30");
+        });
+    }
+
+    [TestMethod]
     public async Task LoadFailure_ShowsErrorState()
     {
         var (app, original) = await TestApplicationFactory.CreateAsync();
@@ -433,6 +480,7 @@ public sealed class CollectionAdministrationComponentTests
     {
         public bool EmptyPlatform { get; init; }
         public IReadOnlyList<CollectionFailureGroup> FailureGroups { get; init; } = [];
+        public IReadOnlyList<CollectionLaneActivity> LaneActivity { get; set; } = [];
         private static readonly ResourceKey Resource = new(CollectionResourceType.Horse, "jra", "H001");
         private static readonly CollectionDefinitionId Definition = new("horse-profile");
         public int ManualRequests { get; private set; }
@@ -550,7 +598,7 @@ public sealed class CollectionAdministrationComponentTests
                     progress = new CollectionProgressSnapshot(
                     new Dictionary<CollectionResourceType, int>(), new Dictionary<CollectionStateStatus, int>(),
                     new Dictionary<CollectionLane, int>(), new Dictionary<int, int>(),
-                    new Dictionary<string, int>(), 0)
+                    new Dictionary<string, int>(), 0, LaneActivity)
                 },
                 "/api/v2/admin/collection/operations/progress" => new
                 {
@@ -558,7 +606,7 @@ public sealed class CollectionAdministrationComponentTests
                     new Dictionary<CollectionResourceType, int> { [CollectionResourceType.Horse] = 1 },
                     new Dictionary<CollectionStateStatus, int> { [CollectionStateStatus.Pending] = 1 },
                     new Dictionary<CollectionLane, int>(), new Dictionary<int, int>(),
-                    new Dictionary<string, int>(), 0)
+                    new Dictionary<string, int>(), 0, LaneActivity)
                 },
                 "/api/v2/admin/collection/operations/task-view-counts" => new
                 {

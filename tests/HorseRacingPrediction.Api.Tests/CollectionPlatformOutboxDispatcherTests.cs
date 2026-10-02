@@ -11,6 +11,41 @@ namespace HorseRacingPrediction.Api.Tests;
 public sealed class CollectionPlatformOutboxDispatcherTests
 {
     [TestMethod]
+    public async Task HostedLoop_RetriesAfterCycleFailure_AndDispatchesWithoutRestart()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "platform-cycle-retry", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions { StateDirectory = directory }));
+            await store.RegisterDefinitionAsync(new("horse-profile"), "horse", CollectionResourceType.Horse, 1, "initial", false);
+            await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "H-cycle"), new("horse-profile"),
+                1, CollectionReason.Initial, DateTimeOffset.UtcNow.AddMinutes(-1));
+            var queue = new RecordingQueue();
+            var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
+                Options.Create(new CollectionQueueOptions
+                {
+                    Enabled = true,
+                    DispatchIntervalSeconds = 1,
+                    DispatchBatchSize = 1,
+                    AggregationDelayMilliseconds = 0
+                }), NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
+            var cycles = 0;
+            dispatcher.BeforeCycleAsync = _ => Interlocked.Increment(ref cycles) == 1
+                ? Task.FromException(new InvalidOperationException("fail once before dispatch"))
+                : Task.CompletedTask;
+
+            await dispatcher.StartAsync(CancellationToken.None);
+            await WaitUntilAsync(() => queue.Messages.Count == 1, TimeSpan.FromSeconds(4));
+            await dispatcher.StopAsync(CancellationToken.None);
+
+            Assert.IsGreaterThanOrEqualTo(2, cycles);
+            Assert.HasCount(1, queue.Messages);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [TestMethod]
     public async Task WakeQueue_ReceivesOnlyOpaqueReservationIdentifiers()
     {
         var directory = Path.Combine(Path.GetTempPath(), "platform-wake", Guid.NewGuid().ToString("N"));
@@ -379,6 +414,14 @@ public sealed class CollectionPlatformOutboxDispatcherTests
             lock (_gate) Messages.Add(envelope);
             return Task.FromResult(new CollectionQueueSendReceipt(Guid.NewGuid().ToString("N")));
         }
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow + timeout;
+        while (!condition() && DateTimeOffset.UtcNow < deadline)
+            await Task.Delay(25);
+        Assert.IsTrue(condition(), "The expected dispatcher activity did not occur before timeout.");
     }
 
     private sealed class WakeRecordingQueue : ICollectionPlatformTaskQueue

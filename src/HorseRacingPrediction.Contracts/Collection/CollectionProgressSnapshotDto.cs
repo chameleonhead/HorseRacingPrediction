@@ -6,4 +6,8 @@ public sealed record CollectionProgressSnapshotDto(
     IReadOnlyDictionary<CollectionLane, int> ActiveTasksByLane,
     IReadOnlyDictionary<int, int> ActiveTasksByPriority,
     IReadOnlyDictionary<string, int> StatesByDefinition,
-    int RetryWaiting);
+    int RetryWaiting,
+    IReadOnlyList<CollectionLaneActivityDto> LaneActivity);
+
+public sealed record CollectionLaneActivityDto(CollectionLane Lane, int DueReady, int Running,
+    DateTimeOffset? LastStartedAt, DateTimeOffset? LastCompletedAt);

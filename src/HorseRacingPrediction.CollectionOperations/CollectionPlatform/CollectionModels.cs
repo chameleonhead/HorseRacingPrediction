@@ -279,7 +279,11 @@ public sealed record CollectionProgressSnapshot(
     IReadOnlyDictionary<CollectionLane, int> ActiveTasksByLane,
     IReadOnlyDictionary<int, int> ActiveTasksByPriority,
     IReadOnlyDictionary<string, int> StatesByDefinition,
-    int RetryWaiting);
+    int RetryWaiting,
+    IReadOnlyList<CollectionLaneActivity>? LaneActivity = null);
+
+public sealed record CollectionLaneActivity(CollectionLane Lane, int DueReady, int Running,
+    DateTimeOffset? LastStartedAt, DateTimeOffset? LastCompletedAt);
 
 public sealed record CollectionReadinessSnapshot(int PendingHorseRequests, int PendingJockeyRequests,
     int PendingRaceResultRequests, int PendingTrainerRequests)

@@ -14,6 +14,50 @@ namespace HorseRacingPrediction.Api.Tests;
 public sealed class CollectionOperationsEndpointTests
 {
     [TestMethod]
+    public async Task Progress_ReturnsEveryLaneWithDueRunningAndLifecycleTimestamps()
+    {
+        var directory = CreateDirectory();
+        try
+        {
+            var store = await CreateStoreAsync(directory);
+            var startedAt = DateTimeOffset.UtcNow.AddMinutes(-3);
+            var finishedAt = startedAt.AddMinutes(1);
+            var completed = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "H-complete"),
+                new("horse-profile"), 1, CollectionReason.Initial, startedAt.AddMinutes(-1),
+                CollectionLane.Background, 10);
+            var completedLease = await store.AcquireAsync(completed.TaskId!.Value, 1, startedAt,
+                TimeSpan.FromMinutes(5));
+            await store.CompleteAttemptAsync(completed.TaskId.Value, completedLease!.LeaseToken, finishedAt,
+                new(CollectionAttemptResult.Succeeded));
+            var running = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "H-running"),
+                new("horse-profile"), 1, CollectionReason.Initial, startedAt,
+                CollectionLane.Background, 10);
+            await store.AcquireAsync(running.TaskId!.Value, 1, startedAt.AddMinutes(2), TimeSpan.FromMinutes(5));
+            await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "H-due"), new("horse-profile"),
+                1, CollectionReason.Initial, DateTimeOffset.UtcNow.AddMinutes(-1), CollectionLane.Normal, 30);
+            await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "H-future"), new("horse-profile"),
+                1, CollectionReason.Initial, DateTimeOffset.UtcNow.AddDays(1), CollectionLane.Realtime, 100);
+            await using var app = await CreateApplicationAsync(store);
+            using var client = app.GetTestClient();
+
+            var response = await client.GetFromJsonAsync<GetCollectionProgressResponse>(
+                "/api/v2/admin/collection/operations/progress");
+
+            Assert.IsNotNull(response);
+            Assert.HasCount(3, response.Progress.LaneActivity);
+            var realtime = response.Progress.LaneActivity.Single(x => x.Lane == CollectionLane.Realtime);
+            var normal = response.Progress.LaneActivity.Single(x => x.Lane == CollectionLane.Normal);
+            var background = response.Progress.LaneActivity.Single(x => x.Lane == CollectionLane.Background);
+            Assert.AreEqual(0, realtime.DueReady);
+            Assert.AreEqual(1, normal.DueReady);
+            Assert.AreEqual(1, background.Running);
+            Assert.AreEqual(startedAt.AddMinutes(2), background.LastStartedAt);
+            Assert.AreEqual(finishedAt, background.LastCompletedAt);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [TestMethod]
     public async Task RacePeriodRecollection_ValidatesRangeWithoutCreatingTasks()
     {
         var directory = CreateDirectory();

@@ -32,6 +32,21 @@
 }
 
 <div class="collection-status-heading"><strong>収集状況</strong>@if(progress is not null){<span class="hint">収集対象 @progress.ResourcesByType.Values.Sum() 件</span>}</div>
+@if (progress is not null)
+{
+    <section class="lane-activity" aria-labelledby="lane-activity-title">
+        <div class="section-title"><h2 id="lane-activity-title">処理区分別の実行状況</h2><span class="hint">実処理の記録</span></div>
+        <div class="lane-activity-grid">
+            <FluentDataGrid Items="@LaneActivity.AsQueryable()" TGridItem="CollectionLaneActivity" aria-label="処理区分別の実行状況">
+                <TemplateColumn Title="処理区分">@LaneLabel(context.Lane)</TemplateColumn>
+                <TemplateColumn Title="実行待ち">@context.DueReady.ToString("N0")</TemplateColumn>
+                <TemplateColumn Title="実行中">@context.Running.ToString("N0")</TemplateColumn>
+                <TemplateColumn Title="最終開始">@ActivityTime(context.LastStartedAt)</TemplateColumn>
+                <TemplateColumn Title="最終完了">@ActivityTime(context.LastCompletedAt)</TemplateColumn>
+            </FluentDataGrid>
+        </div>
+    </section>
+}
 <FluentTabs Class="page-view-tabs collection-status-tabs" ShowActiveIndicator="true" ActiveTabId="@view" ActiveTabIdChanged="OnStatusTabChanged" aria-label="収集状況">
     @foreach (var option in views)
     {
@@ -316,6 +331,10 @@ else
     private static string StateStatusLabel(CollectionStateStatus v)=>v switch{CollectionStateStatus.Unknown=>"未確認",CollectionStateStatus.Pending=>"処理待ち",CollectionStateStatus.Collecting=>"収集中",CollectionStateStatus.Current=>"収集済み",CollectionStateStatus.RefreshDue=>"更新待ち",CollectionStateStatus.Stale=>"要再取得",CollectionStateStatus.Failed=>"失敗",CollectionStateStatus.Unavailable=>"取得不可",_=>v.ToString()};
     private static string StateStatusTone(CollectionStateStatus v)=>v switch{CollectionStateStatus.Current=>"success",CollectionStateStatus.Failed or CollectionStateStatus.Stale=>"danger",CollectionStateStatus.Collecting=>"info",CollectionStateStatus.Unavailable=>"neutral",_=>"warning"};
     private static string Time(DateTimeOffset? value)=>JstTime.Format(value);
+    private IReadOnlyList<CollectionLaneActivity> LaneActivity => Enum.GetValues<CollectionLane>()
+        .Select(lane => progress?.LaneActivity?.FirstOrDefault(x => x.Lane == lane)
+            ?? new CollectionLaneActivity(lane, 0, 0, null, null)).ToArray();
+    private static string ActivityTime(DateTimeOffset? value)=>value.HasValue?JstTime.Format(value,"yyyy/MM/dd HH:mm:ss"):"実績なし";
     private static string LaneLabel(CollectionLane v)=>v switch{CollectionLane.Realtime=>"リアルタイム",CollectionLane.Normal=>"通常",CollectionLane.Background=>"バックグラウンド",_=>v.ToString()};
     private sealed record FilterOption(string Value,string Label);
     private sealed record CollectionKind(string Type,string Definition,int Revision,string Label,string Description);

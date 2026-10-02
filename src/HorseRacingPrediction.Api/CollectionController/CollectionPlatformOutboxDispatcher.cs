@@ -33,15 +33,37 @@ public sealed class CollectionPlatformOutboxDispatcher(
     private long _lastTelemetrySnapshotUtcTicks;
 
     internal Func<IReadOnlyList<PendingCollectionDispatch>, CancellationToken, Task>? BeforeReservationAsync { get; set; }
+    internal Func<CancellationToken, Task>? BeforeCycleAsync { get; set; }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!_options.Enabled) return;
         while (!stoppingToken.IsCancellationRequested)
         {
-            await DispatchOnceAsync(stoppingToken).ConfigureAwait(false);
-            await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, _options.DispatchIntervalSeconds)), stoppingToken)
-                .ConfigureAwait(false);
+            try
+            {
+                if (BeforeCycleAsync is not null)
+                    await BeforeCycleAsync(stoppingToken).ConfigureAwait(false);
+                await DispatchOnceAsync(stoppingToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Collection dispatch cycle failed; the dispatcher will retry after the configured interval.");
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, _options.DispatchIntervalSeconds)), stoppingToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
         }
     }
 

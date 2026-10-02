@@ -2602,13 +2602,24 @@ public sealed partial class CollectionPlatformStore
         var active = tasks.Where(x => x.Status is CollectionTaskStatus.Pending or CollectionTaskStatus.Ready
             or CollectionTaskStatus.Running or CollectionTaskStatus.RetryWaiting or CollectionTaskStatus.WaitingDiscovery)
             .ToList();
+        var now = JstTime.Now();
+        var laneActivity = Enum.GetValues<CollectionLane>().Select(lane =>
+        {
+            var laneTasks = tasks.Where(x => x.Lane == lane).ToList();
+            return new CollectionLaneActivity(lane,
+                laneTasks.Count(x => x.Status == CollectionTaskStatus.Ready && x.AvailableAt <= now),
+                laneTasks.Count(x => x.Status == CollectionTaskStatus.Running),
+                laneTasks.Where(x => x.StartedAt.HasValue).Select(x => x.StartedAt).Max(),
+                laneTasks.Where(x => x.FinishedAt.HasValue).Select(x => x.FinishedAt).Max());
+        }).ToArray();
         return new(
             resources.GroupBy(x => x.Type).ToDictionary(x => x.Key, x => x.Count()),
             states.GroupBy(x => x.Status).ToDictionary(x => x.Key, x => x.Count()),
             active.GroupBy(x => x.Lane).ToDictionary(x => x.Key, x => x.Count()),
             active.GroupBy(x => x.Priority).ToDictionary(x => x.Key, x => x.Count()),
             states.GroupBy(x => x.DefinitionId).ToDictionary(x => x.Key, x => x.Count(), StringComparer.Ordinal),
-            tasks.Count(x => x.Status == CollectionTaskStatus.RetryWaiting));
+            tasks.Count(x => x.Status == CollectionTaskStatus.RetryWaiting),
+            laneActivity);
     }
 
     public async Task<CollectionPipelineState> GetPipelineStateAsync(CancellationToken cancellationToken = default)
