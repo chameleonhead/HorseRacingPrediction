@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261001_cheap-first-agent-workflow",
+  "taskId": "T8",
+  "attemptId": "T8-A2",
+  "state": "completed",
+  "taskDifficulty": "low",
+  "acceptanceCriteria": ["AC9", "AC10"],
+  "route": {"tier": "verifier", "requestedModel": "gpt-6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "runtime has not independently exposed the verifier model"},
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "runtime has not exposed per-verifier token usage"},
+  "scope": ["read-only", "docs/changes/20261001_cheap-first-agent-workflow"],
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "runtime has not exposed verifier review usage or active time"},
+  "overhead": {"availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "runtime has not exposed attributable verifier overhead"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "runtime has not exposed attributable verifier elapsed time"},
+  "startRevision": "9f331601776e6878b4ffb92729a2caa7050e7714",
+  "endRevisionOrPatch": "review:T8-A2",
+  "outcome": {"verificationPassed": true, "qualityPassed": true, "scopePassed": true, "independentChallenge": "Five semantic forward scenarios plus the canonical repository-root validator and full orchestration test suite", "retries": 0, "leadCorrections": 0, "reviewPasses": 1, "promoted": false, "escapedDefects": 0, "escalations": 0, "reviewMode": "ac-group", "detailReviewReason": null, "decision": "accept"}
+}

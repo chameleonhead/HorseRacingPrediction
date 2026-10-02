@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261001_cheap-first-agent-workflow",
+  "taskId": "T7",
+  "attemptId": "T7-A1",
+  "state": "completed",
+  "taskDifficulty": "low",
+  "acceptanceCriteria": ["AC9", "AC10"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime has not independently exposed the worker model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime has not exposed per-worker token usage"
+  },
+  "scope": [
+    ".codex/skills/agent-task-orchestration/SKILL.md",
+    ".codex/skills/agent-task-orchestration/scripts"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "runtime did not expose review usage or active time"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "active preparation, integration, and audit time was not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "runtime did not expose reliable worker elapsed time"
+  },
+  "startRevision": "9f331601776e6878b4ffb92729a2caa7050e7714",
+  "endRevisionOrPatch": "working-tree:T7-A1",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Lead inspected the attributable diff and reran the focused semantic policy tests",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

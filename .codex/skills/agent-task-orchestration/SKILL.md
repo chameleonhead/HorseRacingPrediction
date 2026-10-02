@@ -1,11 +1,22 @@
 ---
 name: agent-task-orchestration
-description: Plan and govern delegated coding, research, and review work with explicit scope, evidence, parallelization, escalation, and outcome-cost gates; use when a task should be split across agents or model tiers.
+description: Plan and govern ordinary repository development and investigation, including serialized tasks, with explicit scope, evidence, routing, and verification; delegation is optional.
 ---
 
 # Agent Task Orchestration
 
-Use this skill when a task has separable workstreams and delegation could reduce elapsed time or cost. The lead remains accountable for the design, integration, and final decision. Do not delegate authority for requirements, security-sensitive decisions, destructive actions, or acceptance of the final result.
+Use this skill for ordinary repository development or investigation, including serialized work; delegation is optional. Do not use it for an answer that needs neither repository investigation nor a repository change. The lead remains accountable for the design, integration, and final decision. Do not delegate authority for requirements, security-sensitive decisions, destructive actions, or acceptance of the final result.
+
+## First implementation-write gate
+
+Before the first implementation edit, record a concise readiness note in the governing task or change record with:
+
+- confirmation that this skill was loaded in the current turn;
+- the repository-informed plan: purpose, investigation findings, files to change, ordered implementation steps, unresolved specification questions, and verification commands with expected results;
+- the route and requested model/reasoning, whether the assigned executor accepted and is available, and the task state. Record the observed model and source only when telemetry exposes them; otherwise retain null with a reason. If the required Cheap Executor is unavailable, mark the task `Externally blocked` before implementation. Approval alone does not establish executor availability;
+- for a repository change record, a passing run of the canonical audit command `python scripts/audit_agent_execution.py <change-record-path>` from the repository root. Other validators apply only when their governed artifact and current state support pre-edit validation; record why a check does not apply. DDD approval remains a separate, unchanged gate.
+
+Lead-owned planning or change-record edits may establish this gate. Implementation files remain untouched until all applicable readiness facts are recorded and validation passes. This gate applies only before an implementation edit; a read-only repository investigation may use the skill without it.
 
 ## Operating model
 

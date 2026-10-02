@@ -4,14 +4,14 @@
 - Change record schema: 2
 - Owner: Main agent / user
 - Created: 2026-10-01
-- Updated: 2026-10-01
+- Updated: 2026-10-03
 
 ## Completion summary
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Policy edits | Complete | Four canonical workflow documents updated; historical records and application code untouched. |
-| Verification | Complete | Skill validators, record/audit validators, validator tests, and independent S1-S9 review passed. Lead integrated acceptance completed. |
+| Policy edits | Complete | The orchestration skill now covers ordinary serialized repository work and defines an explicit first-implementation-write gate. |
+| Verification | Complete | T8-A2 accepted AC9-AC10 after five independent scenarios and all mechanical gates passed. |
 | Deployment/operation | Not applicable | No application or runtime changes. |
 
 ## Context and goals
@@ -49,6 +49,8 @@ The Luna/high default is an explicit user-directed preference, not a proven cost
 | AC6 | DDD approval, ownership, AC/task traceability, independent evidence, audits, and final acceptance remain consistent. | T2-T6 | Skill/record validators; integrated review | Verified |
 | AC7 | User-directed routing preference is separate from efficiency claims; requested/observed model and unavailable telemetry remain distinct. | T2-T5 | Audit schema and policy review | Verified |
 | AC8 | No contradictory active routing rule remains; historical records and application code are untouched, and docs validate. | T2-T6 | Exact policy search, `git diff --check`, `git status`, validators | Verified |
+| AC9 | The orchestration skill is discoverable for ordinary serialized repository development and investigation, not only work that appears worth splitting or delegating. | T7-T8 | frontmatter validation and an independent serialized-task forward scenario | Verified |
+| AC10 | Before the first implementation edit, the workflow records skill loading, the repository-informed plan, route/model availability, and a passing applicable audit gate; an unavailable required executor becomes `Externally blocked` before editing. | T7-T8 | policy assertions, validator tests, and unavailable-worker forward scenario | Verified |
 
 ## Task plan
 
@@ -60,6 +62,9 @@ The Luna/high default is an explicit user-directed preference, not a proven cost
 | T4 | Clarify model-neutral DDD Lead acceptance | Cheap Executor; Lead accepts | gpt-6-luna/high | Frozen decision; separate file | `.codex/skills/document-driven-development/SKILL.md` | `quick_validate.py`, DDD tests, AC review | T4-A1 audit and integrated diff | Verified | Cheap for bounded documentation | T4-A1 | unavailable; retries 0; corrections 0; reviews 1 |
 | T5 | Run independent forward scenarios and final validation | Independent Cheap Verifier | gpt-6-luna/high | T2-T4 | Read-only + this record | Validators, scenarios, diff/status checks | Independent review report and focused rerun | Verified | Read-only independent review | none | unavailable; retries 1; corrections 1; reviews 1 |
 | T6 | Perform Lead integrated acceptance and reconcile record | Lead; model-neutral | no model selected | T5 | This change record | Integrated policy/AC/task review | Final acceptance decision and reconciled status | Verified | Lead final acceptance | none | unavailable; retries 0; corrections 0; reviews 1 |
+| T7 | Tighten skill discovery and add the first-write orchestration gate with regression tests | Cheap Executor | gpt-6-luna/high requested; observed unavailable | AC9-AC10 approved | `.codex/skills/agent-task-orchestration/SKILL.md`<br>`.codex/skills/agent-task-orchestration/scripts` | skill quick validator; focused skill tests; unavailable-worker and serialized-task scenarios | bounded diff and executable evidence | Verified | Worker — bounded skill and semantic policy-test edit authorized by user | T7-A1, T7-A2 | unavailable; retries 0; corrections 1; reviews 2 |
+| T8 | Independently verify the entry and first-write gates | Cheap Verifier | gpt-6-luna/high requested; observed unavailable | T7 | `read-only`<br>`docs/changes/20261001_cheap-first-agent-workflow` | skill validator, full orchestration tests, audit validator, `git diff --check` | AC9-AC10 independent evidence | Verified | Worker — independent read-only scenario and mechanical verification | T8-A1, T8-A2 | unavailable; retries 0; corrections 0; reviews 2 |
+| T9 | Perform Lead integrated acceptance and close the reopened record | Lead | model-neutral | T8 | this record only | zero-open-item and scope review | reconciled AC/task/concern evidence | Verified | Lead final acceptance | none | unavailable; retries 0; corrections 0; reviews 1 |
 
 ## Forward tests
 
@@ -83,6 +88,7 @@ S9. Fragmentation increases rework → combine or resize cheap slices / have Lea
 | C4 | Cheap-model unavailability/failure could silently make Strong the executor. | Keep ordinary implementation blocked until eligible executor; Strong is planner only / AC3-4; S7 | Recommend | Approved | Resolved in design |
 | C5 | Removing high-tier defaults could accidentally weaken verification or DDD. | Preserve all governance and mechanical gates; Lead acceptance is model-neutral / AC5-6; S8 | Recommend | Approved | Resolved in design |
 | C6 | Keeping old and new operational rules together creates conflicting instructions. | Replace conflicting active text; do not rewrite history / AC8; T2-T5 | Recommend deletion/replacement | Approved: delete conflicting wording | Resolved in design |
+| C7 | On 2026-10-03 the dispatcher task began implementation before this skill was loaded. `AGENTS.md` requires the workflow for normal development, while this skill's description only advertises tasks that should be split or delegated. The body also lacks one compact, explicit pre-first-write checkpoint. | Expand only this skill's discovery description to ordinary repository work and add a four-fact first-write gate. Do not add a second orchestration framework or weaken DDD / AC9-AC10; T7-T9 | Recommend the narrow correction; required executor unavailability must block edits rather than silently using Lead. | Approved on 2026-10-03: 「変更をお願いします」 | Resolved in design |
 
 ## Inventory evidence
 
@@ -106,16 +112,19 @@ Short plan, completed through T2-T4: (1) replaced the AGENTS routing section; (2
 - Read-only inventory requested gpt-6-luna/high; observed model and usage telemetry are unavailable.
 - Alternatives considered: keeping generic high-tier execution and relying on case-by-case judgment leaves the default ambiguous; treating five samples as an approval gate blocks the user's explicit preference; spawning all five roles for every task adds unnecessary overhead. Residual risks are model availability and unknown execution telemetry; preserve explicit blocker handling and make no efficiency claim without evidence.
 - After policy edits: both skill quick validators passed; the audit validator accepted this record; DDD record validation reported zero issues; the existing audit test suite passed 33 tests; `git diff --check` passed. The first independent S1-S8 review found one ambiguous audit phrase that could imply Strong implementation; it is logged as T3-A1 revise, corrected, and the focused S1-S9 rerun passed (T3-A2). AC1-AC8 and T1-T5 are Verified. T6 is Verified after Lead integrated acceptance.
-- Final review: AC1-AC8 and T1-T6 are Verified. No approved work or blocking finding remains. Commit the validated policy and evidence as one purpose; no application deployment is required.
+- Final review: AC1-AC10 and T1-T9 are Verified. No approved work or blocking finding remains. Commit the validated policy and evidence as one purpose; no application deployment is required.
 
 ### Review finding and closure
 
 - T3-A1: independent review found `execution-audit.md` said to “promote the route” when fragmentation increased cost, which could contradict Strong planning-only. Recorded as one escaped wording defect; corrected to have the Lead reconsider the user-directed default while retaining the Strong boundary. T3-A2 is the focused correction and verification record.
 - Forward coverage adds S9 to test cost/rework deterioration without allowing automatic promotion of implementation to Strong.
+- T8-A1 found that an older skill-local audit script rejects an active record whose schema differs from its assumptions. T7-A2 clarified that the repository-root `python scripts/audit_agent_execution.py <change-record-path>` command is the canonical pre-edit gate and that other validators apply only when their governed artifact and current state support pre-edit validation. T8-A2 then accepted AC9-AC10 across five semantic scenarios. The older script remains outside this approved scope and is not presented as canonical.
 
 ### Final integrated acceptance
 
 Lead accepted the integrated four-file policy against AC1-AC8 and the independent S1-S9 evidence. Final decision clarification explicitly assigns Router/Verifier to Cheap, keeps Router out of ordinary code edits, requires checking guidance/patterns/safe defaults before specification questions, and preserves Execution Mode question gates. This was policy adjudication, not application implementation. The attempted duplicate Lead patch did not apply; delegated policy edits were preserved. Initial commentary claiming delegation unavailable was incorrect: the original dispatch was accepted and the worker delivered the changes.
+
+Lead also accepted the reopened change against AC9-AC10. The dispatcher failure demonstrated a missing discovery and first-write control, T7 added the narrow skill entry and regression assertions, T8-A1 exposed validator ambiguity, T7-A2 resolved the canonical-command boundary, and T8-A2 independently accepted the result. The changed implementation scope remains limited to the orchestration skill and its tests; application code and the separately blocked dispatcher incident record are excluded.
 
 Mechanical checks (bundled Python executable `C:/Users/yuto.nagano/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`):
 

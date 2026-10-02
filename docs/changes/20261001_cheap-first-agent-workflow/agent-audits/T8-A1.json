@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261001_cheap-first-agent-workflow",
+  "taskId": "T8",
+  "attemptId": "T8-A1",
+  "state": "completed",
+  "taskDifficulty": "low",
+  "acceptanceCriteria": ["AC9", "AC10"],
+  "route": {
+    "tier": "verifier",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime has not independently exposed the verifier model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime has not exposed per-verifier token usage"
+  },
+  "scope": ["read-only", "docs/changes/20261001_cheap-first-agent-workflow"],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "runtime did not expose review usage or active time"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "active effort telemetry was not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "runtime did not expose reliable verifier elapsed time"
+  },
+  "startRevision": "9f331601776e6878b4ffb92729a2caa7050e7714",
+  "endRevisionOrPatch": "review:T8-A1",
+  "outcome": {
+    "verificationPassed": false,
+    "qualityPassed": false,
+    "scopePassed": true,
+    "independentChallenge": "Five policy scenarios passed, but validator command ambiguity made the first-write gate non-deterministic",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 1,
+    "escalations": 0,
+    "reviewMode": "detailed",
+    "detailReviewReason": "conflicting validator outcomes",
+    "decision": "revise"
+  }
+}
