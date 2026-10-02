@@ -143,6 +143,7 @@ before any retry or repair decision.
 | T10 | Release legacy dispatched Ready envelopes that permanently consume the single production dispatch slot without an execution lease. | Cheap executor/verifier | gpt-6-luna high; bounded schema recovery | T9 deployment observation | collection schema migration and dispatch regression | v19 fixture with one stranded legacy envelope becomes dispatchable while leased/current envelopes remain unchanged | schema-v20 regression passed; production dispatch resumption remains under T6 | Verified | Cheap executor/verifier - closure item required for production terminal verification | no delegated patch | unavailable; retries 1; corrections 1; reviews 2 |
 | T11 | Adopt the first official JRA identity for a single source-less opaque legacy Horse aggregate. | Cheap executor/verifier | gpt-6-luna high; bounded identity fallback | T10 production replay | Horse resolver and focused tests | unique v4 opaque legacy candidate succeeds; multiple candidates and source-bound v5 namesakes remain rejected | focused 16 passed; API 411 passed/1 skipped; production replay remains under T6 | Verified | Cheap executor/verifier - closure item after exact-resource evidence proved unavailable for first-seen legacy Horses | no delegated patch | unavailable; retries 1; corrections 1; reviews 2 |
 | T12 | Preserve the conflicting Horse name and normalized official source in isolated identity failure evidence. | Cheap executor/verifier | gpt-6-luna high; diagnostic contract preserving error code | T11 production replay | race identity rejection detail and regression | `HorseIdentityConflict` code remains stable while detail identifies the candidate | focused 17 passed; API 412 passed/1 skipped; build and format passed | Verified | Cheap executor/verifier - bounded observability closure item | no delegated patch | unavailable; retries 1; corrections 1; reviews 1 |
+| T13 | Exclude superseded Horse aggregates from collection identity resolution. | Cheap executor/verifier | gpt-6-luna high; bounded read-model correction | T12 production evidence | Horse resolver load query and collected-race regression | a redirect source cannot create a false same-name identity conflict | focused 18 passed; API 413 passed/1 skipped; build and format passed | Verified | Cheap executor/verifier - closure item after exact Horse/source evidence | no delegated patch | unavailable; retries 0; corrections 0; reviews 1 |
 
 The read/write scopes overlap across the collection identity and persistence path, so implementation is
 serialized. No subagent was dispatched for the current bounded investigation; the Lead retained the
@@ -177,6 +178,10 @@ verification use the repository's requested cheap route after approval.
   scheduling could create exact Horse collection metadata. The remaining candidate is a single same-name,
   source-less opaque legacy aggregate. T11 may adopt that aggregate only when it is the sole source-less namesake
   and birth evidence does not conflict; multiple candidates and any conflicting source-bound identity remain closed.
+- **Checkpoint review (T13):** T12 identified `20260131:Kyoto:3` Horse `キャッチアシーフ` with official source
+  `jra-horse:2023103810`. The public Horse search exposes one active aggregate, while the resolver loaded active and
+  superseded redirect-source rows. Redirect sources are already hidden from business reads and must likewise be
+  excluded before collection identity matching; redirect targets and all non-redirected namesakes remain unchanged.
 - **Final review:** Pending.
 
 ## Documentation updates
@@ -208,6 +213,9 @@ verification use the repository's requested cheap route after approval.
 - T12 diagnostic identity guards: 17 passed. The full API suite passed 412 tests with 1 skipped; solution build and
   formatter verification remained clean. The rejection retains `HorseIdentityConflict` as its machine-readable
   code while its isolated detail identifies the conflicting Horse name and normalized official source.
+- T13 redirect-source exclusion: focused identity guards passed 18 tests. The full API suite passed 413 tests with
+  1 skipped; solution build and formatter verification remained clean. The regression proves that collection writes
+  retain the active redirect target and never reselect the superseded source aggregate.
 - CI run 36958984104 and deployment run 36958984094 passed; the deployment drain step and API health check succeeded.
 - Production recovery closed exactly 12 obsolete pedigree failures, queued 11 parent profiles and three races,
   resumed the pipeline, and reconciled zero actionable failure groups. Exercising the bulk specific-resource

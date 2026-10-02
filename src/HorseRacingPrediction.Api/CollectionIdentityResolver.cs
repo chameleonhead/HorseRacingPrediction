@@ -35,6 +35,7 @@ internal static class CollectionIdentityResolver
         CollectionPlatformStore? collection, CancellationToken token)
     {
         var rows = await (from horse in db.Horses.AsNoTracking()
+                          where !db.HorseIdentityRepairRedirects.Any(redirect => redirect.SourceHorseId == horse.HorseId)
                           join profile in db.Set<HorseRacingPrediction.Application.Queries.ReadModels.JraSubjectProfileReadModel>().AsNoTracking()
                               on horse.HorseId equals profile.SubjectId into profiles
                           from profile in profiles.DefaultIfEmpty()

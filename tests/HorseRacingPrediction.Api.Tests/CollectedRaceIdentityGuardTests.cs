@@ -139,6 +139,49 @@ public sealed class CollectedRaceIdentityGuardTests
     }
 
     [TestMethod]
+    public async Task CollectedIdentityIgnoresSupersededRedirectSourceHorse()
+    {
+        var (app, client) = await CreateApplicationAsync();
+        await using var application = app;
+        using var http = client;
+        const string name = "リダイレクト済馬";
+        var sourceIdentity = SourceIdentity("131001");
+        var supersededId = DeterministicIdGenerator.BuildHorseId(name, sourceIdentity);
+        var activeId = DeterministicIdGenerator.BuildHorseId(name);
+        foreach (var horseId in new[] { supersededId, activeId })
+        {
+            using var registration = await http.PostAsJsonAsync("/api/horses",
+                SubjectRequestFactory.RegisterHorse(name, name, null, null, horseId: horseId), JsonOptions);
+            registration.EnsureSuccessStatusCode();
+        }
+
+        var provider = app.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>();
+        using (var db = provider.CreateContext())
+        {
+            db.HorseIdentityRepairRedirects.Add(new()
+            {
+                SourceHorseId = supersededId,
+                TargetHorseId = activeId,
+                RepairId = "test-redirect",
+                JraIdentity = sourceIdentity,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var request = new DeclareRaceResultBulkRequest(new(new DateOnly(2036, 9, 24), "京都", 3,
+            "リダイレクト除外検証", EntryCount: 1, IsRaceCard: true,
+            Entries: [Entry(1, name, sourceIdentity)]));
+        using var response = await http.PostAsJsonAsync("/api/races/result-bulk", request, JsonOptions);
+        var body = await ReadBodyAsync(response);
+
+        Assert.IsTrue(body.Result.CorePersisted, string.Join(" | ", body.Result.Errors));
+        var entries = await GetEntriesAsync(http, body.Result.RaceId);
+        Assert.IsTrue(entries.ContainsKey(activeId));
+        Assert.IsFalse(entries.ContainsKey(supersededId));
+    }
+
+    [TestMethod]
     public async Task LegacyHorseUsesExactCollectionResourceSourceBeforeProfileProjectionExists()
     {
         var (app, client) = await CreateApplicationAsync();
