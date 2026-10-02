@@ -43,7 +43,7 @@ public sealed class SharedSubjectIdentityTests
 
         var mismatch = Assert.ThrowsExactly<JraSubjectIdentificationException>(() =>
             SubjectProfilePageParser.Validate(page, new("Horse", "サンプル",
-                SourceIdentity: "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024102539/OTHER")));
+                SourceIdentity: "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024102538/OTHER")));
         Assert.AreEqual(JraSubjectIdentificationFailureKind.SourceIdentityMismatch, mismatch.Kind);
     }
 

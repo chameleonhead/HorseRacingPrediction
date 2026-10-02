@@ -29,6 +29,32 @@ public sealed class JraSourceIdentityTests
     }
 
     [TestMethod]
+    public void HorseIdentity_NormalizesResultAndProfileRoutesToTheSameStableHorseNumber()
+    {
+        const string profile = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002013106119/DD";
+        const string result = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud102013106119/C4";
+
+        Assert.IsTrue(JraSourceIdentity.TryNormalizeHorse(profile, out var profileIdentity));
+        Assert.IsTrue(JraSourceIdentity.TryNormalizeHorse(result, out var resultIdentity));
+        Assert.AreEqual("jra-horse:2013106119", profileIdentity);
+        Assert.AreEqual(profileIdentity, resultIdentity);
+        Assert.IsTrue(JraSourceIdentity.MatchesHorse(profile, result));
+        Assert.AreEqual(DeterministicIdGenerator.BuildHorseId("ゴールドドリーム", profile),
+            DeterministicIdGenerator.BuildHorseId("ゴールドドリーム", result));
+    }
+
+    [TestMethod]
+    public void NormalizeHorseUrl_PreservesTheNavigableCnameWhileIdentityUsesStableHorseNumber()
+    {
+        const string result = "/JRADB/accessU.html?CNAME=pw01dud102013106119/C4";
+
+        var normalized = JraSourceIdentity.NormalizeHorseUrl(result);
+
+        Assert.AreEqual("https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud102013106119/C4",
+            normalized?.AbsoluteUri);
+    }
+
+    [TestMethod]
     public void HorseIdentity_RejectsMissingOrDuplicateCName()
     {
         Assert.IsFalse(JraSourceIdentity.TryNormalizeHorse("https://www.jra.go.jp/JRADB/accessU.html", out _));

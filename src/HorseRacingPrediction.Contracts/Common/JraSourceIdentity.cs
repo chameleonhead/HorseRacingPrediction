@@ -5,6 +5,8 @@ namespace HorseRacingPrediction.Contracts.Common;
 public static class JraSourceIdentity
 {
     private const string HorsePath = "/JRADB/accessU.html";
+    private const string HorseCnamePrefix = "pw01dud";
+    private const int HorseNumberLength = 10;
 
     public static bool MatchesHorse(string? left, string? right) =>
         TryNormalizeHorse(left, out var leftIdentity)
@@ -14,9 +16,34 @@ public static class JraSourceIdentity
     public static bool TryNormalizeHorse(string? value, out string identity)
     {
         identity = string.Empty;
+        if (!TryParseHorse(value, out _, out var cname)) return false;
+
+        var separator = cname.IndexOf('/');
+        var route = separator > 0 ? cname[..separator] : string.Empty;
+        var horseNumberStart = HorseCnamePrefix.Length + 2;
+        var hasStableHorseNumber = separator > 0
+            && route.Length == horseNumberStart + HorseNumberLength
+            && route.StartsWith(HorseCnamePrefix, StringComparison.OrdinalIgnoreCase)
+            && route.AsSpan(HorseCnamePrefix.Length, 2).ToString().All(char.IsDigit)
+            && route.AsSpan(horseNumberStart, HorseNumberLength).ToString().All(char.IsDigit);
+        identity = hasStableHorseNumber
+            ? $"jra-horse:{route[horseNumberStart..]}"
+            : cname;
+        return true;
+    }
+
+    public static Uri? NormalizeHorseUrl(string? value)
+    {
+        if (!TryParseHorse(value, out _, out var cname) || !TryNormalizeHorse(value, out _)) return null;
+        return new Uri($"https://www.jra.go.jp{HorsePath}?CNAME={cname}");
+    }
+
+    private static bool TryParseHorse(string? value, out Uri uri, out string cname)
+    {
+        uri = null!;
+        cname = string.Empty;
         if (string.IsNullOrWhiteSpace(value)) return false;
 
-        Uri? uri;
         if (Uri.TryCreate(value, UriKind.Absolute, out var absolute) && absolute.Scheme is "http" or "https")
         {
             if (!string.Equals(absolute.Host, "www.jra.go.jp", StringComparison.OrdinalIgnoreCase)) return false;
@@ -33,17 +60,7 @@ public static class JraSourceIdentity
             || !string.Equals(uri.AbsolutePath, HorsePath, StringComparison.OrdinalIgnoreCase)) return false;
         var values = HttpUtility.ParseQueryString(uri.Query).GetValues("CNAME");
         if (values is not { Length: 1 } || string.IsNullOrWhiteSpace(values[0])) return false;
-        identity = values[0]!.Trim();
-        if (identity.Any(character => !char.IsLetterOrDigit(character) && character is not ('/' or '_' or '-')))
-        {
-            identity = string.Empty;
-            return false;
-        }
-        return true;
+        cname = values[0]!.Trim();
+        return cname.All(character => char.IsLetterOrDigit(character) || character is '/' or '_' or '-');
     }
-
-    public static Uri? NormalizeHorseUrl(string? value)
-        => TryNormalizeHorse(value, out var identity)
-            ? new Uri($"https://www.jra.go.jp{HorsePath}?CNAME={identity}")
-            : null;
 }
