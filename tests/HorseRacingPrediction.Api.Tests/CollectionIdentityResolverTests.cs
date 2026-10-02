@@ -58,13 +58,32 @@ public sealed class CollectionIdentityResolverTests
     }
 
     [TestMethod]
-    public void OfficialIdentity_RejectsSameNameSourceBoundHorseWithDifferentIdentity()
+    public void OfficialIdentity_AllowsSameNameSourceBoundHorseWithDifferentIdentity()
     {
         const string name = "公式識別子競合馬";
         const string otherIdentity =
             "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002020654321/00";
         var horses = new[]
         {
+            new CollectionIdentityResolver.HorseIdentityRow(
+                DeterministicIdGenerator.BuildHorseId(name, otherIdentity), name, null, otherIdentity),
+        };
+
+        var resolved = CollectionIdentityResolver.ResolveHorse(horses, name, OfficialIdentity, null);
+
+        Assert.AreEqual(DeterministicIdGenerator.BuildHorseId(name, OfficialIdentity), resolved);
+    }
+
+    [TestMethod]
+    public void OfficialIdentity_RejectsSourceLessCandidateAlongsideSourceBoundNamesake()
+    {
+        const string name = "曖昧な同名馬";
+        const string otherIdentity =
+            "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002020654321/00";
+        var horses = new[]
+        {
+            new CollectionIdentityResolver.HorseIdentityRow(
+                DeterministicIdGenerator.BuildHorseId(name), name, null, null, true),
             new CollectionIdentityResolver.HorseIdentityRow(
                 DeterministicIdGenerator.BuildHorseId(name, otherIdentity), name, null, otherIdentity),
         };

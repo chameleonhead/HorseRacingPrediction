@@ -16,27 +16,24 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class JraSubjectCollectionHandlerTests
 {
     [TestMethod]
-    public async Task ParentIdentityFailure_KeepsSavedProfileAndReportsUnfinishedDiscovery()
+    public async Task PedigreeNames_DoNotCallIdentityApiOrBlockRaceHistoryDiscovery()
     {
         var sink = new RecordingProfileSink();
         var requests = new RecordingRequestSink();
-        using var http = new HttpClient(new IdentityEvidenceResponse()) { BaseAddress = new("https://api.test") };
+        using var http = new HttpClient(new IdentityApiMustNotBeCalledResponse()) { BaseAddress = new("https://api.test") };
         var handler = new JraSubjectProfileCollectionHandler(
             JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse),
             SubjectSessions("A", new Dictionary<string, string> { ["生年月日"] = "2020年1月1日", ["父"] = "B", ["母"] = "C" }),
             sink, requests, entityWriter: new HorseRacingPrediction.Collector.Http.HttpDataCollectionWriteService(http, new()));
         var completion = await handler.CollectAsync(SubjectTask("horse-a", "A", new Dictionary<string, string>()), CancellationToken.None);
         Assert.HasCount(1, sink.Saves);
+        Assert.AreEqual("B", sink.Saves.Single().Profile.Fields["父"]);
+        Assert.AreEqual("C", sink.Saves.Single().Profile.Fields["母"]);
         Assert.IsEmpty(requests.Requests);
-        Assert.AreEqual(CollectionAttemptResult.PermanentFailure, completion.Result);
-        Assert.AreEqual(CollectionFailureImpact.Isolated, completion.FailureImpact);
-        Assert.AreEqual("HorseIdentityEvidenceRequired", completion.ErrorCode);
-        StringAssert.Contains(completion.ErrorMessage!, "ProfilePersisted=True");
-        StringAssert.Contains(completion.ErrorMessage!, "ReferenceDiscovery=Incomplete; RaceHistory=NotStarted");
-        Assert.IsNotNull(completion.RequestedUrl);
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
     }
 
-    private sealed class IdentityEvidenceResponse : HttpMessageHandler
+    private sealed class IdentityApiMustNotBeCalledResponse : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token) =>
             Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.UnprocessableEntity)
@@ -410,7 +407,7 @@ public sealed class JraSubjectCollectionHandlerTests
     }
 
     [TestMethod]
-    public async Task HorseProfile_DeduplicatesParentsAndRejectsSelfReference()
+    public async Task HorseProfile_RequestsTrainerButDoesNotExpandPedigreeNames()
     {
         var descriptor = JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse);
         var currentId = DeterministicIdGenerator.BuildHorseId("A");
@@ -428,8 +425,8 @@ public sealed class JraSubjectCollectionHandlerTests
 
         await handler.CollectAsync(SubjectTask(currentId, "A", new Dictionary<string, string>()), CancellationToken.None);
 
-        Assert.HasCount(2, requests.Requests);
-        Assert.HasCount(1, requests.Requests.Where(x => x.Resource.Type == CollectionResourceType.Horse));
+        Assert.HasCount(1, requests.Requests);
+        Assert.IsFalse(requests.Requests.Any(x => x.Resource.Type == CollectionResourceType.Horse));
         Assert.HasCount(1, requests.Requests.Where(x => x.Resource.Type == CollectionResourceType.Trainer));
         Assert.IsFalse(requests.Requests.Any(x => x.Resource.Id == currentId));
         Assert.IsTrue(requests.Requests.All(x => x.Attributes["discoveryDepth"] == "1"));
@@ -768,7 +765,7 @@ public sealed class JraSubjectCollectionHandlerTests
     }
 
     [TestMethod]
-    public async Task HorseProfile_CyclicParentGraphStopsAtAncestor()
+    public async Task HorseProfile_PedigreeNamesNeverCreateRecursiveTasks()
     {
         var descriptor = JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse);
         var aId = DeterministicIdGenerator.BuildHorseId("A");
@@ -777,15 +774,7 @@ public sealed class JraSubjectCollectionHandlerTests
                 SubjectSessions("A", new Dictionary<string, string> { ["生年月日"] = "2020年1月1日", ["父"] = "B" }),
                 new RecordingProfileSink(), firstRequests)
             .CollectAsync(SubjectTask(aId, "A", new Dictionary<string, string>()), CancellationToken.None);
-        var b = firstRequests.Requests.Single();
-
-        var secondRequests = new RecordingRequestSink();
-        await new JraSubjectProfileCollectionHandler(descriptor,
-                SubjectSessions("B", new Dictionary<string, string> { ["生年月日"] = "2010年1月1日", ["父"] = "A" }),
-                new RecordingProfileSink(), secondRequests)
-            .CollectAsync(SubjectTask(b.Resource.Id, "B", b.Attributes), CancellationToken.None);
-
-        Assert.IsEmpty(secondRequests.Requests);
+        Assert.IsEmpty(firstRequests.Requests);
     }
 
     [TestMethod]

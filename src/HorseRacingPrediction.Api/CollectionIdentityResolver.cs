@@ -106,7 +106,7 @@ internal static class CollectionIdentityResolver
                     throw new InvalidOperationException("HorseIdentityConflict");
                 return legacyCandidates[0].HorseId;
             }
-            if (named.Length > 0)
+            if (named.Any(x => string.IsNullOrWhiteSpace(x.SourceIdentity)))
                 throw new InvalidOperationException("HorseIdentityConflict");
         }
         return id;

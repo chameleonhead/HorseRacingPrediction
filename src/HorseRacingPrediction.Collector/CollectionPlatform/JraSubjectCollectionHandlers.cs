@@ -305,8 +305,6 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         var references = new (CollectionResourceType Type, string? Name)[]
         {
             (CollectionResourceType.Trainer, Field(profile.Fields, "調教師", "調教師名")),
-            (CollectionResourceType.Horse, NormalizePedigreeReference(Field(profile.Fields, "父", "父馬"))),
-            (CollectionResourceType.Horse, NormalizePedigreeReference(Field(profile.Fields, "母", "母馬"))),
         };
         foreach (var reference in references.Where(x => !string.IsNullOrWhiteSpace(x.Name))
                      .Select(x => (x.Type, Name: x.Name!.Trim())).Distinct())
@@ -336,14 +334,6 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
                     ["discoveredFromId"] = task.Resource.Id,
                 }, cancellationToken).ConfigureAwait(false);
         }
-    }
-
-    private static string? NormalizePedigreeReference(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return null;
-        var marker = value.IndexOfAny(['(', '（']);
-        var normalized = (marker < 0 ? value : value[..marker]).Trim();
-        return normalized.EndsWith("産駒", StringComparison.Ordinal) ? null : normalized;
     }
 
     private async Task DiscoverHorseRaceHistoryAsync(LeasedCollectionTask task, JraSubjectPage firstPage,
