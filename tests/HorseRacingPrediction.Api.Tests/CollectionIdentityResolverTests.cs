@@ -25,6 +25,41 @@ public sealed class CollectionIdentityResolverTests
     }
 
     [TestMethod]
+    public void OfficialIdentity_ReusesSingleSourceLessOpaqueLegacyHorse()
+    {
+        const string name = "旧世代ID馬";
+        const string legacyId = "horse-60c4cf5b-0233-4dd2-b7d0-5fc378f67ab0";
+        var horses = new[]
+        {
+            new CollectionIdentityResolver.HorseIdentityRow(
+                legacyId, name, new DateOnly(2021, 3, 12), null),
+        };
+
+        var resolved = CollectionIdentityResolver.ResolveHorse(
+            horses, name, OfficialIdentity, new DateOnly(2021, 3, 12));
+
+        Assert.AreEqual(legacyId, resolved);
+    }
+
+    [TestMethod]
+    public void OfficialIdentity_RejectsMultipleSourceLessOpaqueLegacyHorses()
+    {
+        const string name = "旧世代同名馬";
+        var horses = new[]
+        {
+            new CollectionIdentityResolver.HorseIdentityRow(
+                "horse-b30f7434-18d2-46ad-b539-5caf8787b7be", name, null, null),
+            new CollectionIdentityResolver.HorseIdentityRow(
+                "horse-bbd5b513-c71f-4e96-a1aa-251211df29b2", name, null, null),
+        };
+
+        var error = Assert.ThrowsExactly<InvalidOperationException>(() =>
+            CollectionIdentityResolver.ResolveHorse(horses, name, OfficialIdentity, null));
+
+        Assert.AreEqual("AmbiguousHorseIdentity", error.Message);
+    }
+
+    [TestMethod]
     public void OfficialIdentity_RejectsMultipleLegacyCandidates()
     {
         const string name = "同名馬";

@@ -85,6 +85,10 @@ internal static class CollectionIdentityResolver
 
     internal static string ResolveHorse(IReadOnlyList<HorseIdentityRow> horses, string name, string? source, DateOnly? birth)
     {
+        static bool IsOpaqueLegacyId(string horseId) => horseId.StartsWith("horse-", StringComparison.Ordinal)
+            && Guid.TryParse(horseId["horse-".Length..], out var value)
+            && value.ToString("D")[14] == '4';
+
         if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("MissingHorseName");
         if (!string.IsNullOrWhiteSpace(source) && !JraSourceIdentity.TryNormalizeHorse(source, out _))
             throw new InvalidOperationException("InvalidHorseSourceIdentity");
@@ -110,8 +114,12 @@ internal static class CollectionIdentityResolver
         }
         if (hasSource)
         {
-            var legacyCandidates = named.Where(x => x.HasNameDerivedIdentity
-                && string.IsNullOrWhiteSpace(x.SourceIdentity) && x.HorseId != id).ToArray();
+            // Pre-source Horse aggregates were created both from names and from caller-supplied opaque IDs.
+            // A single source-less namesake is the only safe adoption candidate when its first official
+            // JRA identity arrives; multiple candidates or a source-bound namesake remain fail-closed.
+            var legacyCandidates = named.Where(x => (x.HasNameDerivedIdentity || IsOpaqueLegacyId(x.HorseId))
+                && string.IsNullOrWhiteSpace(x.SourceIdentity)
+                && x.HorseId != id).ToArray();
             if (legacyCandidates.Length > 1)
                 throw new InvalidOperationException("AmbiguousHorseIdentity");
             if (legacyCandidates.Length == 1)
