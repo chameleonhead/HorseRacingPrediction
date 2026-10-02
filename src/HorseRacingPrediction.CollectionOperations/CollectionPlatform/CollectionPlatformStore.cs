@@ -1895,6 +1895,40 @@ public sealed partial class CollectionPlatformStore
         finally { _gate.Release(); }
     }
 
+    public async Task<int> ReleaseOrphanedReadyDispatchesAsync(CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            if (!await db.Controls.AnyAsync(x => x.ControlId == "pipeline" && x.IsPaused, cancellationToken)
+                .ConfigureAwait(false))
+                throw new InvalidOperationException("The collection pipeline must be paused.");
+            var activeEnvelopeIds = db.ExecutionLeases
+                .Where(x => x.Status == "StartPending" || x.Status == "Running")
+                .Select(x => x.DispatchEnvelopeId);
+            var rows = await (from outbox in db.DispatchOutbox
+                              join task in db.Tasks on outbox.TaskId equals task.TaskId
+                              where outbox.DispatchedAt != null && outbox.EnvelopeId != null
+                                    && outbox.DispatchGeneration == task.DispatchGeneration
+                                    && task.Status == CollectionTaskStatus.Ready
+                                    && !activeEnvelopeIds.Contains(outbox.EnvelopeId.Value)
+                              select outbox).ToListAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var row in rows)
+            {
+                row.DispatchedAt = null;
+                row.ReservationToken = null;
+                row.ReservedUntilUnixMilliseconds = null;
+                row.EnvelopeId = null;
+                row.WakeId = null;
+                row.QueueMessageId = null;
+            }
+            if (rows.Count > 0) await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return rows.Count;
+        }
+        finally { _gate.Release(); }
+    }
+
     public async Task<CollectionExecutionAcquireResult> AcquireNextExecutionAsync(CollectionWakeSignal wake,
         string queueMessageId, DateTimeOffset now, TimeSpan startLease,
         CancellationToken cancellationToken = default, int aggregationDelayMilliseconds = 0)

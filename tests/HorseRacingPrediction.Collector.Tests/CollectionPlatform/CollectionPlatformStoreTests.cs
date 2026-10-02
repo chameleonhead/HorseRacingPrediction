@@ -565,6 +565,40 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual("2026-10-04", lease!.Attributes["weekendPriorityUntil"]);
     }
 
+    [TestMethod]
+    public async Task ReleaseOrphanedReadyDispatches_RequiresPauseAndReopensSentWakeWithoutLease()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Recovery, now);
+        var pending = (await store.GetPendingDispatchesAsync(now.AddSeconds(1), 10)).Single();
+        var envelopeId = Guid.NewGuid();
+        var wakeId = Guid.NewGuid();
+        var reservation = Guid.NewGuid().ToString("N");
+        Assert.IsTrue(await store.TryReserveDispatchesWithinCapacityAsync([pending.OutboxId], reservation,
+            envelopeId, wakeId, now, TimeSpan.FromSeconds(45), 1));
+        await using (var db = new CollectionPlatformDbContext(new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                         .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False").Options))
+        {
+            var row = await db.DispatchOutbox.SingleAsync(x => x.OutboxId == pending.OutboxId);
+            row.DispatchedAt = now;
+            row.ReservationToken = null;
+            row.ReservedUntilUnixMilliseconds = null;
+            row.WakeId = null;
+            row.QueueMessageId = "lost-message";
+            await db.SaveChangesAsync();
+        }
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
+            store.ReleaseOrphanedReadyDispatchesAsync());
+        await store.SetPausedAsync(true, "deployment", now.AddSeconds(1));
+
+        Assert.AreEqual(1, await store.ReleaseOrphanedReadyDispatchesAsync());
+        await store.SetPausedAsync(false, null, now.AddSeconds(2));
+        Assert.AreEqual(pending.OutboxId,
+            (await store.GetPendingDispatchesAsync(now.AddSeconds(3), 10)).Single().OutboxId);
+    }
+
     private async Task UpdatePersistedCompatibilityAttributesAsync(Guid taskId, string resourceAttributes,
         bool clearTaskMetadata = false)
     {

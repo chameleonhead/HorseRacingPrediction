@@ -38,7 +38,7 @@ curl() {
         return 90
       fi ;;
     */tasks\?*)
-      if [[ "$url" == *status=Running* ]]; then
+      if [[ "$url" == *statuses=Running* ]]; then
         if [ "$TEST_CASE" = invalid-tasks ]; then echo '{"page":{"items":"invalid"}}'
         elif [ "$TEST_CASE" = not-drained ]; then echo '{"page":{"items":[{}]}}'
         else echo '{"page":{"items":[]}}'
@@ -101,7 +101,7 @@ foreach ($case in @('running', 'paused', 'get-failure', 'invalid-state', 'pause-
 if ($script -notmatch '/api/v2/admin/collection' -or
     $script -notmatch '/pipeline-state' -or
     $script -notmatch '/failure-notifications\?view=Actionable&limit=1' -or
-    $script -notmatch '"\$base/tasks\?status=Running&limit=1"' -or
+    $script -notmatch '"\$base/tasks\?statuses=Running&pageSize=1"' -or
     $script -notmatch '\.pipeline\.isPaused' -or
     $script -notmatch '\.page\.items' -or
     $script -notmatch '\.notifications' -or
@@ -113,7 +113,7 @@ if ($script -notmatch '/api/v2/admin/collection' -or
 $guardBase = [regex]::Match($guardScript, 'base="\$API_BASE_URL(?<path>/api/v2/admin/collection)"')
 if (-not $guardBase.Success -or
     $guardScript -notmatch '"\$base/pipeline-state"' -or
-    $guardScript -notmatch '"\$base/tasks\?status=Running&limit=1"' -or
+    $guardScript -notmatch '"\$base/tasks\?statuses=Running&pageSize=1"' -or
     $guardScript -notmatch '-X PUT' -or
     $guardScript -notmatch '"pipeline":\{"paused":true' -or
     $guardScript -notmatch '\.pipeline\.isPaused' -or

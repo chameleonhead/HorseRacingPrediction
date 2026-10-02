@@ -89,7 +89,7 @@ public sealed class CollectionQueueCutoverContractTests
         StringAssert.Contains(guard, "\"$base/pipeline-state\"");
         StringAssert.Contains(guard,
             "--data '{\"pipeline\":{\"paused\":true,\"reason\":\"deployment version transition\"}}' \"$base/pipeline\"");
-        StringAssert.Contains(guard, "\"$base/tasks?status=Running&limit=1\"");
+        StringAssert.Contains(guard, "\"$base/tasks?statuses=Running&pageSize=1\"");
         StringAssert.Contains(guard, ".items | if type == \"array\" then length");
         Assert.IsFalse(guard.Contains("/api/admin/collection", StringComparison.Ordinal));
         Assert.IsFalse(guard.Contains("/pipeline/pause", StringComparison.Ordinal));
@@ -112,7 +112,7 @@ public sealed class CollectionQueueCutoverContractTests
             healthCheck, StringComparison.Ordinal);
         var restoreStep = apiDeploy[restore..];
         var pipelineStateRead = restoreStep.IndexOf("\"$base/pipeline-state\"", StringComparison.Ordinal);
-        var postDeployDrainCheck = restoreStep.IndexOf("\"$base/tasks?status=Running&limit=1\"",
+        var postDeployDrainCheck = restoreStep.IndexOf("\"$base/tasks?statuses=Running&pageSize=1\"",
             StringComparison.Ordinal);
         var actionableFailureCheck = restoreStep.IndexOf("\"$base/failure-notifications?view=Actionable&limit=1\"",
             StringComparison.Ordinal);
@@ -127,7 +127,7 @@ public sealed class CollectionQueueCutoverContractTests
         StringAssert.Contains(restoreStep,
             "base=\"https://${DOMAIN_NAME:-$(echo \"$LIGHTSAIL_HOST\" | tr '.' '-').sslip.io}/api/v2/admin/collection\"");
         StringAssert.Contains(restoreStep, "\"$base/pipeline-state\"");
-        StringAssert.Contains(restoreStep, "\"$base/tasks?status=Running&limit=1\"");
+        StringAssert.Contains(restoreStep, "\"$base/tasks?statuses=Running&pageSize=1\"");
         StringAssert.Contains(restoreStep, "\"$base/failure-notifications?view=Actionable&limit=1\"");
         StringAssert.Contains(restoreStep, "-X PUT");
         StringAssert.Contains(restoreStep, "--data '{\"pipeline\":{\"paused\":false}}' \"$base/pipeline\"");

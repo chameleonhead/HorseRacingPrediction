@@ -289,7 +289,7 @@ jobs:
           pipeline="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/pipeline-state")"
           jq -e '.pipeline.isPaused == true' <<<"$pipeline" >/dev/null
           case "$ORIGINAL_WAS_PAUSED" in true|false) ;; *) exit 1 ;; esac
-          running="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/tasks?status=Running&limit=1")"
+          running="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/tasks?statuses=Running&pageSize=1")"
           jq -e '.page.items | type == "array" and length == 0' <<<"$running" >/dev/null
           if [ "$ORIGINAL_WAS_PAUSED" = "false" ]; then
             # A task may have failed while draining under our deployment pause.
@@ -353,7 +353,7 @@ jobs:
           fi
           drained=false
           for attempt in $(seq 1 60); do
-            running="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/tasks?status=Running&limit=1")"
+            running="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/tasks?statuses=Running&pageSize=1")"
             count="$(jq -er '.page.items | if type == "array" then length else error("Invalid task list") end' <<<"$running")"
             if [ "$count" = "0" ]; then
               drained=true
@@ -365,6 +365,9 @@ jobs:
             echo "Collection drain timed out; pipeline remains paused" >&2
             exit 1
           fi
+          curl --fail --silent --show-error -X PUT \
+            -H "X-Api-Key: $API_KEY" -H 'Content-Type: application/json' \
+            --data '{"pipeline":{"paused":true,"reason":"deployment version transition"}}' "$base/pipeline" >/dev/null
 
       - name: Initialize collector infrastructure
         run: |
