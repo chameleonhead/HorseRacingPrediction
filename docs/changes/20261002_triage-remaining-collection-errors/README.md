@@ -1,6 +1,6 @@
 # Remaining collection error triage
 
-- Status: Approved
+- Status: Implemented
 - Change record schema: 2
 - Owner: Collection operations
 - Created: 2026-10-02
@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | Code | Complete | Unsafe pedigree expansion is removed and official source-bound namesakes remain distinct without weakening source-less ambiguity guards. |
 | Verification | Complete locally | Focused and full suites, build, formatting, diff hygiene, and live parser probes pass. |
-| Deployment/operation | In progress | CI/deployment and exact production recovery remain in T6. |
+| Deployment/operation | Complete | CI and deployment passed; the pipeline is running, all six priority-1000 recovery tasks succeeded, and the production dashboard reports zero failures. |
 
 ## Context
 
@@ -123,9 +123,9 @@ before any retry or repair decision.
 | AC1 | A persisted parent horse profile completes trainer and race-history discovery without creating sire/dam Horse tasks; sire/dam text remains persisted in the parent profile. | T1-T3 | production-shaped handler integration test | Verified |
 | AC2 | No Horse is created, selected, or merged from a pedigree name alone when official/source-bound same-name records exist or candidates are ambiguous. | T2 | resolver/handler counterexamples for namesake, ambiguity, and conflicting birth evidence | Verified |
 | AC3 | Official source-bound namesakes are distinct Horses, while a source-less same-name candidate or a same-race source change remains fail-closed and atomic. | T1-T3 | resolver and collected-race counterexamples | Verified |
-| AC4 | The exact 12 generated pedigree resources are closed without retry and no unrelated failure is changed. | T4 | exact production membership and post-operation reconciliation | Connected |
-| AC5 | All three race write failures are retried after deployment and persist result/lifecycle evidence without identity or horse-number errors. | T5 | live parser probes plus controlled production verification | Connected |
-| AC6 | The correction does not materially amplify JRA requests; concurrency, deduplication, 429 handling, and pipeline safety-stop behavior remain verified. | T2-T3 | request-count, retry classification, dispatcher, and production observation | Connected |
+| AC4 | The exact 12 generated pedigree resources are closed without retry and no unrelated failure is changed. | T4 | exact production membership and post-operation reconciliation | Verified |
+| AC5 | All three race write failures are retried after deployment and persist result/lifecycle evidence without identity or horse-number errors. | T5 | live parser probes plus controlled production verification | Verified |
+| AC6 | The correction does not materially amplify JRA requests; concurrency, deduplication, 429 handling, and pipeline safety-stop behavior remain verified. | T2-T3 | request-count, retry classification, dispatcher, and production observation | Verified |
 
 ## Task plan
 
@@ -136,19 +136,19 @@ before any retry or repair decision.
 | T3 | Verify integrated persistence, request volume, idempotency, and existing operator behavior. | Cheap verifier | gpt-6-luna high; mechanical verification after T2 | T1,T2 | tests and verification only | full suites, solution build, formatter | API 407 passed/1 skipped; Collector 411 passed; build and format clean | Verified | Cheap verifier - regression gates | requested model not externally observable; no separate patch | unavailable; retries 0; corrections 0; reviews 1 |
 | T4 | Inventory and classify the 12 no-candidate resources read-only. | Cheap investigator | gpt-6-luna high; read-only evidence gathering | authenticated session | production GET/repair preview only | exact 12-item reconciliation | all 12 are name-only pedigree expansions; 10 no-candidate and 2 ambiguous namesakes | Verified | Cheap investigator - bounded read-only inventory | none | unavailable; retries 0; corrections 0; reviews 1 |
 | T5 | Diagnose the three race write failures and choose controlled recovery per item. | Cheap investigator, Lead accepts recovery | gpt-6-luna high; read-only first, Lead owns mutation decision | authenticated session | production GET and isolated live probe | three complete result identity inventories | all official rows carry normalized Horse identity; timestamps and inner codes recorded | Verified | Cheap investigator for evidence; Lead for mutation decision | none | unavailable; retries 1; corrections 0; reviews 1 |
-| T6 | Final integrated regression, deployment, bounded recovery, and production verification. | Cheap verifier and Lead | gpt-6-luna high for mechanical gates; Lead for acceptance/operation | T1,T2,T3,T4,T5 and approval | tests/workflows/approved production operation | CI/deploy plus terminal resource evidence | passing gates and production terminal evidence | Dependent | Cheap verifier for gates; Lead for final acceptance | pending dispatch | unavailable; retries 0; corrections 0; reviews 0 |
-| T7 | Correct the bulk specific-resource input discovered during production recovery. | Cheap executor/verifier | gpt-6-luna high; local UI binding fix | T6 production exercise | Jobs UI and component test | component regression plus production browser verification | `Immediate` binding assertion and live preview/submit | In progress | Cheap executor/verifier - closure item within approved operator recovery | no delegated patch | unavailable; retries 1; corrections 1; reviews 1 |
-| T8 | Propagate stronger scheduling when a manual recovery reuses an active task. | Cheap executor/verifier | gpt-6-luna high; bounded persistence correction | T7 production exercise | collection platform store and focused regression | store regression plus production task detail | active task changes from Normal/50 to Realtime/100 without mutating its revision | In progress | Cheap executor/verifier - closure item within approved recovery | no delegated patch | unavailable; retries 1; corrections 1; reviews 1 |
+| T6 | Final integrated regression, deployment, bounded recovery, and production verification. | Cheap verifier and Lead | gpt-6-luna high for mechanical gates; Lead for acceptance/operation | T1,T2,T3,T4,T5 and approval | tests/workflows/approved production operation | CI/deploy plus terminal resource evidence | CI/deploy passed; six priority-1000 recovery tasks succeeded; failures 0; pipeline resumed | Verified | Cheap verifier for gates; Lead for final acceptance | no delegated patch | unavailable; retries 1 external Terraform download retry; corrections 0; reviews 1 |
+| T7 | Correct the bulk specific-resource input discovered during production recovery. | Cheap executor/verifier | gpt-6-luna high; local UI binding fix | T6 production exercise | Jobs UI and component test | component regression plus production browser verification | native `oninput`, current definition revisions, component regression, and production preview/submit verified | Verified | Cheap executor/verifier - closure item within approved operator recovery | no delegated patch | unavailable; retries 1; corrections 1; reviews 1 |
+| T8 | Propagate stronger scheduling when a manual recovery reuses an active task. | Cheap executor/verifier | gpt-6-luna high; bounded persistence correction | T7 production exercise | collection platform store and focused regression | store regression plus production task detail | production recovery tasks were upgraded to Realtime/1000 without changing requested revision and were executed | Verified | Cheap executor/verifier - closure item within approved recovery | no delegated patch | unavailable; retries 1; corrections 1; reviews 1 |
 | T9 | Recover legacy official Horse identities from their exact collection-resource metadata before profile projection exists. | Cheap executor/verifier | gpt-6-luna high; bounded identity evidence correction | T8 production exercise | collection platform read API, API identity integration, focused tests | production-shaped legacy-ID regression and mismatched-source counterexample | exact resource metadata resolves the matching official source while a different source remains rejected | Verified | Cheap executor/verifier - closure item within approved identity recovery | no delegated patch | unavailable; retries 1; corrections 1; reviews 2 |
 | T10 | Release legacy dispatched Ready envelopes that permanently consume the single production dispatch slot without an execution lease. | Cheap executor/verifier | gpt-6-luna high; bounded schema recovery | T9 deployment observation | collection schema migration and dispatch regression | v19 fixture with one stranded legacy envelope becomes dispatchable while leased/current envelopes remain unchanged | schema-v20 regression passed; production dispatch resumption remains under T6 | Verified | Cheap executor/verifier - closure item required for production terminal verification | no delegated patch | unavailable; retries 1; corrections 1; reviews 2 |
 | T11 | Adopt the first official JRA identity for a single source-less opaque legacy Horse aggregate. | Cheap executor/verifier | gpt-6-luna high; bounded identity fallback | T10 production replay | Horse resolver and focused tests | unique v4 opaque legacy candidate succeeds; multiple candidates and source-bound v5 namesakes remain rejected | focused 16 passed; API 411 passed/1 skipped; production replay remains under T6 | Verified | Cheap executor/verifier - closure item after exact-resource evidence proved unavailable for first-seen legacy Horses | no delegated patch | unavailable; retries 1; corrections 1; reviews 2 |
 | T12 | Preserve the conflicting Horse name and normalized official source in isolated identity failure evidence. | Cheap executor/verifier | gpt-6-luna high; diagnostic contract preserving error code | T11 production replay | race identity rejection detail and regression | `HorseIdentityConflict` code remains stable while detail identifies the candidate | focused 17 passed; API 412 passed/1 skipped; build and format passed | Verified | Cheap executor/verifier - bounded observability closure item | no delegated patch | unavailable; retries 1; corrections 1; reviews 1 |
 | T13 | Exclude superseded Horse aggregates from collection identity resolution. | Cheap executor/verifier | gpt-6-luna high; bounded read-model correction | T12 production evidence | Horse resolver load query and collected-race regression | a redirect source cannot create a false same-name identity conflict | focused 18 passed; API 413 passed/1 skipped; build and format passed | Verified | Cheap executor/verifier - closure item after exact Horse/source evidence | no delegated patch | unavailable; retries 0; corrections 0; reviews 1 |
 | T14 | Release queue-proven orphaned Ready dispatches at the deployment boundary. | Cheap executor/verifier | gpt-6-luna high; safety-gated operational recovery | T13 production replay | store, pipeline pause endpoint, deploy guard, tests | release requires paused pipeline, no running lease, and empty visible/in-flight queue | deploy script passed; Collector 413 passed; API 413 passed/1 skipped; format passed | Verified | Cheap executor/verifier - closure item for repeated post-deploy capacity stall | no delegated patch | unavailable; retries 2; corrections 2; reviews 2 |
-| T15 | Treat a structured JRA directory no-candidate result as unavailable rather than an actionable failure. | Cheap executor/verifier | gpt-6-luna high; bounded outcome correction | T14 production replay | subject handler and focused regression | `NoCandidate` becomes `NotApplicable`; ambiguity and structural failures remain fail-closed | focused 4 passed; Collector 414 passed; build, format, and diff check passed; production replay pending | Verified | Cheap executor/verifier - closure item for repeated withdrawn/missing Horse profiles | no delegated patch | unavailable; retries 0; corrections 0; reviews 1 |
-| T16 | Adopt a source-less Horse whose ID is derived from the exact legacy JRA CNAME route. | Cheap executor/verifier | gpt-6-luna high; bounded compatibility correction | T15 production replay | Horse resolver and positive/negative regressions | exact legacy route IDs reuse the aggregate; a different route remains a conflict | focused 11 passed; API 415 passed/1 skipped; build, format, and diff check passed; production replay pending | Verified | Cheap executor/verifier - closure item for legacy route-derived IDs | no delegated patch | unavailable; retries 1; corrections 1; reviews 1 |
-| T17 | Release unleased Ready dispatch reservations while paused even when stale wakes remain in SQS. | Cheap executor/verifier | gpt-6-luna high; bounded recovery gate correction | T16 production replay | pipeline endpoint and existing lease-safety regression | active leases remain protected; stale wakes fail their reservation token and cannot execute | store safety 1 passed; Collector 414 passed; API 415 passed/1 skipped; build, format, and diff check passed; production replay pending | Verified | Cheap executor/verifier - closure item for priority bypass after deployment | no delegated patch | unavailable; retries 1; corrections 1; reviews 1 |
-| T18 | Make priority outrank the persisted dispatch scan cursor and keep high-priority candidates inside the bounded page. | Cheap executor/verifier | gpt-6-luna high; bounded scheduler correction | T17 production replay and monitoring finding | allocator, pending query, and regression | priority 1000 before the cursor outranks priority 70 after it; lane fairness remains unchanged | focused 14 passed; Collector 415 passed; build, format, and diff check passed; production replay pending | Verified | Cheap executor/verifier - closure item for `DispatchOrderViolation` | no delegated patch | unavailable; retries 0; corrections 0; reviews 1 |
+| T15 | Treat a structured JRA directory no-candidate result as unavailable rather than an actionable failure. | Cheap executor/verifier | gpt-6-luna high; bounded outcome correction | T14 production replay | subject handler and focused regression | `NoCandidate` becomes `NotApplicable`; ambiguity and structural failures remain fail-closed | focused 4 and Collector 414 passed; three production Horse recovery tasks succeeded without actionable failures | Verified | Cheap executor/verifier - closure item for repeated withdrawn/missing Horse profiles | no delegated patch | unavailable; retries 0; corrections 0; reviews 1 |
+| T16 | Adopt a source-less Horse whose ID is derived from the exact legacy JRA CNAME route. | Cheap executor/verifier | gpt-6-luna high; bounded compatibility correction | T15 production replay | Horse resolver and positive/negative regressions | exact legacy route IDs reuse the aggregate; a different route remains a conflict | focused 11 and API 415/1 skipped passed; `20250810:Sapporo:8` succeeded in production | Verified | Cheap executor/verifier - closure item for legacy route-derived IDs | no delegated patch | unavailable; retries 1; corrections 1; reviews 1 |
+| T17 | Release unleased Ready dispatch reservations while paused even when stale wakes remain in SQS. | Cheap executor/verifier | gpt-6-luna high; bounded recovery gate correction | T16 production replay | pipeline endpoint and existing lease-safety regression | active leases remain protected; stale wakes fail their reservation token and cannot execute | store safety, Collector 414, and API 415/1 skipped passed; production pause/resume released and replayed all six tasks | Verified | Cheap executor/verifier - closure item for priority bypass after deployment | no delegated patch | unavailable; retries 1; corrections 1; reviews 1 |
+| T18 | Make priority outrank the persisted dispatch scan cursor and keep high-priority candidates inside the bounded page. | Cheap executor/verifier | gpt-6-luna high; bounded scheduler correction | T17 production replay and monitoring finding | allocator, pending query, and regression | priority 1000 before the cursor outranks priority 70 after it; lane fairness remains unchanged | focused 14 and Collector 415 passed; all six production priority-1000 tasks were dispatched and succeeded | Verified | Cheap executor/verifier - closure item for `DispatchOrderViolation` | no delegated patch | unavailable; retries 0; corrections 0; reviews 1 |
 
 The read/write scopes overlap across the collection identity and persistence path, so implementation is
 serialized. No subagent was dispatched for the current bounded investigation; the Lead retained the
@@ -187,14 +187,20 @@ verification use the repository's requested cheap route after approval.
   `jra-horse:2023103810`. The public Horse search exposes one active aggregate, while the resolver loaded active and
   superseded redirect-source rows. Redirect sources are already hidden from business reads and must likewise be
   excluded before collection identity matching; redirect targets and all non-redirected namesakes remain unchanged.
-- **Final review:** Pending.
+- **Checkpoint review (T15-T18):** The remaining production failures separated into safe unavailable
+  subject outcomes, exact legacy route-derived Horse identities, stale dispatch reservations, and a scan-cursor
+  priority inversion. Each closure retained its existing fail-closed counterexamples. After deployment, a bounded
+  pause/resume invalidated stale wakes; the corrected allocator dispatched all six priority-1000 recovery tasks.
+- **Final review:** Complete. Every AC and task is `Verified`. CI and deployment passed for the final commit;
+  the three race recoveries and three Horse recoveries reached `Succeeded`, the dashboard reported zero failures,
+  and the collection pipeline remained unpaused. No acceptance-blocking external issue remains.
 
 ## Documentation updates
 
-- No canonical documentation is changed during the incomplete investigation. Inspected
-  `docs/22-collector-design.md`, `docs/20-admin-ui-design.md`, and the existing subject-identification
-  recovery change records. If approved, the final design must update the collector and operator
-  documents with the new relation-level recovery contract.
+- No canonical public or operator contract changed. The implementation corrects compatibility handling,
+  internal dispatch recovery, and existing UI input behavior within the contracts already described by
+  `docs/22-collector-design.md` and `docs/20-admin-ui-design.md`; this change record carries the incident-specific
+  decisions and production evidence.
 
 ## Verification record
 
@@ -245,10 +251,24 @@ verification use the repository's requested cheap route after approval.
   the exact stored official source, then all existing and new counterexamples passed.
 - Solution build completed with zero warnings and errors; `dotnet format --verify-no-changes --no-restore`,
   `git diff --check`, and the change-record audit validator passed.
+- T15 structured no-candidate handling: focused 4 passed and full Collector passed 414 tests. T16 legacy route
+  identity adoption: focused 11 passed and full API passed 415 tests with 1 skipped. T17 lease-safe paused release:
+  focused store safety passed, Collector passed 414, and API passed 415 with 1 skipped. T18 priority/cursor ordering:
+  focused 14 passed and full Collector passed 415; solution build, formatter, and diff hygiene remained clean.
+- Final CI run `36993397675` and deployment run `36993397688` passed for commit `e52b497a`. The first deployment
+  attempt encountered a transient Terraform provider download connection reset; retrying only failed jobs completed
+  the same commit without a code or configuration change.
+- At 2026-10-02 19:29 JST, production tasks for `20250810:Sapporo:8`, `20260503:Tokyo:6`, and
+  `20260131:Kyoto:3` had each completed successfully with one attempt and no error code. Horse tasks
+  `1bb7c5dd-1122-4051-aa68-d2499a66ec97`, `5a648bfe-fd4c-40c7-9428-4eb55c546ee8`, and
+  `ec1d1bfe-7dc1-4eff-8c4a-10bce3770f5e` had also completed successfully with one attempt.
+- The final production dashboard reported zero failures, 736 current resources, and 16 unavailable resources.
+  The pipeline was unpaused with no pause reason. Historical monitoring findings remain historical evidence; the
+  formerly stalled priority-1000 task IDs are terminal and no new actionable failure group is present.
 - No secret was written to commands, logs, documentation, or commits.
 
 ## Deviations and follow-up
 
-The bounded recovery operations are submitted and the pipeline is running. T7 is production verified. T8 must
-be deployed and the four exact race tasks re-requested before final terminal evidence is accepted. The recovery
-targets remain under observation; no new actionable failure group is present.
+No acceptance-blocking deviation remains. The historical monitoring window can continue to display earlier
+`DispatchOrderViolation` evidence until it ages out; terminal task state and post-deployment dispatch behavior are
+the authoritative recovery evidence. Normal backlog processing continues with the pipeline running.
