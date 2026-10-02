@@ -1639,17 +1639,11 @@ public sealed partial class CollectionPlatformStore
         foreach (var lane in Enum.GetValues<CollectionLane>())
         {
             var laneQuery = query.Where(x => x.task.Lane == lane);
-            var orderedLaneQuery = laneQuery.OrderBy(x => x.outbox.AvailableAt).ThenBy(x => x.outbox.OutboxId);
-            var laneRows = scanAvailableAt.HasValue && scanOutboxId.HasValue
-                ? await laneQuery.Where(x => x.outbox.AvailableAt > scanAvailableAt.Value
-                        || (x.outbox.AvailableAt == scanAvailableAt.Value
-                            && x.outbox.OutboxId.CompareTo(scanOutboxId.Value) > 0))
-                    .OrderBy(x => x.outbox.AvailableAt).ThenBy(x => x.outbox.OutboxId)
-                    .Take(perLanePageSize).ToListAsync(cancellationToken).ConfigureAwait(false)
-                : await orderedLaneQuery.Take(perLanePageSize).ToListAsync(cancellationToken).ConfigureAwait(false);
-            if (laneRows.Count == 0 && scanAvailableAt.HasValue && scanOutboxId.HasValue)
-                laneRows = await orderedLaneQuery.Take(perLanePageSize).ToListAsync(cancellationToken)
-                    .ConfigureAwait(false);
+            // A cursor is only a stable tie-breaker inside the allocator. Filtering out everything
+            // before it lets a continuous arrival stream permanently hide higher-priority work.
+            var laneRows = await laneQuery.OrderByDescending(x => x.task.Priority)
+                .ThenBy(x => x.outbox.AvailableAt).ThenBy(x => x.outbox.OutboxId)
+                .Take(perLanePageSize).ToListAsync(cancellationToken).ConfigureAwait(false);
             pending.AddRange(laneRows.Select(x => ToPendingDispatch(x.outbox, x.task, x.resource)));
         }
         return pending.OrderBy(x => x.AvailableAt).ThenBy(x => x.OutboxId).Take(pageSize).ToList();

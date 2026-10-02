@@ -37,6 +37,25 @@ public sealed class CollectionExecutionContractsTests
     }
 
     [TestMethod]
+    public void Allocator_PrioritizesHigherPriorityBeforeScanCursor()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var beforeCursor = new FairCollectionCandidate(Guid.NewGuid(), CollectionLane.Realtime, 1000,
+            now.AddMinutes(-2), now.AddMinutes(-2), Guid.Parse("00000000-0000-0000-0000-000000000001"));
+        var afterCursor = new FairCollectionCandidate(Guid.NewGuid(), CollectionLane.Realtime, 70,
+            now, now, Guid.Parse("00000000-0000-0000-0000-000000000003"));
+        var state = CollectionLaneDispatchState.Empty with
+        {
+            ScanAvailableAt = now.AddMinutes(-1),
+            ScanOutboxId = Guid.Parse("00000000-0000-0000-0000-000000000002"),
+        };
+
+        var selected = new CollectionLaneAllocator().Select([beforeCursor, afterCursor], now, state);
+
+        Assert.AreEqual(beforeCursor.TaskId, selected!.TaskId);
+    }
+
+    [TestMethod]
     public void Allocator_DoesNotStarveBackground()
     {
         var now = DateTimeOffset.UtcNow;

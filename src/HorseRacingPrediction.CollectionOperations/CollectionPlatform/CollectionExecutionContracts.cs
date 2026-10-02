@@ -72,8 +72,8 @@ public sealed class CollectionLaneAllocator
         if (due.Count == 0) return null;
         var selectedLane = SelectLane(due, state);
         return due.Where(x => x.Lane == selectedLane)
-            .OrderByDescending(x => IsAfterCursor(x, state))
-            .ThenByDescending(x => EffectivePriority(x, now))
+            .OrderByDescending(x => EffectivePriority(x, now))
+            .ThenByDescending(x => IsAfterCursor(x, state))
             .ThenBy(x => x.AvailableAt)
             .ThenBy(x => x.CreatedAt)
             .ThenBy(x => x.TaskId)
