@@ -138,6 +138,7 @@ before any retry or repair decision.
 | T5 | Diagnose the three race write failures and choose controlled recovery per item. | Cheap investigator, Lead accepts recovery | gpt-6-luna high; read-only first, Lead owns mutation decision | authenticated session | production GET and isolated live probe | three complete result identity inventories | all official rows carry normalized Horse identity; timestamps and inner codes recorded | Verified | Cheap investigator for evidence; Lead for mutation decision | none | unavailable; retries 1; corrections 0; reviews 1 |
 | T6 | Final integrated regression, deployment, bounded recovery, and production verification. | Cheap verifier and Lead | gpt-6-luna high for mechanical gates; Lead for acceptance/operation | T1,T2,T3,T4,T5 and approval | tests/workflows/approved production operation | CI/deploy plus terminal resource evidence | passing gates and production terminal evidence | Dependent | Cheap verifier for gates; Lead for final acceptance | pending dispatch | unavailable; retries 0; corrections 0; reviews 0 |
 | T7 | Correct the bulk specific-resource input discovered during production recovery. | Cheap executor/verifier | gpt-6-luna high; local UI binding fix | T6 production exercise | Jobs UI and component test | component regression plus production browser verification | `Immediate` binding assertion and live preview/submit | In progress | Cheap executor/verifier - closure item within approved operator recovery | no delegated patch | unavailable; retries 1; corrections 1; reviews 1 |
+| T8 | Propagate stronger scheduling when a manual recovery reuses an active task. | Cheap executor/verifier | gpt-6-luna high; bounded persistence correction | T7 production exercise | collection platform store and focused regression | store regression plus production task detail | active task changes from Normal/50 to Realtime/100 without mutating its revision | In progress | Cheap executor/verifier - closure item within approved recovery | no delegated patch | unavailable; retries 1; corrections 1; reviews 1 |
 
 The read/write scopes overlap across the collection identity and persistence path, so implementation is
 serialized. No subagent was dispatched for the current bounded investigation; the Lead retained the
@@ -187,12 +188,17 @@ verification use the repository's requested cheap route after approval.
   resulting request exposed a second stale default: manual and bulk requests always sent revision 1 although
   the deployed `race-detail` revision is 6 and subject definitions are also newer. T7 now derives the revision
   from `CollectionDefinitionRevisions` for both request paths and asserts the serialized request revision.
+- The deployed T7 build passed CI run `36964460163` and deployment run `36964460175`. Production bulk preview
+  accepted all four supplied race IDs and submission completed. A subsequent individual priority-100 request
+  exposed that the non-ordinary active-task reuse branch retained the original Normal/50 scheduling. T8 updates
+  only the reused task lane and priority; it deliberately leaves the task revision unchanged so the existing
+  higher-revision materialization path remains intact.
 - Solution build completed with zero warnings and errors; `dotnet format --verify-no-changes --no-restore`,
   `git diff --check`, and the change-record audit validator passed.
 - No secret was written to commands, logs, documentation, or commits.
 
 ## Deviations and follow-up
 
-The bounded recovery operations are submitted and the pipeline is running. T7 must be deployed and verified
-through the production bulk preview before final terminal evidence is accepted. The 14 recovery targets remain
-under observation; no new actionable failure group is present.
+The bounded recovery operations are submitted and the pipeline is running. T7 is production verified. T8 must
+be deployed and the four exact race tasks re-requested before final terminal evidence is accepted. The recovery
+targets remain under observation; no new actionable failure group is present.

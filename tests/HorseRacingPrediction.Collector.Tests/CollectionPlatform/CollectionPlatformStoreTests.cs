@@ -1043,6 +1043,27 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task ManualRefresh_UpgradesReusedActiveTaskScheduling()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var initial = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now,
+            CollectionLane.Normal, 50);
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", CollectionResourceType.Horse, 8,
+            "Updated profile extractor", true);
+
+        var manual = await store.RequestAsync(Horse, HorseProfile, 8, CollectionReason.ManualRefresh,
+            now.AddSeconds(1), CollectionLane.Realtime, 100);
+
+        Assert.IsFalse(manual.CreatedTask);
+        Assert.AreEqual(initial.TaskId, manual.TaskId);
+        var task = (await store.GetTasksAsync()).Single(x => x.TaskId == initial.TaskId);
+        Assert.AreEqual(CollectionLane.Realtime, task.Lane);
+        Assert.AreEqual(100, task.Priority);
+        Assert.AreEqual(7, task.RequestedRevision);
+    }
+
+    [TestMethod]
     public async Task Request_RejectsNonHttpExplicitUrl()
     {
         var store = await CreateStoreAsync();

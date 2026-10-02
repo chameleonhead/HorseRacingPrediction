@@ -344,6 +344,11 @@ public sealed partial class CollectionPlatformStore
         }
         if (active is not null)
         {
+            var activeTask = await db.Tasks.SingleAsync(x => x.TaskId == active.TaskId, cancellationToken)
+                .ConfigureAwait(false);
+            activeTask.Lane = StrongerLane(activeTask.Lane, lane);
+            activeTask.Priority = Math.Max(activeTask.Priority, priority);
+            activeTask.UpdatedAt = requestedAt;
             if (reason is CollectionReason.Recovery or CollectionReason.ManualRefresh
                 or CollectionReason.PeriodRecollection)
                 await StartFailureRecoveryAsync(db, resourceEntity.ResourcePk, definition.Value,
