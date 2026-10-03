@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "changeId": "20261002_dispatcher-cycle-resilience",
   "taskId": "T5",
-  "attemptId": "T5-A1",
+  "attemptId": "T5-A2",
   "state": "completed",
   "taskDifficulty": "medium",
   "acceptanceCriteria": ["AC4"],
@@ -41,21 +41,21 @@
     "minutes": null,
     "reason": "runtime did not expose reliable worker elapsed effort"
   },
-  "startRevision": "ade4eb87",
-  "endRevisionOrPatch": "working-tree patch 3020cacc71372b0d28b74c3532ac93615b19dc15",
+  "startRevision": "1586892e",
+  "endRevisionOrPatch": "working-tree patch 5b5c7615fac9ce42f5e81f6c33ba7c0639cae5d3",
   "outcome": {
     "verificationPassed": true,
-    "qualityPassed": false,
+    "qualityPassed": true,
     "scopePassed": true,
-    "independentChallenge": "Lead reviewed the split-clock diff and reran 47 focused tests plus the full API suite; the delayed test crosses the future-Realtime due boundary without changing cycle-snapshot fairness.",
-    "retries": 0,
+    "independentChallenge": "Lead reran 47 focused tests and the full API suite, and verified the late clock provider is invoked once at the store write boundary while every revalidation query retains the cycle snapshot.",
+    "retries": 1,
     "leadCorrections": 0,
     "reviewPasses": 1,
     "promoted": false,
-    "escapedDefects": 1,
+    "escapedDefects": 0,
     "escalations": 0,
     "reviewMode": "ac-group",
     "detailReviewReason": null,
-    "decision": "revise"
+    "decision": "accept"
   }
 }

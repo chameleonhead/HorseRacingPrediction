@@ -32,6 +32,7 @@ public sealed partial class CollectionPlatformStore
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> Gates = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _gate;
     private readonly IRaceResourceIdentityResolver? _raceIdentityResolver;
+    internal Action? BeforeReservationExpiryTimeRead { get; set; }
 
     public CollectionPlatformStore(IOptions<CollectionPlatformOptions> options,
         IRaceResourceIdentityResolver? raceIdentityResolver = null)
@@ -1686,14 +1687,15 @@ public sealed partial class CollectionPlatformStore
         IReadOnlyCollection<Guid> outboxIds, string reservationToken, Guid envelopeId, Guid wakeId,
         DateTimeOffset now, TimeSpan duration, int maxInFlightEnvelopes, int aggregationDelayMilliseconds = 0,
         CancellationToken cancellationToken = default)
-        => ReserveDispatchesWithinCapacityAsync(outboxIds, reservationToken, envelopeId, wakeId, now, now,
+        => ReserveDispatchesWithinCapacityAsync(outboxIds, reservationToken, envelopeId, wakeId, now, () => now,
             duration, maxInFlightEnvelopes, aggregationDelayMilliseconds, cancellationToken);
 
     public async Task<CollectionDispatchCycleOutcome> ReserveDispatchesWithinCapacityAsync(
         IReadOnlyCollection<Guid> outboxIds, string reservationToken, Guid envelopeId, Guid wakeId,
-        DateTimeOffset now, DateTimeOffset reservationTime, TimeSpan duration, int maxInFlightEnvelopes,
+        DateTimeOffset now, Func<DateTimeOffset> reservationTimeProvider, TimeSpan duration, int maxInFlightEnvelopes,
         int aggregationDelayMilliseconds = 0, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(reservationTimeProvider);
         var ids = outboxIds.Distinct().ToArray();
         if (ids.Length == 0 || string.IsNullOrWhiteSpace(reservationToken) || envelopeId == Guid.Empty)
             return CollectionDispatchCycleOutcome.CandidateRejected;
@@ -1792,11 +1794,13 @@ public sealed partial class CollectionPlatformStore
                 return CollectionDispatchCycleOutcome.ReserveConflict;
             await AdvanceDispatcherFairnessAsync(db, rows.Select(x => x.outbox).ToArray(), rows[0].task.Lane, now,
                 cancellationToken).ConfigureAwait(false);
+            BeforeReservationExpiryTimeRead?.Invoke();
+            var reservedUntilUnixMilliseconds = reservationTimeProvider().Add(duration).ToUnixTimeMilliseconds();
             foreach (var row in rows)
             {
                 row.outbox.ReservationToken = reservationToken;
                 // Eligibility and fairness use the cycle snapshot; only the reservation lifetime uses fresh time.
-                row.outbox.ReservedUntilUnixMilliseconds = reservationTime.Add(duration).ToUnixTimeMilliseconds();
+                row.outbox.ReservedUntilUnixMilliseconds = reservedUntilUnixMilliseconds;
                 row.outbox.EnvelopeId = envelopeId;
                 row.outbox.WakeId = wakeId == Guid.Empty ? null : wakeId;
             }

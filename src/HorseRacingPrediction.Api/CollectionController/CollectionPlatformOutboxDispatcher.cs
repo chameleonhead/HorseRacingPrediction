@@ -130,9 +130,8 @@ public sealed class CollectionPlatformOutboxDispatcher(
             {
                 if (BeforeReservationAsync is not null)
                     await BeforeReservationAsync(group, cancellationToken).ConfigureAwait(false);
-                var reservationTime = CurrentTime();
                 var reserveOutcome = await store.ReserveDispatchesWithinCapacityAsync(group.Select(x => x.OutboxId).ToArray(),
-                        reservationToken, envelopeId, wakeId, now, reservationTime,
+                        reservationToken, envelopeId, wakeId, now, CurrentTime,
                         TimeSpan.FromSeconds(Math.Max(10, _options.OutboxReservationSeconds)),
                         Math.Max(1, _options.MaxInFlightEnvelopes), _options.AggregationDelayMilliseconds,
                         cancellationToken).ConfigureAwait(false);

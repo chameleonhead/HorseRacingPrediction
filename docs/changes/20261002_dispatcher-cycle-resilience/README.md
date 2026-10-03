@@ -79,7 +79,7 @@ candidate-query, or telemetry exceptions before that boundary can end the hosted
 | H3 | A stale reservation alone explains the stall. | Falsified for the current incident. | The approved pause/release/resume path completed, but counts did not change and Running stayed zero for two minutes. | Pause/resume and observe task transitions. | Falsified; retain reservation safety unchanged. |
 | H4 | Catching a cycle exception can preserve safety invariants. | Design claim requiring isolated reproduction. | Per-envelope failures already use catch-and-continue; cancellation and pipeline pause must remain authoritative. | Inject one pre-envelope transient failure, then prove a later cycle dispatches; separately cancel and prove prompt exit. | Proposed verification in T1. |
 | H5 | The current admin screen already exposes enough lane-liveness evidence. | Falsified by contract and component inspection. | `/jobs` shows a browser refresh time and the progress contract only exposes `ActiveTasksByLane`; neither last execution timestamps nor due/running split is available. | Inspect `Jobs.razor`, `CollectionProgressSnapshot`, DTO mapping, and store aggregation. | Falsified; AC5-AC6 add authoritative lane activity. |
-| H6 | The wake reaches Lambda only after its reservation has already expired because the dispatcher reuses the cycle-start time when writing the reservation deadline. | Confirmed production fact plus direct code trace. | From 2026-10-02 20:22 JST onward CloudWatch recorded zero successful acquisitions and 195 `ReservationUnavailable` acquisitions over 24 hours. The dispatcher continued to emit `Reserved` and `WakeSent`; Lambda started in the same minute and returned without a task. `DispatchOnceAsync` captures `now` before a production cycle that currently takes about four minutes, then `ReserveDispatchesWithinCapacityAsync` persists `ReservedUntilUnixMilliseconds = now + 45 seconds`. | Use the existing pre-reservation test hook to advance a controllable clock beyond 45 seconds, then acquire the emitted wake through the real store boundary. | Confirmed. Preserve the selection snapshot for eligibility/fairness but calculate the reservation deadline from a fresh timestamp immediately before reservation. |
+| H6 | The wake reaches Lambda only after its reservation has already expired because reservation expiry is based on a timestamp captured before slow reservation work. | Confirmed production fact plus two deployment observations and direct code trace. | From 2026-10-02 20:22 JST onward CloudWatch recorded zero successful acquisitions and repeated `ReservationUnavailable` acquisitions. Deployment 37088541200 moved the capture from cycle start to immediately before the store call, yet the first post-deploy wake at 11:24 JST still returned `ReservationUnavailable`. Therefore the reservation transaction itself exceeds 45 seconds. | Invoke a controllable reservation clock inside the store only after all revalidation and immediately before writing `ReservedUntilUnixMilliseconds`; acquire the emitted wake through the real store boundary. | Confirmed and refined. Preserve the cycle snapshot for all revalidation; calculate expiry from a provider invoked at the write boundary. |
 
 ## Decisions
 
@@ -98,9 +98,8 @@ candidate-query, or telemetry exceptions before that boundary can end the hosted
 6. The UI presents facts rather than a derived healthy/stalled badge. Alert thresholds belong to monitoring; this
    avoids declaring a low-volume Background lane unhealthy merely because it legitimately had no recent work.
 7. Candidate eligibility, fairness, lease, and capacity revalidation continue to use the cycle-start snapshot.
-   Reservation lifetime alone starts from a fresh timestamp obtained immediately before the reservation transaction,
-   so slow candidate discovery cannot create an already-expired wake. The store accepts this second timestamp only for
-   calculating `ReservedUntilUnixMilliseconds`; the 45-second duration and every pause, lease, capacity, priority,
+   Reservation lifetime alone starts from a clock provider invoked inside the store immediately before expiry is
+   written, after its slow revalidation queries. The 45-second duration and every pause, lease, capacity, priority,
    and compatibility guard remain unchanged.
 
 ## Concern and agreement ledger
@@ -135,7 +134,7 @@ candidate-query, or telemetry exceptions before that boundary can end the hosted
 | T2 | Add authoritative per-lane progress aggregation, additive contracts, `/jobs` table, and focused tests. | Lead planner/executor/verifier | gpt-6-luna high requested; observed unavailable | Cheap execution; public contract integration is serialized to prevent a mismatched intermediate state. | Approval | progress model/store/DTO/mapper/client, `Jobs.razor` and scoped styles, focused API/component tests | focused store/API/component tests, full affected suites, build, formatter, CodeGraph sync | AC5-AC6 executable evidence | none | unavailable; retries 1; corrections 1; reviews 1 | Verified |
 | T3 | Deploy through the canonical workflow. | Lead operator | mechanical | Integration operation depends on the verified revision and remains Lead-owned. | T1,T2 | workflow operation only | CI and deployment terminal success | run URLs and deployed commit | none | unavailable; retries 0; corrections 0; reviews 0 | Runnable |
 | T4 | Verify production progress, screen evidence, and close the incident record. | Lead verifier | lead acceptance | Final acceptance remains Lead-owned. | T3 | authenticated diagnostics, browser verification, and change record only | lane-specific before/after facts, pipeline/failure state, rendered `/jobs` evidence | AC4-AC6 evidence and final review | none | unavailable; retries 0; corrections 0; reviews 0 | Dependent |
-| T5 | Correct the stale reservation clock, add the production-shaped delay regression, deploy, and verify three-lane recovery. | Cheap Executor; Lead integrates and accepts | gpt-6-luna high requested; observed model unavailable because runtime telemetry does not expose it | Cheap execution; split-clock refinement after the first focused test exposed a fairness crossover boundary; deployment and final acceptance remain Lead-owned. | H6 confirmed; existing approval and AC2-AC4 | `src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformOutboxDispatcher.cs`; `src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.cs`; `tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs` | focused starvation tests; full API suite; API build; exact CI formatter; CodeGraph sync; audit/DDD validators; `git diff --check`; canonical deploy; CloudWatch and `/jobs` observation | delayed reservation acquires successfully, unchanged fairness regressions pass, deployed production shows successful acquisitions and lane progress | T5-A1 | unavailable; retries 0; corrections 0; reviews 1 | In progress |
+| T5 | Correct the stale reservation clock, add the production-shaped delay regression, deploy, and verify three-lane recovery. | Cheap Executor; Lead integrates and accepts | gpt-6-luna high requested; observed model unavailable because runtime telemetry does not expose it | Cheap execution; first deployment falsified the pre-store capture boundary, so the same bounded slice is retried with the clock invoked at the store write boundary; deployment and final acceptance remain Lead-owned. | H6 confirmed; existing approval and AC2-AC4 | `src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformOutboxDispatcher.cs`; `src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.cs`; `tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs` | focused starvation tests; full API suite; API build; exact CI formatter; CodeGraph sync; audit/DDD validators; `git diff --check`; canonical deploy; CloudWatch and `/jobs` observation | delayed reservation acquires successfully, unchanged fairness regressions pass, deployed production shows successful acquisitions and lane progress | T5-A1, T5-A2 | unavailable; retries 1; corrections 0; reviews 2 | In progress |
 
 ## Review gates
 
@@ -175,15 +174,15 @@ candidate-query, or telemetry exceptions before that boundary can end the hosted
 
 ```text
 Incident: 2026-10-02 23:08 JST; 3,578 Ready, 3,552 due, zero Running, all three lanes stalled.
-Temporary recovery: Pause/resume and same-revision deployment 37037800539 did not recover task execution.
-Root cause: The dispatcher reuses its cycle-start timestamp after a roughly four-minute candidate scan, so the
-45-second reservation is already expired when the wake is sent. Lambda acknowledges `ReservationUnavailable` and
-does not acquire a task. The missing cycle exception boundary was a separate resilience defect already corrected.
-Corrective proposal: Keep candidate/fairness evaluation on the cycle snapshot, but start the unchanged reservation
-duration from a fresh pre-reservation timestamp; reproduce the delay through the store and Lambda acquisition path.
-Permanent fix: Approved; T5 implementation in progress.
-Remaining risk: The reservation transaction itself is expected to remain well below 45 seconds. If later telemetry
-shows otherwise, moving deadline calculation inside the transaction requires a separate design review.
+Temporary recovery: Pause/resume, same-revision deployment 37037800539, and first clock-fix deployment 37088541200
+did not recover task execution.
+Root cause: The reservation transaction itself takes longer than 45 seconds in production, while expiry was calculated
+from a timestamp captured before the transaction. Lambda acknowledges `ReservationUnavailable` and does not acquire a
+task. The missing cycle exception boundary was a separate resilience defect already corrected.
+Corrective proposal: Keep every eligibility/fairness/capacity check on the cycle snapshot, but invoke a separate clock
+inside the store immediately before writing the unchanged reservation duration.
+Permanent fix: Approved; T5-A2 implementation in progress.
+Remaining risk: None identified beyond production verification of the corrected write-boundary clock.
 ```
 
 ## Verification record
@@ -207,6 +206,14 @@ shows otherwise, moving deadline calculation inside the transaction requires a s
   fresh clock, while the original `now` remains on all lease, capacity, eligibility, aggregation, fairness, and cursor
   paths. The production-shaped test independently crosses the future-Realtime due boundary during a 46-second
   simulated delay and still acquires the selected non-Realtime wake. Deployment and production observation remain.
+- T5 production verification failed after successful CI and deployment 37088541200: the first post-deploy wake at
+  11:24 JST produced `ReservationUnavailable`, and all lanes retained their 2026-10-02 lifecycle timestamps. This
+  falsifies the assumption that only pre-store work exceeded 45 seconds. T5-A1 has one escaped defect; T5-A2 invokes
+  the fresh clock at the store write boundary and must repeat the same local and production gates.
+- T5-A2 patch `5b5c7615fac9ce42f5e81f6c33ba7c0639cae5d3` passed 47 focused tests, the full API suite
+  (419 passed, one existing skip), exact formatter verification, API build with zero warnings/errors, and diff check.
+  Lead review confirmed the provider is invoked once after all revalidation and before expiry assignment; every
+  existing query continues to use the cycle snapshot. Redeployment and production observation remain.
 
 ## Deviations and follow-up
 

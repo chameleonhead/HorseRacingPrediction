@@ -469,6 +469,9 @@ public sealed class CollectionDispatchStarvationReproductionTests
             var store = new CollectionPlatformStore(options);
             var cycleStartedAt = DateTimeOffset.UtcNow.AddMinutes(-2);
             var currentTime = cycleStartedAt;
+            var currentTimeReads = 0;
+            var reservationWriteBoundaryReached = false;
+            var reservationTimeReadTooEarly = false;
             var definition = new CollectionDefinitionId("race-detail");
             await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race,
                 1, "initial", false);
@@ -484,6 +487,7 @@ public sealed class CollectionDispatchStarvationReproductionTests
             var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
                 .UseSqlite($"Data Source={databasePath};Pooling=False;Default Timeout=30").Options;
             var queue = new WakeCaptureQueue();
+            store.BeforeReservationExpiryTimeRead = () => reservationWriteBoundaryReached = true;
             var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
                 Options.Create(new CollectionQueueOptions
                 {
@@ -495,7 +499,13 @@ public sealed class CollectionDispatchStarvationReproductionTests
                     AggregationDelayMilliseconds = 0
                 }), NullLogger<CollectionPlatformOutboxDispatcher>.Instance)
             {
-                CurrentTime = () => currentTime
+                CurrentTime = () =>
+                {
+                    currentTimeReads++;
+                    if (currentTimeReads > 1 && !reservationWriteBoundaryReached)
+                        reservationTimeReadTooEarly = true;
+                    return currentTime;
+                }
             };
             dispatcher.BeforeReservationAsync = (_, _) =>
             {
@@ -505,6 +515,12 @@ public sealed class CollectionDispatchStarvationReproductionTests
 
             await dispatcher.DispatchOnceAsync(CancellationToken.None);
 
+            Assert.AreEqual(2, currentTimeReads,
+                "The clock is read once for the cycle snapshot and once for the reservation expiry.");
+            Assert.IsTrue(reservationWriteBoundaryReached,
+                "The reservation clock must be read only after reservation revalidation reaches the write boundary.");
+            Assert.IsFalse(reservationTimeReadTooEarly,
+                "The fresh reservation time must not be captured in the dispatcher before the store transaction.");
             Assert.AreEqual(1, queue.Wakes.Count);
             var wake = queue.Wakes.Single();
             var reserved = await LoadOutboxForWakeAsync(dbOptions, wake.DispatchEnvelopeId);
