@@ -23,27 +23,56 @@
 @code {
     [Parameter, EditorRequired] public RaceDto Race { get; set; } = default!;
     [Parameter, EditorRequired] public EventCallback OnSaved { get; set; }
-    private string? raceName, racecourseCode, gradeCode, surfaceCode, directionCode, reason, message, error;
+    private string? raceName;
+    private string? racecourseCode;
+    private string? gradeCode;
+    private string? surfaceCode;
+    private string? directionCode;
+    private string? reason;
+    private string? message;
+    private string? error;
     private int? raceNumber, distanceMeters;
     private bool saving;
 
     protected override void OnParametersSet()
     {
-        raceName = Race.RaceName; racecourseCode = Race.RacecourseCode; raceNumber = Race.RaceNumber;
-        gradeCode = Race.GradeCode; surfaceCode = Race.SurfaceCode; distanceMeters = Race.DistanceMeters; directionCode = Race.DirectionCode;
+        raceName = Race.RaceName;
+        racecourseCode = Race.RacecourseCode;
+        raceNumber = Race.RaceNumber;
+        gradeCode = Race.GradeCode;
+        surfaceCode = Race.SurfaceCode;
+        distanceMeters = Race.DistanceMeters;
+        directionCode = Race.DirectionCode;
     }
 
     private async Task SaveAsync()
     {
-        saving = true; message = error = null;
+        saving = true;
+        message = null;
+        error = null;
         try
         {
             var response = await RacesApi.CorrectRaceDataAsync(new CorrectRaceDataRequest(new CorrectRaceDataInputDto(raceName, racecourseCode, raceNumber, gradeCode, surfaceCode, distanceMeters, directionCode, reason)));
-            if (!response.IsSuccessStatusCode) { error = "基本情報を保存できませんでした。"; return; }
-            message = "基本情報を保存しました。"; await OnSaved.InvokeAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                error = "基本情報を保存できませんでした。";
+                return;
+            }
+
+            message = "基本情報を保存しました。";
+            await OnSaved.InvokeAsync();
         }
-        catch (ApiException) { error = "基本情報を保存できませんでした。"; }
-        catch (HttpRequestException) { error = "APIに接続できませんでした。"; }
-        finally { saving = false; }
+        catch (ApiException)
+        {
+            error = "基本情報を保存できませんでした。";
+        }
+        catch (HttpRequestException)
+        {
+            error = "APIに接続できませんでした。";
+        }
+        finally
+        {
+            saving = false;
+        }
     }
 }

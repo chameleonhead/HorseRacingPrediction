@@ -24,24 +24,67 @@
 @code {
     [Parameter, EditorRequired] public RaceDto Race { get; set; } = default!;
     private List<ResultEditValue> values = [];
-    private bool saving; private string? message, error;
-    protected override void OnParametersSet() => values = Race.Entries.Select(entry => { var result = Race.EntryResults.FirstOrDefault(x => x.HorseId == entry.HorseId); return new ResultEditValue(entry, result?.FinishPosition, result?.OfficialTime, result?.MarginText); }).ToList();
+    private bool saving;
+    private string? message;
+    private string? error;
+
+    protected override void OnParametersSet()
+        => values = Race.Entries
+            .Select(entry =>
+            {
+                var result = Race.EntryResults.FirstOrDefault(x => x.HorseId == entry.HorseId);
+                return new ResultEditValue(
+                    entry,
+                    result?.FinishPosition,
+                    result?.OfficialTime,
+                    result?.MarginText);
+            })
+            .ToList();
     private async Task SaveAsync(ResultEditValue value)
     {
-        saving = true; message = error = null;
+        saving = true;
+        message = null;
+        error = null;
         try
         {
-            var request = new DeclareEntryResultRequest(new DeclareEntryResultInputDto(value.FinishPosition, value.OfficialTime, value.MarginText, null, null, null)) { RaceId = Race.RaceId, EntryId = value.Entry.EntryId };
+            var request = new DeclareEntryResultRequest(
+                new DeclareEntryResultInputDto(
+                    value.FinishPosition,
+                    value.OfficialTime,
+                    value.MarginText,
+                    null,
+                    null,
+                    null))
+            {
+                RaceId = Race.RaceId,
+                EntryId = value.Entry.EntryId
+            };
             var response = await RacesApi.DeclareEntryResultAsync(request);
-            if (!response.IsSuccessStatusCode) { error = "結果情報を保存できませんでした。"; return; }
+            if (!response.IsSuccessStatusCode)
+            {
+                error = "結果情報を保存できませんでした。";
+                return;
+            }
             message = $"{value.Entry.HorseName ?? value.Entry.HorseId} の結果を保存しました。";
         }
-        catch (ApiException) { error = "結果情報を保存できませんでした。"; }
-        catch (HttpRequestException) { error = "APIに接続できませんでした。"; }
-        finally { saving = false; }
+        catch (ApiException)
+        {
+            error = "結果情報を保存できませんでした。";
+        }
+        catch (HttpRequestException)
+        {
+            error = "APIに接続できませんでした。";
+        }
+        finally
+        {
+            saving = false;
+        }
     }
     private sealed class ResultEditValue(RaceEntryDto entry, int? finishPosition, string? officialTime, string? marginText)
     {
-        public RaceEntryDto Entry { get; } = entry; public int? FinishPosition { get; set; } = finishPosition; public string? OfficialTime { get; set; } = officialTime; public string? MarginText { get; set; } = marginText;
+        public RaceEntryDto Entry { get; } = entry;
+        public int? FinishPosition { get; set; } = finishPosition;
+        public string? OfficialTime { get; set; } = officialTime;
+        public string? MarginText { get; set; } = marginText;
     }
 }

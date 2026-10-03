@@ -24,24 +24,53 @@
 @code {
     [Parameter, EditorRequired] public RaceDto Race { get; set; } = default!;
     private List<EntryEditValue> values = [];
-    private bool saving; private string? message, error;
-    protected override void OnParametersSet() => values = Race.Entries.Select(x => new EntryEditValue(x, x.DeclaredWeight, x.DeclaredWeightDiff, x.OwnerName)).ToList();
+    private bool saving;
+    private string? message;
+    private string? error;
+
+    protected override void OnParametersSet()
+        => values = Race.Entries
+            .Select(x => new EntryEditValue(x, x.DeclaredWeight, x.DeclaredWeightDiff, x.OwnerName))
+            .ToList();
     private async Task SaveAsync(EntryEditValue value)
     {
-        saving = true; message = error = null;
+        saving = true;
+        message = null;
+        error = null;
         try
         {
-            var request = new UpdateEntryCollectedDataRequest(new UpdateEntryCollectedDataInputDto(value.Weight, value.WeightDiff, value.OwnerName)) { RaceId = Race.RaceId, EntryId = value.Entry.EntryId };
+            var request = new UpdateEntryCollectedDataRequest(
+                new UpdateEntryCollectedDataInputDto(value.Weight, value.WeightDiff, value.OwnerName))
+            {
+                RaceId = Race.RaceId,
+                EntryId = value.Entry.EntryId
+            };
             var response = await RacesApi.UpdateEntryCollectedDataAsync(request);
-            if (!response.IsSuccessStatusCode) { error = "出走馬情報を保存できませんでした。"; return; }
+            if (!response.IsSuccessStatusCode)
+            {
+                error = "出走馬情報を保存できませんでした。";
+                return;
+            }
             message = $"{value.Entry.HorseName ?? value.Entry.HorseId} の情報を保存しました。";
         }
-        catch (ApiException) { error = "出走馬情報を保存できませんでした。"; }
-        catch (HttpRequestException) { error = "APIに接続できませんでした。"; }
-        finally { saving = false; }
+        catch (ApiException)
+        {
+            error = "出走馬情報を保存できませんでした。";
+        }
+        catch (HttpRequestException)
+        {
+            error = "APIに接続できませんでした。";
+        }
+        finally
+        {
+            saving = false;
+        }
     }
     private sealed class EntryEditValue(RaceEntryDto entry, decimal? weight, decimal? weightDiff, string? ownerName)
     {
-        public RaceEntryDto Entry { get; } = entry; public decimal? Weight { get; set; } = weight; public decimal? WeightDiff { get; set; } = weightDiff; public string? OwnerName { get; set; } = ownerName;
+        public RaceEntryDto Entry { get; } = entry;
+        public decimal? Weight { get; set; } = weight;
+        public decimal? WeightDiff { get; set; } = weightDiff;
+        public string? OwnerName { get; set; } = ownerName;
     }
 }
