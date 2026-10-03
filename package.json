@@ -1,0 +1,14 @@
+{
+  "private": true,
+  "scripts": {
+    "format": "npm run format:csharp && npm run format:web",
+    "format:check": "npm run format:csharp:check && npm run format:web:check",
+    "format:csharp": "dotnet format HorseRacingPrediction.sln whitespace --no-restore",
+    "format:csharp:check": "dotnet format HorseRacingPrediction.sln whitespace --no-restore --verify-no-changes",
+    "format:web": "prettier --write \"src/**/*.html\"",
+    "format:web:check": "prettier --check \"src/**/*.html\""
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
+  }
+}
