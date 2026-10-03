@@ -1,0 +1,47 @@
+@using HorseRacingPrediction.Contracts.Races
+@using HorseRacingPrediction.ApiClient.Races
+@using Refit
+@inject IRacesApi RacesApi
+
+<section aria-labelledby="race-results-edit-heading">
+    <h2 id="race-results-edit-heading">結果情報</h2>
+    @if (Race.Entries.Count == 0) { <p>結果を入力できる出走馬がありません。</p> }
+    else
+    {
+        <FluentDataGrid Items="@values.AsQueryable()" aria-label="レース結果編集">
+            <PropertyColumn Property="@(x => x.Entry.HorseNumber)" Title="馬番" />
+            <PropertyColumn Property="@(x => x.Entry.HorseName)" Title="馬名" />
+            <TemplateColumn Title="着順"><input aria-label="@(context.Entry.HorseName ?? context.Entry.HorseId) 着順" type="number" @bind="context.FinishPosition" /></TemplateColumn>
+            <TemplateColumn Title="タイム"><input aria-label="@(context.Entry.HorseName ?? context.Entry.HorseId) タイム" @bind="context.OfficialTime" /></TemplateColumn>
+            <TemplateColumn Title="着差"><input aria-label="@(context.Entry.HorseName ?? context.Entry.HorseId) 着差" @bind="context.MarginText" /></TemplateColumn>
+            <TemplateColumn Title="操作"><FluentButton Appearance="ButtonAppearance.Primary" OnClick="@(() => SaveAsync(context))" Disabled="@saving">保存</FluentButton></TemplateColumn>
+        </FluentDataGrid>
+    }
+    @if (message is not null) { <p role="status">@message</p> }
+    @if (error is not null) { <p role="alert">@error</p> }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public RaceDto Race { get; set; } = default!;
+    private List<ResultEditValue> values = [];
+    private bool saving; private string? message, error;
+    protected override void OnParametersSet() => values = Race.Entries.Select(entry => { var result = Race.EntryResults.FirstOrDefault(x => x.HorseId == entry.HorseId); return new ResultEditValue(entry, result?.FinishPosition, result?.OfficialTime, result?.MarginText); }).ToList();
+    private async Task SaveAsync(ResultEditValue value)
+    {
+        saving = true; message = error = null;
+        try
+        {
+            var request = new DeclareEntryResultRequest(new DeclareEntryResultInputDto(value.FinishPosition, value.OfficialTime, value.MarginText, null, null, null)) { RaceId = Race.RaceId, EntryId = value.Entry.EntryId };
+            var response = await RacesApi.DeclareEntryResultAsync(request);
+            if (!response.IsSuccessStatusCode) { error = "結果情報を保存できませんでした。"; return; }
+            message = $"{value.Entry.HorseName ?? value.Entry.HorseId} の結果を保存しました。";
+        }
+        catch (ApiException) { error = "結果情報を保存できませんでした。"; }
+        catch (HttpRequestException) { error = "APIに接続できませんでした。"; }
+        finally { saving = false; }
+    }
+    private sealed class ResultEditValue(RaceEntryDto entry, int? finishPosition, string? officialTime, string? marginText)
+    {
+        public RaceEntryDto Entry { get; } = entry; public int? FinishPosition { get; set; } = finishPosition; public string? OfficialTime { get; set; } = officialTime; public string? MarginText { get; set; } = marginText;
+    }
+}

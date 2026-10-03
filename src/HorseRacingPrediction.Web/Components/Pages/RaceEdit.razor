@@ -1,0 +1,44 @@
+@page "/races/{RaceId}/edit"
+@rendermode InteractiveServer
+@using HorseRacingPrediction.Contracts.Races
+@using HorseRacingPrediction.ApiClient.Races
+@using Refit
+@using HorseRacingPrediction.Web.Components.Races
+@inject IRacesApi RacesApi
+@inject NavigationManager Navigation
+
+<PageTitle>レース編集</PageTitle>
+<p><a href="@($"/races/{Uri.EscapeDataString(RaceId)}")">← レース詳細に戻る</a></p>
+@if (loading) { <p>レース情報を読み込み中…</p> }
+else if (error is not null) { <p role="alert">@error</p><FluentButton Appearance="ButtonAppearance.Primary" OnClick="LoadAsync">再試行</FluentButton> }
+else if (race is null) { <p>指定されたレースは見つかりませんでした。</p> }
+else
+{
+    <h1>@(race.RaceName ?? race.RaceId) の編集</h1>
+    <p>@race.RaceDate?.ToString("yyyy/MM/dd")　@race.RacecourseCode　@(race.RaceNumber)R</p>
+    <FluentTabs ShowActiveIndicator="true" aria-label="レース編集項目">
+        <FluentTab Label="基本情報" Id="basic"><RaceBasicEditForm Race="@race" OnSaved="ReloadAsync" /></FluentTab>
+        <FluentTab Label="出走馬情報" Id="entries"><RaceEntriesEditForm Race="@race" OnSaved="ReloadAsync" /></FluentTab>
+        <FluentTab Label="結果情報" Id="results"><RaceResultsEditForm Race="@race" OnSaved="ReloadAsync" /></FluentTab>
+    </FluentTabs>
+}
+
+@code {
+    [Parameter] public string RaceId { get; set; } = string.Empty;
+    private RaceDto? race; private bool loading; private string? error;
+    protected override Task OnParametersSetAsync() => LoadAsync();
+    private async Task LoadAsync()
+    {
+        loading = true; error = null;
+        try
+        {
+            var response = await RacesApi.GetRaceAsync(new GetRaceRequest { RaceId = RaceId });
+            race = response.IsSuccessStatusCode ? response.Content?.Race : null;
+            if (race is null) error = response.StatusCode == System.Net.HttpStatusCode.NotFound ? "指定されたレースは見つかりませんでした。" : "レース情報を取得できませんでした。";
+        }
+        catch (ApiException) { error = "レース情報を取得できませんでした。"; }
+        catch (HttpRequestException) { error = "APIに接続できませんでした。"; }
+        finally { loading = false; }
+    }
+    private async Task ReloadAsync() => await LoadAsync();
+}
