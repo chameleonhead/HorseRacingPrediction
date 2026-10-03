@@ -1,6 +1,7 @@
 @page "/races/{RaceId}"
 @using HorseRacingPrediction.Contracts.Races
 @using HorseRacingPrediction.ApiClient.Races
+@using Refit
 @inject IRacesApi RacesApi
 <PageTitle>レース詳細</PageTitle>
 <p><a href="/races">← レース一覧に戻る</a></p>
@@ -43,6 +44,7 @@ else
     {
         loading = true; error = null;
         try { var response = await RacesApi.GetRaceAsync(new GetRaceRequest { RaceId = RaceId }); race = response.IsSuccessStatusCode ? response.Content?.Race : null; if (race is null) error = "レース詳細を取得できませんでした。"; }
+        catch (ApiException) { error = "レース詳細を取得できませんでした。"; }
         catch (HttpRequestException) { error = "APIに接続できませんでした。"; }
         finally { loading = false; }
     }

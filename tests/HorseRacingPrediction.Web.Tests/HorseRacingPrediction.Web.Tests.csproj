@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="bunit" Version="2.11.3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageReference Include="MSTest.TestAdapter" Version="4.4.1" />
+    <PackageReference Include="MSTest.TestFramework" Version="4.4.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\HorseRacingPrediction.Web\HorseRacingPrediction.Web.csproj" />
+    <ProjectReference Include="..\..\src\HorseRacingPrediction.ApiClient\HorseRacingPrediction.ApiClient.csproj" />
+    <ProjectReference Include="..\..\src\HorseRacingPrediction.Contracts\HorseRacingPrediction.Contracts.csproj" />
+  </ItemGroup>
+</Project>

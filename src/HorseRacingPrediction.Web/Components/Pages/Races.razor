@@ -1,6 +1,7 @@
 @page "/races"
 @using HorseRacingPrediction.Contracts.Races
 @using HorseRacingPrediction.ApiClient.Races
+@using Refit
 @inject IRacesApi RacesApi
 
 <PageTitle>レース</PageTitle>
@@ -46,6 +47,7 @@ else
             result = response.IsSuccessStatusCode ? response.Content : null;
             if (result is null) error = "レース一覧を取得できませんでした。";
         }
+        catch (ApiException) { error = "レース一覧を取得できませんでした。"; }
         catch (HttpRequestException) { error = "APIに接続できませんでした。"; }
         finally { loading = false; }
     }
