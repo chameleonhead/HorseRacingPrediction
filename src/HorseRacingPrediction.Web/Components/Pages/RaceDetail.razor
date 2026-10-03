@@ -13,10 +13,13 @@ else
 {
     <h1>@(race.RaceName ?? race.RaceId)</h1>
     <p>@race.RaceDate?.ToString("yyyy/MM/dd")　@race.RacecourseCode　@(race.RaceNumber)R　状態: @StatusLabel(race.Status)</p>
-    <dl><dt>グレード</dt><dd>@(race.GradeCode ?? "未登録")</dd><dt>発走時刻</dt><dd>@(race.StartTime?.ToString("HH:mm") ?? "未登録")</dd><dt>距離</dt><dd>@(race.DistanceMeters?.ToString() ?? "未登録")m @((race.DirectionCode ?? "") is string direction && !string.IsNullOrWhiteSpace(direction) ? $"（{direction}）" : "")</dd><dt>馬場</dt><dd>@(race.SurfaceCode ?? "未登録")</dd><dt>天候</dt><dd>@(race.WeatherObservations.LastOrDefault()?.WeatherText ?? "未取得")</dd><dt>結果確定</dt><dd>@(race.ResultDeclaredAt?.ToString("yyyy/MM/dd HH:mm") ?? "未確定")</dd><dt>勝ち馬</dt><dd>@(race.WinningHorseName ?? "未確定")</dd></dl>
-    @if (race.Entries.Count > 0)
-    {
-        <h2>出走表</h2>
+    <FluentTabs ShowActiveIndicator="true" aria-label="レース詳細">
+        <FluentTab Label="概要" Id="overview">
+            <dl><dt>グレード</dt><dd>@(race.GradeCode ?? "未登録")</dd><dt>発走時刻</dt><dd>@(race.StartTime?.ToString("HH:mm") ?? "未登録")</dd><dt>距離</dt><dd>@(race.DistanceMeters?.ToString() ?? "未登録") @((race.DirectionCode ?? "") is string direction && !string.IsNullOrWhiteSpace(direction) ? $"（{direction}）" : "")</dd><dt>馬場</dt><dd>@(race.SurfaceCode ?? "未登録")</dd><dt>天候</dt><dd>@(race.WeatherObservations.LastOrDefault()?.WeatherText ?? "未取得")</dd><dt>結果確定</dt><dd>@(race.ResultDeclaredAt?.ToString("yyyy/MM/dd HH:mm") ?? "未確定")</dd><dt>勝ち馬</dt><dd>@(race.WinningHorseName ?? "未確定")</dd></dl>
+        </FluentTab>
+        @if (race.Entries.Count > 0)
+        {
+        <FluentTab Label="出走表" Id="entries">
         <FluentDataGrid Items="@race.Entries.OrderBy(x => x.HorseNumber).AsQueryable()" aria-label="出走表">
             <PropertyColumn Property="@(x => x.GateNumber)" Title="枠" />
             <PropertyColumn Property="@(x => x.HorseNumber)" Title="馬番" />
@@ -25,7 +28,38 @@ else
             <TemplateColumn Title="調教師">@EntityLink("trainers", context.TrainerId, context.TrainerName)</TemplateColumn>
             <TemplateColumn Title="結果">@(FinishLabel(context.HorseId))</TemplateColumn>
         </FluentDataGrid>
-    }
+        </FluentTab>
+        }
+        @if (race.EntryResults.Count > 0)
+        {
+        <FluentTab Label="結果" Id="results">
+            <FluentDataGrid Items="@race.EntryResults.OrderBy(x => x.FinishPosition ?? int.MaxValue).AsQueryable()" aria-label="確定結果">
+                <PropertyColumn Property="@(x => x.FinishPosition)" Title="着順" />
+                <PropertyColumn Property="@(x => x.HorseNumber)" Title="馬番" />
+                <PropertyColumn Property="@(x => x.HorseName)" Title="馬名" />
+                <PropertyColumn Property="@(x => x.OfficialTime)" Title="タイム" />
+                <PropertyColumn Property="@(x => x.MarginText)" Title="着差" />
+            </FluentDataGrid>
+        </FluentTab>
+        }
+        @if (race.Odds is not null && (race.Odds.WinOdds.Count > 0 || race.Odds.PlaceOdds.Count > 0))
+        {
+        <FluentTab Label="オッズ" Id="odds">
+            @if (race.Odds.WinOdds.Count > 0) { <h2>単勝</h2><FluentDataGrid Items="@race.Odds.WinOdds.AsQueryable()" aria-label="単勝オッズ"><PropertyColumn Property="@(x => x.HorseNumber)" Title="馬番" /><PropertyColumn Property="@(x => x.HorseName)" Title="馬名" /><PropertyColumn Property="@(x => x.Odds)" Title="オッズ" /><PropertyColumn Property="@(x => x.Popularity)" Title="人気" /></FluentDataGrid> }
+            @if (race.Odds.PlaceOdds.Count > 0) { <h2>複勝</h2><FluentDataGrid Items="@race.Odds.PlaceOdds.AsQueryable()" aria-label="複勝オッズ"><PropertyColumn Property="@(x => x.HorseNumber)" Title="馬番" /><PropertyColumn Property="@(x => x.HorseName)" Title="馬名" /><TemplateColumn Title="オッズ">@context.OddsMin?.ToString("0.0")〜@context.OddsMax?.ToString("0.0")</TemplateColumn></FluentDataGrid> }
+        </FluentTab>
+        }
+        @if (race.PayoutResult is not null)
+        {
+        <FluentTab Label="払戻" Id="payouts">
+            <FluentDataGrid Items="@PayoutRows().AsQueryable()" aria-label="払戻">
+                <PropertyColumn Property="@(x => x.Kind)" Title="券種" />
+                <PropertyColumn Property="@(x => x.Combination)" Title="組み合わせ" />
+                <PropertyColumn Property="@(x => x.Amount)" Title="払戻金" />
+            </FluentDataGrid>
+        </FluentTab>
+        }
+    </FluentTabs>
 }
 @code {
     [Parameter] public string RaceId { get; set; } = string.Empty;
@@ -57,4 +91,14 @@ else
         RaceStatus.InProgress => "レース中", RaceStatus.ResultDeclared => "結果確定", RaceStatus.PayoutDeclared => "払戻確定",
         RaceStatus.Closed => "締切", RaceStatus.Rescheduled => "開催変更", _ => "未登録"
     };
+
+    private IEnumerable<(string Kind, string Combination, decimal Amount)> PayoutRows()
+    {
+        if (race?.PayoutResult is not { } payout) yield break;
+        foreach (var item in payout.WinPayouts) yield return ("単勝", item.Combination, item.Amount);
+        foreach (var item in payout.PlacePayouts) yield return ("複勝", item.Combination, item.Amount);
+        foreach (var item in payout.QuinellaPayouts) yield return ("馬連", item.Combination, item.Amount);
+        foreach (var item in payout.ExactaPayouts) yield return ("馬単", item.Combination, item.Amount);
+        foreach (var item in payout.TrifectaPayouts) yield return ("三連単", item.Combination, item.Amount);
+    }
 }
