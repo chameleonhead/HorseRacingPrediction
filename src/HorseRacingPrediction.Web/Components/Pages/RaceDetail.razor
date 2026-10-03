@@ -100,5 +100,8 @@ else
         foreach (var item in payout.QuinellaPayouts) yield return ("馬連", item.Combination, item.Amount);
         foreach (var item in payout.ExactaPayouts) yield return ("馬単", item.Combination, item.Amount);
         foreach (var item in payout.TrifectaPayouts) yield return ("三連単", item.Combination, item.Amount);
+        foreach (var item in payout.BracketQuinellaPayouts ?? []) yield return ("枠連", item.Combination, item.Amount);
+        foreach (var item in payout.WidePayouts ?? []) yield return ("ワイド", item.Combination, item.Amount);
+        foreach (var item in payout.TrioPayouts ?? []) yield return ("三連複", item.Combination, item.Amount);
     }
 }

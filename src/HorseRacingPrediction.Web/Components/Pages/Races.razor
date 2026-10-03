@@ -14,20 +14,23 @@
     <label>開始日 <input aria-label="開始日" type="date" @bind="from" /></label>
     <label>終了日 <input aria-label="終了日" type="date" @bind="to" /></label>
     <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SearchAsync">検索</FluentButton>
+    <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="ClearFiltersAsync">条件をクリア</FluentButton>
 </div>
 @if (loading) { <p>読み込み中…</p> }
 else if (error is not null) { <p role="alert">@error</p><FluentButton Appearance="ButtonAppearance.Primary" OnClick="LoadAsync">再試行</FluentButton> }
 else if (result is null || result.Races.Count == 0) { <p>該当するレースはありません。</p> }
 else
 {
-    <p>@result.Pagination.TotalCount 件</p>
-    <FluentDataGrid Items="@result.Races.AsQueryable()">
+    <p>@result.Pagination.TotalCount 件中 @((currentPage - 1) * PageSize + 1)–@Math.Min(currentPage * PageSize, result.Pagination.TotalCount) 件</p>
+    <FluentDataGrid Items="@result.Races.AsQueryable()" aria-label="レース一覧">
         <TemplateColumn Title="開催日">@context.RaceDate?.ToString("yyyy/MM/dd")</TemplateColumn>
         <PropertyColumn Property="@(x => x.RacecourseCode)" Title="競馬場" />
         <TemplateColumn Title="R">@(context.RaceNumber?.ToString() ?? "—")</TemplateColumn>
         <TemplateColumn Title="レース名"><a href="@($"/races/{Uri.EscapeDataString(context.RaceId)}")">@(context.RaceName ?? context.RaceId)</a></TemplateColumn>
         <PropertyColumn Property="@(x => x.EntryCount)" Title="頭数" />
-        <TemplateColumn Title="状態">@StatusLabel(context.Status)</TemplateColumn>
+        <TemplateColumn Title="状態"><span class="race-status">@StatusLabel(context.Status)</span></TemplateColumn>
+        <PropertyColumn Property="@(x => x.WinningHorseName)" Title="勝ち馬" />
+        <TemplateColumn Title="確定日時">@context.ResultDeclaredAt?.ToString("yyyy/MM/dd HH:mm")</TemplateColumn>
     </FluentDataGrid>
     <nav aria-label="レース一覧ページ" class="pagination">
         <FluentButton Appearance="ButtonAppearance.Subtle" Disabled="@(currentPage <= 1 || loading)" OnClick="PreviousPageAsync">前へ</FluentButton>
@@ -48,6 +51,12 @@ else
         await LoadAsync();
     }
     private async Task SearchAsync() { currentPage = 1; UpdateUrl(); await LoadAsync(); }
+    private async Task ClearFiltersAsync()
+    {
+        name = null; course = null; from = null; to = null; currentPage = 1;
+        UpdateUrl();
+        await LoadAsync();
+    }
     private async Task LoadAsync()
     {
         loading = true; error = null;
