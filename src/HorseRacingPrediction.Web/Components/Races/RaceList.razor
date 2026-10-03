@@ -1,0 +1,18 @@
+@using HorseRacingPrediction.Contracts.Races
+@if (Loading && Result is null) { <p>読み込み中…</p> }
+else if (Error is not null) { <p role="alert">@Error</p><FluentButton Appearance="ButtonAppearance.Primary" OnClick="OnRetry">再試行</FluentButton> }
+else if (Result is null || Result.Races.Count == 0) { <p>該当するレースはありません。検索条件を変更するか、条件をクリアしてください。</p><FluentButton Appearance="ButtonAppearance.Subtle" OnClick="OnClear">条件をクリア</FluentButton> }
+else
+{
+    @if (Loading) { <p aria-live="polite">検索中…</p> }
+    <p>@Result.Pagination.TotalCount 件中 @((Page - 1) * PageSize + 1)–@Math.Min(Page * PageSize, Result.Pagination.TotalCount) 件</p>
+    <FluentDataGrid Items="@Result.Races.AsQueryable()" aria-label="レース一覧">
+        <TemplateColumn Title="開催日">@context.RaceDate?.ToString("yyyy/MM/dd")</TemplateColumn><PropertyColumn Property="@(x => x.RacecourseCode)" Title="競馬場" /><TemplateColumn Title="R">@(context.RaceNumber?.ToString() ?? "—")</TemplateColumn><TemplateColumn Title="レース名"><a href="@($"/races/{Uri.EscapeDataString(context.RaceId)}")">@(context.RaceName ?? context.RaceId)</a></TemplateColumn><PropertyColumn Property="@(x => x.EntryCount)" Title="頭数" /><TemplateColumn Title="状態"><span class="race-status">@StatusLabel(context.Status)</span></TemplateColumn><PropertyColumn Property="@(x => x.WinningHorseName)" Title="勝ち馬" /><TemplateColumn Title="確定日時">@context.ResultDeclaredAt?.ToString("yyyy/MM/dd HH:mm")</TemplateColumn>
+    </FluentDataGrid>
+    <nav aria-label="レース一覧ページ" class="pagination"><FluentButton Appearance="ButtonAppearance.Subtle" Disabled="@(Page <= 1 || Loading)" OnClick="OnPreviousPage">前へ</FluentButton><span>@Page / @Result.Pagination.TotalPages ページ</span><FluentButton Appearance="ButtonAppearance.Subtle" Disabled="@(Page >= Result.Pagination.TotalPages || Loading)" OnClick="OnNextPage">次へ</FluentButton></nav>
+}
+@code {
+    [Parameter] public SearchRacesResponse? Result { get; set; } [Parameter] public bool Loading { get; set; } [Parameter] public string? Error { get; set; } [Parameter] public int Page { get; set; } [Parameter] public int PageSize { get; set; } = 50;
+    [Parameter] public EventCallback OnRetry { get; set; } [Parameter] public EventCallback OnClear { get; set; } [Parameter] public EventCallback OnPreviousPage { get; set; } [Parameter] public EventCallback OnNextPage { get; set; }
+    private static string StatusLabel(RaceStatus status) => status switch { RaceStatus.Draft => "下書き", RaceStatus.CardPublished => "出馬表公開", RaceStatus.PreRaceOpen => "発走前", RaceStatus.InProgress => "レース中", RaceStatus.ResultDeclared => "結果確定", RaceStatus.PayoutDeclared => "払戻確定", RaceStatus.Closed => "締切", RaceStatus.Rescheduled => "開催変更", _ => "未登録" };
+}

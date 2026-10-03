@@ -1,0 +1,24 @@
+<div class="filter-toolbar" role="search">
+    <label>レース名 <input aria-label="レース名" placeholder="レース名" value="@Name" @oninput="OnNameInput" /></label>
+    <label>開催場 <input aria-label="開催場" placeholder="開催場" value="@Course" @oninput="OnCourseInput" /></label>
+    <label>開始日 <input aria-label="開始日" type="date" value="@(From?.ToString("yyyy-MM-dd"))" @onchange="OnFromChange" /></label>
+    <label>終了日 <input aria-label="終了日" type="date" value="@(To?.ToString("yyyy-MM-dd"))" @onchange="OnToChange" /></label>
+    <FluentButton Appearance="ButtonAppearance.Primary" OnClick="OnSearch">検索</FluentButton>
+    <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="OnClear">条件をクリア</FluentButton>
+</div>
+@code {
+    [Parameter] public string? Name { get; set; }
+    [Parameter] public EventCallback<string?> NameChanged { get; set; }
+    [Parameter] public string? Course { get; set; }
+    [Parameter] public EventCallback<string?> CourseChanged { get; set; }
+    [Parameter] public DateOnly? From { get; set; }
+    [Parameter] public EventCallback<DateOnly?> FromChanged { get; set; }
+    [Parameter] public DateOnly? To { get; set; }
+    [Parameter] public EventCallback<DateOnly?> ToChanged { get; set; }
+    [Parameter] public EventCallback OnSearch { get; set; }
+    [Parameter] public EventCallback OnClear { get; set; }
+    private Task OnNameInput(ChangeEventArgs args) => NameChanged.InvokeAsync(args.Value?.ToString());
+    private Task OnCourseInput(ChangeEventArgs args) => CourseChanged.InvokeAsync(args.Value?.ToString());
+    private Task OnFromChange(ChangeEventArgs args) => FromChanged.InvokeAsync(DateOnly.TryParse(args.Value?.ToString(), out var value) ? value : null);
+    private Task OnToChange(ChangeEventArgs args) => ToChanged.InvokeAsync(DateOnly.TryParse(args.Value?.ToString(), out var value) ? value : null);
+}

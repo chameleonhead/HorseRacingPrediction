@@ -88,7 +88,7 @@ public sealed class RacePagesComponentTests
         var cut = context.Render<Races>();
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "テストレース"));
 
-        cut.Find("input[aria-label='レース名']").Change("有馬記念");
+        await cut.Find("input[aria-label='レース名']").InputAsync("有馬記念");
         var search = cut.FindComponents<FluentButton>().Single(x => x.Markup.Contains("検索"));
         await cut.InvokeAsync(() => search.Instance.OnClick.InvokeAsync(new MouseEventArgs()));
 
