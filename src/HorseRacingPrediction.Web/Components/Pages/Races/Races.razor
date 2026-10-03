@@ -7,7 +7,7 @@
 @inject IRacesApi RacesApi
 @inject NavigationManager Navigation
 <PageTitle>レース</PageTitle>
-<div class="page-header"><div><h1>レース</h1><p>レース情報を検索・確認します。</p></div></div>
+<PageHeader Title="レース" Description="レース情報を検索・確認します。" />
 <RaceSearchForm @bind-Name="name" @bind-Course="course" @bind-From="from" @bind-To="to" OnSearch="SearchAsync" OnClear="ClearFiltersAsync" />
 <RaceList Result="@result" Loading="@loading" Error="@error" Page="@currentPage" PageSize="@PageSize" OnRetry="LoadAsync" OnClear="ClearFiltersAsync" OnPreviousPage="PreviousPageAsync" OnNextPage="NextPageAsync" />
 @code {

@@ -1,0 +1,5 @@
+<span class="status-badge @CssClass" role="status">@Label</span>
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter] public string? CssClass { get; set; }
+}

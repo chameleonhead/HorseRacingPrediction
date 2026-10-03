@@ -1,0 +1,10 @@
+@if (Kind == "loading") { <p role="status" aria-live="polite">@LoadingText</p> }
+else if (Kind == "error") { <p role="alert">@Message</p>@if (OnRetry.HasDelegate) { <FluentButton Appearance="ButtonAppearance.Primary" OnClick="OnRetry">再試行</FluentButton> } }
+else if (Kind == "empty") { <p>@Message</p>@if (OnClear.HasDelegate) { <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="OnClear">条件をクリア</FluentButton> } }
+@code {
+    [Parameter] public string Kind { get; set; } = "";
+    [Parameter] public string Message { get; set; } = string.Empty;
+    [Parameter] public string LoadingText { get; set; } = "読み込み中…";
+    [Parameter] public EventCallback OnRetry { get; set; }
+    [Parameter] public EventCallback OnClear { get; set; }
+}

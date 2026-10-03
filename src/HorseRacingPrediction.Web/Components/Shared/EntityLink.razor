@@ -1,0 +1,7 @@
+@if (string.IsNullOrWhiteSpace(Id)) { <span>未登録</span> }
+else { <a href="@($"/{Segment}/{Uri.EscapeDataString(Id)}")">@(string.IsNullOrWhiteSpace(Label) ? Id : Label)</a> }
+@code {
+    [Parameter, EditorRequired] public string Segment { get; set; } = string.Empty;
+    [Parameter] public string? Id { get; set; }
+    [Parameter] public string? Label { get; set; }
+}
