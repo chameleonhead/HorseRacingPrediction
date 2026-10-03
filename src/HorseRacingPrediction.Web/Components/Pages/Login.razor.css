@@ -1,5 +1,13 @@
-﻿.login {
-    width: min(100%, 360px);
+﻿.login-card {
+    box-sizing: border-box;
+    width: min(100%, 400px);
+    padding: 32px;
+}
+
+@media (max-width: 480px) {
+    .login-card {
+        padding: 24px;
+    }
 }
 
 .login-header {
@@ -28,10 +36,11 @@ p {
     gap: 16px;
 }
 
-.forgot-password {
-    justify-self: start;
-}
-
 .login-button {
     width: 100%;
+    margin-top: 8px;
+}
+
+.forgot-password {
+    justify-self: start;
 }

@@ -3,5 +3,12 @@
     display: grid;
     place-items: center;
     min-height: 100vh;
-    padding: 24px;
+    padding: 32px 20px;
+    background: var(--neutral-layer-1, #f5f5f5);
+}
+
+@media (max-width: 480px) {
+    .login-layout {
+        padding: 20px 16px;
+    }
 }
