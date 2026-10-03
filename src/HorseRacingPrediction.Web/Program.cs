@@ -1,6 +1,8 @@
 using HorseRacingPrediction.Web.Authentication;
 using HorseRacingPrediction.Web.Components;
 using HorseRacingPrediction.Web.Configurations;
+using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.ApiClient.Races;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.FluentUI.AspNetCore.Components;
 
@@ -28,6 +30,13 @@ builder.Services
     .AddInteractiveServerComponents();
 
 builder.Services.AddFluentUIComponents();
+builder.Services.AddHorseRacingApiClient(options =>
+{
+    options.BaseAddress = new Uri(builder.Configuration["ApiClient:BaseUrl"] ?? "https://localhost:5001");
+    options.ApiKey = builder.Configuration["ApiClient:ApiKey"] ?? Environment.GetEnvironmentVariable("HORSE_RACING_API_KEY");
+    options.ApiKeyHeaderName = builder.Configuration["ApiClient:ApiKeyHeaderName"] ?? "X-Api-Key";
+});
+builder.Services.AddScoped(sp => sp.GetRequiredService<IApiClientFactory>().Create<IRacesApi>());
 
 // Add services for authentication and authorization
 builder.Services

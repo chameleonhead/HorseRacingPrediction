@@ -1,0 +1,35 @@
+@page "/races/{RaceId}"
+@using HorseRacingPrediction.Contracts.Races
+@using HorseRacingPrediction.ApiClient.Races
+@inject IRacesApi RacesApi
+<PageTitle>レース詳細</PageTitle>
+<p><a href="/races">← レース一覧に戻る</a></p>
+@if (loading) { <p>読み込み中…</p> }
+else if (error is not null) { <p role="alert">@error</p> }
+else if (race is null) { <p>レースが見つかりません。</p> }
+else
+{
+    <h1>@(race.RaceName ?? race.RaceId)</h1>
+    <p>@race.RaceDate?.ToString("yyyy/MM/dd")　@race.RacecourseCode　@(race.RaceNumber)R　状態: @race.Status</p>
+    <dl><dt>グレード</dt><dd>@(race.GradeCode ?? "未登録")</dd><dt>距離</dt><dd>@(race.DistanceMeters?.ToString() ?? "未登録")m</dd><dt>馬場</dt><dd>@(race.SurfaceCode ?? "未登録")</dd><dt>天候</dt><dd>@(race.WeatherObservations.LastOrDefault()?.WeatherText ?? "未取得")</dd></dl>
+    @if (race.Entries.Count > 0)
+    {
+        <h2>出走表</h2>
+        <table><thead><tr><th>枠</th><th>馬番</th><th>馬名</th><th>騎手</th><th>調教師</th><th>結果</th></tr></thead><tbody>
+        @foreach (var entry in race.Entries.OrderBy(x => x.HorseNumber))
+        { var finish = race.EntryResults.FirstOrDefault(x => x.HorseId == entry.HorseId)?.FinishPosition;
+          <tr><td>@entry.GateNumber</td><td>@entry.HorseNumber</td><td>@entry.HorseName</td><td>@entry.JockeyName</td><td>@entry.TrainerName</td><td>@(finish is null ? "未確定" : $"{finish}着")</td></tr> }
+        </tbody></table>
+    }
+}
+@code {
+    [Parameter] public string RaceId { get; set; } = string.Empty;
+    private RaceDto? race; private bool loading; private string? error;
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true; error = null;
+        try { var response = await RacesApi.GetRaceAsync(new GetRaceRequest { RaceId = RaceId }); race = response.IsSuccessStatusCode ? response.Content?.Race : null; if (race is null) error = "レース詳細を取得できませんでした。"; }
+        catch (HttpRequestException) { error = "APIに接続できませんでした。"; }
+        finally { loading = false; }
+    }
+}

@@ -8,8 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\HorseRacingPrediction.ApiClient\HorseRacingPrediction.ApiClient.csproj" />
+    <ProjectReference Include="..\HorseRacingPrediction.Contracts\HorseRacingPrediction.Contracts.csproj" />
     <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" Version="5.0.0-rc.5-26219.1" />
     <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components.Icons" Version="5.0.0-rc.5-26219.1" />
+    <PackageReference Include="Refit" Version="16.3.0" />
   </ItemGroup>
 
 </Project>

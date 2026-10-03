@@ -1,71 +1,44 @@
 @page "/races"
+@using HorseRacingPrediction.Contracts.Races
+@using HorseRacingPrediction.ApiClient.Races
+@inject IRacesApi RacesApi
 
 <PageTitle>レース</PageTitle>
-
-<div class="page-header">
-    <div>
-        <h1>レース</h1>
-        <p>レース情報を確認・管理します。</p>
-    </div>
-
-    <FluentButton Appearance="ButtonAppearance.Primary"
-                  IconStart="@(new Icons.Regular.Size20.Add())">
-        レースを追加
-    </FluentButton>
+<div class="page-header"><div><h1>レース</h1><p>レース情報を検索・確認します。</p></div></div>
+<div class="filter-toolbar">
+    <input placeholder="レース名" @bind="name" />
+    <input placeholder="開催場" @bind="course" />
+    <input type="date" @bind="from" /><input type="date" @bind="to" />
+    <FluentButton Appearance="ButtonAppearance.Primary" OnClick="LoadAsync">検索</FluentButton>
 </div>
-
-<FluentStack Orientation="Orientation.Horizontal">
-    <FluentTextInput Placeholder="レースを検索" />
-
-    <FluentSpacer />
-
-    <FluentButton Appearance="ButtonAppearance.Subtle"
-                  IconStart="@(new Icons.Regular.Size20.ArrowClockwise())">
-        更新
-    </FluentButton>
-</FluentStack>
-
-<FluentDataGrid Items="@races.AsQueryable()">
-
-    <TemplateColumn Title="開催日">
-        @context.Date.ToString("yyyy/MM/dd")
-    </TemplateColumn>
-
-    <PropertyColumn Property="@(race => race.Course)"
-                    Title="競馬場" />
-
-    <PropertyColumn Property="@(race => race.RaceNumber)"
-                    Title="R" />
-
-    <PropertyColumn Property="@(race => race.Name)"
-                    Title="レース名" />
-                    
-    <TemplateColumn Title="">
-        <FluentButton Appearance="ButtonAppearance.Subtle"
-                      IconStart="@(new Icons.Regular.Size20.Open())"
-                      Title="詳細"
-                      OnClick="@(() => OpenRace(context))" />
-    </TemplateColumn>
-
-</FluentDataGrid>
-
-@code
+@if (loading) { <p>読み込み中…</p> }
+else if (error is not null) { <p role="alert">@error</p> }
+else if (result is null || result.Races.Count == 0) { <p>該当するレースはありません。</p> }
+else
 {
-    private readonly List<RaceItem> races =
-    [
-        new(new DateOnly(2026, 9, 19), "中山", 11, "ながつきステークス"),
-        new(new DateOnly(2026, 9, 20), "中山", 11, "セントライト記念"),
-        new(new DateOnly(2026, 9, 21), "中山", 10, "内房ステークス"),
-        new(new DateOnly(2026, 9, 21), "阪神", 11, "神戸新聞杯")
-    ];
-
-    private sealed record RaceItem(
-        DateOnly Date,
-        string Course,
-        int RaceNumber,
-        string Name);
-
-    private void OpenRace(RaceItem race)
+    <p>@result.Pagination.TotalCount 件</p>
+    <FluentDataGrid Items="@result.Races.AsQueryable()">
+        <TemplateColumn Title="開催日">@context.RaceDate?.ToString("yyyy/MM/dd")</TemplateColumn>
+        <PropertyColumn Property="@(x => x.RacecourseCode)" Title="競馬場" />
+        <TemplateColumn Title="R">@(context.RaceNumber?.ToString() ?? "—")</TemplateColumn>
+        <TemplateColumn Title="レース名"><a href="@($"/races/{Uri.EscapeDataString(context.RaceId)}")">@(context.RaceName ?? context.RaceId)</a></TemplateColumn>
+        <PropertyColumn Property="@(x => x.EntryCount)" Title="頭数" />
+        <TemplateColumn Title="状態">@context.Status</TemplateColumn>
+    </FluentDataGrid>
+}
+@code {
+    private string? name, course, error; private DateOnly? from, to; private bool loading; private SearchRacesResponse? result;
+    protected override Task OnInitializedAsync() => LoadAsync();
+    private async Task LoadAsync()
     {
+        loading = true; error = null;
+        try
+        {
+            var response = await RacesApi.SearchRacesAsync(new SearchRacesRequest { RaceName = name, RacecourseCode = course, RaceDateFrom = from, RaceDateTo = to, Page = 1, PageSize = 50, SortBy = "raceDate", SortDescending = true });
+            result = response.IsSuccessStatusCode ? response.Content : null;
+            if (result is null) error = "レース一覧を取得できませんでした。";
+        }
+        catch (HttpRequestException) { error = "APIに接続できませんでした。"; }
+        finally { loading = false; }
     }
 }
