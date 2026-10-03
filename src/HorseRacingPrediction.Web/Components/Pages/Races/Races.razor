@@ -7,17 +7,143 @@
 @inject IRacesApi RacesApi
 @inject NavigationManager Navigation
 <PageTitle>レース</PageTitle>
+
 <PageHeader Title="レース" Description="レース情報を検索・確認します。" />
+
 <RaceSearchForm @bind-Name="name" @bind-Course="course" @bind-From="from" @bind-To="to" OnSearch="SearchAsync" OnClear="ClearFiltersAsync" />
+
 <RaceList Result="@result" Loading="@loading" Error="@error" Page="@currentPage" PageSize="@PageSize" OnRetry="LoadAsync" OnClear="ClearFiltersAsync" OnPreviousPage="PreviousPageAsync" OnNextPage="NextPageAsync" />
+
 @code {
-    private const int PageSize = 50; private string? name, course, error; private DateOnly? from, to; private bool loading; private int currentPage = 1; private SearchRacesResponse? result;
-    protected override async Task OnInitializedAsync() { var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query); name = Text(query, "name"); course = Text(query, "course"); from = DateOnly.TryParse(Text(query, "from"), out var fromValue) ? fromValue : null; to = DateOnly.TryParse(Text(query, "to"), out var toValue) ? toValue : null; currentPage = int.TryParse(Text(query, "page"), out var pageValue) && pageValue > 0 ? pageValue : 1; await LoadAsync(); }
-    private async Task SearchAsync() { currentPage = 1; UpdateUrl(); await LoadAsync(); }
-    private async Task ClearFiltersAsync() { name = null; course = null; from = null; to = null; currentPage = 1; UpdateUrl(); await LoadAsync(); }
-    private async Task LoadAsync() { loading = true; error = null; try { var response = await RacesApi.SearchRacesAsync(new SearchRacesRequest { RaceName = name, RacecourseCode = course, RaceDateFrom = from, RaceDateTo = to, Page = currentPage, PageSize = PageSize, SortBy = "raceDate", SortDescending = true }); result = response.IsSuccessStatusCode ? response.Content : null; if (result is null) error = "レース一覧を取得できませんでした。"; else UpdateUrl(); } catch (ApiException) { error = "レース一覧を取得できませんでした。"; } catch (HttpRequestException) { error = "APIに接続できませんでした。"; } finally { loading = false; } }
-    private async Task PreviousPageAsync() { if (currentPage > 1) { currentPage--; UpdateUrl(); await LoadAsync(); } }
-    private async Task NextPageAsync() { if (result is not null && currentPage < result.Pagination.TotalPages) { currentPage++; UpdateUrl(); await LoadAsync(); } }
-    private void UpdateUrl() { var values = new Dictionary<string, string?> { ["name"] = name, ["course"] = course, ["from"] = from?.ToString("yyyy-MM-dd"), ["to"] = to?.ToString("yyyy-MM-dd"), ["page"] = currentPage.ToString() }; var uri = Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/races", values.Where(x => !string.IsNullOrWhiteSpace(x.Value))); if (Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery != Navigation.ToAbsoluteUri(uri).PathAndQuery) Navigation.NavigateTo(uri, replace: true); }
-    private static string? Text(IDictionary<string, Microsoft.Extensions.Primitives.StringValues> query, string key) => query.TryGetValue(key, out var value) ? value.ToString() : null;
+    private const int PageSize = 50;
+    private string? name;
+    private string? course;
+    private string? error;
+    private DateOnly? from;
+    private DateOnly? to;
+    private bool loading;
+    private int currentPage = 1;
+    private SearchRacesResponse? result;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(
+            Navigation.ToAbsoluteUri(Navigation.Uri).Query);
+
+        name = Text(query, "name");
+        course = Text(query, "course");
+        from = DateOnly.TryParse(Text(query, "from"), out var fromValue) ? fromValue : null;
+        to = DateOnly.TryParse(Text(query, "to"), out var toValue) ? toValue : null;
+        currentPage = int.TryParse(Text(query, "page"), out var pageValue) && pageValue > 0
+            ? pageValue
+            : 1;
+
+        await LoadAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        currentPage = 1;
+        UpdateUrl();
+        await LoadAsync();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        name = null;
+        course = null;
+        from = null;
+        to = null;
+        currentPage = 1;
+        UpdateUrl();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        error = null;
+
+        try
+        {
+            var response = await RacesApi.SearchRacesAsync(new SearchRacesRequest
+            {
+                RaceName = name,
+                RacecourseCode = course,
+                RaceDateFrom = from,
+                RaceDateTo = to,
+                Page = currentPage,
+                PageSize = PageSize,
+                SortBy = "raceDate",
+                SortDescending = true
+            });
+
+            result = response.IsSuccessStatusCode ? response.Content : null;
+            if (result is null)
+            {
+                error = "レース一覧を取得できませんでした。";
+            }
+            else
+            {
+                UpdateUrl();
+            }
+        }
+        catch (ApiException)
+        {
+            error = "レース一覧を取得できませんでした。";
+        }
+        catch (HttpRequestException)
+        {
+            error = "APIに接続できませんでした。";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task PreviousPageAsync()
+    {
+        if (currentPage > 1)
+        {
+            currentPage--;
+            UpdateUrl();
+            await LoadAsync();
+        }
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (result is not null && currentPage < result.Pagination.TotalPages)
+        {
+            currentPage++;
+            UpdateUrl();
+            await LoadAsync();
+        }
+    }
+
+    private void UpdateUrl()
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["name"] = name,
+            ["course"] = course,
+            ["from"] = from?.ToString("yyyy-MM-dd"),
+            ["to"] = to?.ToString("yyyy-MM-dd"),
+            ["page"] = currentPage.ToString()
+        };
+
+        var uri = Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString(
+            "/races",
+            values.Where(x => !string.IsNullOrWhiteSpace(x.Value)));
+
+        if (Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery != Navigation.ToAbsoluteUri(uri).PathAndQuery)
+        {
+            Navigation.NavigateTo(uri, replace: true);
+        }
+    }
+
+    private static string? Text(
+        IDictionary<string, Microsoft.Extensions.Primitives.StringValues> query,
+        string key) => query.TryGetValue(key, out var value) ? value.ToString() : null;
 }
