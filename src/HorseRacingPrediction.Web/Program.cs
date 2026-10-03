@@ -32,7 +32,9 @@ builder.Services
 builder.Services.AddFluentUIComponents();
 builder.Services.AddHorseRacingApiClient(options =>
 {
-    options.BaseAddress = new Uri(builder.Configuration["ApiClient:BaseUrl"] ?? "https://localhost:5001");
+    var baseUrl = builder.Configuration["ApiClient:BaseUrl"]
+        ?? throw new InvalidOperationException("ApiClient:BaseUrl must be configured.");
+    options.BaseAddress = new Uri(baseUrl);
     options.ApiKey = builder.Configuration["ApiClient:ApiKey"] ?? Environment.GetEnvironmentVariable("HORSE_RACING_API_KEY");
     options.ApiKeyHeaderName = builder.Configuration["ApiClient:ApiKeyHeaderName"] ?? "X-Api-Key";
 });

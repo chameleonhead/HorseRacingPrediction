@@ -6,10 +6,11 @@
 <PageTitle>レース</PageTitle>
 <div class="page-header"><div><h1>レース</h1><p>レース情報を検索・確認します。</p></div></div>
 <div class="filter-toolbar">
-    <input placeholder="レース名" @bind="name" />
-    <input placeholder="開催場" @bind="course" />
-    <input type="date" @bind="from" /><input type="date" @bind="to" />
-    <FluentButton Appearance="ButtonAppearance.Primary" OnClick="LoadAsync">検索</FluentButton>
+    <label>レース名 <input aria-label="レース名" placeholder="レース名" @bind="name" /></label>
+    <label>開催場 <input aria-label="開催場" placeholder="開催場" @bind="course" /></label>
+    <label>開始日 <input aria-label="開始日" type="date" @bind="from" /></label>
+    <label>終了日 <input aria-label="終了日" type="date" @bind="to" /></label>
+    <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SearchAsync">検索</FluentButton>
 </div>
 @if (loading) { <p>読み込み中…</p> }
 else if (error is not null) { <p role="alert">@error</p> }
@@ -25,20 +26,30 @@ else
         <PropertyColumn Property="@(x => x.EntryCount)" Title="頭数" />
         <TemplateColumn Title="状態">@context.Status</TemplateColumn>
     </FluentDataGrid>
+    <nav aria-label="レース一覧ページ" class="pagination">
+        <FluentButton Appearance="ButtonAppearance.Subtle" Disabled="@(currentPage <= 1 || loading)" OnClick="PreviousPageAsync">前へ</FluentButton>
+        <span>@currentPage / @result.Pagination.TotalPages ページ</span>
+        <FluentButton Appearance="ButtonAppearance.Subtle" Disabled="@(currentPage >= result.Pagination.TotalPages || loading)" OnClick="NextPageAsync">次へ</FluentButton>
+    </nav>
 }
 @code {
-    private string? name, course, error; private DateOnly? from, to; private bool loading; private SearchRacesResponse? result;
+    private const int PageSize = 50;
+    private string? name, course, error; private DateOnly? from, to; private bool loading; private int currentPage = 1; private SearchRacesResponse? result;
     protected override Task OnInitializedAsync() => LoadAsync();
+    private async Task SearchAsync() { currentPage = 1; await LoadAsync(); }
     private async Task LoadAsync()
     {
         loading = true; error = null;
         try
         {
-            var response = await RacesApi.SearchRacesAsync(new SearchRacesRequest { RaceName = name, RacecourseCode = course, RaceDateFrom = from, RaceDateTo = to, Page = 1, PageSize = 50, SortBy = "raceDate", SortDescending = true });
+            var response = await RacesApi.SearchRacesAsync(new SearchRacesRequest { RaceName = name, RacecourseCode = course, RaceDateFrom = from, RaceDateTo = to, Page = currentPage, PageSize = PageSize, SortBy = "raceDate", SortDescending = true });
             result = response.IsSuccessStatusCode ? response.Content : null;
             if (result is null) error = "レース一覧を取得できませんでした。";
         }
         catch (HttpRequestException) { error = "APIに接続できませんでした。"; }
         finally { loading = false; }
     }
+
+    private async Task PreviousPageAsync() { if (currentPage > 1) { currentPage--; await LoadAsync(); } }
+    private async Task NextPageAsync() { if (result is not null && currentPage < result.Pagination.TotalPages) { currentPage++; await LoadAsync(); } }
 }
