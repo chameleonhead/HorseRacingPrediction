@@ -608,6 +608,95 @@ public sealed class CollectionDispatchStarvationReproductionTests
     }
 
     [TestMethod]
+    public async Task ReserveConflictStopsStaleCandidateScanAndNextCycleRefetchesPreferredLane()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "collection-reserve-conflict-scan", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
+            { StateDirectory = directory }));
+            var requestedAt = DateTimeOffset.UtcNow.AddMinutes(-3);
+            var definition = new CollectionDefinitionId("race-detail");
+            await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race,
+                1, "initial", false);
+            for (var index = 0; index < 5; index++)
+                await store.RequestAsync(new(CollectionResourceType.Race, "JRA", $"CONFLICT-REALTIME-{index}"),
+                    definition, 1, CollectionReason.Initial, requestedAt, CollectionLane.Realtime, 100 - index);
+            await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "CONFLICT-NORMAL"), definition, 1,
+                CollectionReason.Initial, requestedAt, CollectionLane.Normal, 50);
+            await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "CONFLICT-BACKGROUND"), definition, 1,
+                CollectionReason.Initial, requestedAt, CollectionLane.Background, 10);
+
+            var databasePath = Path.Combine(directory, "collection-platform.db");
+            var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                .UseSqlite($"Data Source={databasePath};Pooling=False;Default Timeout=30").Options;
+            await using (var db = new CollectionPlatformDbContext(dbOptions))
+            {
+                var fairness = await db.DispatcherFairnessStates.SingleAsync(x => x.StateId == 1);
+                fairness.LastNonRealtimeLane = CollectionLane.Normal.ToString();
+                await db.SaveChangesAsync();
+            }
+            var queue = new WakeCaptureQueue();
+            var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
+                Options.Create(new CollectionQueueOptions
+                {
+                    Enabled = true,
+                    DispatchBatchSize = 10,
+                    EnvelopeMaxTasks = 1,
+                    MaxInFlightEnvelopes = 10,
+                    OutboxReservationSeconds = 45,
+                    AggregationDelayMilliseconds = 0
+                }), NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
+            var reservationAttempts = 0;
+            var competingReservationsMade = false;
+            dispatcher.BeforeReservationAsync = async (group, cancellationToken) =>
+            {
+                reservationAttempts++;
+                if (competingReservationsMade) return;
+                Assert.AreEqual(CollectionLane.Realtime, group.Single().Lane,
+                    "The cycle snapshot initially prefers Realtime.");
+                var candidates = await store.GetPendingDispatchesAsync(requestedAt, 80, cancellationToken);
+                var otherRealtime = candidates.Where(x => x.Lane == CollectionLane.Realtime
+                        && x.Notification.TaskId != group.Single().Notification.TaskId)
+                    .Take(4).ToArray();
+                Assert.AreEqual(4, otherRealtime.Length,
+                    "The competing dispatcher must have four other Realtime grants available.");
+                foreach (var candidate in otherRealtime)
+                {
+                    var token = Guid.NewGuid().ToString("N");
+                    Assert.IsTrue(await store.TryReserveDispatchesWithinCapacityAsync([candidate.OutboxId], token,
+                        Guid.NewGuid(), Guid.NewGuid(), requestedAt, TimeSpan.FromSeconds(45), 10, 0,
+                        cancellationToken), "Competing Realtime reservations advance persistent fairness.");
+                }
+                competingReservationsMade = true;
+            };
+
+            await dispatcher.DispatchOnceAsync(CancellationToken.None);
+
+            Assert.IsTrue(competingReservationsMade);
+            Assert.AreEqual(1, reservationAttempts,
+                "A global fairness conflict must stop the stale page instead of spending reservations on other lanes.");
+            Assert.IsEmpty(queue.Wakes,
+                "The stale Realtime candidate cannot reserve after another dispatcher advances persistent fairness.");
+
+            await dispatcher.DispatchOnceAsync(CancellationToken.None);
+
+            Assert.IsTrue(queue.Wakes.Count > 0,
+                "The next cycle must reload the candidate page and dispatch the currently preferred lane.");
+            var reserved = await LoadOutboxForWakeAsync(dbOptions, queue.Wakes[0].DispatchEnvelopeId);
+            await using var verify = new CollectionPlatformDbContext(dbOptions);
+            var reservedTask = await verify.Tasks.SingleAsync(x => x.TaskId == reserved.TaskId);
+            Assert.AreEqual(CollectionLane.Background, reservedTask.Lane,
+                "After persisted fairness advances past four Realtime grants with Normal last served, Background is preferred.");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
     [DataRow("hold")]
     [DataRow("duplicate-outbox")]
     [DataRow("available-at")]

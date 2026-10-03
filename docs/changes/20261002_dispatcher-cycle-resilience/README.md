@@ -101,6 +101,10 @@ candidate-query, or telemetry exceptions before that boundary can end the hosted
    Reservation lifetime alone starts from a clock provider invoked inside the store immediately before expiry is
    written, after its slow revalidation queries. The 45-second duration and every pause, lease, capacity, priority,
    and compatibility guard remain unchanged.
+8. `ReserveConflict` invalidates the dispatcher’s bounded candidate/fairness snapshot because the store compares the
+   requested lane against all globally eligible lanes. End only that `DispatchOnceAsync` scan and let the next hosted
+   cycle refetch; keep `CandidateRejected` candidate-specific and continue through other candidates in the same cycle.
+   `CapacityFull` remains global and still stops the current scan.
 
 ## Concern and agreement ledger
 
@@ -114,15 +118,16 @@ candidate-query, or telemetry exceptions before that boundary can end the hosted
 | C6 | A derived red/green status needs an arbitrary inactivity threshold and can misclassify low-volume Background work. | False alarms or false reassurance. | Show due/running counts and exact lifecycle timestamps; retain the existing monitoring subsystem for alert classification. | AC5,AC6 / T2,T3 | Agree; raw operational facts are actionable without a new policy. | Approved with this record on 2026-10-02. | Resolved in design |
 | C7 | Adding progress fields could break existing clients or add an expensive query. | Admin pages or operational polling could regress. | Use one additive DTO property, retain all existing fields, aggregate the task snapshot already loaded by `GetProgressAsync`, and regression-test both progress and dashboard response shapes. | AC5,AC6 / T2 / contract tests | Agree. | Approved with this record on 2026-10-02. | Resolved in design |
 | C8 | Refreshing the single store timestamp at reservation would also change future-work eligibility, lease/capacity revalidation, and lane fairness after a slow scan. | The incident fix could violate AC2-AC3 while restoring throughput. | Pass a separate reservation-deadline timestamp to the store and use it only for `ReservedUntilUnixMilliseconds`; retain the cycle snapshot for every existing query and fairness update. Add a delayed pre-reservation counterexample where Realtime remains future at the cycle snapshot and rerun existing fairness regressions. | AC2-AC4 / T5 / delayed-reservation and existing starvation tests | Object to replacing the existing store `now`; agree with the split-clock correction. | Approved as a local closure refinement; no public contract or frozen lane decision changes. | Resolved in design |
+| C9 | A successful grouped wake can consume the sampled candidates for a lane while globally eligible work remains beyond the bounded page. | Continuing over the old page can issue repeated slow reservations for lanes that are no longer grantable under current global fairness. | Treat `ReserveConflict` as invalidation of the current candidate/fairness snapshot and end that scan; retain same-cycle continuation for candidate-specific `CandidateRejected`. The next hosted cycle refetches candidates and persistent fairness. | AC1-AC4 / T7 / controlled concurrent-fairness conflict followed by fresh-cycle dispatch | Agree; the store compares against all globally eligible lanes, so repeating against the same remaining page cannot repair the snapshot. | Lead-approved operational closure refinement on 2026-10-03; lane rules and public behavior remain unchanged. | Resolved in design |
 
 ## Acceptance criteria
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | After one non-cancellation exception before envelope dispatch, the hosted dispatcher logs it, waits without a hot loop, and a later cycle dispatches eligible work without process restart. | T1,T6 | hosted-service regression with a fail-once dependency; capacity-full scans stop and the next cycle resumes after capacity frees | Verified |
-| AC2 | When Realtime tasks exist but are future-dated, due Normal and Background tasks are dispatched; future Realtime tasks remain untouched. | T1,T6 | real store/dispatcher counterexample, including a future Realtime crossover during reservation delay | Verified |
-| AC3 | Under due three-lane load, dispatch order retains four Realtime grants followed by Normal, then four Realtime grants followed by Background; priorities and compatibility grouping remain unchanged. | T1,T6 | existing and focused fairness/starvation regressions | Verified |
-| AC4 | CI and canonical deployment pass; production remains unpaused with zero new failures and shows terminal progress from Realtime, Normal, and Background during a bounded observation window. | T2,T3,T5,T6 | delayed-reservation and bounded-capacity regressions, CI/deploy runs, CloudWatch acquisition evidence, plus before/after task evidence by lane | Connected |
+| AC1 | After one non-cancellation exception before envelope dispatch, the hosted dispatcher logs it, waits without a hot loop, and a later cycle dispatches eligible work without process restart. | T1,T6,T7 | hosted-service regression with a fail-once dependency; capacity-full scans stop and the next cycle resumes after capacity frees; reservation conflicts stop the stale candidate scan and the next cycle refetches | Verified |
+| AC2 | When Realtime tasks exist but are future-dated, due Normal and Background tasks are dispatched; future Realtime tasks remain untouched. | T1,T6,T7 | real store/dispatcher counterexample, including a future Realtime crossover during reservation delay | Verified |
+| AC3 | Under due three-lane load, dispatch order retains four Realtime grants followed by Normal, then four Realtime grants followed by Background; priorities and compatibility grouping remain unchanged. | T1,T6,T7 | existing and focused fairness/starvation regressions | Verified |
+| AC4 | CI and canonical deployment pass; production remains unpaused with zero new failures and shows terminal progress from Realtime, Normal, and Background during a bounded observation window. | T2,T3,T5,T6,T7 | delayed-reservation, bounded-capacity, and stale-candidate-conflict regressions, CI/deploy runs, CloudWatch acquisition evidence, plus before/after task evidence by lane | Connected |
 | AC5 | `/jobs` always displays Realtime, Normal, and Background in that order with due Ready count, Running count, latest task start, and latest task completion. Values come from persisted server state; timestamps use JST and absent timestamps display `実績なし`. | T2 | store/mapper/API regressions and bUnit component assertions including zero/null Background history | Verified |
 | AC6 | Automatic/manual refresh updates the lane activity table without navigation, the existing page-refresh timestamp remains distinct, and the table remains readable at narrow width without hiding Background. Existing progress/dashboard clients retain their prior fields. | T2 | bUnit refresh and responsive markup assertions; API compatibility tests; focused browser verification | Connected |
 
@@ -135,7 +140,8 @@ candidate-query, or telemetry exceptions before that boundary can end the hosted
 | T3 | Deploy through the canonical workflow. | Lead operator | mechanical | Integration operation depends on the verified revision and remains Lead-owned. | T1,T2,T5,T6 | workflow operation only | CI and deployment terminal success | run URLs and deployed commit | none | unavailable; retries 0; corrections 0; reviews 0 | Dependent |
 | T4 | Verify production progress, screen evidence, and close the incident record. | Lead verifier | lead acceptance | Final acceptance remains Lead-owned. | T3 | authenticated diagnostics, browser verification, and change record only | lane-specific before/after facts, pipeline/failure state, rendered `/jobs` evidence | AC4-AC6 evidence and final review | none | unavailable; retries 0; corrections 0; reviews 0 | Dependent |
 | T5 | Complete the split-clock reservation fix and lead-owned production recovery/verification. | Cheap Executor; Lead integrates and accepts | gpt-6-luna high requested; observed model unavailable because runtime telemetry does not expose it | Cheap code slice T5-A2 is complete; production deployment/verification waits for T6's bounded-scan guard so both fixes ship together. | T6, then T3/T4 | `src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformOutboxDispatcher.cs`; `src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.cs`; `tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs` | focused starvation tests; full API suite; API build; exact CI formatter; CodeGraph sync; audit/DDD validators; `git diff --check`; canonical deploy; CloudWatch and `/jobs` observation | delayed reservation acquires successfully, unchanged fairness regressions pass, deployed production shows successful acquisitions and lane progress | T5-A1, T5-A2 | unavailable; retries 1; corrections 0; reviews 2 | Dependent |
-| T6 | Stop the bounded candidate scan on global CapacityFull while continuing after candidate-specific rejection or reservation conflict. | Cheap Executor; Lead integrates and accepts | gpt-6-luna high requested; observed model unavailable because runtime telemetry does not expose it | Cheap execution; one terminal branch and deterministic dispatcher regression fit the existing AC contract; no policy/config/public contract changes. | T5-A2 split-clock code complete | `src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformOutboxDispatcher.cs`; `tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs`; `docs/changes/20261002_dispatcher-cycle-resilience/README.md`; `docs/changes/20261002_dispatcher-cycle-resilience/agent-audits/T6-A1.json` | focused starvation class; dispatcher class for fairness/host-loop regression; audit/DDD validators; `git diff --check` | CapacityFull after the first wake stops the current scan before a third reservation attempt; CandidateRejected still reaches valid work; released capacity progresses on a later cycle | T6-A1 | unavailable; retries 1; corrections 0; reviews 0 | Verified |
+| T6 | Stop the bounded candidate scan on global CapacityFull while preserving same-cycle continuation for candidate-specific rejection. | Cheap Executor; Lead integrates and accepts | gpt-6-luna high requested; observed model unavailable because runtime telemetry does not expose it | Cheap execution; one terminal branch and deterministic dispatcher regression fit the existing AC contract; no policy/config/public contract changes. | T5-A2 split-clock code complete | `src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformOutboxDispatcher.cs`; `tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs`; `docs/changes/20261002_dispatcher-cycle-resilience/README.md`; `docs/changes/20261002_dispatcher-cycle-resilience/agent-audits/T6-A1.json` | focused starvation class; dispatcher class for fairness/host-loop regression; audit/DDD validators; `git diff --check` | CapacityFull after the first wake stops the current scan before a third reservation attempt; CandidateRejected still reaches valid work; released capacity progresses on a later cycle. T7 later reclassifies ReserveConflict as global snapshot invalidation. | T6-A1 | unavailable; retries 1; corrections 0; reviews 0 | Verified |
+| T7 | Stop the current bounded candidate scan when store fairness rejects its reservation; fetch fresh candidates and fairness next cycle while candidate-specific rejection continues in-cycle. | Cheap Executor; Lead integrates and accepts | gpt-6-luna high requested; observed model unavailable because runtime telemetry does not expose it | Production ReserveConflict repeats align with stale in-memory candidates after successful group reservations; bounded correction adds no policy/config/public contract changes. | T6 verified; production config and repeated conflict evidence inspected | `src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformOutboxDispatcher.cs`; `tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs`; `docs/changes/20261002_dispatcher-cycle-resilience/README.md`; `docs/changes/20261002_dispatcher-cycle-resilience/agent-audits/T7-A1.json` | focused starvation class; dispatcher class for fairness/host-loop regression; audit/DDD validators; `git diff --check` | A conflict terminates the stale scan after one attempt; the next cycle refetches and dispatches the globally preferred lane; candidate-specific rejection and fairness counterexamples remain green | T7-A1 | unavailable; retries 1; corrections 0; reviews 0 | Verified |
 
 ## Review gates
 
@@ -187,7 +193,39 @@ candidate-query, or telemetry exceptions before that boundary can end the hosted
   and `ReserveConflict` retain the existing reload-and-continue path. The capacity-one regression observes two
   reservation attempts for the first cycle, no third attempt, then another wake after completion frees capacity.
   The existing mutation-continuation case and dispatcher/fairness class remain green. The initial audit gate failure
-  was closed by making T5 dependent until T6 completes and aligning the active audit schema/write scope.
+  was closed by making T5 dependent until T6 completes and aligning the active audit schema/write scope. T7 below
+  subsequently reclassifies ReserveConflict as global snapshot invalidation based on production evidence.
+- **T7 pre-implementation review (2026-10-03):** CodeGraph is unavailable in the managed worktree; source inspection
+  found `GetPendingDispatchesAsync` materializes a bounded page once per cycle, while reservation revalidation selects
+  the preferred lane from all eligible database rows. Each successful reservation removes its group only from the
+  in-memory page. Production defaults are batch size 10, scan budget 80, per-lane sample 26, and max in-flight 1;
+  configured race-detail grouping can consume the page sample in 2-3 successful envelopes. Production evidence shows
+  repeated Background/OTHER `ReserveConflict` at two-minute intervals before Realtime finally acquired, consistent
+  with expensive retries over a stale remaining page. Purpose: stop a scan on global fairness conflict so the next
+  cycle refreshes both sources of state. Files: dispatcher, focused starvation regression, this record, and T7 audit.
+  Steps: add a deterministic competing dispatcher that commits four Realtime reservations before the first reservation;
+  assert one conflict attempt and
+  no same-cycle stale candidate attempt; invoke a second cycle and prove the current preferred lane is dispatched;
+  retain candidate-rejection continuation, four-Realtime/Normal-Background fairness, future-Realtime, and CapacityFull
+  regressions; run the focused classes, validators, and diff check. Unresolved specification questions: none. Counterexample:
+  after the dispatcher reads Realtime preference, another reservation advances persisted fairness to Background; the
+  stale cycle's Realtime candidate conflicts, but the next cycle must refetch and dispatch Background. Commands:
+  `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-restore --filter
+  FullyQualifiedName~CollectionDispatchStarvationReproductionTests` and the dispatcher class filter, plus audit/DDD
+  validators and `git diff --check`; expected all pass. Route requested `gpt-6-luna` / high; observed model and usage
+  unavailable because runtime telemetry is not exposed. T7 is locally verified; no production operation is in this scope.
+- **T7 verification correction:** The production-shaped concurrency fixture passed four real Realtime reservations
+  before the stale attempt; the subsequent cycle correctly emitted multiple wakes within max-in-flight capacity, so
+  the initial assertion of exactly one wake was invalid. The gate failed on the fixture expectation, not implementation
+  behavior. Corrected it to require at least one wake and verify the first lane; rerun passed.
+- **T7 checkpoint review (2026-10-03):** The competing-dispatcher regression commits four Realtime reservations
+  after the dispatcher reads its cycle snapshot, advancing fairness through the real store transaction.
+  `ReserveConflict` now exits after exactly one reservation attempt with no wake;
+  the following cycle fetches fresh state and acquires the expected Background lane. The starvation class passed
+  39/39, including the new counterexample and existing rejection-continuation/future-Realtime cases; the dispatcher
+  class passed 10/10. Audit/DDD validators and `git diff --check` passed. No production deploy or recovery is claimed.
+  The first pre-implementation audit check also caught an incomplete active-attempt JSON shape; it was corrected
+  before code editing and the audit validator passed on rerun (audit-authoring/schema issue; one correction).
 - **Final review:** Pending deployment and production evidence.
 
 ## Incident record
@@ -201,7 +239,8 @@ from a timestamp captured before the transaction. Lambda acknowledges `Reservati
 task. The missing cycle exception boundary was a separate resilience defect already corrected.
 Corrective proposal: Keep every eligibility/fairness/capacity check on the cycle snapshot, but invoke a separate clock
 inside the store immediately before writing the unchanged reservation duration.
-Permanent fix: Approved; T5-A2 implementation in progress.
+Permanent fix: T5-A2 split-clock and T7 conflict-scan corrections are locally verified; production deployment and
+lane-specific recovery evidence remain Lead-owned.
 Remaining risk: None identified beyond production verification of the corrected write-boundary clock.
 ```
 
@@ -239,6 +278,14 @@ Remaining risk: None identified beyond production verification of the corrected 
   terminates the bounded scan after the second attempt and a later cycle resumes when capacity is released.
 - Lead verification passed the full API suite (420 passed, one existing skip), the Release API build with zero
   warnings/errors, and exact solution formatter verification. Deployment and production evidence remain outstanding.
+- T7-A1 passed the focused starvation class (39/39) and dispatcher class (10/10); `git diff --check`, the agent audit
+  validator, and the DDD change-record validator passed. Four competing Realtime reservations advanced persisted
+  fairness after the dispatcher read its cycle snapshot; this produced one `ReserveConflict` attempt and no wake in
+  the stale cycle. The next cycle fetched fresh state and acquired Background from the new fairness snapshot.
+  CandidateRejected continuation and existing future-Realtime/fairness cases remained green. This is local
+  verification only; deployment and production lane progress remain outstanding.
+- Lead verification passed the full API suite (421 passed, one existing skip), the Release API build with zero
+  warnings/errors, exact solution formatter verification, both record validators, and `git diff --check`.
 
 ## Deviations and follow-up
 

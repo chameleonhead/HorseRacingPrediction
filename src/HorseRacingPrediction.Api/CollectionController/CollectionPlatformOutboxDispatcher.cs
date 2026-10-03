@@ -140,11 +140,12 @@ public sealed class CollectionPlatformOutboxDispatcher(
                     if (telemetry is not null)
                         await telemetry.RecordDispatchCycleAsync(reserveOutcome, item.Lane,
                             item.Definition.Value, cancellationToken).ConfigureAwait(false);
-                    // Capacity is global to this cycle; candidate-specific rejections/conflicts still try later candidates.
-                    if (reserveOutcome == CollectionDispatchCycleOutcome.CapacityFull)
+                    // Capacity and reservation fairness are global to this bounded cycle snapshot. A later hosted
+                    // cycle reloads both candidate pages and fairness; only candidate-specific rejection continues.
+                    if (reserveOutcome is CollectionDispatchCycleOutcome.CapacityFull
+                        or CollectionDispatchCycleOutcome.ReserveConflict)
                         break;
-                    // Another dispatcher may have consumed a lane grant while this instance was selecting.
-                    // Reload persistent fairness before selecting from the remaining bounded scan page.
+                    // A candidate-specific rejection may leave other candidates in this bounded page valid.
                     dispatchState = await store.GetLaneDispatchStateAsync(cancellationToken).ConfigureAwait(false);
                     continue;
                 }
