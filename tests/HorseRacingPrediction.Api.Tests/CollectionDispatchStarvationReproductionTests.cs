@@ -548,6 +548,66 @@ public sealed class CollectionDispatchStarvationReproductionTests
     }
 
     [TestMethod]
+    public async Task CapacityFullStopsCurrentScanAndLaterCycleResumesAfterCapacityFrees()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "collection-capacity-full-scan", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
+            { StateDirectory = directory }));
+            var requestedAt = DateTimeOffset.UtcNow.AddMinutes(-3);
+            var definition = new CollectionDefinitionId("race-detail");
+            await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race,
+                1, "initial", false);
+            for (var index = 1; index <= 3; index++)
+                await store.RequestAsync(new(CollectionResourceType.Race, "JRA", $"CAPACITY-{index}"),
+                    definition, 1, CollectionReason.Backfill, requestedAt, CollectionLane.Background, 10 - index);
+
+            var queue = new WakeCaptureQueue();
+            var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
+                Options.Create(new CollectionQueueOptions
+                {
+                    Enabled = true,
+                    DispatchBatchSize = 10,
+                    EnvelopeMaxTasks = 1,
+                    MaxInFlightEnvelopes = 1,
+                    OutboxReservationSeconds = 45,
+                    AggregationDelayMilliseconds = 0
+                }), NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
+            var reservationAttempts = 0;
+            dispatcher.BeforeReservationAsync = (_, _) =>
+            {
+                reservationAttempts++;
+                return Task.CompletedTask;
+            };
+
+            await dispatcher.DispatchOnceAsync(CancellationToken.None);
+
+            Assert.AreEqual(1, queue.Wakes.Count, "The first eligible candidate must produce one wake.");
+            Assert.AreEqual(2, reservationAttempts,
+                "The successful reservation fills global capacity; CapacityFull on the second candidate must stop before a third attempt.");
+            var acquisitionTime = DateTimeOffset.UtcNow;
+            var firstAcquisition = await store.AcquireNextExecutionAsync(queue.Wakes[0], "capacity-first",
+                acquisitionTime, TimeSpan.FromSeconds(45));
+            Assert.AreEqual(CollectionExecutionAcquireStatus.Acquired, firstAcquisition.Status);
+            Assert.IsTrue(await store.CompleteExecutionAsync(firstAcquisition.ExecutionBatchId!.Value,
+                firstAcquisition.LeaseToken!, acquisitionTime.AddSeconds(1)));
+
+            await dispatcher.DispatchOnceAsync(CancellationToken.None);
+
+            Assert.AreEqual(2, queue.Wakes.Count,
+                "A later cycle must dispatch remaining work after completion releases the capacity slot.");
+            Assert.AreEqual(4, reservationAttempts,
+                "The later cycle should try one candidate successfully, then stop at the next CapacityFull result.");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
     [DataRow("hold")]
     [DataRow("duplicate-outbox")]
     [DataRow("available-at")]

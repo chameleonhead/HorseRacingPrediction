@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261002_dispatcher-cycle-resilience",
+  "taskId": "T6",
+  "attemptId": "T6-A1",
+  "state": "completed",
+  "taskDifficulty": "low",
+  "acceptanceCriteria": ["AC1", "AC2", "AC3", "AC4"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose worker model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime did not expose per-worker usage"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformOutboxDispatcher.cs",
+    "tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs",
+    "docs/changes/20261002_dispatcher-cycle-resilience/README.md",
+    "docs/changes/20261002_dispatcher-cycle-resilience/agent-audits/T6-A1.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "runtime did not expose review usage or active time"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "active effort telemetry was not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "runtime did not expose reliable worker elapsed effort"
+  },
+  "startRevision": "6eb4c482f27be0ae9e1ae6526630deb18fe357cf",
+  "endRevisionOrPatch": "working-tree patch 99ff34a286c0cd81bfc81829ba429698580e0176",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Capacity-one regression confirms no third attempt after CapacityFull and a later cycle resumes; existing rejection-continuation and dispatcher/fairness regressions pass.",
+    "retries": 1,
+    "leadCorrections": 0,
+    "reviewPasses": 0,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}
