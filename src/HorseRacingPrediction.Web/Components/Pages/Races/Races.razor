@@ -10,7 +10,13 @@
 
 <PageHeader Title="レース" Description="レース情報を検索・確認します。" />
 
-<RaceSearchForm @bind-Name="name" @bind-Course="course" @bind-From="from" @bind-To="to" OnSearch="SearchAsync" OnClear="ClearFiltersAsync" />
+<RaceSearchForm @bind-Name="name"
+                @bind-Course="course"
+                @bind-From="from"
+                @bind-To="to"
+                ValidationMessage="@validationError"
+                OnSearch="SearchAsync"
+                OnClear="ClearFiltersAsync" />
 
 <RaceList Result="@result" Loading="@loading" Error="@error" Page="@currentPage" PageSize="@PageSize" OnRetry="LoadAsync" OnClear="ClearFiltersAsync" OnPreviousPage="PreviousPageAsync" OnNextPage="NextPageAsync" />
 
@@ -19,6 +25,7 @@
     private string? name;
     private string? course;
     private string? error;
+    private string? validationError;
     private DateOnly? from;
     private DateOnly? to;
     private bool loading;
@@ -43,6 +50,12 @@
 
     private async Task SearchAsync()
     {
+        validationError = ValidateFilters();
+        if (validationError is not null)
+        {
+            return;
+        }
+
         currentPage = 1;
         UpdateUrl();
         await LoadAsync();
@@ -54,6 +67,7 @@
         course = null;
         from = null;
         to = null;
+        validationError = null;
         currentPage = 1;
         UpdateUrl();
         await LoadAsync();
@@ -100,6 +114,16 @@
         {
             loading = false;
         }
+    }
+
+    private string? ValidateFilters()
+    {
+        if (from is not null && to is not null && from > to)
+        {
+            return "終了日は開始日以降の日付を指定してください。";
+        }
+
+        return null;
     }
 
     private async Task PreviousPageAsync()

@@ -1,0 +1,42 @@
+.race-detail-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+.race-detail-header h1 {
+    margin-bottom: 8px;
+}
+
+.race-overview {
+    display: grid;
+    grid-template-columns: minmax(9rem, 0.4fr) minmax(12rem, 1fr);
+    gap: 12px 24px;
+    max-width: 720px;
+}
+
+.race-overview dt {
+    color: var(--neutral-foreground-hint, #616161);
+    font-weight: 600;
+}
+
+.race-overview dd {
+    margin: 0;
+}
+
+@media (max-width: 640px) {
+    .race-detail-header {
+        flex-direction: column;
+    }
+
+    .race-overview {
+        grid-template-columns: 1fr;
+        gap: 4px;
+    }
+
+    .race-overview dd {
+        margin-bottom: 8px;
+    }
+}

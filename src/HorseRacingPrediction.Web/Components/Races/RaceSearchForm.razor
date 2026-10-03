@@ -6,6 +6,12 @@
     <FluentButton Appearance="ButtonAppearance.Primary" OnClick="OnSearch">検索</FluentButton>
     <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="OnClear">条件をクリア</FluentButton>
 </div>
+
+@if (!string.IsNullOrWhiteSpace(ValidationMessage))
+{
+    <p role="alert">@ValidationMessage</p>
+}
+
 @code {
     [Parameter] public string? Name { get; set; }
     [Parameter] public EventCallback<string?> NameChanged { get; set; }
@@ -17,6 +23,7 @@
     [Parameter] public EventCallback<DateOnly?> ToChanged { get; set; }
     [Parameter] public EventCallback OnSearch { get; set; }
     [Parameter] public EventCallback OnClear { get; set; }
+    [Parameter] public string? ValidationMessage { get; set; }
     private Task OnNameInput(ChangeEventArgs args)
         => NameChanged.InvokeAsync(args.Value?.ToString());
 
