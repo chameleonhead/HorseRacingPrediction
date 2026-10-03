@@ -28,5 +28,16 @@ else
     [Parameter] public EventCallback OnClear { get; set; }
     [Parameter] public EventCallback OnPreviousPage { get; set; }
     [Parameter] public EventCallback OnNextPage { get; set; }
-    private static string StatusLabel(RaceStatus status) => status switch { RaceStatus.Draft => "下書き", RaceStatus.CardPublished => "出馬表公開", RaceStatus.PreRaceOpen => "発走前", RaceStatus.InProgress => "レース中", RaceStatus.ResultDeclared => "結果確定", RaceStatus.PayoutDeclared => "払戻確定", RaceStatus.Closed => "締切", RaceStatus.Rescheduled => "開催変更", _ => "未登録" };
+    private static string StatusLabel(RaceStatus status) => status switch
+    {
+        RaceStatus.Draft => "下書き",
+        RaceStatus.CardPublished => "出馬表公開",
+        RaceStatus.PreRaceOpen => "発走前",
+        RaceStatus.InProgress => "レース中",
+        RaceStatus.ResultDeclared => "結果確定",
+        RaceStatus.PayoutDeclared => "払戻確定",
+        RaceStatus.Closed => "締切",
+        RaceStatus.Rescheduled => "開催変更",
+        _ => "未登録"
+    };
 }

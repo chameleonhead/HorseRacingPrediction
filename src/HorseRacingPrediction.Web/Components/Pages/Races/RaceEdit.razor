@@ -25,8 +25,13 @@ else
 
 @code {
     [Parameter] public string RaceId { get; set; } = string.Empty;
-    private RaceDto? race; private bool loading; private string? error;
+
+    private RaceDto? race;
+    private bool loading;
+    private string? error;
+
     protected override Task OnParametersSetAsync() => LoadAsync();
+
     private async Task LoadAsync()
     {
         loading = true; error = null;
@@ -34,11 +39,26 @@ else
         {
             var response = await RacesApi.GetRaceAsync(new GetRaceRequest { RaceId = RaceId });
             race = response.IsSuccessStatusCode ? response.Content?.Race : null;
-            if (race is null) error = response.StatusCode == System.Net.HttpStatusCode.NotFound ? "指定されたレースは見つかりませんでした。" : "レース情報を取得できませんでした。";
+            if (race is null)
+            {
+                error = response.StatusCode == System.Net.HttpStatusCode.NotFound
+                    ? "指定されたレースは見つかりませんでした。"
+                    : "レース情報を取得できませんでした。";
+            }
         }
-        catch (ApiException) { error = "レース情報を取得できませんでした。"; }
-        catch (HttpRequestException) { error = "APIに接続できませんでした。"; }
-        finally { loading = false; }
+        catch (ApiException)
+        {
+            error = "レース情報を取得できませんでした。";
+        }
+        catch (HttpRequestException)
+        {
+            error = "APIに接続できませんでした。";
+        }
+        finally
+        {
+            loading = false;
+        }
     }
-    private async Task ReloadAsync() => await LoadAsync();
+
+    private Task ReloadAsync() => LoadAsync();
 }

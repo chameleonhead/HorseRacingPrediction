@@ -17,8 +17,17 @@
     [Parameter] public EventCallback<DateOnly?> ToChanged { get; set; }
     [Parameter] public EventCallback OnSearch { get; set; }
     [Parameter] public EventCallback OnClear { get; set; }
-    private Task OnNameInput(ChangeEventArgs args) => NameChanged.InvokeAsync(args.Value?.ToString());
-    private Task OnCourseInput(ChangeEventArgs args) => CourseChanged.InvokeAsync(args.Value?.ToString());
-    private Task OnFromChange(ChangeEventArgs args) => FromChanged.InvokeAsync(DateOnly.TryParse(args.Value?.ToString(), out var value) ? value : null);
-    private Task OnToChange(ChangeEventArgs args) => ToChanged.InvokeAsync(DateOnly.TryParse(args.Value?.ToString(), out var value) ? value : null);
+    private Task OnNameInput(ChangeEventArgs args)
+        => NameChanged.InvokeAsync(args.Value?.ToString());
+
+    private Task OnCourseInput(ChangeEventArgs args)
+        => CourseChanged.InvokeAsync(args.Value?.ToString());
+
+    private Task OnFromChange(ChangeEventArgs args)
+        => FromChanged.InvokeAsync(
+            DateOnly.TryParse(args.Value?.ToString(), out var value) ? value : null);
+
+    private Task OnToChange(ChangeEventArgs args)
+        => ToChanged.InvokeAsync(
+            DateOnly.TryParse(args.Value?.ToString(), out var value) ? value : null);
 }
