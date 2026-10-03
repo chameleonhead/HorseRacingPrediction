@@ -5,7 +5,7 @@ using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.ApiClient.Races;
 using HorseRacingPrediction.Contracts.Common;
 using HorseRacingPrediction.Contracts.Races;
-using HorseRacingPrediction.Web.Components.Pages;
+using HorseRacingPrediction.Web.Components.Pages.Races;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.FluentUI.AspNetCore.Components;
