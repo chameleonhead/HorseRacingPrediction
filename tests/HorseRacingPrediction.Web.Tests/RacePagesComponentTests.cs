@@ -6,6 +6,7 @@ using HorseRacingPrediction.ApiClient.Races;
 using HorseRacingPrediction.Contracts.Common;
 using HorseRacingPrediction.Contracts.Races;
 using HorseRacingPrediction.Web.Components.Pages;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
@@ -79,6 +80,25 @@ public sealed class RacePagesComponentTests
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "レース一覧を取得できませんでした。"));
     }
 
+    [TestMethod]
+    public async Task RaceList_Search_UsesFiltersAndSynchronizesUrl()
+    {
+        using var handler = new RaceApiHandler();
+        using var context = CreateContext(handler);
+        var cut = context.Render<Races>();
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "テストレース"));
+
+        cut.Find("input[aria-label='レース名']").Change("有馬記念");
+        var search = cut.FindComponents<FluentButton>().Single(x => x.Markup.Contains("検索"));
+        await cut.InvokeAsync(() => search.Instance.OnClick.InvokeAsync(new MouseEventArgs()));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.AreEqual("有馬記念", handler.LastRaceName);
+            StringAssert.Contains(context.Services.GetRequiredService<NavigationManager>().Uri, "name=%E6%9C%89%E9%A6%AC%E8%A8%98%E5%BF%B5");
+        });
+    }
+
     private static BunitContext CreateContext(RaceApiHandler handler)
     {
         var context = new BunitContext();
@@ -107,6 +127,7 @@ public sealed class RacePagesComponentTests
         public int SearchCount { get; private set; }
         public int LastPage { get; private set; }
         public string? LastRequestPath { get; private set; }
+        public string? LastRaceName { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -115,6 +136,7 @@ public sealed class RacePagesComponentTests
             {
                 SearchCount++;
                 LastPage = int.TryParse(GetQuery(request, "page"), out var page) ? page : 1;
+                LastRaceName = GetQuery(request, "raceName");
                 var response = Search ?? new SearchRacesResponse(
                     [new("R001", new DateOnly(2026, 10, 3), "中山", 11, "テストレース", RaceStatus.ResultDeclared, 1, "テストホース", DateTimeOffset.UtcNow)],
                     new PaginationDto(LastPage, 1, 2, 2));
@@ -134,6 +156,13 @@ public sealed class RacePagesComponentTests
             => new(StatusCode) { Content = JsonContent.Create(value), RequestMessage = new HttpRequestMessage() };
 
         private static string? GetQuery(HttpRequestMessage request, string key)
-            => System.Web.HttpUtility.ParseQueryString(request.RequestUri?.Query ?? string.Empty)[key];
+        {
+            var query = request.RequestUri?.Query.TrimStart('?') ?? string.Empty;
+            return query.Split('&', StringSplitOptions.RemoveEmptyEntries)
+                .Select(part => part.Split('=', 2))
+                .Where(parts => parts.Length == 2)
+                .Select(parts => new { Key = Uri.UnescapeDataString(parts[0]), Value = Uri.UnescapeDataString(parts[1].Replace('+', ' ')) })
+                .FirstOrDefault(pair => pair.Key == key)?.Value;
+        }
     }
 }
