@@ -3,16 +3,17 @@
 @using HorseRacingPrediction.ApiClient.Races
 @using Refit
 @inject IRacesApi RacesApi
+@inject NavigationManager Navigation
 <PageTitle>レース詳細</PageTitle>
 <p><a href="/races">← レース一覧に戻る</a></p>
 @if (loading) { <p>読み込み中…</p> }
-else if (error is not null) { <p role="alert">@error</p> }
+else if (error is not null) { <p role="alert">@error</p><FluentButton Appearance="ButtonAppearance.Primary" OnClick="LoadAsync">再試行</FluentButton> }
 else if (race is null) { <p>レースが見つかりません。</p> }
 else
 {
     <h1>@(race.RaceName ?? race.RaceId)</h1>
-    <p>@race.RaceDate?.ToString("yyyy/MM/dd")　@race.RacecourseCode　@(race.RaceNumber)R　状態: @race.Status</p>
-    <dl><dt>グレード</dt><dd>@(race.GradeCode ?? "未登録")</dd><dt>距離</dt><dd>@(race.DistanceMeters?.ToString() ?? "未登録")m</dd><dt>馬場</dt><dd>@(race.SurfaceCode ?? "未登録")</dd><dt>天候</dt><dd>@(race.WeatherObservations.LastOrDefault()?.WeatherText ?? "未取得")</dd></dl>
+    <p>@race.RaceDate?.ToString("yyyy/MM/dd")　@race.RacecourseCode　@(race.RaceNumber)R　状態: @StatusLabel(race.Status)</p>
+    <dl><dt>グレード</dt><dd>@(race.GradeCode ?? "未登録")</dd><dt>発走時刻</dt><dd>@(race.StartTime?.ToString("HH:mm") ?? "未登録")</dd><dt>距離</dt><dd>@(race.DistanceMeters?.ToString() ?? "未登録")m @((race.DirectionCode ?? "") is string direction && !string.IsNullOrWhiteSpace(direction) ? $"（{direction}）" : "")</dd><dt>馬場</dt><dd>@(race.SurfaceCode ?? "未登録")</dd><dt>天候</dt><dd>@(race.WeatherObservations.LastOrDefault()?.WeatherText ?? "未取得")</dd><dt>結果確定</dt><dd>@(race.ResultDeclaredAt?.ToString("yyyy/MM/dd HH:mm") ?? "未確定")</dd><dt>勝ち馬</dt><dd>@(race.WinningHorseName ?? "未確定")</dd></dl>
     @if (race.Entries.Count > 0)
     {
         <h2>出走表</h2>
@@ -43,9 +44,17 @@ else
     protected override async Task OnParametersSetAsync()
     {
         loading = true; error = null;
-        try { var response = await RacesApi.GetRaceAsync(new GetRaceRequest { RaceId = RaceId }); race = response.IsSuccessStatusCode ? response.Content?.Race : null; if (race is null) error = "レース詳細を取得できませんでした。"; }
+        try { var response = await RacesApi.GetRaceAsync(new GetRaceRequest { RaceId = RaceId }); race = response.IsSuccessStatusCode ? response.Content?.Race : null; if (race is null) error = response.StatusCode == System.Net.HttpStatusCode.NotFound ? "指定されたレースは見つかりませんでした。" : "レース詳細を取得できませんでした。"; }
         catch (ApiException) { error = "レース詳細を取得できませんでした。"; }
         catch (HttpRequestException) { error = "APIに接続できませんでした。"; }
         finally { loading = false; }
     }
+
+    private async Task LoadAsync() => await OnParametersSetAsync();
+    private static string StatusLabel(RaceStatus status) => status switch
+    {
+        RaceStatus.Draft => "下書き", RaceStatus.CardPublished => "出馬表公開", RaceStatus.PreRaceOpen => "発走前",
+        RaceStatus.InProgress => "レース中", RaceStatus.ResultDeclared => "結果確定", RaceStatus.PayoutDeclared => "払戻確定",
+        RaceStatus.Closed => "締切", RaceStatus.Rescheduled => "開催変更", _ => "未登録"
+    };
 }

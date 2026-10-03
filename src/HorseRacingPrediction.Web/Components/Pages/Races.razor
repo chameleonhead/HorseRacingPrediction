@@ -4,6 +4,7 @@
 @using HorseRacingPrediction.ApiClient.Races
 @using Refit
 @inject IRacesApi RacesApi
+@inject NavigationManager Navigation
 
 <PageTitle>レース</PageTitle>
 <div class="page-header"><div><h1>レース</h1><p>レース情報を検索・確認します。</p></div></div>
@@ -15,7 +16,7 @@
     <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SearchAsync">検索</FluentButton>
 </div>
 @if (loading) { <p>読み込み中…</p> }
-else if (error is not null) { <p role="alert">@error</p> }
+else if (error is not null) { <p role="alert">@error</p><FluentButton Appearance="ButtonAppearance.Primary" OnClick="LoadAsync">再試行</FluentButton> }
 else if (result is null || result.Races.Count == 0) { <p>該当するレースはありません。</p> }
 else
 {
@@ -26,7 +27,7 @@ else
         <TemplateColumn Title="R">@(context.RaceNumber?.ToString() ?? "—")</TemplateColumn>
         <TemplateColumn Title="レース名"><a href="@($"/races/{Uri.EscapeDataString(context.RaceId)}")">@(context.RaceName ?? context.RaceId)</a></TemplateColumn>
         <PropertyColumn Property="@(x => x.EntryCount)" Title="頭数" />
-        <TemplateColumn Title="状態">@context.Status</TemplateColumn>
+        <TemplateColumn Title="状態">@StatusLabel(context.Status)</TemplateColumn>
     </FluentDataGrid>
     <nav aria-label="レース一覧ページ" class="pagination">
         <FluentButton Appearance="ButtonAppearance.Subtle" Disabled="@(currentPage <= 1 || loading)" OnClick="PreviousPageAsync">前へ</FluentButton>
@@ -37,8 +38,16 @@ else
 @code {
     private const int PageSize = 50;
     private string? name, course, error; private DateOnly? from, to; private bool loading; private int currentPage = 1; private SearchRacesResponse? result;
-    protected override Task OnInitializedAsync() => LoadAsync();
-    private async Task SearchAsync() { currentPage = 1; await LoadAsync(); }
+    protected override async Task OnInitializedAsync()
+    {
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query);
+        name = Text(query, "name"); course = Text(query, "course");
+        from = DateOnly.TryParse(Text(query, "from"), out var fromValue) ? fromValue : null;
+        to = DateOnly.TryParse(Text(query, "to"), out var toValue) ? toValue : null;
+        currentPage = int.TryParse(Text(query, "page"), out var pageValue) && pageValue > 0 ? pageValue : 1;
+        await LoadAsync();
+    }
+    private async Task SearchAsync() { currentPage = 1; UpdateUrl(); await LoadAsync(); }
     private async Task LoadAsync()
     {
         loading = true; error = null;
@@ -47,12 +56,26 @@ else
             var response = await RacesApi.SearchRacesAsync(new SearchRacesRequest { RaceName = name, RacecourseCode = course, RaceDateFrom = from, RaceDateTo = to, Page = currentPage, PageSize = PageSize, SortBy = "raceDate", SortDescending = true });
             result = response.IsSuccessStatusCode ? response.Content : null;
             if (result is null) error = "レース一覧を取得できませんでした。";
+            else UpdateUrl();
         }
         catch (ApiException) { error = "レース一覧を取得できませんでした。"; }
         catch (HttpRequestException) { error = "APIに接続できませんでした。"; }
         finally { loading = false; }
     }
 
-    private async Task PreviousPageAsync() { if (currentPage > 1) { currentPage--; await LoadAsync(); } }
-    private async Task NextPageAsync() { if (result is not null && currentPage < result.Pagination.TotalPages) { currentPage++; await LoadAsync(); } }
+    private async Task PreviousPageAsync() { if (currentPage > 1) { currentPage--; UpdateUrl(); await LoadAsync(); } }
+    private async Task NextPageAsync() { if (result is not null && currentPage < result.Pagination.TotalPages) { currentPage++; UpdateUrl(); await LoadAsync(); } }
+    private void UpdateUrl()
+    {
+        var values = new Dictionary<string, string?> { ["name"] = name, ["course"] = course, ["from"] = from?.ToString("yyyy-MM-dd"), ["to"] = to?.ToString("yyyy-MM-dd"), ["page"] = currentPage.ToString() };
+        var uri = Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/races", values.Where(x => !string.IsNullOrWhiteSpace(x.Value)));
+        if (Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery != Navigation.ToAbsoluteUri(uri).PathAndQuery) Navigation.NavigateTo(uri, replace: true);
+    }
+    private static string? Text(IDictionary<string, Microsoft.Extensions.Primitives.StringValues> query, string key) => query.TryGetValue(key, out var value) ? value.ToString() : null;
+    private static string StatusLabel(RaceStatus status) => status switch
+    {
+        RaceStatus.Draft => "下書き", RaceStatus.CardPublished => "出馬表公開", RaceStatus.PreRaceOpen => "発走前",
+        RaceStatus.InProgress => "レース中", RaceStatus.ResultDeclared => "結果確定", RaceStatus.PayoutDeclared => "払戻確定",
+        RaceStatus.Closed => "締切", RaceStatus.Rescheduled => "開催変更", _ => "未登録"
+    };
 }
