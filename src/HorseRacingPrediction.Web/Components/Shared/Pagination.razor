@@ -1,8 +1,17 @@
 <nav aria-label="@AriaLabel" class="pagination">
-    <FluentButton Appearance="ButtonAppearance.Subtle" Disabled="@(Page <= 1 || Disabled)" OnClick="Previous">前へ</FluentButton>
+    <FluentButton Appearance="ButtonAppearance.Subtle"
+                  Disabled="@(Page <= 1 || Disabled)"
+                  OnClick="Previous">
+        前へ
+    </FluentButton>
     <span>@Page / @TotalPages ページ</span>
-    <FluentButton Appearance="ButtonAppearance.Subtle" Disabled="@(Page >= TotalPages || Disabled)" OnClick="Next">次へ</FluentButton>
+    <FluentButton Appearance="ButtonAppearance.Subtle"
+                  Disabled="@(Page >= TotalPages || Disabled)"
+                  OnClick="Next">
+        次へ
+    </FluentButton>
 </nav>
+
 @code {
     [Parameter] public int Page { get; set; } = 1;
     [Parameter] public int TotalPages { get; set; } = 1;
