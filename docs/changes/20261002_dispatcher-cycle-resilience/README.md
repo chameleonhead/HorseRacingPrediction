@@ -1,6 +1,6 @@
 # Collection dispatcher resilience and lane activity visibility
 
-- Status: Approved
+- Status: Implemented
 - Change record schema: 2
 - Owner: Collection operations
 - Created: 2026-10-02
@@ -11,8 +11,8 @@
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
 | Code | Implemented | Dispatcher resilience, additive lane activity contract, store aggregation, and `/jobs` grid are complete. |
-| Verification | Local passed | API 418 passed/1 existing skip; Contracts 61 passed; ApiClient 24 passed; focused refresh test passed; build and formatter passed; T6 starvation 38 passed and dispatcher 10 passed. |
-| Deployment/operation | Recovery in progress | The write-boundary clock restored Normal and Realtime execution, then production exposed a CapacityFull scan stall. T6 is locally verified and awaits canonical redeployment and three-lane observation. |
+| Verification | Passed | Final API suite: 421 passed/1 existing skip; Contracts 61 passed; ApiClient 24 passed; focused dispatcher, refresh, build, formatter, audit, and change-record gates passed. |
+| Deployment/operation | Recovered | Commit `8c12498a` passed CI/deploy; production is unpaused with zero actionable failures and post-deploy terminal progress in Realtime, Normal, and Background. |
 
 ## Context
 
@@ -127,9 +127,9 @@ candidate-query, or telemetry exceptions before that boundary can end the hosted
 | AC1 | After one non-cancellation exception before envelope dispatch, the hosted dispatcher logs it, waits without a hot loop, and a later cycle dispatches eligible work without process restart. | T1,T6,T7 | hosted-service regression with a fail-once dependency; capacity-full scans stop and the next cycle resumes after capacity frees; reservation conflicts stop the stale candidate scan and the next cycle refetches | Verified |
 | AC2 | When Realtime tasks exist but are future-dated, due Normal and Background tasks are dispatched; future Realtime tasks remain untouched. | T1,T6,T7 | real store/dispatcher counterexample, including a future Realtime crossover during reservation delay | Verified |
 | AC3 | Under due three-lane load, dispatch order retains four Realtime grants followed by Normal, then four Realtime grants followed by Background; priorities and compatibility grouping remain unchanged. | T1,T6,T7 | existing and focused fairness/starvation regressions | Verified |
-| AC4 | CI and canonical deployment pass; production remains unpaused with zero new failures and shows terminal progress from Realtime, Normal, and Background during a bounded observation window. | T2,T3,T5,T6,T7 | delayed-reservation, bounded-capacity, and stale-candidate-conflict regressions, CI/deploy runs, CloudWatch acquisition evidence, plus before/after task evidence by lane | Connected |
+| AC4 | CI and canonical deployment pass; production remains unpaused with zero new failures and shows terminal progress from Realtime, Normal, and Background during a bounded observation window. | T2,T3,T5,T6,T7 | delayed-reservation, bounded-capacity, and stale-candidate-conflict regressions, CI/deploy runs, CloudWatch acquisition evidence, plus before/after task evidence by lane | Verified |
 | AC5 | `/jobs` always displays Realtime, Normal, and Background in that order with due Ready count, Running count, latest task start, and latest task completion. Values come from persisted server state; timestamps use JST and absent timestamps display `実績なし`. | T2 | store/mapper/API regressions and bUnit component assertions including zero/null Background history | Verified |
-| AC6 | Automatic/manual refresh updates the lane activity table without navigation, the existing page-refresh timestamp remains distinct, and the table remains readable at narrow width without hiding Background. Existing progress/dashboard clients retain their prior fields. | T2 | bUnit refresh and responsive markup assertions; API compatibility tests; focused browser verification | Connected |
+| AC6 | Automatic/manual refresh updates the lane activity table without navigation, the existing page-refresh timestamp remains distinct, and the table remains readable at narrow width without hiding Background. Existing progress/dashboard clients retain their prior fields. | T2 | bUnit refresh and responsive markup assertions; API compatibility tests; focused browser verification | Verified |
 
 ## Task plan
 
@@ -137,9 +137,9 @@ candidate-query, or telemetry exceptions before that boundary can end the hosted
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | Add cycle resilience and production-shaped liveness/fairness regressions. | Lead planner/executor/verifier | gpt-6-luna high requested; observed unavailable | Cheap execution; overlapping writes in dispatcher and tests make delegation review cost exceed benefit. | Approval | dispatcher and its focused tests only | focused dispatcher/starvation tests, full API suite, build, formatter, CodeGraph sync | AC1-AC3 executable evidence | none | unavailable; retries 0; corrections 0; reviews 1 | Verified |
 | T2 | Add authoritative per-lane progress aggregation, additive contracts, `/jobs` table, and focused tests. | Lead planner/executor/verifier | gpt-6-luna high requested; observed unavailable | Cheap execution; public contract integration is serialized to prevent a mismatched intermediate state. | Approval | progress model/store/DTO/mapper/client, `Jobs.razor` and scoped styles, focused API/component tests | focused store/API/component tests, full affected suites, build, formatter, CodeGraph sync | AC5-AC6 executable evidence | none | unavailable; retries 1; corrections 1; reviews 1 | Verified |
-| T3 | Deploy through the canonical workflow. | Lead operator | mechanical | Integration operation depends on the verified revision and remains Lead-owned. | T1,T2,T5,T6 | workflow operation only | CI and deployment terminal success | run URLs and deployed commit | none | unavailable; retries 0; corrections 0; reviews 0 | Dependent |
-| T4 | Verify production progress, screen evidence, and close the incident record. | Lead verifier | lead acceptance | Final acceptance remains Lead-owned. | T3 | authenticated diagnostics, browser verification, and change record only | lane-specific before/after facts, pipeline/failure state, rendered `/jobs` evidence | AC4-AC6 evidence and final review | none | unavailable; retries 0; corrections 0; reviews 0 | Dependent |
-| T5 | Complete the split-clock reservation fix and lead-owned production recovery/verification. | Cheap Executor; Lead integrates and accepts | gpt-6-luna high requested; observed model unavailable because runtime telemetry does not expose it | Cheap code slice T5-A2 is complete; production deployment/verification waits for T6's bounded-scan guard so both fixes ship together. | T6, then T3/T4 | `src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformOutboxDispatcher.cs`; `src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.cs`; `tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs` | focused starvation tests; full API suite; API build; exact CI formatter; CodeGraph sync; audit/DDD validators; `git diff --check`; canonical deploy; CloudWatch and `/jobs` observation | delayed reservation acquires successfully, unchanged fairness regressions pass, deployed production shows successful acquisitions and lane progress | T5-A1, T5-A2 | unavailable; retries 1; corrections 0; reviews 2 | Dependent |
+| T3 | Deploy through the canonical workflow. | Lead operator | mechanical | Integration operation depends on the verified revision and remains Lead-owned. | T1,T2,T5,T6,T7 | workflow operation only | CI and deployment terminal success | CI `37097618328`; deploy `37097618337`; commit `8c12498a` | none | unavailable; retries 0; corrections 0; reviews 0 | Verified |
+| T4 | Verify production progress, screen evidence, and close the incident record. | Lead verifier | lead acceptance | Final acceptance remains Lead-owned. | T3 | authenticated diagnostics, browser verification, and change record only | lane-specific before/after facts, pipeline/failure state, rendered `/jobs` evidence | all lanes show post-deploy lifecycle timestamps; pipeline unpaused; failures zero; `/jobs` refreshed in place | none | unavailable; retries 0; corrections 0; reviews 1 | Verified |
+| T5 | Complete the split-clock reservation fix and lead-owned production recovery/verification. | Cheap Executor; Lead integrates and accepts | gpt-6-luna high requested; observed model unavailable because runtime telemetry does not expose it | Cheap code slice T5-A2 plus T6/T7 closure corrections are deployed and production-verified. | T6,T7,T3,T4 | `src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformOutboxDispatcher.cs`; `src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.cs`; `tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs` | focused starvation tests; full API suite; API build; exact CI formatter; CodeGraph sync; audit/DDD validators; `git diff --check`; canonical deploy; CloudWatch and `/jobs` observation | seven post-deploy acquisitions, zero ReservationUnavailable, unchanged fairness regressions, and three-lane terminal progress | T5-A1, T5-A2 | unavailable; retries 1; corrections 0; reviews 2 | Verified |
 | T6 | Stop the bounded candidate scan on global CapacityFull while preserving same-cycle continuation for candidate-specific rejection. | Cheap Executor; Lead integrates and accepts | gpt-6-luna high requested; observed model unavailable because runtime telemetry does not expose it | Cheap execution; one terminal branch and deterministic dispatcher regression fit the existing AC contract; no policy/config/public contract changes. | T5-A2 split-clock code complete | `src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformOutboxDispatcher.cs`; `tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs`; `docs/changes/20261002_dispatcher-cycle-resilience/README.md`; `docs/changes/20261002_dispatcher-cycle-resilience/agent-audits/T6-A1.json` | focused starvation class; dispatcher class for fairness/host-loop regression; audit/DDD validators; `git diff --check` | CapacityFull after the first wake stops the current scan before a third reservation attempt; CandidateRejected still reaches valid work; released capacity progresses on a later cycle. T7 later reclassifies ReserveConflict as global snapshot invalidation. | T6-A1 | unavailable; retries 1; corrections 0; reviews 0 | Verified |
 | T7 | Stop the current bounded candidate scan when store fairness rejects its reservation; fetch fresh candidates and fairness next cycle while candidate-specific rejection continues in-cycle. | Cheap Executor; Lead integrates and accepts | gpt-6-luna high requested; observed model unavailable because runtime telemetry does not expose it | Production ReserveConflict repeats align with stale in-memory candidates after successful group reservations; bounded correction adds no policy/config/public contract changes. | T6 verified; production config and repeated conflict evidence inspected | `src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformOutboxDispatcher.cs`; `tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs`; `docs/changes/20261002_dispatcher-cycle-resilience/README.md`; `docs/changes/20261002_dispatcher-cycle-resilience/agent-audits/T7-A1.json` | focused starvation class; dispatcher class for fairness/host-loop regression; audit/DDD validators; `git diff --check` | A conflict terminates the stale scan after one attempt; the next cycle refetches and dispatches the globally preferred lane; candidate-specific rejection and fairness counterexamples remain green | T7-A1 | unavailable; retries 1; corrections 0; reviews 0 | Verified |
 
@@ -226,7 +226,11 @@ candidate-query, or telemetry exceptions before that boundary can end the hosted
   class passed 10/10. Audit/DDD validators and `git diff --check` passed. No production deploy or recovery is claimed.
   The first pre-implementation audit check also caught an incomplete active-attempt JSON shape; it was corrected
   before code editing and the audit validator passed on rerun (audit-authoring/schema issue; one correction).
-- **Final review:** Pending deployment and production evidence.
+- **Final review:** Passed. CI `37097618328` and deploy `37097618337` succeeded for `8c12498a`. From the
+  14:00:54 JST application deployment through 14:28 JST, CloudWatch recorded seven successful acquisitions and zero
+  `ReservationUnavailable` outcomes. `/jobs` refreshed without navigation and showed Realtime completion 14:21:16,
+  Background completion 14:09:59, and Normal completion 14:28:45 JST. The pipeline was unpaused and actionable
+  failures remained zero. Every AC and task is traceable to local or production evidence; Lead accepts the change.
 
 ## Incident record
 
@@ -239,9 +243,10 @@ from a timestamp captured before the transaction. Lambda acknowledges `Reservati
 task. The missing cycle exception boundary was a separate resilience defect already corrected.
 Corrective proposal: Keep every eligibility/fairness/capacity check on the cycle snapshot, but invoke a separate clock
 inside the store immediately before writing the unchanged reservation duration.
-Permanent fix: T5-A2 split-clock and T7 conflict-scan corrections are locally verified; production deployment and
-lane-specific recovery evidence remain Lead-owned.
-Remaining risk: None identified beyond production verification of the corrected write-boundary clock.
+Permanent fix: T5-A2 split-clock, T6 capacity-full termination, and T7 conflict-scan restart were deployed in
+`8c12498a` and verified by three-lane production progress.
+Remaining risk: Reservation queries remain relatively slow under the current SQLite workload, but bounded scans now
+yield between global capacity/fairness changes and all lanes made terminal progress without policy changes.
 ```
 
 ## Verification record
@@ -286,8 +291,15 @@ Remaining risk: None identified beyond production verification of the corrected 
   verification only; deployment and production lane progress remain outstanding.
 - Lead verification passed the full API suite (421 passed, one existing skip), the Release API build with zero
   warnings/errors, exact solution formatter verification, both record validators, and `git diff --check`.
+- Canonical CI `37097618328` and deployment `37097618337` succeeded for `8c12498a`; application deployment completed
+  at 14:00:54 JST. By 14:28 JST CloudWatch had seven successful acquisitions and no `ReservationUnavailable` result.
+  Authenticated production diagnostics showed an unpaused pipeline, zero actionable failures, and terminal progress
+  in every lane: Realtime completed at 14:21:16, Background at 14:09:59, and Normal at 14:28:45 JST.
+- Browser verification refreshed `/jobs` in place at 14:29:41 JST. The table retained Realtime, Normal, and
+  Background in order and displayed their due/running counts and the same authoritative JST lifecycle timestamps;
+  the page also showed `要対応 0`.
 
 ## Deviations and follow-up
 
-No approved implementation exists yet. If deployment restart does not restore dispatch, H2 returns to investigation
-and this record remains `Proposed`; code implementation will not proceed on an invalidated premise.
+No approved-scope deviation or blocking follow-up remains. Query-duration optimization is intentionally excluded
+because recovery, bounded-cycle behavior, and the frozen lane policy are verified.
