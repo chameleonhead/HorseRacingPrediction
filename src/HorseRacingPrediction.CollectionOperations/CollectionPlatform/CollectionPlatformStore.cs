@@ -1682,10 +1682,17 @@ public sealed partial class CollectionPlatformStore
             duration, maxInFlightEnvelopes, aggregationDelayMilliseconds, cancellationToken).ConfigureAwait(false)
             == CollectionDispatchCycleOutcome.Reserved;
 
-    public async Task<CollectionDispatchCycleOutcome> ReserveDispatchesWithinCapacityAsync(
+    public Task<CollectionDispatchCycleOutcome> ReserveDispatchesWithinCapacityAsync(
         IReadOnlyCollection<Guid> outboxIds, string reservationToken, Guid envelopeId, Guid wakeId,
         DateTimeOffset now, TimeSpan duration, int maxInFlightEnvelopes, int aggregationDelayMilliseconds = 0,
         CancellationToken cancellationToken = default)
+        => ReserveDispatchesWithinCapacityAsync(outboxIds, reservationToken, envelopeId, wakeId, now, now,
+            duration, maxInFlightEnvelopes, aggregationDelayMilliseconds, cancellationToken);
+
+    public async Task<CollectionDispatchCycleOutcome> ReserveDispatchesWithinCapacityAsync(
+        IReadOnlyCollection<Guid> outboxIds, string reservationToken, Guid envelopeId, Guid wakeId,
+        DateTimeOffset now, DateTimeOffset reservationTime, TimeSpan duration, int maxInFlightEnvelopes,
+        int aggregationDelayMilliseconds = 0, CancellationToken cancellationToken = default)
     {
         var ids = outboxIds.Distinct().ToArray();
         if (ids.Length == 0 || string.IsNullOrWhiteSpace(reservationToken) || envelopeId == Guid.Empty)
@@ -1788,7 +1795,8 @@ public sealed partial class CollectionPlatformStore
             foreach (var row in rows)
             {
                 row.outbox.ReservationToken = reservationToken;
-                row.outbox.ReservedUntilUnixMilliseconds = now.Add(duration).ToUnixTimeMilliseconds();
+                // Eligibility and fairness use the cycle snapshot; only the reservation lifetime uses fresh time.
+                row.outbox.ReservedUntilUnixMilliseconds = reservationTime.Add(duration).ToUnixTimeMilliseconds();
                 row.outbox.EnvelopeId = envelopeId;
                 row.outbox.WakeId = wakeId == Guid.Empty ? null : wakeId;
             }

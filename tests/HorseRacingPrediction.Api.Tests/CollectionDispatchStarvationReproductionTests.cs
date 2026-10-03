@@ -459,6 +459,79 @@ public sealed class CollectionDispatchStarvationReproductionTests
     }
 
     [TestMethod]
+    public async Task SlowPreReservationPhaseStartsReservationLifetimeImmediatelyBeforeReserve()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "collection-reservation-clock", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var options = Options.Create(new CollectionPlatformOptions { StateDirectory = directory });
+            var store = new CollectionPlatformStore(options);
+            var cycleStartedAt = DateTimeOffset.UtcNow.AddMinutes(-2);
+            var currentTime = cycleStartedAt;
+            var definition = new CollectionDefinitionId("race-detail");
+            await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race,
+                1, "initial", false);
+            var futureRealtime = await store.RequestAsync(
+                new(CollectionResourceType.Race, "JRA", "FUTURE-REALTIME"), definition, 1,
+                CollectionReason.Initial, cycleStartedAt.AddSeconds(30), CollectionLane.Realtime, 1000);
+            await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "DUE-NORMAL"), definition, 1,
+                CollectionReason.Recovery, cycleStartedAt, CollectionLane.Normal, 50);
+            await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "DUE-BACKGROUND"), definition, 1,
+                CollectionReason.Backfill, cycleStartedAt, CollectionLane.Background, 10);
+
+            var databasePath = Path.Combine(directory, "collection-platform.db");
+            var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                .UseSqlite($"Data Source={databasePath};Pooling=False;Default Timeout=30").Options;
+            var queue = new WakeCaptureQueue();
+            var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
+                Options.Create(new CollectionQueueOptions
+                {
+                    Enabled = true,
+                    DispatchBatchSize = 1,
+                    EnvelopeMaxTasks = 1,
+                    MaxInFlightEnvelopes = 1,
+                    OutboxReservationSeconds = 45,
+                    AggregationDelayMilliseconds = 0
+                }), NullLogger<CollectionPlatformOutboxDispatcher>.Instance)
+            {
+                CurrentTime = () => currentTime
+            };
+            dispatcher.BeforeReservationAsync = (_, _) =>
+            {
+                currentTime = cycleStartedAt.AddSeconds(46);
+                return Task.CompletedTask;
+            };
+
+            await dispatcher.DispatchOnceAsync(CancellationToken.None);
+
+            Assert.AreEqual(1, queue.Wakes.Count);
+            var wake = queue.Wakes.Single();
+            var reserved = await LoadOutboxForWakeAsync(dbOptions, wake.DispatchEnvelopeId);
+            Assert.AreNotEqual(futureRealtime.TaskId, reserved.TaskId,
+                "Realtime work that is future-dated at cycle start must remain ineligible even when it becomes due during the delay.");
+            await using (var db = new CollectionPlatformDbContext(dbOptions))
+            {
+                var selectedTask = await db.Tasks.SingleAsync(x => x.TaskId == reserved.TaskId);
+                Assert.IsTrue(selectedTask.Lane is CollectionLane.Normal or CollectionLane.Background,
+                    "Due non-Realtime work must continue to dispatch while future Realtime work is excluded.");
+                var outbox = await db.DispatchOutbox.SingleAsync(x => x.OutboxId == reserved.OutboxId);
+                Assert.IsTrue(outbox.ReservedUntilUnixMilliseconds > currentTime.ToUnixTimeMilliseconds(),
+                    "The configured reservation lifetime must start after the simulated 46-second delay.");
+            }
+
+            var acquired = await store.AcquireNextExecutionAsync(wake, "slow-pre-reservation", currentTime,
+                TimeSpan.FromSeconds(45));
+            Assert.AreEqual(CollectionExecutionAcquireStatus.Acquired, acquired.Status,
+                "The reserved wake must remain acquirable after a pre-reservation phase longer than the reservation lifetime.");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
     [DataRow("hold")]
     [DataRow("duplicate-outbox")]
     [DataRow("available-at")]

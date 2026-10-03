@@ -32,6 +32,8 @@ public sealed class CollectionPlatformOutboxDispatcher(
     private readonly CollectionLaneAllocator _allocator = new();
     private long _lastTelemetrySnapshotUtcTicks;
 
+    internal Func<DateTimeOffset> CurrentTime { get; set; }
+        = () => HorseRacingPrediction.Contracts.Common.Time.JstTime.Now();
     internal Func<IReadOnlyList<PendingCollectionDispatch>, CancellationToken, Task>? BeforeReservationAsync { get; set; }
     internal Func<CancellationToken, Task>? BeforeCycleAsync { get; set; }
 
@@ -69,7 +71,7 @@ public sealed class CollectionPlatformOutboxDispatcher(
 
     internal async Task DispatchOnceAsync(CancellationToken cancellationToken)
     {
-        var now = HorseRacingPrediction.Contracts.Common.Time.JstTime.Now();
+        var now = CurrentTime();
         var reclaimed = await store.ReclaimExpiredExecutionLeasesAsync(now, cancellationToken).ConfigureAwait(false);
         if (telemetry is not null)
             for (var index = 0; index < reclaimed; index++)
@@ -128,8 +130,9 @@ public sealed class CollectionPlatformOutboxDispatcher(
             {
                 if (BeforeReservationAsync is not null)
                     await BeforeReservationAsync(group, cancellationToken).ConfigureAwait(false);
+                var reservationTime = CurrentTime();
                 var reserveOutcome = await store.ReserveDispatchesWithinCapacityAsync(group.Select(x => x.OutboxId).ToArray(),
-                        reservationToken, envelopeId, wakeId, now,
+                        reservationToken, envelopeId, wakeId, now, reservationTime,
                         TimeSpan.FromSeconds(Math.Max(10, _options.OutboxReservationSeconds)),
                         Math.Max(1, _options.MaxInFlightEnvelopes), _options.AggregationDelayMilliseconds,
                         cancellationToken).ConfigureAwait(false);

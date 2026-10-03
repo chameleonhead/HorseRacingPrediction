@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261002_dispatcher-cycle-resilience",
+  "taskId": "T5",
+  "attemptId": "T5-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC4"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose worker model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime did not expose per-worker usage"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformOutboxDispatcher.cs",
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.cs",
+    "tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "runtime did not expose review usage or active time"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "active effort telemetry was not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "runtime did not expose reliable worker elapsed effort"
+  },
+  "startRevision": "ade4eb87",
+  "endRevisionOrPatch": "working-tree patch 3020cacc71372b0d28b74c3532ac93615b19dc15",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Lead reviewed the split-clock diff and reran 47 focused tests plus the full API suite; the delayed test crosses the future-Realtime due boundary without changing cycle-snapshot fairness.",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}
