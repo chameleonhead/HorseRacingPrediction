@@ -15,7 +15,7 @@ else
     <p>@race.RaceDate?.ToString("yyyy/MM/dd")　@race.RacecourseCode　@(race.RaceNumber)R　状態: @StatusLabel(race.Status)</p>
     <FluentTabs ShowActiveIndicator="true" aria-label="レース詳細">
         <FluentTab Label="概要" Id="overview">
-            <dl><dt>グレード</dt><dd>@(race.GradeCode ?? "未登録")</dd><dt>発走時刻</dt><dd>@(race.StartTime?.ToString("HH:mm") ?? "未登録")</dd><dt>距離</dt><dd>@(race.DistanceMeters?.ToString() ?? "未登録") @((race.DirectionCode ?? "") is string direction && !string.IsNullOrWhiteSpace(direction) ? $"（{direction}）" : "")</dd><dt>馬場</dt><dd>@(race.SurfaceCode ?? "未登録")</dd><dt>天候</dt><dd>@(race.WeatherObservations.LastOrDefault()?.WeatherText ?? "未取得")</dd><dt>結果確定</dt><dd>@(race.ResultDeclaredAt?.ToString("yyyy/MM/dd HH:mm") ?? "未確定")</dd><dt>勝ち馬</dt><dd>@(race.WinningHorseName ?? "未確定")</dd></dl>
+            <dl><dt>グレード</dt><dd>@(race.GradeCode ?? "未登録")</dd><dt>発走時刻</dt><dd>@(race.StartTime?.ToString("HH:mm") ?? "未登録")</dd><dt>距離</dt><dd>@(race.DistanceMeters?.ToString() ?? "未登録") @((race.DirectionCode ?? "") is string direction && !string.IsNullOrWhiteSpace(direction) ? $"（{direction}）" : "")</dd><dt>コース補足</dt><dd>@(race.CourseLayout ?? "未登録")</dd><dt>馬場</dt><dd>@TrackLabel()</dd><dt>天候</dt><dd>@(race.WeatherObservations.LastOrDefault()?.WeatherText ?? "未取得")</dd><dt>ペース</dt><dd>@(race.OverallPaceText ?? "未取得")</dd><dt>コーナー通過</dt><dd>@(race.CornerPassagesText ?? "未取得")</dd><dt>結果確定</dt><dd>@(race.ResultDeclaredAt?.ToString("yyyy/MM/dd HH:mm") ?? "未確定")</dd><dt>勝ち馬</dt><dd>@(race.WinningHorseName ?? "未確定")</dd></dl>
         </FluentTab>
         @if (race.Entries.Count > 0)
         {
@@ -26,6 +26,7 @@ else
             <TemplateColumn Title="馬名"><a href="@($"/horses/{Uri.EscapeDataString(context.HorseId)}")">@(context.HorseName ?? context.HorseId)</a></TemplateColumn>
             <TemplateColumn Title="騎手">@EntityLink("jockeys", context.JockeyId, context.JockeyName)</TemplateColumn>
             <TemplateColumn Title="調教師">@EntityLink("trainers", context.TrainerId, context.TrainerName)</TemplateColumn>
+            <TemplateColumn Title="馬主">@EntityLink("owners", context.OwnerId, context.OwnerName)</TemplateColumn>
             <TemplateColumn Title="結果">@(FinishLabel(context.HorseId))</TemplateColumn>
         </FluentDataGrid>
         </FluentTab>
@@ -66,6 +67,15 @@ else
     private RaceDto? race; private bool loading; private string? error;
     private string FinishLabel(string horseId)
         => race?.EntryResults.FirstOrDefault(x => x.HorseId == horseId)?.FinishPosition is int finish ? $"{finish}着" : "未確定";
+
+    private string TrackLabel()
+    {
+        var track = race?.TrackConditionObservations.OrderByDescending(x => x.ObservationTime).FirstOrDefault();
+        if (track is null) return "未取得";
+        var values = new[] { track.TurfConditionCode, track.DirtConditionCode, track.GoingDescriptionText }
+            .Where(x => !string.IsNullOrWhiteSpace(x));
+        return string.Join(" / ", values.DefaultIfEmpty("取得済み"));
+    }
 
     private static RenderFragment EntityLink(string segment, string? id, string? label) => builder =>
     {
