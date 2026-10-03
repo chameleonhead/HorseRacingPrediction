@@ -71,6 +71,79 @@ public sealed class JraSubjectCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task LegacyNameOnlyHorseReference_IsClosedWithoutStartingJraSearch()
+    {
+        var navigatorStarts = 0;
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () =>
+            {
+                navigatorStarts++;
+                return new FakeJraNavigator();
+            }
+        };
+        var sink = new RecordingProfileSink();
+        var handler = new JraSubjectProfileCollectionHandler(
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse), sessions, sink);
+        var task = SubjectTask("horse-child", "旧血統参照", new Dictionary<string, string>
+        {
+            ["discoveredFromType"] = "Horse",
+            ["discoveredFromProvider"] = "JRA",
+            ["discoveredFromId"] = "horse-parent",
+            ["discoveryDepth"] = "2",
+        });
+
+        var completion = await handler.CollectAsync(task, CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.NotApplicable, completion.Result);
+        Assert.AreEqual("LegacyNameOnlyHorseReference", completion.ErrorCode);
+        Assert.AreEqual("HorseProfile:LegacyNameOnlyReference", completion.PageIdentification);
+        Assert.AreEqual(0, navigatorStarts);
+        Assert.IsEmpty(sink.Saves);
+    }
+
+    [TestMethod]
+    public async Task LegacyNameOnlyGuard_DoesNotRejectHorseWithOfficialRaceSource()
+    {
+        const string horseName = "公式情報の競走馬";
+        const string sourceUrl = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002026000102/00";
+        const string raceId = "20260913:Tokyo:5";
+        var navigatorStarts = 0;
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () =>
+            {
+                navigatorStarts++;
+                return new FakeJraNavigator
+                {
+                    SubjectFactory = _ => throw new JraSubjectIdentificationException(
+                        JraSubjectIdentificationFailureKind.MultipleCandidates, "Horse", horseName,
+                        candidates: [], requestedUrl: sourceUrl)
+                };
+            }
+        };
+        var handler = new JraSubjectProfileCollectionHandler(
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse), sessions,
+            new RecordingProfileSink());
+        var task = SubjectTask("horse-official", horseName, new Dictionary<string, string>
+        {
+            ["discoveredFromType"] = "Race",
+            ["discoveredFromProvider"] = "JRA",
+            ["discoveredFromId"] = raceId,
+            ["requestedByRaceId"] = raceId,
+            ["sourceIdentity"] = sourceUrl,
+            ["sourceUrl"] = sourceUrl,
+        });
+
+        var completion = await handler.CollectAsync(task, CancellationToken.None);
+
+        Assert.AreEqual(1, navigatorStarts);
+        Assert.AreEqual(CollectionAttemptResult.ResourceNotFound, completion.Result);
+        Assert.AreEqual("SubjectIdentification:MultipleCandidates", completion.PageIdentification);
+        Assert.AreNotEqual("LegacyNameOnlyHorseReference", completion.ErrorCode);
+    }
+
+    [TestMethod]
     public async Task ScheduledRefresh_WithPreservedNameAndLocation_CollectsProfile()
     {
         var url = new Uri("https://www.jra.go.jp/JRADB/accessU.html?CNAME=scheduled-horse");
@@ -856,7 +929,7 @@ public sealed class JraSubjectCollectionHandlerTests
         var final = "https://www.jra.go.jp/profile/observed";
         var candidates = Enumerable.Range(1, 6)
             .Select(index => new JraSubjectIdentificationCandidate($"candidate-{index}",
-                $"https://www.jra.go.jp/profile/{index}"))
+                $"https://www.jra.go.jp/profile/{index}", $"evidence-{index}"))
             .ToArray();
         var sessions = new FakeJraSessionFactory
         {
@@ -879,6 +952,13 @@ public sealed class JraSubjectCollectionHandlerTests
         Assert.AreEqual(requested, completion.RequestedUrl?.AbsoluteUri);
         Assert.AreEqual(final, completion.FinalUrl?.AbsoluteUri);
         Assert.IsNull(completion.RetryAt);
+        var recordedCandidates = completion.IdentificationCandidates;
+        Assert.IsNotNull(recordedCandidates);
+        Assert.HasCount(5, recordedCandidates);
+        Assert.AreEqual("candidate-1", recordedCandidates[0].Name);
+        Assert.AreEqual("https://www.jra.go.jp/profile/1", recordedCandidates[0].Url);
+        Assert.AreEqual("evidence-1", recordedCandidates[0].Evidence);
+        Assert.AreEqual("candidate-5", recordedCandidates[4].Name);
         StringAssert.Contains(completion.ErrorMessage, "期待=Horse:missing");
         StringAssert.Contains(completion.ErrorMessage, "candidate-5");
         Assert.IsFalse(completion.ErrorMessage!.Contains("candidate-6", StringComparison.Ordinal));

@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 internal static class CollectionPlatformSchemaMigrator
 {
-    internal const int CurrentVersion = 20;
+    internal const int CurrentVersion = 22;
     private const string HistoryTable = "collection_schema_history";
 
     private static readonly string[] ModelTables =
@@ -533,6 +533,73 @@ internal static class CollectionPlatformSchemaMigrator
                 """, cancellationToken, transaction,
                 ("$appliedAt", (object)HorseRacingPrediction.Contracts.Common.Time.JstTime.ToDatabaseString(
                     HorseRacingPrediction.Contracts.Common.Time.JstTime.Now()))).ConfigureAwait(false);
+        }
+
+        if (version < 21)
+        {
+            if (!await HasColumnAsync(connection, transaction, "collection_attempts",
+                    "IdentificationCandidatesJson", cancellationToken).ConfigureAwait(false))
+                await ExecuteAsync(connection,
+                    "ALTER TABLE collection_attempts ADD COLUMN IdentificationCandidatesJson TEXT NULL;",
+                    cancellationToken, transaction).ConfigureAwait(false);
+            await ExecuteAsync(connection, """
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (21, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Common.Time.JstTime.ToDatabaseString(
+                    HorseRacingPrediction.Contracts.Common.Time.JstTime.Now()))).ConfigureAwait(false);
+        }
+
+        if (version < 22)
+        {
+            if (!await HasColumnAsync(connection, transaction, "collection_failure_notifications", "SelectedUrl", cancellationToken).ConfigureAwait(false))
+                await ExecuteAsync(connection, "ALTER TABLE collection_failure_notifications ADD COLUMN SelectedUrl TEXT NULL;",
+                    cancellationToken, transaction).ConfigureAwait(false);
+            if (!await HasColumnAsync(connection, transaction, "collection_failure_notifications", "CanonicalResourceType", cancellationToken).ConfigureAwait(false))
+                await ExecuteAsync(connection, "ALTER TABLE collection_failure_notifications ADD COLUMN CanonicalResourceType TEXT NULL;",
+                    cancellationToken, transaction).ConfigureAwait(false);
+            if (!await HasColumnAsync(connection, transaction, "collection_failure_notifications", "CanonicalResourceProvider", cancellationToken).ConfigureAwait(false))
+                await ExecuteAsync(connection, "ALTER TABLE collection_failure_notifications ADD COLUMN CanonicalResourceProvider TEXT NULL;",
+                    cancellationToken, transaction).ConfigureAwait(false);
+            if (!await HasColumnAsync(connection, transaction, "collection_failure_notifications", "CanonicalResourceId", cancellationToken).ConfigureAwait(false))
+                await ExecuteAsync(connection, "ALTER TABLE collection_failure_notifications ADD COLUMN CanonicalResourceId TEXT NULL;",
+                    cancellationToken, transaction).ConfigureAwait(false);
+            if (!await HasColumnAsync(connection, transaction, "collection_failure_notifications", "Selector", cancellationToken).ConfigureAwait(false))
+                await ExecuteAsync(connection, "ALTER TABLE collection_failure_notifications ADD COLUMN Selector TEXT NULL;",
+                    cancellationToken, transaction).ConfigureAwait(false);
+            if (!await HasColumnAsync(connection, transaction, "collection_failure_notifications", "SelectedAt", cancellationToken).ConfigureAwait(false))
+                await ExecuteAsync(connection, "ALTER TABLE collection_failure_notifications ADD COLUMN SelectedAt TEXT NULL;",
+                    cancellationToken, transaction).ConfigureAwait(false);
+            await ExecuteAsync(connection, """
+                CREATE TABLE IF NOT EXISTS collection_subject_identification_selections (
+                    NotificationId TEXT NOT NULL CONSTRAINT PK_collection_subject_identification_selections PRIMARY KEY,
+                    TaskId TEXT NOT NULL,
+                    SelectedName TEXT NOT NULL,
+                    SelectedUrl TEXT NOT NULL,
+                    Evidence TEXT NULL,
+                    ResourceType TEXT NOT NULL,
+                    Provider TEXT NOT NULL,
+                    ResourceId TEXT NOT NULL,
+                    DefinitionId TEXT NOT NULL,
+                    CanonicalTaskId TEXT NOT NULL,
+                    Selector TEXT NULL,
+                    SelectedAt TEXT NOT NULL,
+                    CreatedTask INTEGER NOT NULL DEFAULT 1,
+                    ReusedTask INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS IX_collection_subject_identification_selections_CanonicalTaskId
+                    ON collection_subject_identification_selections (CanonicalTaskId);
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (22, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Common.Time.JstTime.ToDatabaseString(
+                    HorseRacingPrediction.Contracts.Common.Time.JstTime.Now()))).ConfigureAwait(false);
+            if (!await HasColumnAsync(connection, transaction, "collection_subject_identification_selections", "CreatedTask", cancellationToken).ConfigureAwait(false))
+                await ExecuteAsync(connection,
+                    "ALTER TABLE collection_subject_identification_selections ADD COLUMN CreatedTask INTEGER NOT NULL DEFAULT 1;",
+                    cancellationToken, transaction).ConfigureAwait(false);
+            if (!await HasColumnAsync(connection, transaction, "collection_subject_identification_selections", "ReusedTask", cancellationToken).ConfigureAwait(false))
+                await ExecuteAsync(connection,
+                    "ALTER TABLE collection_subject_identification_selections ADD COLUMN ReusedTask INTEGER NOT NULL DEFAULT 0;",
+                    cancellationToken, transaction).ConfigureAwait(false);
         }
 
         await ExecuteAsync(connection, """

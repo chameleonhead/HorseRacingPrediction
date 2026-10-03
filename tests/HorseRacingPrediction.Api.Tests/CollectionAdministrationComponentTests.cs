@@ -14,6 +14,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 
 using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Repairs;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -481,8 +482,15 @@ public sealed class CollectionAdministrationComponentTests
         public bool EmptyPlatform { get; init; }
         public IReadOnlyList<CollectionFailureGroup> FailureGroups { get; init; } = [];
         public IReadOnlyList<CollectionLaneActivity> LaneActivity { get; set; } = [];
-        private static readonly ResourceKey Resource = new(CollectionResourceType.Horse, "jra", "H001");
-        private static readonly CollectionDefinitionId Definition = new("horse-profile");
+        public static readonly ResourceKey TestResource = new(CollectionResourceType.Horse, "jra", "H001");
+        public static readonly CollectionDefinitionId TestDefinition = new("horse-profile");
+        private static ResourceKey Resource => TestResource;
+        private static CollectionDefinitionId Definition => TestDefinition;
+        public CollectionResourceDetail? ResourceDetail { get; init; }
+        public bool ApplyConflict { get; init; }
+        public Guid CandidateNotificationId { get; init; }
+        public int CandidateApplyRequests { get; private set; }
+        public ApplySubjectIdentificationCandidateRequest? LastCandidateApply { get; private set; }
         public int ManualRequests { get; private set; }
         public int Previews { get; private set; }
         public int ExplicitUrlRequests { get; private set; }
@@ -498,6 +506,24 @@ public sealed class CollectionAdministrationComponentTests
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
+            if (request.Method == HttpMethod.Post
+                && request.RequestUri!.AbsolutePath == "/api/admin/repairs/subject-identification/candidate/apply")
+            {
+                CandidateApplyRequests++;
+                LastCandidateApply = await request.Content!.ReadFromJsonAsync<ApplySubjectIdentificationCandidateRequest>(cancellationToken);
+                if (ApplyConflict)
+                    return new HttpResponseMessage(System.Net.HttpStatusCode.Conflict)
+                    {
+                        Content = new StringContent("[\"選択は競合しました。\"]", System.Text.Encoding.UTF8,
+                            "application/json")
+                    };
+                var canonical = new ApplySubjectIdentificationCandidateResponse(new(
+                    CandidateNotificationId, "https://www.jra.go.jp/profile/candidate-a", "候補馬A",
+                    new(CollectionResourceType.Horse, "JRA", "H0001"), new("horse-profile"),
+                    Guid.NewGuid(), "operator", DateTimeOffset.UtcNow, true, false));
+                return new HttpResponseMessage(System.Net.HttpStatusCode.Accepted)
+                { Content = JsonContent.Create(canonical) };
+            }
             if (request.RequestUri!.AbsolutePath == "/api/v2/admin/collection/tasks")
             {
                 TaskSearchRequests++;
@@ -627,7 +653,7 @@ public sealed class CollectionAdministrationComponentTests
                 _ when request.RequestUri.AbsolutePath.StartsWith("/api/v2/admin/collection/resources/") =>
                     new
                     {
-                        resource = new CollectionResourceDetail(new(Resource, Definition, 0, 1, null, null,
+                        resource = ResourceDetail ?? new CollectionResourceDetail(new(Resource, Definition, 0, 1, null, null,
                         CollectionStateStatus.Pending), [], [], [], [])
                     },
                 _ => Array.Empty<object>(),
@@ -643,6 +669,125 @@ public sealed class CollectionAdministrationComponentTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken) => throw new HttpRequestException("offline");
+    }
+
+    [TestMethod]
+    public async Task JobDetail_SubjectCandidateSelectionShowsOriginAndLinksCanonicalJob()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var handler = CreateCandidateHandler();
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = context.Render<JobDetail>(parameters => parameters
+            .Add(x => x.ResourceTypeName, "Horse").Add(x => x.Provider, "JRA")
+            .Add(x => x.ResourceId, "synthetic-horse").Add(x => x.DefinitionId, "horse-profile"));
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "この対象を作成した原因リソース"));
+        StringAssert.Contains(cut.Markup, "親リソース名");
+        StringAssert.Contains(cut.Markup, "H-origin");
+        StringAssert.Contains(cut.Markup, "旧task由来の説明");
+        StringAssert.Contains(cut.Markup, "候補馬A");
+        StringAssert.Contains(cut.Markup, "生年: 2016年");
+        var jraLink = cut.Find("a[href='https://www.jra.go.jp/profile/candidate-a']");
+        Assert.AreEqual("noopener noreferrer", jraLink.GetAttribute("rel"));
+        var apply = cut.FindComponents<FluentButton>().Single(x => x.Markup.Contains("選択した候補で復旧"));
+        Assert.IsTrue(apply.Instance.Disabled);
+
+        var radios = cut.FindComponent<FluentRadioGroup<string>>();
+        await cut.InvokeAsync(() => radios.Instance.ValueChanged.InvokeAsync("https://www.jra.go.jp/profile/candidate-a"));
+        cut.WaitForAssertion(() => Assert.IsFalse(apply.Instance.Disabled));
+        await cut.InvokeAsync(() => apply.Instance.OnClick.InvokeAsync());
+
+        Assert.AreEqual(1, handler.CandidateApplyRequests);
+        Assert.AreEqual("候補馬A", handler.LastCandidateApply?.Selection?.Name);
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "正規の競走馬ジョブを開く"));
+        StringAssert.Contains(cut.Markup, "/jobs/Horse/JRA/H0001/horse-profile");
+    }
+
+    [TestMethod]
+    public async Task JobDetail_SubjectCandidateApplyFailureKeepsSelectionAndShowsError()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var handler = CreateCandidateHandler(applyConflict: true);
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = context.Render<JobDetail>(parameters => parameters
+            .Add(x => x.ResourceTypeName, "Horse").Add(x => x.Provider, "JRA")
+            .Add(x => x.ResourceId, "synthetic-horse").Add(x => x.DefinitionId, "horse-profile"));
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "候補馬A"));
+        var radios = cut.FindComponent<FluentRadioGroup<string>>();
+        await cut.InvokeAsync(() => radios.Instance.ValueChanged.InvokeAsync("https://www.jra.go.jp/profile/candidate-a"));
+        var apply = cut.FindComponents<FluentButton>().Single(x => x.Markup.Contains("選択した候補で復旧"));
+        await cut.InvokeAsync(() => apply.Instance.OnClick.InvokeAsync());
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "選択は競合しました"));
+        Assert.AreEqual("https://www.jra.go.jp/profile/candidate-a",
+            cut.FindComponent<FluentRadioGroup<string>>().Instance.Value);
+    }
+
+    [TestMethod]
+    public async Task JobDetail_LegacyDiscoveryWithoutOriginExplainsMissingSource()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var legacyTask = new CollectionTaskSummary(Guid.NewGuid(), ResourceHandler.TestResource,
+            ResourceHandler.TestDefinition, CollectionTaskStatus.Failed, CollectionLane.Background,
+            20, 1, DateTimeOffset.UtcNow, 1, new Dictionary<string, string> { ["name"] = "旧対象" },
+            CollectionReason.Discovery);
+        var notification = new PendingCollectionFailureNotification(Guid.NewGuid(), legacyTask.TaskId,
+            ResourceHandler.TestResource, ResourceHandler.TestDefinition, CollectionTaskStatus.Failed,
+            "SubjectNotIdentified", "候補情報のない旧attempt", 1, DateTimeOffset.UtcNow);
+        var attempt = new CollectionAttemptSummary(Guid.NewGuid(), legacyTask.TaskId, 1,
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, CollectionAttemptResult.ResourceNotFound,
+            "SubjectNotIdentified", "候補情報のない旧attempt", null, null, null,
+            "SubjectIdentification:MultipleCandidates");
+        var handler = new ResourceHandler
+        {
+            ResourceDetail = new(
+            new(ResourceHandler.TestResource, ResourceHandler.TestDefinition, 0, 1, null, null, CollectionStateStatus.Failed), [], [],
+            [legacyTask], [attempt], LatestTask: legacyTask, Failures: [notification])
+        };
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = context.Render<JobDetail>(parameters => parameters
+            .Add(x => x.ResourceTypeName, "Horse").Add(x => x.Provider, "jra")
+            .Add(x => x.ResourceId, "H001").Add(x => x.DefinitionId, "horse-profile"));
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "旧taskには生成元の種類・IDが保存されていません"));
+        StringAssert.Contains(cut.Markup, "元の対象は特定できません");
+        StringAssert.Contains(cut.Markup, "この旧taskでは候補選択による復旧を利用できません");
+    }
+
+    private static ResourceHandler CreateCandidateHandler(bool applyConflict = false)
+    {
+        var taskId = Guid.NewGuid();
+        var notificationId = Guid.NewGuid();
+        var task = new CollectionTaskSummary(taskId, ResourceHandler.TestResource, ResourceHandler.TestDefinition,
+            CollectionTaskStatus.Failed, CollectionLane.Background, 20, 1, DateTimeOffset.UtcNow, 1,
+            new Dictionary<string, string> { ["discoveredFromReason"] = "旧task由来の説明" }, CollectionReason.Discovery);
+        var failure = new PendingCollectionFailureNotification(notificationId, taskId,
+            ResourceHandler.TestResource, ResourceHandler.TestDefinition, CollectionTaskStatus.Failed,
+            "SubjectNotIdentified", "複数候補があります", 1, DateTimeOffset.UtcNow);
+        var attempt = new CollectionAttemptSummary(Guid.NewGuid(), taskId, 1, DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow, CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified",
+            "複数候補があります", null, null, null, "SubjectIdentification:MultipleCandidates",
+            IdentificationCandidates: [new("候補馬A", "https://www.jra.go.jp/profile/candidate-a", "生年: 2016年")]);
+        var detail = new CollectionResourceDetail(
+            new(ResourceHandler.TestResource, ResourceHandler.TestDefinition, 0, 1, null, null, CollectionStateStatus.Failed),
+            [], [], [task], [attempt], LatestTask: task, Failures: [failure],
+            Origin: new(new(CollectionResourceType.Horse, "JRA", "H-origin"), "親リソース名", "旧task由来の説明",
+                "/jobs/Horse/JRA/H-origin/horse-profile", true));
+        return new ResourceHandler
+        {
+            ResourceDetail = detail,
+            ApplyConflict = applyConflict,
+            CandidateNotificationId = notificationId
+        };
     }
 
     private sealed class FailureGroupHandler : HttpMessageHandler

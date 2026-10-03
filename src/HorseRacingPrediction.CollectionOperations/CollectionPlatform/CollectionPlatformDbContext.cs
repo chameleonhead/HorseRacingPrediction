@@ -32,6 +32,7 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
     public DbSet<CollectionPlatformControlEntity> Controls => Set<CollectionPlatformControlEntity>();
     public DbSet<RaceRepairHoldEntity> RaceRepairHolds => Set<RaceRepairHoldEntity>();
     public DbSet<CollectionFailureNotificationEntity> FailureNotifications => Set<CollectionFailureNotificationEntity>();
+    public DbSet<SubjectIdentificationSelectionEntity> SubjectIdentificationSelections => Set<SubjectIdentificationSelectionEntity>();
     public DbSet<BackfillBatchEntity> BackfillBatches => Set<BackfillBatchEntity>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
@@ -168,6 +169,13 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
             e.HasIndex(x => new { x.ResolutionStatus, x.AvailableAt });
             e.HasIndex(x => x.RecoveryTaskId);
             e.HasIndex(x => x.TaskId);
+        });
+        modelBuilder.Entity<SubjectIdentificationSelectionEntity>(e =>
+        {
+            e.ToTable("collection_subject_identification_selections");
+            e.HasKey(x => x.NotificationId);
+            e.Property(x => x.ResourceType).HasConversion<string>();
+            e.HasIndex(x => x.CanonicalTaskId);
         });
         modelBuilder.Entity<BackfillBatchEntity>(e =>
         {

@@ -8,7 +8,8 @@ public sealed record CollectionResourceDetailDto(CollectionStateSnapshotDto? Sta
     int? AttemptHistoryPage = null, IReadOnlyList<CollectionFailureNotificationDto>? Failures = null,
     IReadOnlyList<RaceArtifactSnapshotDto>? RaceArtifacts = null,
     RaceSchedulingEvidenceDto? RaceEvidence = null,
-    IReadOnlyList<CollectionAttemptStageSummaryDto>? StageOutcomes = null)
+    IReadOnlyList<CollectionAttemptStageSummaryDto>? StageOutcomes = null,
+    CollectionOriginSummaryDto? Origin = null)
 {
     public int RequestHistoryPage => HistoryPage;
     public int EffectiveTaskHistoryPage => TaskHistoryPage ?? HistoryPage;

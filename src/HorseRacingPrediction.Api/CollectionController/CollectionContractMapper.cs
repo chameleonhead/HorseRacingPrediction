@@ -70,17 +70,22 @@ internal static class CollectionContractMapper
             value.HttpStatusCode, value.PageIdentification, value.RetryAt, value.NextCollectionAt,
             value.LocationOutcomes?.Select(ToInternal).ToArray(), value.FailureImpact,
             value.StageOutcomes?.Select(ToInternal).ToArray(),
-            value.RaceEvidence is null ? null : ToInternal(value.RaceEvidence));
+            value.RaceEvidence is null ? null : ToInternal(value.RaceEvidence),
+            value.IdentificationCandidates?.Select(x => new SubjectIdentificationCandidate(
+                x.Name, x.Url, x.Evidence)).ToArray());
     internal static CollectionAttemptStageSummaryDto ToDto(CollectionAttemptStageSummary value)
         => new(value.StageOutcomeId, value.AttemptId, value.Stage, value.Artifact, value.Result,
             value.ErrorCode, value.ErrorMessage, value.RequestedUrl, value.FinalUrl, value.Persisted);
     internal static CollectionFailureNotificationDto ToDto(PendingCollectionFailureNotification value)
         => new(value.NotificationId, value.TaskId, ToDto(value.Resource), ToDto(value.Definition), value.Status,
             value.ErrorCode, value.ErrorMessage, value.AttemptCount, value.FailedAt,
-            value.ResolutionStatus, value.RecoveryTaskId, value.RecoveryStartedAt, value.ResolvedAt);
+            value.ResolutionStatus, value.RecoveryTaskId, value.RecoveryStartedAt, value.ResolvedAt,
+            value.SelectedUrl, value.CanonicalResource is { } resource ? ToDto(resource) : null,
+            value.Selector, value.SelectedAt);
     internal static CollectionTaskSummaryDto ToDto(CollectionTaskSummary value)
         => new(value.TaskId, ToDto(value.Resource), ToDto(value.Definition), value.Status, value.Lane,
-            value.Priority, value.RequestedRevision, value.AvailableAt, value.AttemptCount, value.Metadata);
+            value.Priority, value.RequestedRevision, value.AvailableAt, value.AttemptCount, value.Metadata,
+            value.Reason);
     internal static CollectionRequestSummaryDto ToDto(CollectionRequestSummary value)
         => new(value.RequestId, value.RequestedRevision, value.Reason, value.RequestedAt,
             value.ExplicitUrl, value.BatchId);
@@ -88,7 +93,9 @@ internal static class CollectionContractMapper
         => new(value.AttemptId, value.TaskId, value.AttemptNumber, value.StartedAt, value.FinishedAt,
             value.Result, value.ErrorCode, value.ErrorMessage, value.RequestedUrl, value.FinalUrl,
             value.HttpStatusCode, value.PageIdentification, value.ExecutionBatchId, value.DispatchEnvelopeId,
-            value.QueueMessageId, value.LambdaRequestId, value.BatchTaskOrdinal, value.BatchTaskCount);
+            value.QueueMessageId, value.LambdaRequestId, value.BatchTaskOrdinal, value.BatchTaskCount,
+            value.IdentificationCandidates?.Select(x => new SubjectIdentificationCandidateDto(
+                x.Name, x.Url, x.Evidence)).ToArray());
     internal static CollectionStateSnapshotDto ToDto(CollectionStateSnapshot value)
         => new(ToDto(value.Resource), ToDto(value.Definition), value.AppliedRevision, value.RequiredRevision,
             value.LastCollectedAt, value.NextCollectionAt, value.Status,
@@ -125,7 +132,7 @@ internal static class CollectionContractMapper
             value.AttemptHistoryPage, value.Failures?.Select(ToDto).ToArray(),
             value.RaceArtifacts?.Select(ToDto).ToArray(),
             value.RaceEvidence is null ? null : ToDto(value.RaceEvidence),
-            value.StageOutcomes?.Select(ToDto).ToArray());
+            value.StageOutcomes?.Select(ToDto).ToArray(), null);
     internal static CollectionBulkPreviewDto ToDto(CollectionBulkPreview value)
         => new(ToDto(value.Definition), value.Revision, value.TargetCount, value.Resources.Select(ToDto).ToArray());
     internal static CollectionBulkExecutionDto ToDto(CollectionBulkExecution value)

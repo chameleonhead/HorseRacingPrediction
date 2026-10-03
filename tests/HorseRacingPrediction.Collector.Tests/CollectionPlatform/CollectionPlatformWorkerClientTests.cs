@@ -35,6 +35,30 @@ public sealed class CollectionPlatformWorkerClientTests
     }
 
     [TestMethod]
+    public async Task Completion_SendsStructuredIdentificationCandidatesWithMaximumFiveItems()
+    {
+        var taskId = Guid.NewGuid();
+        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(),
+            new(CollectionResourceType.Horse, "JRA", "horse-local"), new("horse-profile"), 1,
+            CollectionReason.Discovery, CollectionLane.Normal, 50, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(15), null, new Dictionary<string, string>());
+        var transport = new RecordingTransport(lease);
+        var client = new CollectionPlatformWorkerClient(
+            new HttpClient(transport) { BaseAddress = new("https://api.test/") },
+            new CollectionDefinitionHandlerRegistry([new IdentificationCandidateHandler()]));
+
+        await client.ExecuteAsync(new(taskId, 1), CancellationToken.None);
+
+        using var document = JsonDocument.Parse(transport.CompletionBody!);
+        var candidates = document.RootElement.GetProperty("attempt").GetProperty("identificationCandidates");
+        Assert.AreEqual(5, candidates.GetArrayLength());
+        Assert.AreEqual("候補1", candidates[0].GetProperty("name").GetString());
+        Assert.AreEqual("https://www.jra.go.jp/profile/1", candidates[0].GetProperty("url").GetString());
+        Assert.AreEqual("根拠1", candidates[0].GetProperty("evidence").GetString());
+        Assert.AreEqual("候補5", candidates[4].GetProperty("name").GetString());
+    }
+
+    [TestMethod]
     public async Task Acquire_SendsCurrentExecutionCorrelationToApi()
     {
         var taskId = Guid.NewGuid();
@@ -241,6 +265,18 @@ public sealed class CollectionPlatformWorkerClientTests
                     new(41, CollectionAttemptResult.UnexpectedPage, "UnexpectedPage"),
                     new(42, CollectionAttemptResult.Succeeded),
                 ]));
+    }
+
+    private sealed class IdentificationCandidateHandler : ICollectionDefinitionHandler
+    {
+        public CollectionDefinitionId DefinitionId => new("horse-profile");
+        public CollectionResourceType ResourceType => CollectionResourceType.Horse;
+        public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
+            => Task.FromResult(new CollectionAttemptCompletion(CollectionAttemptResult.ResourceNotFound,
+                ErrorCode: "SubjectNotIdentified",
+                IdentificationCandidates: Enumerable.Range(1, 6).Select(index =>
+                    new SubjectIdentificationCandidate($"候補{index}",
+                        $"https://www.jra.go.jp/profile/{index}", $"根拠{index}")).ToArray()));
     }
 
     private sealed class ThrowingHandler(Exception exception) : ICollectionDefinitionHandler

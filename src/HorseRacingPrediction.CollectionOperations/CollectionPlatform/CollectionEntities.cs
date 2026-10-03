@@ -152,6 +152,30 @@ public sealed class CollectionFailureNotificationEntity
     public Guid? RecoveryTaskId { get; set; }
     public DateTimeOffset? RecoveryStartedAt { get; set; }
     public DateTimeOffset? ResolvedAt { get; set; }
+    public string? SelectedUrl { get; set; }
+    public CollectionResourceType? CanonicalResourceType { get; set; }
+    public string? CanonicalResourceProvider { get; set; }
+    public string? CanonicalResourceId { get; set; }
+    public string? Selector { get; set; }
+    public DateTimeOffset? SelectedAt { get; set; }
+}
+
+public sealed class SubjectIdentificationSelectionEntity
+{
+    public Guid NotificationId { get; set; }
+    public Guid TaskId { get; set; }
+    public string SelectedName { get; set; } = string.Empty;
+    public string SelectedUrl { get; set; } = string.Empty;
+    public string? Evidence { get; set; }
+    public CollectionResourceType ResourceType { get; set; }
+    public string Provider { get; set; } = string.Empty;
+    public string ResourceId { get; set; } = string.Empty;
+    public string DefinitionId { get; set; } = string.Empty;
+    public Guid CanonicalTaskId { get; set; }
+    public string? Selector { get; set; }
+    public DateTimeOffset SelectedAt { get; set; }
+    public bool CreatedTask { get; set; }
+    public bool ReusedTask { get; set; }
 }
 
 public sealed class BackfillBatchEntity
@@ -191,6 +215,7 @@ public sealed class CollectionAttemptEntity
     public string? LambdaRequestId { get; set; }
     public int? BatchTaskOrdinal { get; set; }
     public int? BatchTaskCount { get; set; }
+    public string? IdentificationCandidatesJson { get; set; }
 }
 
 public sealed class CollectionAttemptStageOutcomeEntity

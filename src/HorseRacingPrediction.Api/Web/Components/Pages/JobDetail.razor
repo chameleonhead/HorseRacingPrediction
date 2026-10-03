@@ -15,7 +15,12 @@ else if (detail is not null)
 {
     @if (!string.IsNullOrWhiteSpace(operationMessage))
     {
-        <FluentMessageBar Intent="@MessageIntent.Success" Title="@operationMessage" />
+        <FluentMessageBar Intent="@MessageIntent.Success" Title="@operationMessage">
+            @if (canonicalJobUrl is not null)
+            {
+                <a href="@canonicalJobUrl">正規の競走馬ジョブを開く</a>
+            }
+        </FluentMessageBar>
     }
     @if (operationErrors.Count > 0)
     {
@@ -76,6 +81,76 @@ else if (detail is not null)
         </section>
     }
 
+    @if (detail.Origin is { } origin)
+    {
+        <section class="detail-section origin-summary" aria-labelledby="origin-summary-title">
+            <h2 id="origin-summary-title">この対象を作成した原因リソース</h2>
+            <dl>
+                <dt>対象名</dt><dd>@(origin.Name ?? "名称を取得できません")</dd>
+                <dt>種類</dt><dd>@ResourceTypeLabelFor(origin.Resource.Type)</dd>
+                <dt>提供元</dt><dd>@origin.Resource.Provider</dd>
+                <dt>対象ID</dt><dd><code>@origin.Resource.Id</code></dd>
+                <dt>作成理由</dt><dd>@OriginReasonLabel(origin.Reason)</dd>
+            </dl>
+            @if (origin.DetailUrl is not null)
+            {
+                <a href="@origin.DetailUrl">原因リソースのジョブ詳細を開く</a>
+            }
+            @if (!origin.DetailsAvailable)
+            {
+                <p role="status">@(origin.DetailUnavailableReason ?? "生成元の詳細を取得できません")。保存済みの種類・提供元・対象IDを表示しています。</p>
+            }
+        </section>
+    }
+    else if (LatestTask?.Reason == CollectionReason.Discovery)
+    {
+        <section class="detail-section origin-summary" aria-labelledby="origin-summary-title">
+            <h2 id="origin-summary-title">この対象を作成した原因リソース</h2>
+            <p>旧taskには生成元の種類・IDが保存されていません。関連情報の発見から作成されたtaskですが、元の対象は特定できません。</p>
+        </section>
+    }
+
+    @if (IsMultipleCandidateFailure)
+    {
+        <section class="detail-section candidate-selection" aria-labelledby="candidate-selection-title">
+            <h2 id="candidate-selection-title">同定候補を選択</h2>
+            <p>JRA公式ページと根拠を確認して候補を選びます。元の曖昧な対象は統合せず、選択した競走馬を別の対象として再取得します。</p>
+            @if (CandidateSelections.Count == 0)
+            {
+                <UiState Kind="warning" Title="選択できる候補が保存されていません" Message="この旧taskでは候補選択による復旧を利用できません。失敗履歴を確認してください。" />
+            }
+            else
+            {
+                <FluentRadioGroup TValue="string" Name="subject-identification-candidate" Label="候補を選択"
+                                  @bind-Value="selectedCandidateUrl">
+                    @foreach (var candidate in CandidateSelections)
+                    {
+                        <FluentRadio TValue="string" Value="@candidate.Url" AriaLabel="@($"{candidate.Name}を選択")">
+                            <span class="candidate-option">
+                                <strong>@candidate.Name</strong>
+                                @if (!string.IsNullOrWhiteSpace(candidate.Evidence))
+                                {
+                                    <span>@candidate.Evidence</span>
+                                }
+                                <a href="@candidate.Url" target="_blank" rel="noopener noreferrer">JRA公式ページで確認</a>
+                            </span>
+                        </FluentRadio>
+                    }
+                </FluentRadioGroup>
+                <div class="action-row">
+                    <FluentButton Appearance="@Appearance.Accent" OnClick="ApplySelectedCandidateAsync"
+                                  Disabled="@(busy || SelectedCandidate is null || ActiveFailure?.ResolutionStatus != CollectionFailureResolutionStatus.Open)">
+                        @(busy ? "復旧を依頼しています…" : "選択した候補で復旧")
+                    </FluentButton>
+                </div>
+                @if (candidateErrors.Count > 0)
+                {
+                    <UiState Kind="error" Title="候補を適用できません" Message="@string.Join(" ", candidateErrors)" />
+                }
+            }
+        </section>
+    }
+
     <RaceOpsDetailTabs>
         <FluentTab Label="概要" Id="overview"><section class="detail-card detail-section"><h2>収集対象</h2><dl class="meta"><dt>種類</dt><dd>@ResourceTypeLabel</dd><dt>提供元</dt><dd>@Provider</dd><dt>対象ID</dt><dd><code>@ResourceId</code></dd><dt>収集内容</dt><dd>@DefinitionLabel</dd><dt>処理区分</dt><dd>@(LatestTask is null ? "—" : LaneLabel(LatestTask.Lane))</dd><dt>優先度</dt><dd>@(LatestTask?.Priority.ToString() ?? "—")</dd>@foreach(var item in VisibleMetadata){<dt>@MetadataLabel(item.Key)</dt><dd>@item.Value</dd>}</dl></section></FluentTab>
         <FluentTab Label="@($"依頼履歴 ({detail.RequestTotal})")" Id="requests"><section class="entity-section detail-section"><h2>収集依頼の履歴</h2><p class="section-description">この情報が、いつ、どの理由で収集対象になったかを確認できます。</p>@if(detail.Requests.Count==0){<UiState Title="収集依頼はまだありません" />}else{<FluentDataGrid Items="@detail.Requests.AsQueryable()" TGridItem="CollectionRequestSummary" aria-label="収集依頼の履歴"><TemplateColumn Title="依頼日時">@Time(context.RequestedAt)</TemplateColumn><TemplateColumn Title="理由">@ReasonLabel(context.Reason)</TemplateColumn><TemplateColumn Title="抽出仕様">版 @context.RequestedRevision</TemplateColumn><TemplateColumn Title="Backfill">@(context.BatchId??"—")</TemplateColumn><TemplateColumn Title="取得先指定">@if(string.IsNullOrWhiteSpace(context.ExplicitUrl)){<span>なし</span>}else{<span class="history-url"><a href="@context.ExplicitUrl" target="_blank" rel="noopener noreferrer">@context.ExplicitUrl</a><FluentButton Appearance="@Appearance.Stealth" OnClick="@(() => CopyUrlAsync(context.ExplicitUrl!))">コピー</FluentButton></span>}</TemplateColumn></FluentDataGrid>}@if(RequestHistoryPages>1){<nav class="pagination" aria-label="依頼履歴ページ"><FluentButton OnClick="PreviousRequestHistoryAsync" Disabled="@(busy || requestHistoryPage<=1)">前へ</FluentButton><span>@requestHistoryPage / @RequestHistoryPages ページ</span><FluentButton OnClick="NextRequestHistoryAsync" Disabled="@(busy || requestHistoryPage>=RequestHistoryPages)">次へ</FluentButton></nav>}</section></FluentTab>
@@ -93,7 +168,7 @@ else if (detail is not null)
     [Parameter] public string ResourceId { get; set; } = string.Empty;
     [Parameter] public string DefinitionId { get; set; } = string.Empty;
     [SupplyParameterFromQuery(Name = "returnUrl")] public string? ReturnUrl { get; set; }
-    private bool loading, busy; private int requestHistoryPage=1,taskHistoryPage=1,attemptHistoryPage=1; private const int HistoryPageSize=25; private CollectionResourceDetail? detail; private string? explicitUrl, operationMessage; private IReadOnlyList<string> errors=[],requestErrors=[],operationErrors=[];
+    private bool loading, busy; private int requestHistoryPage=1,taskHistoryPage=1,attemptHistoryPage=1; private const int HistoryPageSize=25; private CollectionResourceDetail? detail; private string? explicitUrl, operationMessage, canonicalJobUrl, selectedCandidateUrl; private IReadOnlyList<string> errors=[],requestErrors=[],operationErrors=[],candidateErrors=[];
     private CollectionResourceType? Type => Enum.TryParse<CollectionResourceType>(ResourceTypeName, true, out var value) ? value : null;
     private CollectionTaskSummary? LatestTask=>detail?.LatestTask;
     private IEnumerable<KeyValuePair<string,string>> VisibleMetadata =>
@@ -107,10 +182,20 @@ else if (detail is not null)
         ["requestedByHorseId"]="発見元競走馬", ["requestedByHorseName"]="発見元競走馬名",
     };
     private static string MetadataLabel(string key)=>MetadataLabels.GetValueOrDefault(key,key);
+    private static string ResourceTypeLabelFor(CollectionResourceType value)=>value switch{CollectionResourceType.Race=>"レース",CollectionResourceType.Horse=>"競走馬",CollectionResourceType.Jockey=>"騎手",CollectionResourceType.Trainer=>"調教師",CollectionResourceType.Owner=>"馬主",_=>value.ToString()};
+    private static string OriginReasonLabel(string? reason)=>Enum.TryParse<CollectionReason>(reason, true, out var value)?ReasonLabel(value):string.IsNullOrWhiteSpace(reason)?"taskに記録なし":reason;
     private static string ArtifactLabel(RaceArtifactKind value)=>value==RaceArtifactKind.Card?"出馬表":"結果";
     private static string ArtifactStatusLabel(RaceArtifactStatus value)=>value switch{RaceArtifactStatus.Unknown=>"判定不能",RaceArtifactStatus.AwaitingPublication=>"公開待ち",RaceArtifactStatus.Due=>"取得可能",RaceArtifactStatus.Collecting=>"取得中",RaceArtifactStatus.Current=>"取得済み",RaceArtifactStatus.Blocked=>"要対応",RaceArtifactStatus.Unavailable=>"対象外",_=>value.ToString()};
     private PendingCollectionFailureNotification? ActiveFailure=>detail?.Failures?.Where(x=>x.ResolutionStatus is CollectionFailureResolutionStatus.Open or CollectionFailureResolutionStatus.RecoveryInProgress).OrderByDescending(x=>x.FailedAt).FirstOrDefault();
     private CollectionAttemptSummary? ActiveFailureAttempt=>ActiveFailure is null?null:detail?.Attempts.Where(x=>x.TaskId==ActiveFailure.TaskId).OrderByDescending(x=>x.StartedAt).FirstOrDefault();
+    private bool IsMultipleCandidateFailure => Type == CollectionResourceType.Horse
+        && ActiveFailure is { ResolutionStatus: CollectionFailureResolutionStatus.Open, ErrorCode: "SubjectNotIdentified" }
+        && string.Equals(ActiveFailureAttempt?.PageIdentification,
+            "SubjectIdentification:MultipleCandidates", StringComparison.Ordinal);
+    private IReadOnlyList<SubjectIdentificationCandidate> CandidateSelections => IsMultipleCandidateFailure
+        ? ActiveFailureAttempt?.IdentificationCandidates ?? [] : [];
+    private SubjectIdentificationCandidate? SelectedCandidate => CandidateSelections.FirstOrDefault(x =>
+        string.Equals(x.Url, selectedCandidateUrl, StringComparison.Ordinal));
     private CollectionAttemptSummary? AvailabilityWaitAttempt=>LatestTask?.Status!=CollectionTaskStatus.RetryWaiting?null:detail?.Attempts.Where(x=>x.TaskId==LatestTask.TaskId&&x.Result==CollectionAttemptResult.ResourceNotYetAvailable).OrderByDescending(x=>x.StartedAt).FirstOrDefault();
     private string ResourceTypeLabel=>Type switch{CollectionResourceType.Race=>"レース",CollectionResourceType.RaceCard=>"出馬表",CollectionResourceType.RaceOdds=>"オッズ",CollectionResourceType.RaceResult=>"レース結果",CollectionResourceType.Horse=>"競走馬",CollectionResourceType.Jockey=>"騎手",CollectionResourceType.Trainer=>"調教師",_=>ResourceTypeName};
     private string DefinitionLabel=>DefinitionId switch{"race-discovery"=>"開催レースの探索","race-detail"=>"レース詳細の収集","race-card"=>"出馬表の収集（旧）","race-odds"=>"オッズの収集","race-result"=>"レース結果の収集（旧）","horse-profile"=>"競走馬情報の収集","jockey-profile"=>"騎手情報の収集","trainer-profile"=>"調教師情報の収集","owner-identity"=>"馬主識別情報の収集",_=>DefinitionId};
@@ -137,6 +222,33 @@ else if (detail is not null)
     private async Task NextAttemptHistoryAsync(){if(attemptHistoryPage>=AttemptHistoryPages)return;attemptHistoryPage++;await LoadAsync();}
     private Task RequestAsync()=>SubmitRequestAsync(null);
     private Task RequestWithExplicitUrlAsync()=>SubmitRequestAsync(explicitUrl?.Trim());
+    private async Task ApplySelectedCandidateAsync()
+    {
+        if (ActiveFailure is not { ResolutionStatus: CollectionFailureResolutionStatus.Open } failure
+            || SelectedCandidate is not { } candidate) return;
+        candidateErrors = []; operationErrors = []; canonicalJobUrl = null; operationMessage = null; busy = true;
+        try
+        {
+            var result = await Api.ApplySubjectIdentificationCandidateAsync(failure.NotificationId,
+                new(candidate.Name, candidate.Url, candidate.Evidence));
+            if (!result.Success || result.Value is null)
+            {
+                candidateErrors = result.Errors;
+                return;
+            }
+
+            var application = result.Value;
+            canonicalJobUrl = $"/jobs/{Uri.EscapeDataString(application.CanonicalResource.Type.ToString())}/{Uri.EscapeDataString(application.CanonicalResource.Provider)}/{Uri.EscapeDataString(application.CanonicalResource.Id)}/{Uri.EscapeDataString(application.CanonicalDefinition.Value)}?returnUrl={Uri.EscapeDataString(NavigationPath)}";
+            operationMessage = $"{candidate.Name}を正規の競走馬として登録し、再取得を受け付けました。";
+            selectedCandidateUrl = null;
+            await LoadAsync();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            candidateErrors = ["管理APIに接続できないため、復旧を確定できませんでした。選択を保持しています。更新して状態を確認してください。"];
+        }
+        finally { busy = false; }
+    }
     private async Task SubmitRequestAsync(string? requestedUrl)
     {
         if (Type is null || detail is null) return;

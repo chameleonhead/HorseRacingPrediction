@@ -23,5 +23,6 @@ internal static class GetSubjectIdentificationRepairEndpoint
                         return Results.Ok(new GetSubjectIdentificationRepairResponse(new SubjectIdentificationRepairPreviewDto(candidates)));
                     })
                     .Produces<GetSubjectIdentificationRepairResponse>(StatusCodes.Status200OK);
+        ApplySubjectIdentificationCandidateEndpoint.Map(group);
     }
 }

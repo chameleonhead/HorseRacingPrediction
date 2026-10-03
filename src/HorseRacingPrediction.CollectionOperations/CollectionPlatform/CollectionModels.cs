@@ -148,6 +148,8 @@ public sealed record CollectionStageOutcome(string Stage, RaceArtifactKind Artif
     CollectionAttemptResult Result, string? ErrorCode = null, string? ErrorMessage = null,
     Uri? RequestedUrl = null, Uri? FinalUrl = null, bool Persisted = false);
 
+public sealed record SubjectIdentificationCandidate(string Name, string Url, string? Evidence = null);
+
 public sealed record RaceArtifactSnapshot(RaceArtifactKind Artifact, RaceArtifactStatus Status,
     int AppliedRevision, int RequiredRevision, DateTimeOffset? LastObservedAt,
     DateTimeOffset? LastPersistedAt, DateTimeOffset? NextDueAt, string? ErrorCode,
@@ -163,7 +165,8 @@ public sealed record CollectionAttemptCompletion(CollectionAttemptResult Result,
     IReadOnlyList<ResourceLocationOutcome>? LocationOutcomes = null,
     CollectionFailureImpact FailureImpact = CollectionFailureImpact.StopPipeline,
     IReadOnlyList<CollectionStageOutcome>? StageOutcomes = null,
-    RaceSchedulingEvidence? RaceEvidence = null);
+    RaceSchedulingEvidence? RaceEvidence = null,
+    IReadOnlyList<SubjectIdentificationCandidate>? IdentificationCandidates = null);
 
 public sealed record RevisionImpact(RevisionImpactScopeType ScopeType, string ScopePayload);
 
@@ -246,7 +249,7 @@ public sealed record PendingCollectionDispatch(Guid OutboxId, CollectionTaskNoti
 public sealed record CollectionTaskSummary(Guid TaskId, ResourceKey Resource, CollectionDefinitionId Definition,
     CollectionTaskStatus Status, CollectionLane Lane, int Priority, int RequestedRevision,
     DateTimeOffset AvailableAt, int AttemptCount,
-    IReadOnlyDictionary<string, string>? Metadata = null);
+    IReadOnlyDictionary<string, string>? Metadata = null, CollectionReason? Reason = null);
 
 public sealed record CollectionTaskQuery(
     IReadOnlyCollection<CollectionTaskStatus>? Statuses = null,
@@ -297,7 +300,9 @@ public sealed record PendingCollectionFailureNotification(Guid NotificationId, G
     ResourceKey Resource, CollectionDefinitionId Definition, CollectionTaskStatus Status,
     string? ErrorCode, string? ErrorMessage, int AttemptCount, DateTimeOffset FailedAt,
     CollectionFailureResolutionStatus ResolutionStatus = CollectionFailureResolutionStatus.Open,
-    Guid? RecoveryTaskId = null, DateTimeOffset? RecoveryStartedAt = null, DateTimeOffset? ResolvedAt = null);
+    Guid? RecoveryTaskId = null, DateTimeOffset? RecoveryStartedAt = null, DateTimeOffset? ResolvedAt = null,
+    string? SelectedUrl = null, ResourceKey? CanonicalResource = null, string? Selector = null,
+    DateTimeOffset? SelectedAt = null);
 public sealed record CollectionFailureGroup(string GroupKey, CollectionDefinitionId Definition,
     CollectionTaskStatus Status, string? ErrorCode, string? ErrorMessage, int Count,
     DateTimeOffset FirstFailedAt, DateTimeOffset LastFailedAt,
@@ -314,6 +319,17 @@ public sealed record CollectionFailureRecoveryResult(int SelectedCount, int Crea
     int ReusedTaskCount, IReadOnlyList<Guid> TaskIds);
 public sealed record CollectionFailureDismissalResult(int SelectedCount, int DismissedCount,
     int AlreadyClosedCount, bool HasRecoveryConflict = false);
+public sealed record SubjectIdentificationCandidateApplication(Guid NotificationId,
+    string SelectedName, Uri SelectedUrl, string? Evidence, ResourceKey CanonicalResource,
+    CollectionDefinitionId CanonicalDefinition, Guid CanonicalTaskId, string? Selector,
+    DateTimeOffset SelectedAt, bool CreatedTask, bool ReusedTask)
+{
+    // The existing selection row predates durable reservation and keeps this column non-null.
+    // Guid.Empty is therefore the persisted, resumable reservation state.
+    public bool IsFinalized => CanonicalTaskId != Guid.Empty;
+}
+public sealed class SubjectIdentificationSelectionConflictException(Guid notificationId)
+    : InvalidOperationException($"Subject identification selection for notification '{notificationId}' conflicts with the existing selection.");
 public sealed record CollectionRequestSummary(Guid RequestId, int RequestedRevision, CollectionReason Reason,
     DateTimeOffset RequestedAt, string? ExplicitUrl, string? BatchId);
 public sealed record CollectionAttemptSummary(Guid AttemptId, Guid TaskId, int AttemptNumber,
@@ -321,7 +337,8 @@ public sealed record CollectionAttemptSummary(Guid AttemptId, Guid TaskId, int A
     string? ErrorCode, string? ErrorMessage, string? RequestedUrl, string? FinalUrl, int? HttpStatusCode,
     string? PageIdentification = null, Guid? ExecutionBatchId = null, Guid? DispatchEnvelopeId = null,
     string? QueueMessageId = null, string? LambdaRequestId = null, int? BatchTaskOrdinal = null,
-    int? BatchTaskCount = null);
+    int? BatchTaskCount = null,
+    IReadOnlyList<SubjectIdentificationCandidate>? IdentificationCandidates = null);
 
 public sealed record CollectionAttemptStageSummary(Guid StageOutcomeId, Guid AttemptId, string Stage,
     RaceArtifactKind Artifact, CollectionAttemptResult Result, string? ErrorCode,
@@ -348,7 +365,8 @@ public sealed record CollectionResourceDetail(CollectionStateSnapshot? State,
     IReadOnlyList<PendingCollectionFailureNotification>? Failures = null,
     IReadOnlyList<RaceArtifactSnapshot>? RaceArtifacts = null,
     RaceSchedulingEvidence? RaceEvidence = null,
-    IReadOnlyList<CollectionAttemptStageSummary>? StageOutcomes = null)
+    IReadOnlyList<CollectionAttemptStageSummary>? StageOutcomes = null,
+    CollectionOriginSummaryDto? Origin = null)
 {
     public int RequestHistoryPage => HistoryPage;
     public int EffectiveTaskHistoryPage => TaskHistoryPage ?? HistoryPage;

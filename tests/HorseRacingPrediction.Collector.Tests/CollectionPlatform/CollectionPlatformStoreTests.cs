@@ -11,6 +11,7 @@ using System.Data.Common;
 
 using HorseRacingPrediction.Contracts.Collection;
 using HorseRacingPrediction.Contracts.Common.Time;
+using HorseRacingPrediction.Contracts.Subjects;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -59,6 +60,92 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsNotNull(await store.AcquireAsync(lease.TaskId, 3, now.AddMinutes(5), TimeSpan.FromMinutes(15)));
     }
 
+    [TestMethod]
+    public async Task IdentificationCandidates_WorkerTransportPersistsStructuredValuesAndCapsAtFive()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 10, 4, 2, 0, 0, TimeSpan.Zero);
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now,
+            attributes: new Dictionary<string, string> { ["name"] = "候補対象" });
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(15));
+        Assert.IsNotNull(lease);
+
+        var completion = new CollectionAttemptCompletion(CollectionAttemptResult.ResourceNotFound,
+            ErrorCode: "SubjectNotIdentified",
+            IdentificationCandidates: Enumerable.Range(1, 6).Select(index =>
+                new SubjectIdentificationCandidate($"候補{index}",
+                    $"https://www.jra.go.jp/profile/{index}", $"根拠{index}")).ToArray());
+        using var http = new HttpClient(new CompletionStoreTransport(store, lease, now))
+        { BaseAddress = new("https://api.test/") };
+        var worker = new CollectionPlatformWorkerClient(http,
+            new CollectionDefinitionHandlerRegistry([new CandidateCompletionHandler(completion)]));
+
+        await worker.ExecuteAsync(new(lease.TaskId, 1), CancellationToken.None);
+
+        var detail = (await store.GetResourceDetailAsync(Horse, HorseProfile))!;
+        var candidates = detail.Attempts.Single().IdentificationCandidates;
+        Assert.IsNotNull(candidates);
+        Assert.HasCount(5, candidates);
+        Assert.AreEqual("候補1", candidates[0].Name);
+        Assert.AreEqual("https://www.jra.go.jp/profile/1", candidates[0].Url);
+        Assert.AreEqual("根拠1", candidates[0].Evidence);
+        Assert.AreEqual("候補5", candidates[4].Name);
+    }
+
+    [TestMethod]
+    public async Task LegacyAttemptWithoutIdentificationCandidates_ReadsAsNull()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 10, 4, 3, 0, 0, TimeSpan.Zero);
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now,
+            attributes: new Dictionary<string, string> { ["name"] = "旧候補対象" });
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(15));
+        Assert.IsNotNull(lease);
+        Assert.IsTrue(await store.CompleteAttemptAsync(lease.TaskId, lease.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified")));
+
+        var detail = (await store.GetResourceDetailAsync(Horse, HorseProfile))!;
+        Assert.IsNull(detail.Attempts.Single().IdentificationCandidates);
+    }
+
+    [TestMethod]
+    public async Task LegacyNameOnlyHorseReference_IsTerminalWithoutActionableFailureOrJraNavigation()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 10, 4, 4, 0, 0, TimeSpan.Zero);
+        var resource = new ResourceKey(CollectionResourceType.Horse, "JRA", "legacy-name-only-horse");
+        var receipt = await store.RequestAsync(resource, HorseProfile, 7, CollectionReason.Discovery, now,
+            CollectionLane.Background, 20, attributes: new Dictionary<string, string>
+            {
+                ["name"] = "旧血統参照",
+                ["discoveredFromType"] = "Horse",
+                ["discoveredFromProvider"] = "JRA",
+                ["discoveredFromId"] = "horse-parent",
+                ["discoveryDepth"] = "2",
+            });
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => throw new AssertFailedException("Legacy name-only task must not open JRA."),
+        };
+        var handler = new JraSubjectProfileCollectionHandler(
+            JraSubjectCollectionDefinitions.For(CollectionResourceType.Horse), sessions,
+            new NoOpSubjectProfileSink());
+        using var http = new HttpClient(new CompletionStoreTransport(store, lease, now))
+        { BaseAddress = new("https://api.test/") };
+        var worker = new CollectionPlatformWorkerClient(http,
+            new CollectionDefinitionHandlerRegistry([handler]));
+
+        await worker.ExecuteAsync(new(lease.TaskId, 1), CancellationToken.None);
+
+        var detail = (await store.GetResourceDetailAsync(resource, HorseProfile))!;
+        Assert.AreEqual(CollectionTaskStatus.Succeeded, detail.LatestTask!.Status);
+        Assert.AreEqual(CollectionStateStatus.Unavailable, detail.State!.Status);
+        Assert.AreEqual("HorseProfile:LegacyNameOnlyReference", detail.Attempts.Single().PageIdentification);
+        Assert.IsEmpty(await store.GetActionableFailureNotificationsAsync(now.AddMinutes(1), 10));
+    }
+
     private sealed class CompletionStoreTransport(CollectionPlatformStore store, LeasedCollectionTask lease,
         DateTimeOffset now) : HttpMessageHandler
     {
@@ -77,6 +164,22 @@ public sealed class CollectionPlatformStoreTests
             Assert.IsTrue(await store.CompleteAttemptAsync(lease.TaskId, lease.LeaseToken, now.AddSeconds(1), completion));
             return new(System.Net.HttpStatusCode.OK);
         }
+    }
+
+    private sealed class CandidateCompletionHandler(CollectionAttemptCompletion completion)
+        : ICollectionDefinitionHandler
+    {
+        public CollectionDefinitionId DefinitionId => new("horse-profile");
+        public CollectionResourceType ResourceType => CollectionResourceType.Horse;
+        public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task,
+            CancellationToken cancellationToken) => Task.FromResult(completion);
+    }
+
+    private sealed class NoOpSubjectProfileSink : IJraSubjectProfileSink
+    {
+        public Task SaveAsync(string subjectType, string subjectId,
+            JraSubjectProfileDto profile,
+            CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     [TestMethod]
@@ -1652,7 +1755,7 @@ public sealed class CollectionPlatformStoreTests
         await connection.OpenAsync();
         await using var history = connection.CreateCommand();
         history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
-        Assert.AreEqual(20L, (long)(await history.ExecuteScalarAsync())!);
+        Assert.AreEqual(22L, (long)(await history.ExecuteScalarAsync())!);
         await using var existing = connection.CreateCommand();
         existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
         Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
@@ -1962,7 +2065,7 @@ public sealed class CollectionPlatformStoreTests
             $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 20;";
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 22;";
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 
@@ -2814,7 +2917,10 @@ public sealed class CollectionPlatformStoreTests
         await store.CompleteAttemptAsync(recovery.TaskId!.Value, recoveryLease!.LeaseToken, now.AddMinutes(2),
             new(CollectionAttemptResult.PermanentFailure, "New"));
 
-        var actionable = (await store.GetActionableFailureNotificationsAsync(now.AddMinutes(3), 10)).Single();
+        var actionableFailures = await store.GetActionableFailureNotificationsAsync(now.AddMinutes(3), 10);
+        Assert.HasCount(1, actionableFailures, string.Join("; ", actionableFailures.Select(x =>
+            $"{x.ErrorCode ?? "<null>"}:{x.ResolutionStatus}:{x.TaskId}")));
+        var actionable = actionableFailures.Single();
         Assert.AreEqual("New", actionable.ErrorCode);
         var history = (await store.GetResourceDetailAsync(Horse, HorseProfile))!.Failures!;
         Assert.HasCount(2, history);

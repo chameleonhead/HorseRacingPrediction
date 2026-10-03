@@ -14,10 +14,11 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 public sealed partial class CollectionPlatformStore
 {
     private const int MaxLocationOutcomesPerCompletion = 100;
+    private const int MaxIdentificationCandidatesPerCompletion = 5;
     private static readonly HashSet<string> AllowedTaskMetadataKeys = new(StringComparer.Ordinal)
     {
         "backfillDate", "batchId", "birthDate", "course", "discoveredFromId", "discoveredFromProvider",
-        "discoveredFromType", "discoveryAncestors", "discoveryDepth", "domainRaceId", "name", "number",
+        "discoveredFromType", "discoveredFromReason", "discoveryAncestors", "discoveryDepth", "domainRaceId", "name", "number",
         "date", "day", "distance", "entries", "layout", "meeting", "month", "observations", "observedAt",
         "owner", "ownerRepair", "position", "referenceRaceCourse", "referenceRaceDate", "referenceRaceNumber",
         "requestedByHorseId", "requestedByHorseName", "requestedByRaceId", "sex", "source",
@@ -856,6 +857,8 @@ public sealed partial class CollectionPlatformStore
             attempt.FinalUrl = completion.FinalUrl?.AbsoluteUri;
             attempt.HttpStatusCode = completion.HttpStatusCode;
             attempt.PageIdentification = completion.PageIdentification;
+            attempt.IdentificationCandidatesJson = SerializeIdentificationCandidates(
+                completion.IdentificationCandidates);
             if (completion.StageOutcomes is { Count: > 0 })
             {
                 foreach (var stage in completion.StageOutcomes)
@@ -1081,6 +1084,11 @@ public sealed partial class CollectionPlatformStore
                 state.Status = completion.Result == CollectionAttemptResult.ResourceNotFound
                     ? CollectionStateStatus.Unavailable : CollectionStateStatus.Failed;
                 db.ActiveTasks.Remove(await db.ActiveTasks.SingleAsync(x => x.TaskId == taskId, cancellationToken));
+                // Reopen the recovery source before queuing this task's failure. Queueing
+                // supersedes prior failures for the same resource; doing it first lets the
+                // EF tracked entity query observe the pre-save RecoveryInProgress row and
+                // incorrectly reopen it after it has been superseded in memory.
+                await ReopenFailuresAsync(db, taskId, cancellationToken).ConfigureAwait(false);
                 await QueueFailureNotificationAsync(db, task, completion.ErrorCode, completion.ErrorMessage, now,
                     pausePipeline: completion.Result != CollectionAttemptResult.ResourceNotFound
                         && completion.FailureImpact != CollectionFailureImpact.Isolated,
@@ -1301,9 +1309,13 @@ public sealed partial class CollectionPlatformStore
             .FirstOrDefaultAsync(cancellationToken);
         var taskRows = await taskQuery.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.TaskId)
             .Skip(Offset(taskHistoryPage, historyPageSize)).Take(historyPageSize).ToListAsync(cancellationToken);
+        var taskRequestIds = taskRows.Select(x => x.RequestId).ToArray();
+        var taskReasons = await db.Requests.AsNoTracking().Where(x => taskRequestIds.Contains(x.RequestId))
+            .ToDictionaryAsync(x => x.RequestId, x => x.Reason, cancellationToken).ConfigureAwait(false);
         var tasks = taskRows.Select(x => new CollectionTaskSummary(x.TaskId, resource, definition, x.Status,
             x.Lane, x.Priority, x.RequestedRevision, x.AvailableAt, x.AttemptCount,
-            DeserializeTaskMetadata(x.MetadataJson ?? item.AttributesJson))).ToList();
+            DeserializeTaskMetadata(x.MetadataJson ?? item.AttributesJson),
+            taskReasons.GetValueOrDefault(x.RequestId))).ToList();
         var taskIds = taskQuery.Select(x => x.TaskId);
         var attemptQuery = db.Attempts.AsNoTracking().Where(x => taskIds.Contains(x.TaskId));
         var attemptTotal = await attemptQuery.CountAsync(cancellationToken);
@@ -1313,14 +1325,17 @@ public sealed partial class CollectionPlatformStore
                 x.AttemptNumber, x.StartedAt, x.FinishedAt, x.Result, x.ErrorCode, x.ErrorMessage,
                 x.RequestedUrl, x.FinalUrl, x.HttpStatusCode, x.PageIdentification, x.ExecutionBatchId,
                 x.DispatchEnvelopeId, x.QueueMessageId, x.LambdaRequestId, x.BatchTaskOrdinal,
-                x.BatchTaskCount)).ToList();
+                x.BatchTaskCount, DeserializeIdentificationCandidates(x.IdentificationCandidatesJson))).ToList();
         var state = stateEntity is null ? null : new CollectionStateSnapshot(resource, definition,
             stateEntity.AppliedRevision, stateEntity.RequiredRevision, stateEntity.LastCollectedAt,
             stateEntity.NextCollectionAt, stateEntity.Status);
         var latestTask = latestTaskRow is null ? null : new CollectionTaskSummary(latestTaskRow.TaskId,
             resource, definition, latestTaskRow.Status, latestTaskRow.Lane, latestTaskRow.Priority,
             latestTaskRow.RequestedRevision, latestTaskRow.AvailableAt, latestTaskRow.AttemptCount,
-            DeserializeTaskMetadata(latestTaskRow.MetadataJson ?? item.AttributesJson));
+            DeserializeTaskMetadata(latestTaskRow.MetadataJson ?? item.AttributesJson),
+            await db.Requests.AsNoTracking().Where(x => x.RequestId == latestTaskRow.RequestId)
+                .Select(x => (CollectionReason?)x.Reason).SingleOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false));
         var failureRows = await FailureQuery(db, item.ResourcePk, definition.Value)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         failureRows = failureRows.OrderByDescending(x => x.Notification.FailedAt).ToList();
@@ -4027,7 +4042,13 @@ public sealed partial class CollectionPlatformStore
         Enum.Parse<CollectionTaskStatus>(row.Notification.Status), row.Notification.ErrorCode,
         row.Notification.ErrorMessage, row.Notification.AttemptCount, row.Notification.FailedAt,
         row.Notification.ResolutionStatus, row.Notification.RecoveryTaskId,
-        row.Notification.RecoveryStartedAt, row.Notification.ResolvedAt);
+        row.Notification.RecoveryStartedAt, row.Notification.ResolvedAt,
+        row.Notification.SelectedUrl,
+        row.Notification.CanonicalResourceType is { } type
+            && row.Notification.CanonicalResourceProvider is { } provider
+            && row.Notification.CanonicalResourceId is { } id
+            ? new ResourceKey(type, provider, id) : null,
+        row.Notification.Selector, row.Notification.SelectedAt);
 
     private sealed class FailureRow
     {
@@ -4064,6 +4085,20 @@ public sealed partial class CollectionPlatformStore
             failure.ResolutionStatus = CollectionFailureResolutionStatus.Resolved;
             failure.ResolvedAt = now;
         }
+        var successfulCanonicalTaskIds = await db.Tasks.AsNoTracking()
+            .Where(x => x.ResourcePk == resourcePk && x.DefinitionId == definitionId
+                && x.Status == CollectionTaskStatus.Succeeded)
+            .Select(x => x.TaskId).ToArrayAsync(token);
+        var selectedFailures = await (from selection in db.SubjectIdentificationSelections
+                                      join failure in db.FailureNotifications
+                                          on selection.NotificationId equals failure.NotificationId
+                                      where successfulCanonicalTaskIds.Contains(selection.CanonicalTaskId)
+                                      select failure).ToListAsync(token);
+        foreach (var failure in selectedFailures)
+        {
+            failure.ResolutionStatus = CollectionFailureResolutionStatus.Resolved;
+            failure.ResolvedAt = now;
+        }
     }
 
     private static async Task<int> ReopenFailuresAsync(CollectionPlatformDbContext db, Guid recoveryTaskId,
@@ -4077,7 +4112,19 @@ public sealed partial class CollectionPlatformStore
             failure.RecoveryTaskId = null;
             failure.RecoveryStartedAt = null;
         }
-        return failures.Count;
+        var linkedFailures = await (from selection in db.SubjectIdentificationSelections
+                                    join failure in db.FailureNotifications
+                                        on selection.NotificationId equals failure.NotificationId
+                                    where selection.CanonicalTaskId == recoveryTaskId
+                                    select failure).ToListAsync(token);
+        foreach (var failure in linkedFailures)
+        {
+            failure.ResolutionStatus = CollectionFailureResolutionStatus.Open;
+            failure.RecoveryStartedAt = null;
+            // Keep the persisted canonical task/resource and selection audit while reopening.
+        }
+        return failures.Select(x => x.NotificationId).Concat(linkedFailures.Select(x => x.NotificationId))
+            .Distinct().Count();
     }
 
     private static void ValidateImpact(RevisionImpact impact, IEnumerable<INamedRevisionImpactCondition> namedConditions)
@@ -4300,6 +4347,31 @@ public sealed partial class CollectionPlatformStore
             foreach (var pair in source)
                 if (!string.IsNullOrWhiteSpace(pair.Value)) result[pair.Key] = pair.Value;
         return result;
+    }
+
+    private static string? SerializeIdentificationCandidates(
+        IReadOnlyList<SubjectIdentificationCandidate>? candidates)
+    {
+        if (candidates is not { Count: > 0 }) return null;
+        return JsonSerializer.Serialize(candidates.Take(MaxIdentificationCandidatesPerCompletion).ToArray());
+    }
+
+    private static IReadOnlyList<SubjectIdentificationCandidate>? DeserializeIdentificationCandidates(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            var candidates = JsonSerializer.Deserialize<SubjectIdentificationCandidate[]>(json);
+            return candidates is { Length: > 0 }
+                ? candidates.Take(MaxIdentificationCandidatesPerCompletion).ToArray()
+                : null;
+        }
+        catch (JsonException)
+        {
+            // Candidate data is an optional diagnostic facet. A malformed or legacy value
+            // must not make the resource detail unavailable.
+            return null;
+        }
     }
 
     private static string SerializeTaskMetadata(IReadOnlyDictionary<string, string>? metadata)

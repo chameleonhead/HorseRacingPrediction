@@ -241,6 +241,14 @@ erDiagram
 
 要対応データ補正の正本はCollection Platformでactiveな `SubjectNotIdentified` failure notificationとし、運用者が `/settings` で元ジョブとエラーを確認して、保存済みの主体情報による再収集を実行する。補正URLの入力は要求しない。パラメーターなしのJRA `access*.html` は主体locationとして使わず、競走馬・騎手・調教師は名前等から公式プロフィールを探索し、馬主はRaceEntry由来の名前で内部identityを解決する。名寄せ候補0件も正常に扱う。自動名寄せするのは、既存のHorse repairが同一JRA識別子または同一RaceEntry由来の一意な統合先を証明できる競走馬だけである。一般の収集失敗は `/jobs`、主体識別の補正は `/settings` を正とする。詳細は [URLを使わない主体識別Recovery](changes/20260914_subject-identity-url-free-recovery/README.md) を参照する。
 
+`SubjectNotIdentified / MultipleCandidates` で公開候補が構造化保存されている場合は、例外として
+対象のJob Detailを候補確認と手動選択の正本とする。候補ごとに名前、公開根拠、JRA外部リンクを示し、
+単一選択後にだけ復旧を依頼できる。選択はURLを曖昧な元Resourceへ上書きする操作ではなく、公式URLから
+canonical subjectを作成して別taskへ接続する操作とし、元Resourceを名前一致だけでmerge/redirectしない。
+候補より先に、task provenanceが示す生成元resourceの対象名・種類・ID・生成理由・Job Detailリンクを表示する。
+生成元detailが取得不能でも保存済みkeyと説明を表示し、対象ページ全体をerrorにしない。
+詳細と画面状態は[主体同定候補をジョブ詳細から選択して復旧する](changes/20261003_subject-candidate-selection/README.md)を正本とする。
+
 「データ品質」には、登録済みの競走馬・騎手・調教師を名称またはIDで検索し、共通のJRA名称正規化規則による補正前後を比較して選択適用する「登録済み名称の正規化」を置く。空検索による全件取得や一括自動適用は行わず、server-side pagingされた検索結果から、変更があり別IDと衝突しない候補だけを選択できる。確認Dialogは補正前後、件数、ID・alias・名寄せ・プロフィール・収集履歴を変更しないことを示す。検索後に値が変わった対象と、正規化後に同種別の別IDと衝突する対象はapply時にも再検証して変更しない。馬主はalias／統合モデルが異なるためこのツールに含めない。loading、検索前、0件、変更候補なし、error、部分成功を区別し、狭幅でも前後比較とPrimary Actionを保持する。詳細は [登録済み主体名称の検索・選択補正ツール](changes/20260920_subject-name-normalization-tool/README.md) を正本とする。
 
 ### 5.9 レース一覧 `/races`

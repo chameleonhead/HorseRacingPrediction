@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261003_subject-candidate-selection",
+  "taskId": "T2",
+  "attemptId": "T2-A1",
+  "state": "completed",
+  "taskDifficulty": "medium: API contract mapping, identity-safe recovery persistence, and provenance read model",
+  "acceptanceCriteria": ["AC1", "AC2", "AC5", "AC6"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-5.6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime worker model telemetry unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime per-worker usage telemetry unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "runtime did not expose reliable worker effort time"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.Api/CollectionController",
+    "src/HorseRacingPrediction.Api/Endpoints/Collection",
+    "src/HorseRacingPrediction.Api/Endpoints/Repairs",
+    "src/HorseRacingPrediction.Api/Endpoints/Horses",
+    "src/HorseRacingPrediction.Contracts/Repairs",
+    "src/HorseRacingPrediction.Contracts/Collection",
+    "src/HorseRacingPrediction.Contracts/Horses",
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform",
+    "tests/HorseRacingPrediction.Api.Tests",
+    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionPlatformStoreTests.cs"
+  ],
+  "startRevision": "18d53870fdaad4f4bdcec2be95c6b7d0bba908ca",
+  "endRevisionOrPatch": "T2-A1 API implementation patch in shared worktree",
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "runtime did not expose review usage or active time"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "active effort telemetry was not captured"
+  },
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": false,
+    "scopePassed": true,
+    "independentChallenge": "Lead independently ran 6 focused API tests; AC-group review found cross-process differing-candidate race may register the losing canonical Horse before durable ledger conflict.",
+    "promoted": false,
+    "escapedDefects": 0,
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "revise"
+  }
+}

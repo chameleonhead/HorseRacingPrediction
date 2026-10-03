@@ -49,6 +49,15 @@ code {
 .url-evidence { display:grid; gap:8px; margin-block:12px; }
 .attempt-detail { min-width:18rem; }.attempt-detail dl { display:grid; gap:6px 12px; grid-template-columns:max-content minmax(0,1fr); }.attempt-detail dd { margin:0; overflow-wrap:anywhere; }.attempt-detail pre { margin:0; white-space:pre-wrap; }
 
+.origin-summary,
+.candidate-selection { margin: 20px 0; }
+.origin-summary dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 16px; }
+.origin-summary dt { color: var(--neutral-foreground-hint); }
+.origin-summary dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.candidate-option { display: grid; gap: 4px; padding: 8px 0; min-width: 0; }
+.candidate-option a { overflow-wrap: anywhere; }
+.candidate-selection fluent-radio { display: block; }
+
 @media (max-width: 720px) {
     .action-row,
     .action-row fluent-button {
@@ -57,4 +66,6 @@ code {
     .latest-error-heading, .url-detail, .history-url { align-items: flex-start; flex-direction: column; }
     .technical-details { grid-template-columns: 1fr; }
     .attempt-detail { min-width:0; }.attempt-detail dl { grid-template-columns:1fr; }
+    .origin-summary dl { grid-template-columns: 1fr; gap: 4px; }
+    .origin-summary dd { margin-bottom: 8px; }
 }

@@ -15,6 +15,26 @@ public sealed partial class AdminApiClient
     private async Task<SubjectIdentificationRepairPreviewDto?> GetSubjectIdentificationRepairPreviewCoreAsync(CancellationToken token)
         => (await GetJsonAsync<GetSubjectIdentificationRepairResponse>(SubjectIdentificationRepairPath, token).ConfigureAwait(false))?.Preview;
 
+    public async Task<AdminApiResult<SubjectIdentificationCandidateApplicationDto>>
+        ApplySubjectIdentificationCandidateAsync(Guid notificationId,
+            SubjectIdentificationCandidateSelectionInputDto selection,
+            CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            $"{SubjectIdentificationRepairPath}/candidate/apply",
+            new ApplySubjectIdentificationCandidateRequest(notificationId, selection),
+            JsonOptions, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+            return AdminApiResult<SubjectIdentificationCandidateApplicationDto>.Fail(
+                await ReadErrorsAsync(response, cancellationToken).ConfigureAwait(false));
+
+        var value = await response.Content.ReadFromJsonAsync<ApplySubjectIdentificationCandidateResponse>(
+            JsonOptions, cancellationToken).ConfigureAwait(false);
+        return value is null
+            ? AdminApiResult<SubjectIdentificationCandidateApplicationDto>.Fail(["復旧結果を確認できませんでした。"])
+            : AdminApiResult<SubjectIdentificationCandidateApplicationDto>.Ok(value.Application);
+    }
+
     public async Task<AdminApiResult<SubjectIdentificationExecutionDto>>
         ExecuteSubjectIdentificationRepairAsync(
             IReadOnlyList<SubjectIdentificationRepairInputDto> items,

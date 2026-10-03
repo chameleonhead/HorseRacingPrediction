@@ -235,7 +235,9 @@ public sealed class CollectionPlatformWorkerClient
                     x.Result, x.ErrorCode, x.ErrorMessage, x.RequestedUrl, x.FinalUrl, x.Persisted)).ToArray(),
                 completion.RaceEvidence is null ? null : new RaceSchedulingEvidenceDto(
                     completion.RaceEvidence.OfficialStartAt, completion.RaceEvidence.Provenance,
-                    completion.RaceEvidence.VerifiedAt)))
+                    completion.RaceEvidence.VerifiedAt),
+                completion.IdentificationCandidates?.Take(5).Select(x => new SubjectIdentificationCandidateDto(
+                    x.Name, x.Url, x.Evidence)).ToArray()))
             { Id = taskId }, cancellationToken)
             .ConfigureAwait(false);
         completeResponse.EnsureSuccessStatusCode();

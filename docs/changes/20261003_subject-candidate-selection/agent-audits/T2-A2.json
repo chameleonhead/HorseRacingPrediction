@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261003_subject-candidate-selection",
+  "taskId": "T2",
+  "attemptId": "T2-A2",
+  "state": "completed",
+  "taskDifficulty": "low: close a cross-process candidate selection side-effect race in the existing API flow",
+  "acceptanceCriteria": ["AC1", "AC2", "AC5", "AC6"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-5.6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime worker model telemetry unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime per-worker usage telemetry unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "runtime did not expose reliable worker effort time"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.Api/CollectionController",
+    "src/HorseRacingPrediction.Api/Endpoints/Collection",
+    "src/HorseRacingPrediction.Api/Endpoints/Repairs",
+    "src/HorseRacingPrediction.Api/Endpoints/Horses",
+    "src/HorseRacingPrediction.Contracts/Repairs",
+    "src/HorseRacingPrediction.Contracts/Collection",
+    "src/HorseRacingPrediction.Contracts/Horses",
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform",
+    "tests/HorseRacingPrediction.Api.Tests",
+    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionPlatformStoreTests.cs"
+  ],
+  "startRevision": "18d53870fdaad4f4bdcec2be95c6b7d0bba908ca",
+  "endRevisionOrPatch": "No implementation patch produced before Lead interrupted the nonresponsive attempt",
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "runtime did not expose review usage or active time"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "active effort telemetry was not captured"
+  },
+  "outcome": {
+    "verificationPassed": false,
+    "qualityPassed": false,
+    "scopePassed": true,
+    "independentChallenge": "Lead requested status twice and inspected scoped diff; attempt produced no implementation files or test evidence before interruption.",
+    "promoted": false,
+    "escapedDefects": 0,
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "revise"
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261003_subject-candidate-selection",
+  "taskId": "T1",
+  "attemptId": "T1-A1",
+  "state": "completed",
+  "taskDifficulty": "medium: DTO transport, schema persistence, and compatibility round-trip",
+  "acceptanceCriteria": ["AC1"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-5.6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime worker model telemetry unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime per-worker usage telemetry unavailable"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.Contracts/Collection",
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform",
+    "src/HorseRacingPrediction.Collector/CollectionPlatform",
+    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform",
+    "tests/HorseRacingPrediction.CollectionOperations.Tests"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "runtime did not expose review usage or active time"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "active effort telemetry unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "runtime did not expose reliable effort time"
+  },
+  "startRevision": "18d53870fdaad4f4bdcec2be95c6b7d0bba908ca",
+  "endRevisionOrPatch": "T1-A1 working-tree patch reviewed by Lead",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Lead traced producer, HTTP worker serialization, nullable schema persistence/read-back; API contract mapper explicitly remains T2 evidence.",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

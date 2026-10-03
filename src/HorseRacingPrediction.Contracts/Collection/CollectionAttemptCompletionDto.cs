@@ -6,4 +6,5 @@ public sealed record CollectionAttemptCompletionDto(CollectionAttemptResult Resu
     DateTimeOffset? NextCollectionAt = null, IReadOnlyList<ResourceLocationOutcomeDto>? LocationOutcomes = null,
     CollectionFailureImpact FailureImpact = CollectionFailureImpact.StopPipeline,
     IReadOnlyList<CollectionStageOutcomeDto>? StageOutcomes = null,
-    RaceSchedulingEvidenceDto? RaceEvidence = null);
+    RaceSchedulingEvidenceDto? RaceEvidence = null,
+    IReadOnlyList<SubjectIdentificationCandidateDto>? IdentificationCandidates = null);

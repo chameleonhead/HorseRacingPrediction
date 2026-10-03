@@ -66,6 +66,14 @@ dispatchは、現在時刻以前に実行可能な候補だけをレーン配分
 
 JRA公開プロフィールの同定失敗は、要求した種別・氏名、公開検索候補、取得ページから解析した氏名、要求URL・最終URLを試行履歴へ残す。氏名・生年月日・保存済み公開識別子の一致条件は緩和せず、同じ抽出revisionの無条件な自動再試行を追加しない。検索結果なし、複数候補、取得プロフィールとの不一致は1回の試行で `SubjectNotIdentified` / `ResourceNotFound` として対象を利用不可・要対応にする。候補情報は公開情報だけを最大5件保持し、HTML本文や認証情報は保存しない。[変更設計と受け入れ基準](changes/20260913_subject-identification-error-recovery/README.md)を参照する。既知の名前正規化・誤参照生成を新revisionで修正できた対象だけをrevision-gatedな冪等Recoveryへ移し、JRA名簿対象外は再試行せず非該当終端へ分離する。個別対象の処理失敗は後続対象とAPI起動を妨げず記録する。詳細は[主体識別エラーを分類し安全に自動復旧する](changes/20260918_subject-identification-auto-recovery/README.md)を正本とする。
 
+複数候補の手動復旧では、候補をerror messageから再解析せず、名前・JRA URL・公開根拠を最大5件の
+構造化attempt evidenceとして保存する。運用者が候補を選択した場合は、URL由来のcanonical Horse IDへ
+明示URL付きRecovery taskを冪等に作成し、曖昧な名前由来Resourceをmerge、redirect、上書きしない。
+元failureと選択先Resource/taskの対応を監査記録として残す。詳細は
+[主体同定候補をジョブ詳細から選択して復旧する](changes/20261003_subject-candidate-selection/README.md)を正本とする。
+
+互換目的で残る古いtaskのうち、Horse/horse-profile・Discovery・発見元がHorseで、名前以外にsource identity、プロフィールURL、生年月日、利用可能な公式Horse locationがないものは、JRA session/searchを開始する前に`NotApplicable`で終端化する。Race由来でJRA公式source identity/URLを持つHorse task、明示プロフィールlocation、通常の利用者依頼にはこのguardを適用しない。対象境界と反例は[主体同定候補の復旧](changes/20261003_subject-candidate-selection/README.md)に記録する。
+
 収集依頼が持つメタデータは、Resourceの最新既知属性とは別に、Task作成時の不変スナップショットとして保存し、lease取得・配送・再試行ではTask側を実行入力の正本とする。同じResourceへの後続依頼が既存Taskの入力や履歴の意味を変えてはならない。主体の関連発見では対象名と発見元Resourceを必須とし、取得できる場合は提供元URL・提供元識別子も保持する。旧Taskにスナップショットがない場合だけResource属性を互換入力として利用する。詳細は [収集タスクへ同定メタデータを引き継ぐ](changes/20260914_collection-task-metadata/README.md) を参照する。2026-09-14現在は提案段階であり、現行動作は変わらない。
 
 Horse/Jockey/Trainer/Ownerの関連収集Taskは、共通の主体登録・解決境界が返したcanonical IDだけをResource IDとして使用する。producerが表示名から独自にIDを生成して、業務データ未登録のままプロフィールTaskを作成してはならない。新規主体は業務データを登録してからTaskを作り、登録・解決に失敗した場合は実行不能な子Taskを残さず親処理へ具体的な失敗を返す。競走馬プロフィール内の調教師・血統参照とレース出走情報の主体参照に同じ規則を適用する。

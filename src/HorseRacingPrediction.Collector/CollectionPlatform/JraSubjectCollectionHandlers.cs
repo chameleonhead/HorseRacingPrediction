@@ -82,6 +82,10 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
     public async Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task,
         CancellationToken cancellationToken)
     {
+        if (IsLegacyNameOnlyHorseReference(task))
+            return new(CollectionAttemptResult.NotApplicable, "LegacyNameOnlyHorseReference",
+                "旧形式の名前だけの競走馬参照です。公式識別情報がないため、JRA検索を行わず対象外として終了しました。",
+                PageIdentification: "HorseProfile:LegacyNameOnlyReference");
         var name = task.Attributes.GetValueOrDefault("name");
         if (string.IsNullOrWhiteSpace(name))
             return IdentificationFailure(task, "主体名がないため識別できません。", "MissingName",
@@ -233,6 +237,26 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         && (!string.IsNullOrWhiteSpace(task.Attributes.GetValueOrDefault("sourceIdentity"))
             || !string.IsNullOrWhiteSpace(task.Attributes.GetValueOrDefault("sourceUrl")));
 
+    private static bool IsLegacyNameOnlyHorseReference(LeasedCollectionTask task)
+    {
+        if (task.Resource.Type != CollectionResourceType.Horse
+            || !string.Equals(task.Definition.Value, "horse-profile", StringComparison.Ordinal)
+            || task.Reason != CollectionReason.Discovery
+            || !string.Equals(task.Attributes.GetValueOrDefault("discoveredFromType"), "Horse",
+                StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(task.Attributes.GetValueOrDefault("discoveredFromId"))
+            || string.Equals(task.Resource.Id, task.Attributes.GetValueOrDefault("discoveredFromId"),
+                StringComparison.Ordinal)
+            || HasRaceSourceEvidence(task)
+            || !string.IsNullOrWhiteSpace(task.Attributes.GetValueOrDefault("sourceIdentity"))
+            || !string.IsNullOrWhiteSpace(task.Attributes.GetValueOrDefault("sourceUrl"))
+            || !string.IsNullOrWhiteSpace(task.Attributes.GetValueOrDefault("birthDate")))
+            return false;
+
+        return !(task.Locations ?? []).Any(x =>
+            JraSourceIdentity.NormalizeHorseUrl(x.Url.AbsoluteUri) is not null);
+    }
+
     private static RaceId? ResolveReferenceRace(LeasedCollectionTask task)
     {
         if (!string.Equals(task.Attributes.GetValueOrDefault("discoveredFromType"), CollectionResourceType.Race.ToString(), StringComparison.Ordinal)
@@ -270,18 +294,21 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
     private static CollectionAttemptCompletion IdentificationFailure(LeasedCollectionTask task,
         JraSubjectIdentificationException exception, IReadOnlyList<ResourceLocationOutcome> locationOutcomes) =>
         IdentificationFailure(task, exception.Message, exception.Kind.ToString(), exception.RequestedUrl,
-            exception.FinalUrl, locationOutcomes);
+            exception.FinalUrl, locationOutcomes,
+            exception.Candidates.Select(x => new SubjectIdentificationCandidate(x.Name, x.Url, x.Evidence)).ToArray());
 
     private static CollectionAttemptCompletion IdentificationFailure(LeasedCollectionTask task,
         string message, string? failureKind, string? requestedUrl, string? finalUrl,
-        IReadOnlyList<ResourceLocationOutcome> locationOutcomes)
+        IReadOnlyList<ResourceLocationOutcome> locationOutcomes,
+        IReadOnlyList<SubjectIdentificationCandidate>? identificationCandidates = null)
     {
         return new(
             CollectionAttemptResult.ResourceNotFound,
             "SubjectNotIdentified", message,
             ToUri(requestedUrl), ToUri(finalUrl),
             PageIdentification: failureKind is null ? "SubjectIdentification:Legacy" : $"SubjectIdentification:{failureKind}",
-            LocationOutcomes: locationOutcomes);
+            LocationOutcomes: locationOutcomes,
+            IdentificationCandidates: identificationCandidates);
     }
 
     private static Uri? ToUri(string? value) =>
