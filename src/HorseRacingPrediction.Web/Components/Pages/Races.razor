@@ -16,11 +16,12 @@
     <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SearchAsync">検索</FluentButton>
     <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="ClearFiltersAsync">条件をクリア</FluentButton>
 </div>
-@if (loading) { <p>読み込み中…</p> }
+@if (loading && result is null) { <p>読み込み中…</p> }
 else if (error is not null) { <p role="alert">@error</p><FluentButton Appearance="ButtonAppearance.Primary" OnClick="LoadAsync">再試行</FluentButton> }
-else if (result is null || result.Races.Count == 0) { <p>該当するレースはありません。</p> }
+else if (result is null || result.Races.Count == 0) { <p>該当するレースはありません。検索条件を変更するか、条件をクリアしてください。</p><FluentButton Appearance="ButtonAppearance.Subtle" OnClick="ClearFiltersAsync">条件をクリア</FluentButton> }
 else
 {
+    @if (loading) { <p aria-live="polite">検索中…</p> }
     <p>@result.Pagination.TotalCount 件中 @((currentPage - 1) * PageSize + 1)–@Math.Min(currentPage * PageSize, result.Pagination.TotalCount) 件</p>
     <FluentDataGrid Items="@result.Races.AsQueryable()" aria-label="レース一覧">
         <TemplateColumn Title="開催日">@context.RaceDate?.ToString("yyyy/MM/dd")</TemplateColumn>
