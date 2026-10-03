@@ -90,6 +90,7 @@ Execution Mode に移行した後は、
 
 ### Agent task orchestration
 
+- リポジトリ内のスキルは `.codex/skills/*/SKILL.md` および `.github/skills/*/SKILL.md` に配置する。これらはCodexの組み込みスキル一覧（`skills.list`）に自動登録・表示されない場合があるため、作業開始時は一覧結果だけで存在を判断せず、該当ディレクトリと `SKILL.md` を直接確認する。適用条件に合致するリポジトリ内スキルは、一覧に表示されていなくても全文を読んで適用する。
 - タスク状態の正規語彙は `Proposed`、`Runnable`、`In progress`、`Dependent`、`Externally blocked`、`Rejected with reason`、`Verified` とする。`Implemented` 判定前に、承認済みスコープの `Rejected with reason`、`In progress`、`Runnable`、`Dependent`、その他の未完了状態、または受け入れ基準を阻害する `Externally blocked` を残してはならない。`Externally blocked` は、承認済み受け入れ基準に影響しない明示的な除外フォローアップに限り残せる。
 - 最終応答前に、承認済みタスク・受け入れ基準・重要なレビュー指摘を完了証拠または真正な外部 blockerへ追跡できることを、Leadがリスクに応じた粒度で確認する。最終受け入れの責任はLeadにあるが、通常のレビューや受け入れで高性能モデルを必須にしない。監査で将来の作業にも影響するスキル不足・委譲失敗が実証された場合は、`learn-from-implementation-failures` の事実確認、最小修正、validator、再検証を実施し、結果を change record に記録する。単発の軽微な実装ミスは実装内で修正する。
 
