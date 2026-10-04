@@ -1,0 +1,178 @@
+@page "/races/new"
+@rendermode InteractiveServer
+@using HorseRacingPrediction.ApiClient.Races
+@using HorseRacingPrediction.Contracts.Races
+@using Refit
+@inject IRacesApi RacesApi
+@inject NavigationManager Navigation
+
+<PageTitle>レース新規作成</PageTitle>
+
+<p>
+    <a href="/races">← レース一覧に戻る</a>
+</p>
+
+<PageHeader Title="レース新規作成" Description="レースの基本情報を登録します。" />
+
+<section class="race-create-form" aria-labelledby="race-create-heading">
+    <h2 id="race-create-heading">基本情報</h2>
+
+    @if (error is not null)
+    {
+        <p role="alert">@error</p>
+    }
+
+    @if (message is not null)
+    {
+        <p role="status">@message</p>
+    }
+
+    <div class="form-grid">
+        <label>
+            開催日
+            <input type="date" value="@raceDate.ToString("yyyy-MM-dd")" @onchange="OnRaceDateChanged" />
+        </label>
+        <label>
+            開催場コード
+            <input value="@racecourseCode" @oninput="OnRacecourseChanged" />
+        </label>
+        <label>
+            レース番号
+            <input type="number" min="1" max="20" value="@raceNumber" @oninput="OnRaceNumberChanged" />
+        </label>
+        <label>
+            レース名
+            <input value="@raceName" @oninput="OnRaceNameChanged" />
+        </label>
+        <label>
+            グレード
+            <input value="@gradeCode" @oninput="OnGradeChanged" />
+        </label>
+        <label>
+            馬場区分
+            <input value="@surfaceCode" @oninput="OnSurfaceChanged" />
+        </label>
+        <label>
+            距離(m)
+            <input type="number" min="1" value="@distanceMeters" @oninput="OnDistanceChanged" />
+        </label>
+        <label>
+            回り
+            <input value="@directionCode" @oninput="OnDirectionChanged" />
+        </label>
+    </div>
+
+    <div class="race-create-actions">
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="CreateAsync" Disabled="@saving">
+            @(saving ? "作成中…" : "レースを作成")
+        </FluentButton>
+        <a href="/races">キャンセル</a>
+    </div>
+</section>
+
+@code {
+    private DateOnly raceDate = DateOnly.FromDateTime(DateTime.Today);
+    private string? racecourseCode;
+    private int? raceNumber;
+    private string? raceName;
+    private string? gradeCode;
+    private string? surfaceCode;
+    private int? distanceMeters;
+    private string? directionCode;
+    private bool saving;
+    private string? error;
+    private string? message;
+
+    private void OnRaceDateChanged(ChangeEventArgs args)
+        => raceDate = DateOnly.TryParse(args.Value?.ToString(), out var value) ? value : raceDate;
+
+    private void OnRacecourseChanged(ChangeEventArgs args)
+        => racecourseCode = args.Value?.ToString();
+
+    private void OnRaceNumberChanged(ChangeEventArgs args)
+        => raceNumber = int.TryParse(args.Value?.ToString(), out var value) ? value : null;
+
+    private void OnRaceNameChanged(ChangeEventArgs args)
+        => raceName = args.Value?.ToString();
+
+    private void OnGradeChanged(ChangeEventArgs args)
+        => gradeCode = args.Value?.ToString();
+
+    private void OnSurfaceChanged(ChangeEventArgs args)
+        => surfaceCode = args.Value?.ToString();
+
+    private void OnDistanceChanged(ChangeEventArgs args)
+        => distanceMeters = int.TryParse(args.Value?.ToString(), out var value) ? value : null;
+
+    private void OnDirectionChanged(ChangeEventArgs args)
+        => directionCode = args.Value?.ToString();
+
+    private async Task CreateAsync()
+    {
+        error = null;
+        message = null;
+
+        if (string.IsNullOrWhiteSpace(racecourseCode)
+            || racecourseCode.Length is < 2 or > 32)
+        {
+            error = "開催場コードは2文字以上32文字以内で入力してください。";
+            return;
+        }
+
+        if (raceNumber is not int raceNumberValue)
+        {
+            error = "レース番号は1から20の範囲で入力してください。";
+            return;
+        }
+
+        if (raceNumberValue is < 1 or > 20)
+        {
+            error = "レース番号は1から20の範囲で入力してください。";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(raceName))
+        {
+            error = "レース名を入力してください。";
+            return;
+        }
+
+        saving = true;
+
+        try
+        {
+            var request = new CreateRaceRequest(new CreateRaceInputDto(
+                raceDate,
+                racecourseCode,
+                raceNumberValue,
+                raceName,
+                GradeCode: gradeCode,
+                SurfaceCode: surfaceCode,
+                DistanceMeters: distanceMeters,
+                DirectionCode: directionCode));
+            var response = await RacesApi.CreateRaceAsync(request);
+
+            if (!response.IsSuccessStatusCode || response.Content is null)
+            {
+                error = response.StatusCode == System.Net.HttpStatusCode.Conflict
+                    ? "同じレースがすでに登録されています。"
+                    : "レースを作成できませんでした。";
+                return;
+            }
+
+            Navigation.NavigateTo($"/races/{Uri.EscapeDataString(response.Content.RaceId)}");
+        }
+        catch (ApiException)
+        {
+            error = "レースを作成できませんでした。";
+        }
+        catch (HttpRequestException)
+        {
+            error = "APIに接続できませんでした。";
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

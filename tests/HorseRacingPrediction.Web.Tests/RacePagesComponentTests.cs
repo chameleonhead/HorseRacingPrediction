@@ -28,7 +28,7 @@ public sealed class RacePagesComponentTests
         {
             StringAssert.Contains(cut.Markup, "テストレース");
             StringAssert.Contains(cut.Markup, "1 / 2 ページ");
-            Assert.AreEqual("/races/R001", cut.Find("a").GetAttribute("href"));
+            Assert.AreEqual("/races/R001", cut.Find("a[href='/races/R001']").GetAttribute("href"));
         });
         Assert.AreEqual(1, handler.SearchCount);
     }

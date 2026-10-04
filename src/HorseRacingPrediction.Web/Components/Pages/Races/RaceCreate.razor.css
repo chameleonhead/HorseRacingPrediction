@@ -1,0 +1,35 @@
+.race-create-form {
+    max-width: 840px;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 24px;
+}
+
+.form-grid label {
+    display: grid;
+    gap: 6px;
+    font-weight: 600;
+}
+
+.form-grid input {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 36px;
+    padding: 6px 8px;
+}
+
+.race-create-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 24px;
+}
+
+@media (max-width: 640px) {
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+}

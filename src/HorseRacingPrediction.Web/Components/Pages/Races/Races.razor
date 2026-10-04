@@ -8,7 +8,11 @@
 @inject NavigationManager Navigation
 <PageTitle>レース</PageTitle>
 
-<PageHeader Title="レース" Description="レース情報を検索・確認します。" />
+<PageHeader Title="レース" Description="レース情報を検索・確認します。">
+    <Actions>
+        <a href="/races/new">レースを新規作成</a>
+    </Actions>
+</PageHeader>
 
 <RaceSearchForm @bind-Name="name"
                 @bind-Course="course"
