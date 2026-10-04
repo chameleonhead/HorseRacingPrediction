@@ -1,13 +1,15 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
 using HorseRacingPrediction.Scraping.Jra.Pages;
+using HorseRacingPrediction.Scraping.Jra.Parsing;
+using HorseRacingPrediction.Scraping.Jra.Workflow;
 using Microsoft.Extensions.Options;
-
-using HorseRacingPrediction.Contracts.Collection;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -20,12 +22,12 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(4));
         var sessions = new JraSessionFactory(new LiveBrowserFactory(), [
-            new HorseRacingPrediction.Scraping.Jra.Parsing.CalendarPageParser(),
-            new HorseRacingPrediction.Scraping.Jra.Parsing.RaceListPageParser(),
-            new HorseRacingPrediction.Scraping.Jra.Parsing.RaceResultPageParser()]);
+            new CalendarPageParser(),
+            new RaceListPageParser(),
+            new RaceResultPageParser()]);
         var sink = new RecordingSink();
         var handler = new JraRaceDiscoveryCollectionHandler(sessions,
-            session => new HorseRacingPrediction.Scraping.Jra.Workflow.JraScheduleCollectionWorkflow(session), sink,
+            session => new JraScheduleCollectionWorkflow(session), sink,
             timeProvider: new FixedTimeProvider(new(2026, 9, 24, 0, 0, 0, TimeSpan.Zero)));
         var result = await handler.CollectAsync(CreateDiscoveryTask(new(2026, 9, 21))
             with
@@ -36,10 +38,10 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         StringAssert.Contains(result.PageIdentification!, "Cancelled=20260921:Nakayama:4:7");
     }
 
-    private sealed class LiveBrowserFactory : HorseRacingPrediction.Scraping.Browser.IWebBrowserSessionFactory
+    private sealed class LiveBrowserFactory : IWebBrowserSessionFactory
     {
-        public async Task<HorseRacingPrediction.Scraping.Browser.IWebBrowser> CreateAsync(CancellationToken cancellationToken = default)
-            => await HorseRacingPrediction.Scraping.Browser.PlaywrightWebBrowser.CreateAsync();
+        public async Task<IWebBrowser> CreateAsync(CancellationToken cancellationToken = default)
+            => await PlaywrightWebBrowser.CreateAsync();
     }
 
     [TestMethod]
@@ -166,7 +168,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         Assert.IsTrue(sink.Requests.Any(x => x.Resource.Type == CollectionResourceType.Race
             && x.Resource.Id == $"{date:yyyyMMdd}:Nakayama:1"));
         Assert.IsTrue(sink.Requests.Where(x => x.Definition.Value == "race-detail").All(x => x.RequestedRevision ==
-            HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail));
+            CollectionDefinitionRevisions.RaceDetail));
     }
 
     [TestMethod]

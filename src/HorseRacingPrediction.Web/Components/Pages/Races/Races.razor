@@ -107,23 +107,19 @@
                 SortDescending = true
             });
 
-            result = response.IsSuccessStatusCode ? response.Content : null;
-            if (result is null)
+            if (response.IsSuccessStatusCode)
             {
-                error = "レース一覧を取得できませんでした。";
+                result = response.Content;
+                UpdateUrl();
             }
             else
             {
-                UpdateUrl();
+                error = "レース一覧を取得できませんでした。";
             }
         }
-        catch (ApiException)
+        catch (Exception ex)
         {
-            error = "レース一覧を取得できませんでした。";
-        }
-        catch (HttpRequestException)
-        {
-            error = "APIに接続できませんでした。";
+            error = ex.Message;
         }
         finally
         {

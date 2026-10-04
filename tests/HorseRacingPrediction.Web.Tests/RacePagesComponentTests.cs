@@ -46,7 +46,7 @@ public sealed class RacePagesComponentTests
 
         cut.WaitForAssertion(() =>
         {
-            Assert.AreEqual(2, handler.LastPage);
+            Assert.AreEqual(2, handler.LastRequestPage);
             StringAssert.Contains(cut.Markup, "2 / 2 ページ");
         });
     }
@@ -94,7 +94,7 @@ public sealed class RacePagesComponentTests
 
         cut.WaitForAssertion(() =>
         {
-            Assert.AreEqual("有馬記念", handler.LastRaceName);
+            Assert.AreEqual("有馬記念", handler.LastRequestRaceName);
             StringAssert.Contains(context.Services.GetRequiredService<NavigationManager>().Uri, "name=%E6%9C%89%E9%A6%AC%E8%A8%98%E5%BF%B5");
         });
     }
@@ -125,9 +125,9 @@ public sealed class RacePagesComponentTests
         public RaceDto? Detail { get; set; }
         public HttpStatusCode StatusCode { get; set; } = HttpStatusCode.OK;
         public int SearchCount { get; private set; }
-        public int LastPage { get; private set; }
         public string? LastRequestPath { get; private set; }
-        public string? LastRaceName { get; private set; }
+        public int LastRequestPage { get; private set; }
+        public string? LastRequestRaceName { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -135,11 +135,11 @@ public sealed class RacePagesComponentTests
             if (request.RequestUri?.AbsolutePath == "/api/races" && request.Method == HttpMethod.Get)
             {
                 SearchCount++;
-                LastPage = int.TryParse(GetQuery(request, "page"), out var page) ? page : 1;
-                LastRaceName = GetQuery(request, "raceName");
+                LastRequestPage = int.TryParse(GetQuery(request, "page"), out var page) ? page : 1;
+                LastRequestRaceName = GetQuery(request, "raceName");
                 var response = Search ?? new SearchRacesResponse(
                     [new("R001", new DateOnly(2026, 10, 3), "中山", 11, "テストレース", RaceStatus.ResultDeclared, 1, "テストホース", DateTimeOffset.UtcNow)],
-                    new PaginationDto(LastPage, 1, 2, 2));
+                    new PaginationDto(LastRequestPage, 1, 2, 2));
                 return Task.FromResult(CreateResponse(response));
             }
             if (request.RequestUri?.AbsolutePath == "/api/races/R001" && request.Method == HttpMethod.Get)
