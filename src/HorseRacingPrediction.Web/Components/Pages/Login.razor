@@ -5,6 +5,7 @@
 @page "/login"
 @layout LoginLayout
 @attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
 
 @inject ILoginService LoginService
 @inject NavigationManager Navigation

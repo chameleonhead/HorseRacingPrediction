@@ -1,6 +1,7 @@
 @using HorseRacingPrediction.Contracts.Races
 @using HorseRacingPrediction.ApiClient.Races
 @using Refit
+
 @inject IRacesApi RacesApi
 
 <section aria-labelledby="race-basic-edit-heading">
@@ -15,8 +16,14 @@
         <label>回り<input aria-label="回り" @bind="directionCode" /></label>
         <label>補正理由<input aria-label="補正理由" @bind="reason" /></label>
     </div>
-    @if (message is not null) { <p role="status">@message</p> }
-    @if (error is not null) { <p role="alert">@error</p> }
+    @if (message is not null)
+    {
+        <p role="status">@message</p>
+    }
+    @if (error is not null)
+    {
+        <p role="alert">@error</p>
+    }
     <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SaveAsync" Disabled="@saving">基本情報を保存</FluentButton>
 </section>
 

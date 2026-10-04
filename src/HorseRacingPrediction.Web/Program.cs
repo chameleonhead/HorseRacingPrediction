@@ -1,8 +1,9 @@
+using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.ApiClient.Races;
 using HorseRacingPrediction.Web.Authentication;
 using HorseRacingPrediction.Web.Components;
 using HorseRacingPrediction.Web.Configurations;
-using HorseRacingPrediction.ApiClient;
-using HorseRacingPrediction.ApiClient.Races;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.FluentUI.AspNetCore.Components;
 
@@ -80,6 +81,11 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapStaticAssets().AllowAnonymous();
+app.Map("/logout", async (HttpContext context) =>
+{
+    await context.SignOutAsync(AuthenticationSchemes.Cookie);
+    return TypedResults.LocalRedirect("/");
+}).RequireAuthorization();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

@@ -1,11 +1,15 @@
-@page "/races"
-@rendermode InteractiveServer
 @using HorseRacingPrediction.Contracts.Races
 @using HorseRacingPrediction.ApiClient.Races
 @using HorseRacingPrediction.Web.Components.Races
+@using Microsoft.AspNetCore.WebUtilities
+@using Microsoft.Extensions.Primitives
 @using Refit
+
+@page "/races"
+@rendermode InteractiveServer
 @inject IRacesApi RacesApi
 @inject NavigationManager Navigation
+
 <PageTitle>レース</PageTitle>
 
 <PageHeader Title="レース" Description="レース情報を検索・確認します。">
@@ -22,7 +26,15 @@
                 OnSearch="SearchAsync"
                 OnClear="ClearFiltersAsync" />
 
-<RaceList Result="@result" Loading="@loading" Error="@error" Page="@currentPage" PageSize="@PageSize" OnRetry="LoadAsync" OnClear="ClearFiltersAsync" OnPreviousPage="PreviousPageAsync" OnNextPage="NextPageAsync" />
+<RaceList Result="@result"
+          Loading="@loading"
+          Error="@error"
+          Page="@currentPage"
+          PageSize="@PageSize"
+          OnRetry="LoadAsync"
+          OnClear="ClearFiltersAsync"
+          OnPreviousPage="PreviousPageAsync"
+          OnNextPage="NextPageAsync" />
 
 @code {
     private const int PageSize = 50;
@@ -38,8 +50,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(
-            Navigation.ToAbsoluteUri(Navigation.Uri).Query);
+        var query = QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query);
 
         name = Text(query, "name");
         course = Text(query, "course");
@@ -161,7 +172,7 @@
             ["page"] = currentPage.ToString()
         };
 
-        var uri = Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString(
+        var uri = QueryHelpers.AddQueryString(
             "/races",
             values.Where(x => !string.IsNullOrWhiteSpace(x.Value)));
 
@@ -171,7 +182,5 @@
         }
     }
 
-    private static string? Text(
-        IDictionary<string, Microsoft.Extensions.Primitives.StringValues> query,
-        string key) => query.TryGetValue(key, out var value) ? value.ToString() : null;
+    private static string? Text(IDictionary<string, StringValues> query, string key) => query.TryGetValue(key, out var value) ? value.ToString() : null;
 }

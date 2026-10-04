@@ -1,10 +1,23 @@
 @using HorseRacingPrediction.Contracts.Races
-@if (Loading && Result is null) { <UiState Kind="loading" LoadingText="レースを読み込み中…" /> }
-else if (Error is not null) { <UiState Kind="error" Message="@Error" OnRetry="OnRetry" /> }
-else if (Result is null || Result.Races.Count == 0) { <UiState Kind="empty" Message="該当するレースはありません。検索条件を変更するか、条件をクリアしてください。" OnClear="OnClear" /> }
+
+@if (Loading && Result is null)
+{
+    <UiState Kind="loading" LoadingText="レースを読み込み中…" />
+}
+else if (Error is not null)
+{
+    <UiState Kind="error" Message="@Error" OnRetry="OnRetry" />
+}
+else if (Result is null || Result.Races.Count == 0)
+{
+    <UiState Kind="empty" Message="該当するレースはありません。検索条件を変更するか、条件をクリアしてください。" OnClear="OnClear" />
+}
 else
 {
-    @if (Loading) { <p aria-live="polite">検索中…</p> }
+    @if (Loading)
+    {
+        <p aria-live="polite">検索中…</p>
+    }
     <p>@Result.Pagination.TotalCount 件中 @((Page - 1) * PageSize + 1)–@Math.Min(Page * PageSize, Result.Pagination.TotalCount) 件</p>
     <FluentDataGrid Items="@Result.Races.AsQueryable()" aria-label="レース一覧">
         <TemplateColumn Title="開催日">@context.RaceDate?.ToString("yyyy/MM/dd")</TemplateColumn>

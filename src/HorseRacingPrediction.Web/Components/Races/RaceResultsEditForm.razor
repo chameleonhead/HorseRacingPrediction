@@ -1,11 +1,15 @@
 @using HorseRacingPrediction.Contracts.Races
 @using HorseRacingPrediction.ApiClient.Races
 @using Refit
+
 @inject IRacesApi RacesApi
 
 <section aria-labelledby="race-results-edit-heading">
     <h2 id="race-results-edit-heading">結果情報</h2>
-    @if (Race.Entries.Count == 0) { <p>結果を入力できる出走馬がありません。</p> }
+    @if (Race.Entries.Count == 0)
+    {
+        <p>結果を入力できる出走馬がありません。</p>
+    }
     else
     {
         <FluentDataGrid Items="@values.AsQueryable()" aria-label="レース結果編集">
@@ -17,8 +21,14 @@
             <TemplateColumn Title="操作"><FluentButton Appearance="ButtonAppearance.Primary" OnClick="@(() => SaveAsync(context))" Disabled="@saving">保存</FluentButton></TemplateColumn>
         </FluentDataGrid>
     }
-    @if (message is not null) { <p role="status">@message</p> }
-    @if (error is not null) { <p role="alert">@error</p> }
+    @if (message is not null)
+    {
+        <p role="status">@message</p>
+    }
+    @if (error is not null)
+    {
+        <p role="alert">@error</p>
+    }
 </section>
 
 @code {

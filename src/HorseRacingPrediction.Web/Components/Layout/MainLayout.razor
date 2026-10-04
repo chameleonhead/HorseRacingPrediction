@@ -9,13 +9,10 @@
         <strong>Horse Racing Prediction</strong>
 
         <FluentSpacer />
-        <form method="post" action="/logout" @formname="Logout">
-            <AntiforgeryToken />
 
-            <FluentButton Type="ButtonType.Submit">
-                ログアウト
-            </FluentButton>
-        </form>
+        <FluentButton OnClick="Logout">
+            ログアウト
+        </FluentButton>
     </FluentLayoutItem>
 
     <FluentLayoutItem Area="LayoutArea.Navigation">
@@ -30,10 +27,8 @@
 <FluentProviders />
 
 @code {
-    private void Logout()
+    private async void Logout()
     {
-        Navigation.NavigateTo(
-            "/logout",
-            forceLoad: true);
+        Navigation.NavigateTo("/logout", forceLoad: true);
     }
 }

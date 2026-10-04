@@ -1,17 +1,29 @@
-@page "/races/{RaceId}/edit"
-@rendermode InteractiveServer
 @using HorseRacingPrediction.Contracts.Races
 @using HorseRacingPrediction.ApiClient.Races
-@using Refit
 @using HorseRacingPrediction.Web.Components.Races
+@using Refit
+
+@page "/races/{RaceId}/edit"
+@rendermode InteractiveServer
 @inject IRacesApi RacesApi
 @inject NavigationManager Navigation
 
 <PageTitle>レース編集</PageTitle>
 <p><a href="@($"/races/{Uri.EscapeDataString(RaceId)}")">← レース詳細に戻る</a></p>
-@if (loading) { <p>レース情報を読み込み中…</p> }
-else if (error is not null) { <p role="alert">@error</p><FluentButton Appearance="ButtonAppearance.Primary" OnClick="LoadAsync">再試行</FluentButton> }
-else if (race is null) { <p>指定されたレースは見つかりませんでした。</p> }
+@if (loading)
+{
+    <p>レース情報を読み込み中…</p>
+}
+else if (error is not null)
+{
+
+    <p role="alert">@error</p><FluentButton Appearance="ButtonAppearance.Primary" OnClick="LoadAsync">再試行</FluentButton>
+}
+else if (race is null)
+{
+
+    <p>指定されたレースは見つかりませんでした。</p>
+}
 else
 {
     <h1>@(race.RaceName ?? race.RaceId) の編集</h1>
