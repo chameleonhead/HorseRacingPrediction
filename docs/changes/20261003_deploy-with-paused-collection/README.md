@@ -11,7 +11,7 @@
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
 | Code | Complete | 再開見送り時にGitHub noticeを出してexit 0とし、既存workflow harnessの期待値も更新した。 |
-| Verification | Complete | 2026-10-05にUbuntu24.04上の実workflow shell harness全14ケース、audit、diff hygieneを確認。 |
+| Verification | Complete | 修正後13ファイルのhost/container照合済みUbuntu環境でharness14/14、format/build、全solution1,620成功・失敗0・既存skip1。旧契約期待値を修正し元の全体commandで再検証済み。 |
 | Deployment/operation | Not applicable | このrecordのACはworkflow/harness変更。20261004_collection-outbox-query-indexの承認済みデプロイへ別checkpointとして含め、運用検証はそちらで追跡する。 |
 
 ## Context
@@ -64,8 +64,8 @@ Actionable failureが0件なら自動再開すること。Actionable failureが�
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | Actionable failureがあるとpipelineをpausedのまま保ち、Actions noticeで未再開を示し、stepはexit 0になる。 | T1 | workflow shell harness retained-failure case | Verified |
-| AC2 | pipeline read/validation、running-task check、health、pause、resumeの失敗は従来どおりnon-zeroで終わり、Actionable failureなしならresumeする。 | T1 | workflow shell harness existing fail-closed and resume cases | Verified |
+| AC1 | Actionable failureがあるとpipelineをpausedのまま保ち、Actions noticeで未再開を示し、stepはexit 0になる。 | T1,T2 | workflow shell harness retained-failure case and Collector contract | Verified |
+| AC2 | pipeline read/validation、running-task check、health、pause、resumeの失敗は従来どおりnon-zeroで終わり、Actionable failureなしならresumeする。 | T1,T2 | workflow shell harness existing fail-closed and resume cases | Verified |
 
 ## Documentation updates
 
@@ -77,6 +77,7 @@ Actionable failureが0件なら自動再開すること。Actionable failureが�
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State | Routing | Audit | Result metrics |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | 再開見送りを成功終了へ変更し、notice、既存shell harness期待値、設計文書を同期する。AC1-AC2。 | Lead — single short task | Cheap executor default requested by repository; available executor not separately observable in this environment | User instruction on desired outcome | `.github/workflows/app-deploy.yml`, `tests/scripts/test-deploy-pipeline-state.ps1`, `docs/11-automation-design.md`, this record | `pwsh ./tests/scripts/test-deploy-pipeline-state.ps1 -Bash /bin/bash` (expected retained-failure exit 0/no resume; true failures non-zero); `git diff --check` | Ubuntu24.04 LF-checkout-shaped harness14/14 pass and Lead integrated diff/AC review | Verified | Lead — single short task; read-only Luna verification helper | none | unavailable; retries 1 environment; corrections 0 source; reviews 1 |
+| T2 | 既存Collector契約テストの旧通知期待値を承認済みnotice/exit0へ同期する。AC1–AC2。 | collection_resume_diagnosis | Luna high | F5c diagnosis | tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionQueueCutoverContractTests.cs | Affected contract test, full Collector suite and original Ubuntu solution CI command | Targeted3/3, Collector Release421/421, exact formatter pass; original Ubuntu suite pending in index record T5 | Verified | Bounded stale contract assertion correction | T2-A1 | unavailable; retries 0; corrections 0; reviews 1 |
 
 ## Readiness and pre-implementation note
 
@@ -107,3 +108,7 @@ Actionable failureが0件なら自動再開すること。Actionable failureが�
 The earlier test-skip and no-deployment statements above describe the original turn, not a current prohibition. Under the current approved index recovery, read-only verifier `verify_deploy_guards` was dispatched with requested gpt-6-luna/high (observed model/tokens unavailable). It ran the exact harness in official `mcr.microsoft.com/dotnet/sdk:10.0.202-noble`: Ubuntu24.04.4, PowerShell7.6.0, Bash5.2.21. All fourteen restore/pause/drain/failure cases passed, including retained-failure notice/exit0/no-resume. Repository files were not modified by the verifier.
 
 Initial direct Windows worktree mount failed because Bash received CRLF (`pipefail\r`). `git ls-files --eol` confirmed index LF/worktree CRLF. Container-only copies normalized to Git Ubuntu-checkout LF then repeated the exact harness successfully. This is a proven environment mismatch, not a product correction. Lead accepted the integrated existing diff against AC1–AC2; audit/diff gates and final global formatter remain required before checkpoint commit. No safety behavior besides the approved notice exit status changed. This code-only record's ACs are closed; the canonical deployment and production operation evidence remain owned by the index recovery record, not silently declared done here.
+
+Reopened 2026-10-05 after checkpoint2dead588 (not pushed): the full Ubuntu solution run revealed the overlooked existing Collector workflow-contract assertion still expecting the old message (F5c). Prior final-review completion statement is superseded until closure; harness14 cases remains valid but is not the whole required contract surface. Same Luna/high executor owns only the named contract test, no workflow behavior change; update expectation to approved notice/exit0 then rerun affected/full tests. Readiness: orchestration loaded by Lead this turn, source diagnosis completed, exact file/verification planned, active audit/validator required before edit. This isolated stale-test omission is corrected locally; no generic skill change or model promotion is justified.
+
+Final closure 2026-10-05: affected3/3 and Collector Release421/421 passed locally; fresh Ubuntu snapshot matched13/13 normalized approved file hashes, then original exact full solution CI command passed1,620/0fail/1baseline-skip in200s. Guard harness14/14, exact formatter and Release build0warnings/errors passed on the same frozen snapshot. Lead accepted AC1–AC2 with executable shell counterexamples plus independent existing Collector contract, exact diff/scope review, CodeGraph sync and validator gates. F5c closed; no change to other fail-closed branches or automatic resume policy. Production verification remains the index record's T3, not a claim of collection already resumed. All tasks in this record are Verified.

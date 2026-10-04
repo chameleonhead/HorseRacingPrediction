@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 2, "changeId": "20261003_deploy-with-paused-collection", "taskId": "T2", "attemptId": "T2-A1", "state": "completed", "taskDifficulty": "low", "acceptanceCriteria": ["AC1", "AC2"],
+  "route": {"tier": "worker", "requestedModel": "gpt-6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "Runtime model telemetry unavailable; same Luna/high executor"},
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "Runtime usage unavailable"},
+  "scope": ["tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionQueueCutoverContractTests.cs"],
+  "review": {"usageAvailability":"unavailable","totalTokens":null,"activeMinutes":null,"reason":"Runtime review usage unavailable"},
+  "overhead": {"availability":"unavailable","preparationMinutes":null,"integrationMinutes":null,"auditMinutes":null,"reason":"Active effort not captured"},
+  "elapsed": {"availability":"unavailable","minutes":null,"reason":"Effort not captured"},
+  "startRevision": "2dead588 guard checkpoint; F5c source diagnosis", "endRevisionOrPatch": "Approved notice/exit0 assertion; targeted3 and Collector421 Release tests and formatter passed",
+  "outcome": {"verificationPassed":true,"qualityPassed":true,"scopePassed":true,"independentChallenge":"Ubuntu exact shell harness14 cases independently prove notice/no-resume/fail-closed branches; Collector421 and Lead exact diff review","retries":0,"leadCorrections":0,"reviewPasses":1,"promoted":false,"escapedDefects":0,"escalations":0,"reviewMode":"ac-group","detailReviewReason":null,"decision":"accept"}
+}

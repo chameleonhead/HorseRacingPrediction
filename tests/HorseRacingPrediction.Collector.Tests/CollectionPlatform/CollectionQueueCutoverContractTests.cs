@@ -132,7 +132,9 @@ public sealed class CollectionQueueCutoverContractTests
         StringAssert.Contains(restoreStep, "-X PUT");
         StringAssert.Contains(restoreStep, "--data '{\"pipeline\":{\"paused\":false}}' \"$base/pipeline\"");
         StringAssert.Contains(restoreStep, "Collection remains paused; recovery requires an explicit operator decision.");
-        StringAssert.Contains(restoreStep, "Actionable failures remain; pipeline stays paused for explicit recovery");
+        StringAssert.Contains(restoreStep,
+            "::notice::Deployment succeeded; actionable collection failures remain, so the collection pipeline stays paused for explicit recovery.");
+        StringAssert.Contains(restoreStep, "exit 0");
         Assert.IsGreaterThan(pipelineStateRead, postDeployDrainCheck);
         Assert.IsGreaterThan(postDeployDrainCheck, actionableFailureCheck);
         Assert.IsGreaterThan(actionableFailureCheck, pipelineResume);
