@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261003_subject-candidate-selection",
+  "taskId": "T7",
+  "attemptId": "T7-A1",
+  "state": "completed",
+  "taskDifficulty": "low",
+  "acceptanceCriteria": ["AC1"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-5.6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "worker runtime model telemetry is not exposed"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "worker token usage telemetry is not exposed"
+  },
+  "scope": ["tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs"],
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "runtime did not expose reliable worker elapsed effort"},
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "runtime did not expose review usage or active time"},
+  "overhead": {"availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "active effort telemetry was not captured"},
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Lead confirms v22 migration fixtures and verifies only the assigned test file differs",
+    "promoted": false,
+    "escapedDefects": 0,
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "escalations": 0,
+    "decision": "accept",
+    "reviewMode": "ac-group",
+    "detailReviewReason": null
+  },
+  "startRevision": "938a3367ad4f72e0b8b996eecdb2b00bda226cfd",
+  "endRevisionOrPatch": "existing worktree correction validated; worker produced no additional diff"
+}

@@ -1306,7 +1306,7 @@ public sealed class CollectionDispatchStarvationReproductionTests
             Assert.AreEqual(1, await verify.Database.SqlQueryRaw<int>(
                 "SELECT COUNT(*) AS Value FROM collection_dispatcher_fairness_state WHERE StateId = 1")
                 .SingleAsync(), "Schema migration initializes exactly one dispatcher fairness record.");
-            Assert.AreEqual(20, await verify.Database.SqlQueryRaw<int>(
+            Assert.AreEqual(22, await verify.Database.SqlQueryRaw<int>(
                 "SELECT version AS Value FROM collection_schema_history ORDER BY version DESC LIMIT 1")
                 .SingleAsync(), "The genuine v18 fixture must migrate through the current schema.");
         }
@@ -1341,7 +1341,9 @@ public sealed class CollectionDispatchStarvationReproductionTests
                 row.DispatchedAt = now.AddMinutes(-30);
                 row.QueueMessageId = "lost-legacy-message";
                 row.WakeId = null;
-                await db.Database.ExecuteSqlRawAsync("DELETE FROM collection_schema_history WHERE version = 20;");
+                await db.Database.ExecuteSqlRawAsync(
+                    "DELETE FROM collection_schema_history WHERE version >= 20; " +
+                    "INSERT OR IGNORE INTO collection_schema_history (version, applied_at) VALUES (19, 'v19-fixture');");
                 await db.SaveChangesAsync();
             }
 
