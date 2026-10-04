@@ -52,7 +52,7 @@
 
 既存`app-deploy`はCollector更新前にpipelineを停止し、実行中taskが0件になるまで上限付きで待つ。元から停止中なら理由と停止状態を保持する。
 API停止成功・非稼働・未checkpointのSQLite WALなしを確認してからDBをbackupする。確認失敗時は配備を中断し、不完全なbackupを正常扱いしない。
-配備時の旧race collection job移行（race-detail apply/preview）は実行しない。配備とhealth確認後にも停止/実行中0件を確認し、配備前に稼働中で、再開直前に要対応failureが0件の場合だけ自動再開する。新旧どちらの要対応でも残る場合や不明/失敗時は停止を維持し、明示的な復旧判断へ戻す。新しいWorkflowは追加しない。
+配備時の旧race collection job移行（race-detail apply/preview）は実行しない。配備とhealth確認後にも停止/実行中0件を確認し、配備前に稼働中で、再開直前に要対応failureが0件の場合だけ自動再開する。要対応failureが残る場合は停止を維持してGitHub Actions noticeへ明示し、deployment workflowは正常終了する。pipeline/API確認やhealth、drain、resume自体の不明・失敗は引き続きdeployment failureとする。新旧どちらの要対応でも残る場合は明示的な復旧判断へ戻す。新しいWorkflowは追加しない。変更記録は [再開見送り時もデプロイを正常終了する](changes/20261003_deploy-with-paused-collection/README.md) を参照する。
 変更・反例・運用結果は [collection error closure](changes/20260924_collection-error-closure/evidence/operations.md) を参照する。
 
 ### Collector Lambda の一時資源

@@ -301,8 +301,8 @@ jobs:
             # Conservatively require no actionable failures (including older ones).
             failures="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/failure-notifications?view=Actionable&limit=1")"
             if ! jq -e '.notifications | type == "array" and length == 0' <<<"$failures" >/dev/null; then
-              echo "Actionable failures remain; pipeline stays paused for explicit recovery" >&2
-              exit 1
+              echo "::notice::Deployment succeeded; actionable collection failures remain, so the collection pipeline stays paused for explicit recovery."
+              exit 0
             fi
             curl --fail --silent --show-error -X PUT -H "X-Api-Key: $API_KEY" \
               -H 'Content-Type: application/json' --data '{"pipeline":{"paused":false}}' "$base/pipeline" >/dev/null

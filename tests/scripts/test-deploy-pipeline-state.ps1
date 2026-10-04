@@ -85,7 +85,10 @@ foreach ($case in $cases) {
     $code = $LASTEXITCODE
     $resumed = ($output -join "`n") -match 'RESUMED'
     if ($resumed -ne ($case -eq 'running')) { throw "Incorrect resume: $case" }
-    if (($code -eq 0) -ne ($case -in @('running', 'paused'))) { throw "Incorrect exit: $case ($code)" }
+    if (($code -eq 0) -ne ($case -in @('running', 'paused', 'new-failure'))) { throw "Incorrect exit: $case ($code)" }
+    if ($case -eq 'new-failure' -and ($output -join "`n") -notmatch '::notice::Deployment succeeded; actionable collection failures remain, so the collection pipeline stays paused') {
+        throw 'Actionable failures must be reported as a successful deployment with the collection pause stated.'
+    }
     Write-Output "PASS $case"
 }
 $guard = [regex]::Match($workflow, '(?s)- id: collection-guard.*?        run: \|\r?\n(?<script>.*?)\r?\n      - name: Initialize collector infrastructure')
