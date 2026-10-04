@@ -1,8 +1,13 @@
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Infrastructure.Persistence;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Net.Http.Json;
+using System.Data.Common;
 
 using HorseRacingPrediction.Contracts.Collection;
 using HorseRacingPrediction.Contracts.Common;
@@ -162,6 +167,152 @@ public sealed class SharedCollectionIdentityTests
         foreach (var course in new[] { "東京", "TOKYO" })
             (await http.PostAsJsonAsync("/api/races", new CreateRaceRequest(new(date, course, 2, "duplicate", "race-" + Guid.NewGuid())))).EnsureSuccessStatusCode();
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync("/api/identity/race", new ResolveRaceIdentityRequest(new(date, "Tokyo", 2)))).StatusCode);
+    }
+
+    [TestMethod]
+    public async Task RaceIdentityLookup_UsesDateNumberIndex_AndPreservesExactResolutionAndAmbiguity()
+    {
+        const string indexName = "IX_RacePredictionContexts_RaceDate_RaceNumber";
+        var directory = Path.Combine(Path.GetTempPath(), "race-identity-query-plan", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var databasePath = Path.Combine(directory, "events.db");
+            var capture = new RaceIdentitySqlCaptureInterceptor();
+            var options = new DbContextOptionsBuilder<EventStoreDbContext>()
+                .UseSqlite($"Data Source={databasePath};Pooling=False")
+                .AddInterceptors(capture).Options;
+            await using var db = new EventStoreDbContext(options);
+            await db.Database.MigrateAsync();
+            var tokyoId = "race-tokyo-unique";
+            var nakayamaId = "race-nakayama-same-date-number";
+            var duplicateOneId = "race-tokyo-duplicate-1";
+            var duplicateTwoId = "race-tokyo-duplicate-2";
+            await InsertRaceIdentityRowAsync(db, tokyoId, new(2037, 9, 27), "TOKYO", 11);
+            await InsertRaceIdentityRowAsync(db, nakayamaId, new(2037, 9, 27), "NAKAYAMA", 11);
+            await InsertRaceIdentityRowAsync(db, duplicateOneId, new(2037, 10, 1), "TOKYO", 3);
+            await InsertRaceIdentityRowAsync(db, duplicateTwoId, new(2037, 10, 1), "Tokyo", 3);
+
+            capture.Clear();
+            var indexedTokyo = await CollectionIdentityResolver.RaceAsync(db, new(2037, 9, 27), "Tokyo", 11,
+                CancellationToken.None);
+            var indexedNakayama = await CollectionIdentityResolver.RaceAsync(db, new(2037, 9, 27), "中山", 11,
+                CancellationToken.None);
+            Assert.AreEqual(tokyoId, indexedTokyo,
+                "Date/number lookup must still apply canonical course matching after materialization.");
+            Assert.AreEqual(nakayamaId, indexedNakayama,
+                "A different course with the same date and number must remain independently resolvable.");
+            await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => CollectionIdentityResolver.RaceAsync(
+                db, new(2037, 10, 1), "Tokyo", 3, CancellationToken.None),
+                "Multiple matching same-course identities must remain an ambiguity, not select an arbitrary row.");
+
+            var lookup = capture.Commands.LastOrDefault(command =>
+                command.CommandText.Contains("RacePredictionContexts", StringComparison.OrdinalIgnoreCase)
+                && command.CommandText.Contains("RaceDate", StringComparison.OrdinalIgnoreCase)
+                && command.CommandText.Contains("RaceNumber", StringComparison.OrdinalIgnoreCase));
+            Assert.IsNotNull(lookup, "Capture the actual EF query used by the race identity resolver.");
+            var plan = await ExplainRaceQueryPlanAsync(db, lookup!);
+            Assert.IsTrue(plan.Any(detail => detail.Contains(indexName, StringComparison.OrdinalIgnoreCase)),
+                "SQLite should use the date/number lookup index for the resolver's exact predicate.\n"
+                + string.Join(Environment.NewLine, plan));
+            var indexDefinition = await ReadRaceLookupIndexDefinitionAsync(db);
+            Assert.IsFalse(indexDefinition.Unique, "Same date and race number across courses must remain representable.");
+            Assert.IsFalse(indexDefinition.Partial);
+            CollectionAssert.AreEqual(new[] { "RaceDate", "RaceNumber" }, indexDefinition.Columns.ToArray());
+
+            await db.Database.ExecuteSqlRawAsync($"DROP INDEX {indexName};");
+            var baselineTokyo = await CollectionIdentityResolver.RaceAsync(db, new(2037, 9, 27), "Tokyo", 11,
+                CancellationToken.None);
+            var baselineNakayama = await CollectionIdentityResolver.RaceAsync(db, new(2037, 9, 27), "中山", 11,
+                CancellationToken.None);
+            Assert.AreEqual(indexedTokyo, baselineTokyo, "Index presence must not change the resolver's identity result.");
+            Assert.AreEqual(indexedNakayama, baselineNakayama, "Index presence must not change alternate-course resolution.");
+            await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => CollectionIdentityResolver.RaceAsync(
+                db, new(2037, 10, 1), "Tokyo", 3, CancellationToken.None),
+                "The same-course ambiguity guard must be identical without the index.");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    private static async Task InsertRaceIdentityRowAsync(EventStoreDbContext db, string raceId, DateOnly date,
+        string course, int number)
+    {
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO RacePredictionContexts
+                (RaceId, RaceDate, RacecourseCode, RaceNumber, RaceName, Status, Entries,
+                 WeatherObservations, TrackConditionObservations, OddsSnapshots)
+            VALUES ({raceId}, {date}, {course}, {number}, {raceId}, 0, '[]', '[]', '[]', '[]')
+            """);
+    }
+
+    private static async Task<List<string>> ExplainRaceQueryPlanAsync(EventStoreDbContext db,
+        CapturedRaceQuery query)
+    {
+        var connection = (SqliteConnection)db.Database.GetDbConnection();
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "EXPLAIN QUERY PLAN " + query.CommandText;
+        foreach (var captured in query.Parameters)
+        {
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = captured.Name;
+            parameter.DbType = captured.DbType;
+            parameter.Value = captured.Value ?? DBNull.Value;
+            command.Parameters.Add(parameter);
+        }
+        var details = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync()) details.Add(reader.GetString(3));
+        return details;
+    }
+
+    private static async Task<(bool Unique, bool Partial, List<string> Columns)> ReadRaceLookupIndexDefinitionAsync(
+        EventStoreDbContext db)
+    {
+        var connection = (SqliteConnection)db.Database.GetDbConnection();
+        await connection.OpenAsync();
+        var unique = false;
+        var partial = false;
+        await using (var listCommand = connection.CreateCommand())
+        {
+            listCommand.CommandText = "PRAGMA index_list('RacePredictionContexts')";
+            await using var reader = await listCommand.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                if (reader.GetString(1) != "IX_RacePredictionContexts_RaceDate_RaceNumber") continue;
+                unique = reader.GetInt32(2) != 0;
+                partial = reader.GetInt32(4) != 0;
+                break;
+            }
+        }
+        var columns = new List<string>();
+        await using (var infoCommand = connection.CreateCommand())
+        {
+            infoCommand.CommandText = "PRAGMA index_info('IX_RacePredictionContexts_RaceDate_RaceNumber')";
+            await using var reader = await infoCommand.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) columns.Add(reader.GetString(2));
+        }
+        return (unique, partial, columns);
+    }
+
+    private sealed record CapturedRaceQuery(string CommandText,
+        IReadOnlyList<(string Name, System.Data.DbType DbType, object? Value)> Parameters);
+
+    private sealed class RaceIdentitySqlCaptureInterceptor : DbCommandInterceptor
+    {
+        public List<CapturedRaceQuery> Commands { get; } = [];
+        public void Clear() => Commands.Clear();
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            Commands.Add(new CapturedRaceQuery(command.CommandText,
+                command.Parameters.Cast<DbParameter>()
+                    .Select(parameter => (parameter.ParameterName, parameter.DbType,
+                        parameter.Value is DBNull ? null : parameter.Value)).ToArray()));
+            return ValueTask.FromResult(result);
+        }
     }
 
     [TestMethod]

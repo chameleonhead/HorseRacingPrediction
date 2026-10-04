@@ -1,10 +1,13 @@
 using System.Text.Json;
 using System.Net;
+using System.Data.Common;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Api.Tests;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -1306,7 +1309,7 @@ public sealed class CollectionDispatchStarvationReproductionTests
             Assert.AreEqual(1, await verify.Database.SqlQueryRaw<int>(
                 "SELECT COUNT(*) AS Value FROM collection_dispatcher_fairness_state WHERE StateId = 1")
                 .SingleAsync(), "Schema migration initializes exactly one dispatcher fairness record.");
-            Assert.AreEqual(22, await verify.Database.SqlQueryRaw<int>(
+            Assert.AreEqual(23, await verify.Database.SqlQueryRaw<int>(
                 "SELECT version AS Value FROM collection_schema_history ORDER BY version DESC LIMIT 1")
                 .SingleAsync(), "The genuine v18 fixture must migrate through the current schema.");
         }
@@ -1361,6 +1364,288 @@ public sealed class CollectionDispatchStarvationReproductionTests
                 "SELECT COUNT(*) AS Value FROM collection_schema_history WHERE version = 20").SingleAsync());
         }
         finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [TestMethod]
+    public async Task Schema23_AddsDispatchLookupIndexWithoutChangingOutboxRows_AndIsIdempotent()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "collection-schema-23", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var options = Options.Create(new CollectionPlatformOptions { StateDirectory = directory });
+            var store = new CollectionPlatformStore(options);
+            var now = DateTimeOffset.UtcNow;
+            await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", CollectionResourceType.Race,
+                1, "initial", false);
+            var receipt = await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "SCHEMA-23"),
+                new("race-detail"), 1, CollectionReason.Initial, now);
+            var databasePath = Path.Combine(directory, "collection-platform.db");
+            var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                .UseSqlite($"Data Source={databasePath};Pooling=False;Default Timeout=30").Options;
+
+            Guid outboxId;
+            Guid taskId;
+            long generation;
+            DateTimeOffset availableAt;
+            TaskMigrationSnapshot taskBefore;
+            await using (var db = new CollectionPlatformDbContext(dbOptions))
+            {
+                var row = await db.DispatchOutbox.SingleAsync(x => x.TaskId == receipt.TaskId);
+                row.ReservationToken = "schema-22-reservation";
+                row.DispatchedAt = null;
+                outboxId = row.OutboxId;
+                taskId = row.TaskId;
+                generation = row.DispatchGeneration;
+                availableAt = row.AvailableAt;
+                var task = await db.Tasks.SingleAsync(x => x.TaskId == receipt.TaskId);
+                taskBefore = new TaskMigrationSnapshot(task.TaskId, task.RequestId, task.ResourcePk,
+                    task.DefinitionId, task.RequestedRevision, task.Status, task.Lane, task.Priority,
+                    task.AvailableAt, task.CreatedAt, task.UpdatedAt, task.DispatchGeneration,
+                    task.RaceHoldGeneration, task.AttemptCount, task.MetadataJson);
+                await db.SaveChangesAsync();
+                await db.Database.ExecuteSqlRawAsync(
+                    "DROP INDEX IX_collection_task_outbox_TaskId_DispatchGeneration_DispatchedAt; " +
+                    "DELETE FROM collection_schema_history WHERE version >= 23; " +
+                    "INSERT OR IGNORE INTO collection_schema_history (version, applied_at) VALUES (22, 'v22-fixture');");
+            }
+
+            Assert.AreEqual(22, await ReadCollectionSchemaVersionAsync(dbOptions));
+            Assert.AreEqual(0, await ReadOutboxLookupIndexCountAsync(dbOptions));
+            var schemaHistoryBefore = await ReadCollectionSchemaHistoryAsync(dbOptions);
+
+            _ = new CollectionPlatformStore(options);
+            _ = new CollectionPlatformStore(options);
+
+            await using var verify = new CollectionPlatformDbContext(dbOptions);
+            Assert.AreEqual(23, await ReadCollectionSchemaVersionAsync(dbOptions));
+            Assert.AreEqual(1, await ReadOutboxLookupIndexCountAsync(dbOptions),
+                "The v22-to-v23 migration must add the lookup index exactly once.");
+            var index = await ReadOutboxLookupIndexDefinitionAsync(databasePath);
+            Assert.IsFalse(index.Unique, "Duplicate evidence must remain representable; the new index is non-unique.");
+            Assert.IsFalse(index.Partial, "The index must cover every outbox row; migration must not add a partial predicate.");
+            CollectionAssert.AreEqual(new[] { "TaskId", "DispatchGeneration", "DispatchedAt" }, index.Columns.ToArray(),
+                "The index column order must match the correlated lookup predicate.");
+            var schemaHistoryAfter = await ReadCollectionSchemaHistoryAsync(dbOptions);
+            Assert.AreEqual(schemaHistoryBefore.Count + 1, schemaHistoryAfter.Count,
+                "Reopening the v23 database must not append a second migration record.");
+            CollectionAssert.AreEqual(schemaHistoryBefore.Select(x => $"{x.Version}|{x.AppliedAt}").ToArray(),
+                schemaHistoryAfter.Take(schemaHistoryBefore.Count).Select(x => $"{x.Version}|{x.AppliedAt}").ToArray(),
+                "Every pre-existing schema-history row and applied timestamp must be preserved.");
+            Assert.AreEqual(23, schemaHistoryAfter[^1].Version);
+            var preserved = await verify.DispatchOutbox.SingleAsync(x => x.OutboxId == outboxId);
+            Assert.AreEqual(taskId, preserved.TaskId);
+            Assert.AreEqual(generation, preserved.DispatchGeneration);
+            Assert.AreEqual(availableAt, preserved.AvailableAt);
+            Assert.AreEqual("schema-22-reservation", preserved.ReservationToken);
+            Assert.IsNull(preserved.DispatchedAt);
+            Assert.AreEqual(1, await verify.DispatchOutbox.CountAsync(x => x.TaskId == taskId));
+            var taskAfter = await verify.Tasks.SingleAsync(x => x.TaskId == taskId);
+            Assert.AreEqual(taskBefore, new TaskMigrationSnapshot(taskAfter.TaskId, taskAfter.RequestId,
+                taskAfter.ResourcePk, taskAfter.DefinitionId, taskAfter.RequestedRevision, taskAfter.Status,
+                taskAfter.Lane, taskAfter.Priority, taskAfter.AvailableAt, taskAfter.CreatedAt,
+                taskAfter.UpdatedAt, taskAfter.DispatchGeneration, taskAfter.RaceHoldGeneration,
+                taskAfter.AttemptCount, taskAfter.MetadataJson), "The v22 task row must remain unchanged by migration.");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [TestMethod]
+    public async Task PendingSelection_UsesOutboxLookupIndex_WithoutChangingEligibility()
+    {
+        const string indexName = "IX_collection_task_outbox_TaskId_DispatchGeneration_DispatchedAt";
+        var directory = Path.Combine(Path.GetTempPath(), "collection-outbox-query-plan", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var capture = new OutboxQueryCaptureInterceptor();
+            var databasePath = Path.Combine(directory, "collection-platform.db");
+            var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                .UseSqlite($"Data Source={databasePath};Pooling=False;Default Timeout=30")
+                .AddInterceptors(capture).Options;
+            var store = new CollectionPlatformStore(dbOptions);
+            var now = DateTimeOffset.UtcNow.AddMinutes(-2);
+            var definition = new CollectionDefinitionId("race-detail");
+            await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race,
+                1, "initial", false);
+            var missing = await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "PLAN-MISSING"), definition,
+                1, CollectionReason.Initial, now);
+            var duplicate = await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "PLAN-DUPLICATE"), definition,
+                1, CollectionReason.Initial, now);
+            var valid = await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "PLAN-VALID"), definition,
+                1, CollectionReason.Initial, now);
+            var staleGeneration = await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "PLAN-STALE"), definition,
+                1, CollectionReason.Initial, now);
+            var dispatched = await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "PLAN-DISPATCHED"), definition,
+                1, CollectionReason.Initial, now);
+
+            await using (var db = new CollectionPlatformDbContext(dbOptions))
+            {
+                var missingRow = await db.DispatchOutbox.SingleAsync(x => x.TaskId == missing.TaskId);
+                db.DispatchOutbox.Remove(missingRow);
+                var duplicateRow = await db.DispatchOutbox.SingleAsync(x => x.TaskId == duplicate.TaskId);
+                db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+                {
+                    OutboxId = Guid.NewGuid(),
+                    TaskId = duplicateRow.TaskId,
+                    DispatchGeneration = duplicateRow.DispatchGeneration,
+                    AvailableAt = duplicateRow.AvailableAt,
+                    CreatedAt = duplicateRow.CreatedAt
+                });
+                var validRow = await db.DispatchOutbox.SingleAsync(x => x.TaskId == valid.TaskId);
+                db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+                {
+                    OutboxId = Guid.NewGuid(),
+                    TaskId = validRow.TaskId,
+                    DispatchGeneration = validRow.DispatchGeneration - 1,
+                    AvailableAt = validRow.AvailableAt,
+                    CreatedAt = validRow.CreatedAt
+                });
+                db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+                {
+                    OutboxId = Guid.NewGuid(),
+                    TaskId = validRow.TaskId,
+                    DispatchGeneration = validRow.DispatchGeneration,
+                    AvailableAt = validRow.AvailableAt,
+                    CreatedAt = validRow.CreatedAt,
+                    DispatchedAt = now
+                });
+                var dispatchedRow = await db.DispatchOutbox.SingleAsync(x => x.TaskId == dispatched.TaskId);
+                dispatchedRow.DispatchedAt = now;
+                await db.SaveChangesAsync();
+            }
+
+            capture.Clear();
+            var pending = await store.GetPendingDispatchesAsync(now.AddMinutes(1), 20);
+            CollectionAssert.AreEquivalent(new[] { valid.TaskId, staleGeneration.TaskId },
+                pending.Select(x => x.Notification.TaskId).ToArray(),
+                "The index must not change eligibility for current, stale-generation, dispatched, duplicate, or missing rows.");
+            var lookup = capture.Commands.LastOrDefault(command =>
+                command.CommandText.Contains("collection_task_outbox", StringComparison.OrdinalIgnoreCase)
+                && command.CommandText.Contains("COUNT(*)", StringComparison.OrdinalIgnoreCase));
+            Assert.IsNotNull(lookup, "The actual EF pending-selection SQL with its correlated outbox count must be captured.");
+
+            var plan = await ExplainQueryPlanAsync(databasePath, lookup!);
+            Assert.IsTrue(plan.Any(detail => detail.Contains(indexName, StringComparison.OrdinalIgnoreCase)),
+                "SQLite should use the composite lookup index for the correlated TaskId/generation/dispatched predicate.\n"
+                + string.Join(Environment.NewLine, plan));
+            var indexedTaskIds = pending.Select(x => x.Notification.TaskId).ToArray();
+            await using (var db = new CollectionPlatformDbContext(dbOptions))
+                await db.Database.ExecuteSqlRawAsync($"DROP INDEX {indexName};");
+            var baselinePending = await store.GetPendingDispatchesAsync(now.AddMinutes(1), 20);
+            CollectionAssert.AreEqual(indexedTaskIds, baselinePending.Select(x => x.Notification.TaskId).ToArray(),
+                "The identical store SQL must return the same task identities in the same order without the index.");
+            await using var verify = new CollectionPlatformDbContext(dbOptions);
+            Assert.AreEqual(0, await verify.DispatchOutbox.CountAsync(x => x.TaskId == missing.TaskId));
+            Assert.AreEqual(2, await verify.DispatchOutbox.CountAsync(x => x.TaskId == duplicate.TaskId));
+            Assert.AreEqual(3, await verify.DispatchOutbox.CountAsync(x => x.TaskId == valid.TaskId),
+                "Stale and already-dispatched evidence remains present and unchanged.");
+            Assert.AreEqual(1, await verify.DispatchOutbox.CountAsync(x => x.TaskId == dispatched.TaskId && x.DispatchedAt != null));
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    private static async Task<int> ReadCollectionSchemaVersionAsync(DbContextOptions<CollectionPlatformDbContext> options)
+    {
+        await using var db = new CollectionPlatformDbContext(options);
+        return await db.Database.SqlQueryRaw<int>(
+            "SELECT COALESCE(MAX(version), 0) AS Value FROM collection_schema_history").SingleAsync();
+    }
+
+    private static async Task<int> ReadOutboxLookupIndexCountAsync(DbContextOptions<CollectionPlatformDbContext> options)
+    {
+        await using var db = new CollectionPlatformDbContext(options);
+        return await db.Database.SqlQueryRaw<int>(
+            "SELECT COUNT(*) AS Value FROM sqlite_master WHERE type = 'index' " +
+            "AND name = 'IX_collection_task_outbox_TaskId_DispatchGeneration_DispatchedAt'").SingleAsync();
+    }
+
+    private static async Task<List<(int Version, string AppliedAt)>> ReadCollectionSchemaHistoryAsync(
+        DbContextOptions<CollectionPlatformDbContext> options)
+    {
+        await using var db = new CollectionPlatformDbContext(options);
+        var connection = (SqliteConnection)db.Database.GetDbConnection();
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT version, applied_at FROM collection_schema_history ORDER BY version";
+        await using var reader = await command.ExecuteReaderAsync();
+        var rows = new List<(int Version, string AppliedAt)>();
+        while (await reader.ReadAsync()) rows.Add((reader.GetInt32(0), reader.GetString(1)));
+        return rows;
+    }
+
+    private static async Task<(bool Unique, bool Partial, List<string> Columns)> ReadOutboxLookupIndexDefinitionAsync(
+        string databasePath)
+    {
+        await using var connection = new SqliteConnection($"Data Source={databasePath};Pooling=False");
+        await connection.OpenAsync();
+        var unique = false;
+        var partial = false;
+        await using (var listCommand = connection.CreateCommand())
+        {
+            listCommand.CommandText = "PRAGMA index_list('collection_task_outbox')";
+            await using var reader = await listCommand.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                if (reader.GetString(1) != "IX_collection_task_outbox_TaskId_DispatchGeneration_DispatchedAt") continue;
+                unique = reader.GetInt32(2) != 0;
+                partial = reader.GetInt32(4) != 0;
+                break;
+            }
+        }
+        var columns = new List<string>();
+        await using (var infoCommand = connection.CreateCommand())
+        {
+            infoCommand.CommandText = "PRAGMA index_info('IX_collection_task_outbox_TaskId_DispatchGeneration_DispatchedAt')";
+            await using var reader = await infoCommand.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) columns.Add(reader.GetString(2));
+        }
+        return (unique, partial, columns);
+    }
+
+    private sealed record TaskMigrationSnapshot(Guid TaskId, Guid RequestId, long ResourcePk,
+        string DefinitionId, int RequestedRevision, CollectionTaskStatus Status, CollectionLane Lane,
+        int Priority, DateTimeOffset AvailableAt, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt,
+        long DispatchGeneration, long RaceHoldGeneration, int AttemptCount, string? MetadataJson);
+
+    private static async Task<List<string>> ExplainQueryPlanAsync(string databasePath, CapturedOutboxCommand query)
+    {
+        await using var connection = new SqliteConnection($"Data Source={databasePath};Pooling=False");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "EXPLAIN QUERY PLAN " + query.CommandText;
+        foreach (var captured in query.Parameters)
+        {
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = captured.Name;
+            parameter.DbType = captured.DbType;
+            parameter.Value = captured.Value ?? DBNull.Value;
+            command.Parameters.Add(parameter);
+        }
+        var details = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync()) details.Add(reader.GetString(3));
+        return details;
+    }
+
+    private sealed record CapturedOutboxCommand(string CommandText,
+        IReadOnlyList<(string Name, System.Data.DbType DbType, object? Value)> Parameters);
+
+    private sealed class OutboxQueryCaptureInterceptor : DbCommandInterceptor
+    {
+        public List<CapturedOutboxCommand> Commands { get; } = [];
+        public void Clear() => Commands.Clear();
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            Commands.Add(new CapturedOutboxCommand(command.CommandText,
+                command.Parameters.Cast<DbParameter>()
+                    .Select(parameter => (parameter.ParameterName, parameter.DbType, parameter.Value is DBNull ? null : parameter.Value))
+                    .ToArray()));
+            return ValueTask.FromResult(result);
+        }
     }
 
     [TestMethod]

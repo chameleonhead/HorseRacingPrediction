@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261004_collection-outbox-query-index",
+  "taskId": "T4",
+  "attemptId": "T4-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC5"],
+  "route": {"tier": "worker", "requestedModel": "gpt-6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "Runtime model telemetry unavailable; same Luna/high executor"},
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "Runtime usage unavailable"},
+  "scope": ["EventStoreDbContext.cs", "20261004163306_AddRaceIdentityLookupIndex.cs", "20261004163306_AddRaceIdentityLookupIndex.Designer.cs", "EventStoreDbContextModelSnapshot.cs", "SharedCollectionIdentityTests.cs", "SqliteDbContextProviderTests.cs"],
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "Runtime review usage unavailable"},
+  "overhead": {"availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "Active effort not captured"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "Effort not captured"},
+  "startRevision": "26cb5253 plus frozen T2 three-file patch",
+  "endRevisionOrPatch": "Reviewed six-file T4 working-tree diff against 26cb5253; new AddRaceIdentityLookupIndex files and focused checkpoint 2026-10-05",
+  "outcome": {"verificationPassed": true, "qualityPassed": true, "scopePassed": true, "independentChallenge": "Lead AC5 review plus existing legacy EnsureCreated bootstrap test, exact provider plans/parity and preserved multi-course ambiguity", "retries": 1, "leadCorrections": 0, "reviewPasses": 1, "promoted": false, "escapedDefects": 0, "escalations": 0, "reviewMode": "ac-group", "detailReviewReason": null, "decision": "accept"}
+}

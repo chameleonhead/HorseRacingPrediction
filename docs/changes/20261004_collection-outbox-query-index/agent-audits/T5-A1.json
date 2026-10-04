@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261004_collection-outbox-query-index",
+  "taskId": "T5",
+  "attemptId": "T5-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC3", "AC4"],
+  "route": {"tier": "worker", "requestedModel": "gpt-6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "Runtime model telemetry unavailable; Luna/high verifier dispatch"},
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "Runtime usage unavailable"},
+  "scope": ["read-only repository", "ephemeral Ubuntu container workspace"],
+  "review": {"usageAvailability":"unavailable","totalTokens":null,"activeMinutes":null,"reason":"Runtime review usage unavailable"},
+  "overhead": {"availability":"unavailable","preparationMinutes":null,"integrationMinutes":null,"auditMinutes":null,"reason":"Active effort not captured"},
+  "elapsed": {"availability":"unavailable","minutes":null,"reason":"Active effort not captured; individual stages measured"},
+  "startRevision": "26cb5253 plus frozen T2/T4 and approved deployment guard patch",
+  "endRevisionOrPatch": "Final full HEAD2dead588 plus13 scoped files;13/13 normalized hashes; exact CI and deploy test forms1620pass0fail1baseline-skip each",
+  "outcome": {"verificationPassed":true,"qualityPassed":true,"scopePassed":true,"independentChallenge":"Read-only Ubuntu full baseline solution,13 file hash parity,14 shell counterexamples, formatter/build/EF plus both original full-suite commands; stale runs excluded","retries":3,"leadCorrections":2,"reviewPasses":1,"promoted":false,"escapedDefects":0,"escalations":0,"reviewMode":"ac-group","detailReviewReason":null,"decision":"accept"}
+}

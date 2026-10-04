@@ -49,6 +49,53 @@ public class SqliteDbContextProviderTests
     }
 
     [TestMethod]
+    public async Task RaceIdentityLookupIndex_UpgradesPreviousMigrationWithoutChangingRaceRows_AndIsIdempotent()
+    {
+        const string previousMigration = "20260921074403_AddRaceRescheduleLineage";
+        const string newMigration = "20261004163306_AddRaceIdentityLookupIndex";
+        using var provider = new SqliteDbContextProvider();
+        await using (var previous = provider.CreateContext())
+        {
+            await previous.Database.MigrateAsync(previousMigration);
+            await previous.Database.ExecuteSqlRawAsync("""
+                INSERT INTO RacePredictionContexts
+                    (RaceId, RaceDate, RacecourseCode, RaceNumber, RaceName, Status, Entries,
+                     WeatherObservations, TrackConditionObservations, OddsSnapshots)
+                VALUES
+                    ('race-upgrade-tokyo', '2037-09-27', 'TOKYO', 11, 'Preserved Tokyo', 0, '[]', '[]', '[]', '[]'),
+                    ('race-upgrade-nakayama', '2037-09-27', 'NAKAYAMA', 11, 'Preserved Nakayama', 0, '[]', '[]', '[]', '[]');
+                """);
+            Assert.IsFalse((await previous.Database.GetAppliedMigrationsAsync()).Contains(newMigration));
+
+            await previous.Database.MigrateAsync();
+            var appliedAfterUpgrade = (await previous.Database.GetAppliedMigrationsAsync()).ToList();
+            Assert.AreEqual(1, appliedAfterUpgrade.Count(x => x == newMigration));
+            Assert.AreEqual(1, await previous.Database.SqlQueryRaw<int>(
+                "SELECT COUNT(*) AS Value FROM sqlite_master WHERE type = 'index' AND name = 'IX_RacePredictionContexts_RaceDate_RaceNumber'")
+                .SingleAsync());
+            Assert.AreEqual(2, await previous.RacePredictionContexts.CountAsync());
+            var tokyo = await previous.RacePredictionContexts.SingleAsync(x => x.RaceId == "race-upgrade-tokyo");
+            Assert.AreEqual("Preserved Tokyo", tokyo.RaceName);
+            Assert.AreEqual(new DateOnly(2037, 9, 27), tokyo.RaceDate);
+            Assert.AreEqual("TOKYO", tokyo.RacecourseCode);
+            Assert.AreEqual(11, tokyo.RaceNumber);
+            var nakayama = await previous.RacePredictionContexts.SingleAsync(x => x.RaceId == "race-upgrade-nakayama");
+            Assert.AreEqual("Preserved Nakayama", nakayama.RaceName);
+            Assert.AreEqual(new DateOnly(2037, 9, 27), nakayama.RaceDate);
+            Assert.AreEqual("NAKAYAMA", nakayama.RacecourseCode);
+            Assert.AreEqual(11, nakayama.RaceNumber);
+
+            await previous.Database.MigrateAsync();
+            var appliedAfterRepeat = (await previous.Database.GetAppliedMigrationsAsync()).ToList();
+            CollectionAssert.AreEqual(appliedAfterUpgrade, appliedAfterRepeat,
+                "Reapplying migrations must not add duplicate history rows or alter the upgraded schema.");
+            Assert.AreEqual(1, await previous.Database.SqlQueryRaw<int>(
+                "SELECT COUNT(*) AS Value FROM sqlite_master WHERE type = 'index' AND name = 'IX_RacePredictionContexts_RaceDate_RaceNumber'")
+                .SingleAsync());
+        }
+    }
+
+    [TestMethod]
     public async Task Migrator_BaselinesExistingEnsureCreatedDatabase()
     {
         using var provider = new SqliteDbContextProvider();

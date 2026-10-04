@@ -1,0 +1,88 @@
+# Collection dispatch recovery, 2026-10-04
+
+Owner: Lead. Operational recovery authorized by the user's request to make collection execute again. No code or public-contract change is approved by this record.
+
+## Outcome and boundaries
+
+Restore observable execution and completion of eligible Normal and Background work. Future Realtime work remains waiting until its availability time. Preserve failure notifications and task history; do not retry ambiguous horse identification or remove queues. Unknown integrity failures retain their safety stop.
+
+## Evidence and tasks
+
+- At 22:41 JST, production `pipeline-state` was unpaused (updated 17:16), contradicting the initial hypothesis that the deployment pause still blocked execution.
+- Progress: Normal dueReady 4,780, Running 0, latest start 22:37:04 and completion 22:38:01; Background dueReady 1,191, Running 0, latest start 14:54:13 and completion 14:50:32; Realtime dueReady 0, Running 0. Realtime sample availability is 2026-10-05 09:00 JST.
+- Four actionable horse-profile notifications are isolated `SubjectNotIdentified` / multiple candidates, last failure 04:46; preserve them.
+- Monitoring at 22:42 reports stalled Ready tasks; its snapshot is truncated and does not prove exact outbox state.
+- R1 (In progress): security-sensitive production diagnosis and reversible recovery; Lead owns API operations. Read pipeline, progress, monitoring, task history. Brief pause invokes the existing orphan-Ready dispatch release; resume and observe. No destructive repair or new work request.
+- R2 (In progress): read-only store/dispatcher investigation delegated to `collection_resume_diagnosis`, requested `gpt-6-luna/high` through collaboration dispatch; observed model and usage unavailable. Exact write scope: none. Initial report verified API contracts against source; follow-up examines unpaused starvation. Lead independently checked current source and live API counterexample.
+- R3 (Dependent): root-cause closure and production verification. Require observed task acquisition and subsequent completion with timestamps and no immediate re-stop. If recovery is temporary, retain a concrete corrective task rather than claim permanent closure.
+
+## Recovery ledger
+
+At approximately 22:44 JST, requested an existing API pause with an operator-recovery reason. This releases only Ready dispatched rows without active execution leases; stale queue wakes cannot acquire replacement work. The pause response timed out after 45 seconds, so its orphan-release completion is unknown. The subsequent resume returned success (204/empty body), and `pipeline-state` confirmed unpaused with updatedAt 22:44:40.9230929 JST. Do not infer the timed-out release succeeded.
+
+At 22:49 JST, Running remained zero; Normal last completion was still 22:38:01. No post-recovery acquisition or successful completion is confirmed. Public `/health` returned 200 in 1.29 seconds. This is not verified temporary recovery.
+
+Deeper history contradicts the lane timestamp as an inactivity signal: Background trainer task `10b49bf3-5117-420a-80e1-7dd7d4526dd4` executed attempt 10 at 22:31:24, finishing 22:32:02 with a transient `TimeoutException` (10000ms), then became Ready with availability 22:47:02. Its two-task execution batch finished at 22:32:39. Attempts 8 and 9 also timed out. Source correction to the initial interpretation: task StartedAt is assigned with `??=` at first acquisition, not cleared on retry; transient completion does not set the task's terminal FinishedAt. Progress aggregates task lifecycle timestamps instead of attempt timestamps, so the 14:54 last start cannot represent latest attempted execution. Failure notifications remain unchanged.
+
+R1 remains In progress until production verification; R3 requires CloudWatch/SQS/execution-lease evidence before corrective implementation. Local AWS commands report an expired login; local SSH authentication was rejected. Requested AWS reauthentication asynchronously from the user. Authentication blocks AWS diagnostics, not the canonical GitHub deployment route or administration API.
+
+R2 (Verified): Luna read-only investigation traced contracts, per-lane paging, reservation validation, trainer navigation/timeouts, retry backoff, and timestamp semantics. Lead independently checked store/dispatcher source, live task and batch history, and the unpaused counterexample. No patch attribution or mechanical build/test gate applies because no implementation files changed. Requested model is dispatch intent; observed model/tokens/review effort remain unavailable. Three related read-only turns, one integrated review; no promotion. The future task-lease mismatch is a source hypothesis, not established production cause. Trainer Timeout attribution to an exact browser step is also unconfirmed because that detail is not persisted.
+
+Final checkpoint: no post-recovery Running task observed in the final bounded API read; recovery is unverified. R1/R3 are Externally blocked on authenticated AWS diagnostics. The available administration API exposes task/attempt history but not SQS delivery, CloudWatch outcomes, or execution-lease occupancy. `git diff --check` passed. No source edits, retries, failure dismissal, queue deletion, commits, or deployments were performed in this incident.
+
+Next operation: after AWS reauthentication, correlate dispatch outcomes (Reserved/WakeSent/CapacityFull/ReserveConflict), SQS delivery, Lambda invocation logs, and execution-lease expiry/completion at the same cutoff. Distinguish a slow reservation/acquire/complete operation from task-specific trainer timeouts. Inspect production prevalence before adopting the source-only future-task-lease eligibility mismatch as the cause. Preserve the incident note uncommitted until this investigation and recovery are verified.
+
+## AWS-authenticated continuation
+
+AWS authentication succeeded. R1 is Verified for temporary processing recovery: a Normal race task started 22:52:35 and succeeded 22:53:31; API Pending fell 5,988 to 5,987 and Normal active fell 4,780 to 4,779. Background Running=1 was sampled eight times from 22:59:56 to 23:01:30. The corresponding Lambda invocation began 22:59:14 and ended 23:02:52 with four transient trainer timeouts. Future Realtime dueReady remains zero. The pipeline stayed unpaused. No additional production mutation was necessary after authentication.
+
+Root-cause boundary: micro_3_0 Lightsail has 2 vCPU/1GB, CPU pinned near 10% and BurstCapacityPercentage ~0.023%, about two burst seconds. Lambda's successful race tasks spend ~50 of ~57 seconds inside three API calls. This establishes severely limited CPU headroom/backend latency, but exact SQL contribution remains unprofiled. Lambda is Active, event mapping Enabled, and sampled SQS visible/in-flight/delayed depths were all zero; execution is slow/intermittent rather than permanently absent. Four trainer failures recur without terminal notification; the old lane timestamps cannot reveal those latest attempts.
+
+R2 supplemental read-only SQLite reproduction is Verified: 6,000 task/generation cardinality probes over synthetic 60,000 outbox rows took 6.87s median with current index shape and 21.5ms with a hypothetical covering TaskId/DispatchGeneration/DispatchedAt index; results identical. This is not a production benchmark or live query-plan claim.
+
+R3 remains Proposed for permanent correction under [the concrete index proposal](../changes/20261004_collection-outbox-query-index/README.md). It requires user approval for the additive schema change, provider-shaped tests, canonical deployment, and production observations. No hosting cost increase, queue deletion or failure suppression is proposed. Trainer timeout diagnosis and accurate retry timestamps remain Lead-owned follow-up items; no resolution of those is claimed by the index proposal.
+
+Two ephemeral SSH credential/diagnostic commands were rejected by execution policy before execution; no files or SSH commands ran. The only supplied reason was "blocked by policy". AWS/API diagnostics and the canonical GitHub deployment route remain available.
+
+## Additional search-index investigation
+
+User requested investigation of other searches, not implementation. I1 is In progress: inventory query predicates, joins, sorting/aggregation and current model/migration indexes across collection and domain lookups. I2 is Dependent: rank candidates and verify representative SQLite query plans and unchanged results for the strongest other candidates. Scope is read-only repository/local in-memory experiments; no production database access, code edits, migrations or deployment.
+
+Router: bounded ordinary investigation on the existing `collection_resume_diagnosis` Luna/high route (requested gpt-6-luna/high; runtime model and token telemetry unavailable). Orchestration skill loaded this turn. Lead owns scope and final acceptance. Investigator uses CodeGraph before code search, compares real predicates with composite-prefix/range coverage, and avoids recommending indexes merely because columns are unindexed. Required evidence: source locations, current index definitions, ranked candidates and counterexamples; representative EXPLAIN/result comparison where feasible. No build/test change applies to a diagnosis-only task. Existing dirty files are preserved.
+
+### Findings
+
+Coverage: CollectionPlatformDbContext, EventStoreDbContext, PredictionScheduleDbContext; collection tasks/resources/states, failures, attempts/batches, locations, artifact/dispatch/monitoring reads; race/horse/jockey/trainer searches; owner aliases, repair/provenance and scheduling. This is a repository query/index audit, not a live production query-plan audit.
+
+| Priority | Query | Existing support and deficiency | Recommendation/evidence |
+| --- | --- | --- | --- |
+| High, after the already proposed outbox correction | Race identity: RacePredictionContexts filtered by RaceDate and RaceNumber; course normalized after materialization | CollectionIdentityResolver.cs:14 and DomainRaceResourceIdentityResolver.cs:22 use SQL equality; EventStoreDbContext.cs:121 defines only RaceId PK for this model | Candidate non-unique (RaceDate, RaceNumber). Synthetic SQLite 60,000 rows: SCAN became SEARCH on both equality columns; exact result identity unchanged. Median of 300 warm queries: 1,555.7 microseconds to 1.6 microseconds. Not a production estimate. Event-store provisioning/migration must be separately planned; do not place this automatically in collection schema migration 23. |
+| Low/moderate | Resource-detail task history: ResourcePk/DefinitionId equality, CreatedAt DESC/TaskId DESC order, limit 25 | CollectionPlatformStore.cs:1307; current task index includes RequestedRevision between equality prefix and CreatedAt (DbContext.cs:103) | Candidate (ResourcePk, DefinitionId, CreatedAt DESC, TaskId DESC) removed temporary sort, exact ordered IDs unchanged on 6,000 tasks. Median 6.2 to 3.6 microseconds; too little synthetic benefit to prioritize without real per-resource history sizes. |
+| Not recommended on current evidence | Attempts selected by TaskId, StartedAt DESC/AttemptId DESC order | Existing (TaskId, AttemptNumber) supports task lookup | Candidate (TaskId, StartedAt DESC, AttemptId DESC) still needed global temporary sort for multiple tasks. Equal results; 28.2 to 27.1 microseconds. Do not add based only on mismatched order. |
+
+Other material performance findings, not simply absent indexes:
+
+- Race/horse/jockey/trainer searches materialize entire read-model tables before filters, sort and pagination. Name/date indexes alone cannot help those current in-memory predicates. Any SQL-side rewrite must preserve case-insensitive matching, JSON aliases and substring behavior.
+- Horse identity resolution also loads all horse identities; ordinary B-tree indexes do not solve normalization/substring predicates applied after loading.
+- Task search status filtering has existing (Status, AvailableAt, Lane, Priority) support. Computed status/lane ordering still sorts; a tested expression-index shape was not selected. Substring task/error searches are not solved by ordinary B-tree indexes.
+- GetTasks/latest task/view counts/progress, owner aggregation and schedule acquisition materialize rows before relevant grouping/sorting/filtering. Consider query shape and SQL aggregation first, not blanket indexes. Schedule already has (Status, AvailableAt).
+- Monitoring active-task status filtering plus UpdatedAt order is not fully order-covered, but inspection frequency and live cardinality are unknown. Progress/flow aggregates scan rows by design. No high-confidence monitoring index recommendation without actual plans/workload.
+- Failure delivery has PublishedAt/ResolutionStatus prefix support, but availability/order/limits are partly post-materialization. Improve query pushdown before adding speculative indexes.
+
+Adequate existing support found: unique resource (Type, Provider, ResourceId); active/state (ResourcePk, DefinitionId) keys; active TaskId uniqueness; state Status/NextCollectionAt; attempts TaskId/AttemptNumber and ExecutionBatchId; failure PublishedAt/AvailableAt, ResolutionStatus/AvailableAt, TaskId and RecoveryTaskId; location ResourcePk/DefinitionId/Url; artifact ResourcePk/Artifact and Status/NextDueAt; domain ID PKs; owner NormalizedAlias/OwnerId; repair candidate RepairId/AppliedAt and SourceHorseId/TargetHorseId; redirect source PK/target index; repair issue fingerprint uniqueness and Status/CreatedAt; EventFlow aggregate identity/sequence indexes. Their presence is not proof every ordering variant is covered.
+
+No production/source changes, migration, deployment or additional approval implied. Additional-index storage/write maintenance and startup costs remain unmeasured. The safest next design step is a separately scoped non-unique race-date/number index; task-history index stays secondary. API full-table materialization is a separate optimization workstream.
+
+I1/I2 are Verified for repository inventory and local diagnostic evidence. Lead independently inspected current EventStoreDbContext mapping through CodeGraph and reviewed query-plan counterexamples, including two candidates that did not merit addition. Requested gpt-6-luna/high, observed model/tokens unavailable; one investigation and one integrated acceptance review, no code patch/retry/promotion. Production table sizes, query frequency, deployed provider plans and disk/write impact remain explicit blind spots rather than blocking this diagnosis-only report.
+
+Evidence closure: experiments used Python 3.13.9 / SQLite 3.50.4, inline PowerShell here-string piped to `python -`, with `sqlite3.connect(':memory:')`; no DB files created. Identity probe: `EXPLAIN QUERY PLAN SELECT RaceId,RacecourseCode FROM RacePredictionContexts WHERE RaceDate=? AND RaceNumber=?`; compare exact result rows before/after the hypothetical index. Current EventStore model snapshot (Migrations/EventStoreDbContextModelSnapshot.cs:526) and all RacePredictionContexts migration references have no secondary index. InitialEventStore creates the PK; AddRaceReacquisitionMetadata and AddRaceRescheduleLineage alter columns only. SqliteDatabaseMigrator.cs:58–86 uses the separate EF migration path. Full-read endpoint evidence: SearchRacesEndpoint.cs:36, SearchHorsesEndpoint.cs:33, SearchJockeysEndpoint.cs:33 and SearchTrainersEndpoint.cs:33 call ToListAsync before filtering/sorting/paging. `git diff --check` passed; no additional source files changed.
+
+## 2026-10-05 corrective implementation checkpoint
+
+User approved prioritized outbox and race-identity indexes. The governing index change record is Approved, not yet Implemented. T2 source/provider proof verified with62 focused tests; T4 source/provider proof verified with16 focused tests, pending-model check and empty-DB migration. Indexes are additive/nonunique, unchanged selection/ambiguity/lane safety; actual indexed/unindexed results matched. Compatibility failure for legacy EnsureCreated bootstrap corrected only in the new idempotent EF migration and original provider suite rerun passed. Global Ubuntu CI verification T5 is in progress, then T3 canonical deployment and production verification remain. Existing retained-failure notice workflow has a separate approved checkpoint and14 guard cases passed in Ubuntu-shaped checkout. No production mutation/deploy/commit/push yet in this continuation.
+
+Baseline API after reauthentication remains unpaused; Normal last complete01:08:31 JST, dueReady4,769; Background dueReady1,189. Only timestamped attempt/CloudWatch outcomes can prove latest background execution, not old lane lifecycle dates. No hosting increase or queue/failure deletion. Remaining full-materialization searches are a separate query-design follow-up, not an index fix claim.
+
+Integration checkpoint: local guard commit2dead588 is not pushed. Complete Ubuntu Release build/format/Chromium/EF gates passed; original solution tests passed1,617, failed3, skipped1. Three stale test expectations (two current schema22→23; one old guard notice) are being corrected on the approved Luna route; no new production behavior is required. Original complete Ubuntu command must pass after correction before push.
+
+Pre-deploy observation 2026-10-05 02:20:12 JST: pipeline unpaused; Normal dueReady4,764, Running0, LastStarted02:11:35, LastCompleted02:12:11; Background dueReady1,187, Running1; Realtime dueReady0, Running0. This independently proves some current Normal completion and Background acquisition before the permanent indexes are deployed. It does not establish acceptable continuous throughput or index benefit; long gaps remain to compare after deployment.

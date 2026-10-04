@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 internal static class CollectionPlatformSchemaMigrator
 {
-    internal const int CurrentVersion = 22;
+    internal const int CurrentVersion = 23;
     private const string HistoryTable = "collection_schema_history";
 
     private static readonly string[] ModelTables =
@@ -600,6 +600,18 @@ internal static class CollectionPlatformSchemaMigrator
                 await ExecuteAsync(connection,
                     "ALTER TABLE collection_subject_identification_selections ADD COLUMN ReusedTask INTEGER NOT NULL DEFAULT 0;",
                     cancellationToken, transaction).ConfigureAwait(false);
+        }
+
+        if (version < 23)
+        {
+            await ExecuteAsync(connection, """
+                CREATE INDEX IF NOT EXISTS IX_collection_task_outbox_TaskId_DispatchGeneration_DispatchedAt
+                    ON collection_task_outbox (TaskId, DispatchGeneration, DispatchedAt);
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (23, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Common.Time.JstTime.ToDatabaseString(
+                    HorseRacingPrediction.Contracts.Common.Time.JstTime.Now()))).ConfigureAwait(false);
+            version = 23;
         }
 
         await ExecuteAsync(connection, """

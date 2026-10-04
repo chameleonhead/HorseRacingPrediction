@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 2, "changeId": "20261004_collection-outbox-query-index", "taskId": "T6", "attemptId": "T6-A1", "state": "completed", "taskDifficulty": "low", "acceptanceCriteria": ["AC1", "AC3"],
+  "route": {"tier": "worker", "requestedModel": "gpt-6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "Runtime model telemetry unavailable; same Luna/high executor"},
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "Runtime usage unavailable"},
+  "scope": ["tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionPlatformStoreTests.cs"],
+  "review": {"usageAvailability":"unavailable","totalTokens":null,"activeMinutes":null,"reason":"Runtime review usage unavailable"},
+  "overhead": {"availability":"unavailable","preparationMinutes":null,"integrationMinutes":null,"auditMinutes":null,"reason":"Active effort not captured"},
+  "elapsed": {"availability":"unavailable","minutes":null,"reason":"Effort not captured"},
+  "startRevision": "2dead588 plus frozen index patch", "endRevisionOrPatch": "Two current-schema expectations23; targeted3 and full Collector421 Release tests and formatter passed",
+  "outcome": {"verificationPassed":true,"qualityPassed":true,"scopePassed":true,"independentChallenge":"Original full Collector421 regression plus Lead exact diff review; historical v22 fixture unchanged; global Ubuntu acceptance remains T5","retries":0,"leadCorrections":0,"reviewPasses":1,"promoted":false,"escapedDefects":0,"escalations":0,"reviewMode":"ac-group","detailReviewReason":null,"decision":"accept"}
+}

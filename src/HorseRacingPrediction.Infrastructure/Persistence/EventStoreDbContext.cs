@@ -121,6 +121,7 @@ public class EventStoreDbContext : DbContext
         modelBuilder.Entity<RacePredictionContextReadModel>(entity =>
         {
             entity.HasKey(x => x.RaceId);
+            entity.HasIndex(x => new { x.RaceDate, x.RaceNumber });
             entity.Ignore(x => x.LatestWeather);
             entity.Ignore(x => x.LatestTrackCondition);
             ConfigureJsonProperty(entity, x => x.Entries);

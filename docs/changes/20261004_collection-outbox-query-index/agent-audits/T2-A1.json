@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261004_collection-outbox-query-index",
+  "taskId": "T2",
+  "attemptId": "T2-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC1", "AC2", "AC3"],
+  "route": {"tier": "worker", "requestedModel": "gpt-6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "Runtime model telemetry unavailable; existing Luna/high dispatch reused"},
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "Runtime usage unavailable"},
+  "scope": ["CollectionPlatformDbContext.cs", "CollectionPlatformSchemaMigrator.cs", "CollectionDispatchStarvationReproductionTests.cs"],
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "Runtime review usage unavailable"},
+  "overhead": {"availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "Active effort not captured"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "Effort not captured"},
+  "startRevision": "26cb5253",
+  "endRevisionOrPatch": "Reviewed three-file working-tree T2 diff against 26cb5253; 2026-10-05 focused checkpoint",
+  "outcome": {"verificationPassed": true, "qualityPassed": true, "scopePassed": true, "independentChallenge": "Lead reviewed actual store baseline parity, duplicate guard and exact index semantics; existing regressions passed", "retries": 1, "leadCorrections": 1, "reviewPasses": 1, "promoted": false, "escapedDefects": 0, "escalations": 0, "reviewMode": "ac-group", "detailReviewReason": null, "decision": "accept"}
+}

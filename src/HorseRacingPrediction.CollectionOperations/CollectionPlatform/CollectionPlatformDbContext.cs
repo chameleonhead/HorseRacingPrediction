@@ -130,6 +130,7 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
             e.ToTable("collection_task_outbox"); e.HasKey(x => x.OutboxId);
             e.HasIndex(x => new { x.DispatchedAt, x.AvailableAt });
             e.HasIndex(x => new { x.DispatchedAt, x.ReservedUntilUnixMilliseconds });
+            e.HasIndex(x => new { x.TaskId, x.DispatchGeneration, x.DispatchedAt });
         });
         modelBuilder.Entity<CollectionAttemptStageOutcomeEntity>(e =>
         {
