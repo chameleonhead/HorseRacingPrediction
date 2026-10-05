@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261006_collection-query-efficiency",
+  "taskId": "T2",
+  "attemptId": "T2-A1",
+  "state": "active",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC1", "AC2", "AC4"],
+  "route": {"tier": "worker", "requestedModel": "gpt-6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "runtime did not expose model telemetry"},
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "runtime did not expose worker usage"},
+  "scope": ["src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.cs", "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionPlatformStoreTests.cs"],
+  "review": {"usageAvailability": null, "totalTokens": null, "activeMinutes": null, "reason": null},
+  "overhead": {"availability": null, "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": null},
+  "elapsed": {"availability": null, "minutes": null, "reason": null},
+  "startRevision": "09566e95abdbed47abc31447338a58478376a240",
+  "endRevisionOrPatch": null,
+  "outcome": {"verificationPassed": null, "qualityPassed": null, "scopePassed": null, "independentChallenge": null, "retries": null, "leadCorrections": null, "reviewPasses": null, "promoted": null, "escapedDefects": null, "escalations": null, "reviewMode": null, "detailReviewReason": null, "decision": null}
+}
