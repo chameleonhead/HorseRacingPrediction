@@ -109,6 +109,48 @@ public sealed class CollectionCompletionTransportTests
     }
 
     [TestMethod]
+    public async Task WorkerCompletion_ThroughHttp_PersistsBoundedDiscoveryDiagnosticToResourceDetail()
+    {
+        const string diagnostic = "Race discovery batch response rejected: expected=2; received=2; missing=0; extra=0; "
+            + "duplicate=0; rejected=1; invalidReceipt=0; invalidStatus=0; omittedExpectedKeys=0; "
+            + "redactedTokens=0; truncated=false; samples=[race:20261003:Tokyo:1|Rejected|IdempotencyMismatch]";
+        Assert.IsTrue(diagnostic.All(character => character <= 0x7f));
+        Assert.IsLessThanOrEqualTo(2048, System.Text.Encoding.ASCII.GetByteCount(diagnostic));
+
+        await WithApiAsync(async (store, client) =>
+        {
+            var resource = new ResourceKey(CollectionResourceType.Race, "JRA", "discovery:2026100300");
+            var definition = new CollectionDefinitionId("race-detail");
+            await store.RegisterDefinitionAsync(definition, "Race detail", CollectionResourceType.Race,
+                HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail,
+                "artifact state machine", false);
+            var receipt = await store.RequestAsync(resource, definition,
+                HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail,
+                CollectionReason.Discovery, DateTimeOffset.UtcNow, effectiveDate: new(2026, 10, 3));
+            var taskId = receipt.TaskId!.Value;
+            var completion = new CollectionAttemptCompletion(CollectionAttemptResult.PermanentFailure,
+                "InvalidOperationException", diagnostic);
+            var worker = new CollectionPlatformWorkerClient(client,
+                new CollectionDefinitionHandlerRegistry([new EvidenceHandler(completion)]));
+
+            await worker.ExecuteAsync(new(taskId, 1), CancellationToken.None);
+
+            using var detailResponse = await client.GetAsync(
+                "api/v2/admin/collection/resources/Race/JRA/discovery%3A2026100300/definitions/race-detail?historyPageSize=10");
+            Assert.AreEqual(System.Net.HttpStatusCode.OK, detailResponse.StatusCode);
+            var detailBody = await detailResponse.Content.ReadFromJsonAsync<GetCollectionResourceDetailResponse>();
+            Assert.IsNotNull(detailBody);
+            Assert.AreEqual(CollectionTaskStatus.Failed, detailBody.Resource.LatestTask!.Status);
+            var attempt = detailBody.Resource.Attempts.Single();
+            Assert.AreEqual(CollectionAttemptResult.PermanentFailure, attempt.Result);
+            Assert.AreEqual("InvalidOperationException", attempt.ErrorCode);
+            Assert.AreEqual(diagnostic, attempt.ErrorMessage);
+            Assert.IsLessThanOrEqualTo(2048,
+                System.Text.Encoding.ASCII.GetByteCount(attempt.ErrorMessage!));
+        });
+    }
+
+    [TestMethod]
     public async Task CompletionEndpoint_CommitsWhenTelemetryQueueRejectsCompletionLookup()
     {
         var telemetry = new CollectionDispatchTelemetry(new RejectingMetricQueue(), Options.Create(new CollectionQueueOptions

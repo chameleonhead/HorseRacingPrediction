@@ -11,6 +11,8 @@ using Microsoft.Extensions.Options;
 using HorseRacingPrediction.Contracts.Collection;
 using HorseRacingPrediction.Contracts.Common.Time;
 using HorseRacingPrediction.Contracts.Races;
+using System.Globalization;
+using System.Text;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
@@ -32,6 +34,13 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
     IOptions<RaceDiscoveryCollectionOptions>? options = null, TimeProvider? timeProvider = null)
     : ICollectionDefinitionHandler
 {
+    private const int MaxBatchDiagnosticBytes = 2048;
+    private const int MaxBatchDiagnosticKeys = 5;
+    private static readonly HashSet<string> AllowedBatchStatuses = new(StringComparer.Ordinal)
+        { "Created", "Reused", "Held", "Accepted", "Rejected" };
+    private static readonly HashSet<string> AllowedBatchRejectionCodes = new(StringComparer.Ordinal)
+        { "ResourceSuppressed", "IdempotencyMismatch", "InvalidRequest" };
+
     private readonly RaceDiscoveryCollectionOptions _options = options?.Value ?? new();
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
     public CollectionDefinitionId DefinitionId => new("race-discovery");
@@ -241,10 +250,105 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                 "Accepted" => outcome.RequestId is not null || outcome.TaskId is not null,
                 _ => true,
             }))
-            throw new InvalidOperationException("Race discovery batch response was incomplete or rejected.");
+            throw new InvalidOperationException(BuildBatchResponseDiagnostic(items, response));
 
         static bool HasId(Guid? value) => value is { } id && id != Guid.Empty;
         static bool HasValidOptionalId(Guid? value) => value is null || value != Guid.Empty;
+    }
+
+    private static string BuildBatchResponseDiagnostic(IReadOnlyList<CollectionRequestBulkItemDto> items,
+        CollectionRequestBulkResponse response)
+    {
+        var expectedKeys = items.Select(item => item.ItemKey).Where(key => key is not null).ToArray();
+        var expectedCounts = expectedKeys.GroupBy(key => key, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+        var nonNullOutcomes = response.Outcomes.Where(outcome => outcome.ItemKey is not null).ToArray();
+        var nullOutcomeKeyCount = response.Outcomes.Count(outcome => outcome.ItemKey is null);
+        var outcomesByKey = nonNullOutcomes.GroupBy(outcome => outcome.ItemKey, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
+        var missingCount = expectedCounts.Keys.Count(key => !outcomesByKey.ContainsKey(key));
+        var extraCount = outcomesByKey.Keys.Count(key => !expectedCounts.ContainsKey(key)) + nullOutcomeKeyCount;
+        var duplicateCount = items.Count - expectedCounts.Count + nonNullOutcomes.Length - outcomesByKey.Count
+            + Math.Max(0, nullOutcomeKeyCount - 1);
+        var rejectedCount = response.Outcomes.Count(outcome => outcome.Status == "Rejected");
+        var invalidStatusCount = response.Outcomes.Count(outcome => !AllowedBatchStatuses.Contains(outcome.Status));
+        var invalidReceiptCount = response.Outcomes.Count(outcome => outcome.Status switch
+        {
+            "Created" or "Reused" => !HasId(outcome.RequestId) || !HasId(outcome.TaskId),
+            "Held" => !HasId(outcome.RequestId) || !HasValidOptionalId(outcome.TaskId),
+            "Accepted" => outcome.RequestId is not null || outcome.TaskId is not null,
+            _ => false,
+        });
+        var redactedTokenCount = response.Outcomes.Sum(outcome =>
+            (!AllowedBatchStatuses.Contains(outcome.Status) ? 1 : 0)
+            + (outcome.ErrorCode is not null
+                && (outcome.Status != "Rejected" || !AllowedBatchRejectionCodes.Contains(outcome.ErrorCode))
+                    ? 1 : 0));
+
+        var canonicalExpected = expectedCounts.Keys.Where(IsCanonicalDiscoveryItemKey)
+            .Order(StringComparer.Ordinal).ToArray();
+        redactedTokenCount += expectedCounts.Keys.Count(key => !IsCanonicalDiscoveryItemKey(key))
+            + (items.Count - expectedKeys.Length) + extraCount;
+        var problemKeys = canonicalExpected.Where(key =>
+        {
+            if (!outcomesByKey.TryGetValue(key, out var outcomes)) return true;
+            return outcomes.Length > 1 || outcomes.Any(outcome => outcome.Status switch
+            {
+                "Created" or "Reused" => !HasId(outcome.RequestId) || !HasId(outcome.TaskId),
+                "Held" => !HasId(outcome.RequestId) || !HasValidOptionalId(outcome.TaskId),
+                "Accepted" => outcome.RequestId is not null || outcome.TaskId is not null,
+                "Rejected" => true,
+                _ => true,
+            });
+        }).ToArray();
+        var sampleKeys = (problemKeys.Length > 0 ? problemKeys : canonicalExpected)
+            .Take(MaxBatchDiagnosticKeys).ToArray();
+        var omittedExpectedKeys = Math.Max(0, expectedCounts.Count - sampleKeys.Length);
+        var samples = sampleKeys.Select(key => FormatSample(key, outcomesByKey.GetValueOrDefault(key) ?? []));
+        var truncated = omittedExpectedKeys > 0 || extraCount > 0 || redactedTokenCount > 0;
+        var diagnostic = $"Race discovery batch response rejected: expected={items.Count}; received={response.Outcomes.Count}; "
+            + $"missing={missingCount}; extra={extraCount}; duplicate={duplicateCount}; rejected={rejectedCount}; "
+            + $"invalidReceipt={invalidReceiptCount}; invalidStatus={invalidStatusCount}; "
+            + $"omittedExpectedKeys={omittedExpectedKeys}; redactedTokens={redactedTokenCount}; "
+            + $"truncated={truncated.ToString().ToLowerInvariant()}; samples=[{string.Join(';', samples)}]";
+        if (Encoding.ASCII.GetByteCount(diagnostic) <= MaxBatchDiagnosticBytes) return diagnostic;
+
+        return $"Race discovery batch response rejected: expected={items.Count}; received={response.Outcomes.Count}; "
+            + $"missing={missingCount}; extra={extraCount}; duplicate={duplicateCount}; rejected={rejectedCount}; "
+            + $"invalidReceipt={invalidReceiptCount}; invalidStatus={invalidStatusCount}; "
+            + $"omittedExpectedKeys={expectedCounts.Count}; redactedTokens={redactedTokenCount}; truncated=true; samples=[]";
+
+        static bool HasId(Guid? value) => value is { } id && id != Guid.Empty;
+        static bool HasValidOptionalId(Guid? value) => value is null || value != Guid.Empty;
+
+        static string FormatSample(string key, IReadOnlyList<CollectionRequestBulkOutcomeDto> outcomes)
+        {
+            if (outcomes.Count == 0) return $"{key}|Missing";
+            var outcome = outcomes[0];
+            var status = AllowedBatchStatuses.Contains(outcome.Status) ? outcome.Status : "Redacted";
+            var errorCode = outcome.ErrorCode is null ? "-"
+                : outcome.Status == "Rejected" && AllowedBatchRejectionCodes.Contains(outcome.ErrorCode)
+                    ? outcome.ErrorCode : "Redacted";
+            return $"{key}|{status}|{errorCode}";
+        }
+
+        static bool IsCanonicalDiscoveryItemKey(string key)
+        {
+            var parts = key.Split(':');
+            if (parts.Length != 4 || parts[0] is not ("race" or "odds")
+                || parts[1].Length != 8 || parts[1].Any(character => character is < '0' or > '9')
+                || !DateOnly.TryParseExact(parts[1], "yyyyMMdd", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out _)
+                || !Enum.TryParse<RaceCourse>(parts[2], ignoreCase: false, out var course)
+                || course == RaceCourse.Unknown || !Enum.IsDefined(course)
+                || !string.Equals(course.ToString(), parts[2], StringComparison.Ordinal)
+                || parts[3].Length == 0 || parts[3].Any(character => character is < '0' or > '9')
+                || !int.TryParse(parts[3], NumberStyles.None, CultureInfo.InvariantCulture, out var number)
+                || number is < 1 or > 12
+                || !string.Equals(number.ToString(CultureInfo.InvariantCulture), parts[3], StringComparison.Ordinal))
+                return false;
+            return true;
+        }
     }
 
     private static Uri? ToAbsoluteUri(string value)

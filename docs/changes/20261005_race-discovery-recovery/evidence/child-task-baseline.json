@@ -1,0 +1,1275 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-05T10:17:51.9053290+09:00",
+  "scope": "Date-scoped race-detail/race-odds task universe; original batch membership not reconstructed.",
+  "dates": [
+    "20260926",
+    "20260927",
+    "20261003",
+    "20261004",
+    "20261010",
+    "20261011"
+  ],
+  "items": [
+    {
+      "TaskId": "01e8414a-1404-4633-84c2-6f5f6f833074",
+      "ResourceId": "20260926:Nakayama:5",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "283f1d4e-ab2e-4158-b058-c01ecd7e3a7b",
+      "ResourceId": "20260926:Nakayama:3",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "2a0cdcac-d219-450b-8da8-a76b61f4237f",
+      "ResourceId": "20260926:Hanshin:5",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "41dd6bfc-41ba-44e4-8f4d-8bb0bff453c4",
+      "ResourceId": "20260926:Nakayama:8",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "44bdd366-f92f-41d0-b8cd-465eaa7f3c66",
+      "ResourceId": "20260926:Nakayama:10",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "4bdcb672-94da-4730-8ca2-33d9f15bcba2",
+      "ResourceId": "20260926:Nakayama:10",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "57efefe7-846f-46e5-a06d-5d1d375e9f89",
+      "ResourceId": "20260926:Hanshin:1",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "5802a026-a9a5-4758-9e74-a52707083939",
+      "ResourceId": "20260926:Nakayama:5",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "5daacdc2-dda2-415c-857b-787609b06629",
+      "ResourceId": "20260926:Nakayama:1",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "5f813417-ab67-4a23-abee-618a208a05f2",
+      "ResourceId": "20260926:Nakayama:3",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "658ab272-919e-4e50-aafd-e919c838b2ac",
+      "ResourceId": "20260926:Nakayama:10",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "7edb0bdb-9614-4915-832c-30f10f24d9a6",
+      "ResourceId": "20260926:Hanshin:5",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "829e5943-edbd-40a5-a558-09b54c073392",
+      "ResourceId": "20260926:Hanshin:10",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "8c9910d6-7088-487a-8ee4-6438085929d8",
+      "ResourceId": "20260926:Nakayama:8",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "8ca8370e-a6eb-41ca-b9a2-710025dc466b",
+      "ResourceId": "20260926:Nakayama:8",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "8e7d9365-771c-4f16-9989-40b4ea7c7e93",
+      "ResourceId": "20260926:Hanshin:10",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "8ec4ac8d-a81c-4ec2-9757-b3eb5599d59b",
+      "ResourceId": "20260926:Nakayama:1",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "a090d517-9e87-4029-beb9-fad3264cc3b9",
+      "ResourceId": "20260926:Nakayama:1",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "a4f5e319-447f-4b00-b71a-4a4875f96bf8",
+      "ResourceId": "20260926:Hanshin:5",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "b3caee6d-d8b1-4623-8440-d6130e4d1887",
+      "ResourceId": "20260926:Hanshin:1",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "c3c6a55b-3d7f-44b9-a26a-9b7a06f88cdd",
+      "ResourceId": "20260926:Hanshin:10",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "dd582147-81a2-4fcb-b6dd-314e9d44afa7",
+      "ResourceId": "20260926:Nakayama:3",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "f74334c8-ac9f-45fd-803d-c00e8cdcc5a5",
+      "ResourceId": "20260926:Nakayama:5",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "f8e4323b-e86a-48eb-b78a-dedf52f905bb",
+      "ResourceId": "20260926:Hanshin:1",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "032dba41-a423-4ff8-9c95-47191389d202",
+      "ResourceId": "20260926:Hanshin:1",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "17f2efde-9862-4992-bfac-69b51e20cc4a",
+      "ResourceId": "20260926:Nakayama:10",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "46e4be90-dcce-40e7-8708-272cb5710e3c",
+      "ResourceId": "20260926:Hanshin:5",
+      "Definition": "race-detail",
+      "Status": 7,
+      "AttemptCount": 0,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "5906bb74-3bec-43ae-9738-2b30fe156269",
+      "ResourceId": "20260926:Nakayama:8",
+      "Definition": "race-detail",
+      "Status": 7,
+      "AttemptCount": 0,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "6f05b125-51c1-4bb4-9e12-e2b40cd61e6d",
+      "ResourceId": "20260926:Nakayama:10",
+      "Definition": "race-detail",
+      "Status": 7,
+      "AttemptCount": 0,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "76b80a61-a7b3-4839-9264-309943060dc2",
+      "ResourceId": "20260926:Hanshin:10",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "8286a08d-8ea7-4545-a0b5-bdeeb39ef175",
+      "ResourceId": "20260926:Hanshin:5",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "8fa5769b-092d-4813-9759-552be6ff4c94",
+      "ResourceId": "20260926:Nakayama:8",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "9d289060-143c-4dbe-bed9-5e87ff21bc1e",
+      "ResourceId": "20260926:Hanshin:10",
+      "Definition": "race-detail",
+      "Status": 7,
+      "AttemptCount": 0,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "9e16e22b-b0d7-4b0f-8600-cd6edb59a2fe",
+      "ResourceId": "20260926:Nakayama:5",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "9f2d0c18-7193-41bb-81c4-fc1b25be0a23",
+      "ResourceId": "20260926:Nakayama:1",
+      "Definition": "race-detail",
+      "Status": 7,
+      "AttemptCount": 0,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "e4e2bc3e-5f44-4a72-b974-75a171859881",
+      "ResourceId": "20260926:Hanshin:1",
+      "Definition": "race-detail",
+      "Status": 7,
+      "AttemptCount": 0,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "e4f2ffc3-ec14-4b28-bf2d-0597bff923db",
+      "ResourceId": "20260926:Nakayama:3",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "ea2a58e9-dbc6-4f08-bdf9-ee4b98bd2b89",
+      "ResourceId": "20260926:Nakayama:5",
+      "Definition": "race-detail",
+      "Status": 7,
+      "AttemptCount": 0,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "ecf35a5f-6f2b-4796-9f43-33d71ca5c5ea",
+      "ResourceId": "20260926:Nakayama:1",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "f79ec7e5-5c1b-46b2-9b51-e06589e5e6ee",
+      "ResourceId": "20260926:Nakayama:3",
+      "Definition": "race-detail",
+      "Status": 7,
+      "AttemptCount": 0,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "3e6c45a5-ed7f-4cc0-8912-0258c56c6952",
+      "ResourceId": "20260926:Nakayama:11",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "468c0202-9a6e-42e0-b91b-257fb42a7d44",
+      "ResourceId": "20260926:Hanshin:12",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "5445b15f-6033-4050-be92-dabc7b6938f4",
+      "ResourceId": "20260926:Hanshin:8",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "63a2fe84-35f8-4d83-bad0-86c74000d078",
+      "ResourceId": "20260926:Hanshin:2",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "6da5e03a-6790-4d03-9675-6241a6864e7c",
+      "ResourceId": "20260926:Nakayama:7",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "7d9b89bf-fda2-4d11-9ac5-f37c9c4a36d0",
+      "ResourceId": "20260926:Hanshin:4",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "92cad682-d0b5-4c85-bab4-b63c69641ac2",
+      "ResourceId": "20260926:Hanshin:6",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "b63bd65d-8de7-41a3-8b4a-284cc5a579d9",
+      "ResourceId": "20260926:Hanshin:3",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "bab217e6-1508-4431-9e6e-2a9115cd6866",
+      "ResourceId": "20260926:Nakayama:6",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "bc0e44d9-f806-4820-ac80-05b0f82fe7c7",
+      "ResourceId": "20260926:Nakayama:2",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "bea4cb52-d33a-49d4-838c-08ca7f7e11d6",
+      "ResourceId": "20260926:Nakayama:4",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "ca562bc2-0cce-479d-976d-4b14718d6e27",
+      "ResourceId": "20260926:Hanshin:9",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "e3f9b581-406e-4e99-8157-ac87d705f131",
+      "ResourceId": "20260926:Nakayama:12",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "e59bd04b-4fa0-47bb-aecd-8c4cba177e23",
+      "ResourceId": "20260926:Nakayama:9",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "fba4bcaf-5eb3-48b8-87f8-11d2f7922ed6",
+      "ResourceId": "20260926:Hanshin:7",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "feaaac61-3c91-4b23-bb4f-f45f415b342e",
+      "ResourceId": "20260926:Hanshin:11",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "101cc33f-96a9-4486-a377-12d2e9496596",
+      "ResourceId": "20260926:Nakayama:8",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "211187e4-3e10-4451-bc89-8316e0264131",
+      "ResourceId": "20260926:Hanshin:5",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "2a877284-1275-4488-a306-7ae96fed8a34",
+      "ResourceId": "20260926:Nakayama:5",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "40ad0876-61d6-4d9e-a91f-55714496114c",
+      "ResourceId": "20260926:Nakayama:3",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "5142b417-6df1-4e69-a066-b5d8df25ca65",
+      "ResourceId": "20260926:Nakayama:10",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "a0a80400-ea5f-433a-bbf4-69212a2e36c3",
+      "ResourceId": "20260926:Hanshin:10",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "b1e16a94-553a-450a-b198-6f355a5b4000",
+      "ResourceId": "20260926:Hanshin:1",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "f3faac1a-0569-4f55-b207-0a3a205722e3",
+      "ResourceId": "20260926:Nakayama:1",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 1
+    },
+    {
+      "TaskId": "2bf7d793-ac4a-411c-8b39-770ced84ce1d",
+      "ResourceId": "20260927:Hanshin:11",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "748baf45-6767-44b6-8719-3bd0fcaa647c",
+      "ResourceId": "20260927:Hanshin:11",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "05857a29-7bbc-4f08-a5f4-b2ff71dafa90",
+      "ResourceId": "20260927:Hanshin:8",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "2830912c-b44b-4ff8-8414-f2fe3f913717",
+      "ResourceId": "20260927:Nakayama:7",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "2ccffab9-b35d-4c9a-9028-aced5f4df108",
+      "ResourceId": "20260927:Hanshin:12",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "2ff4de7e-17e7-442f-8275-7447b27d09b4",
+      "ResourceId": "20260927:Nakayama:11",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "496319c4-b638-4cb2-abe2-76caba7fd3ea",
+      "ResourceId": "20260927:Nakayama:5",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "4bc2f301-add1-4135-a115-eebb04f0e574",
+      "ResourceId": "20260927:Hanshin:11",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "5863be13-4bf6-41a8-ba75-9ef3c9f352dc",
+      "ResourceId": "20260927:Nakayama:4",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "64519d3f-e3e8-4cc6-8a7f-8d8d618192e4",
+      "ResourceId": "20260927:Nakayama:8",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "7322fc15-827b-4900-9616-edf4fbb42db0",
+      "ResourceId": "20260927:Nakayama:12",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "7688568a-b432-4f4d-b209-9ffb6cf329f7",
+      "ResourceId": "20260927:Nakayama:3",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "7e70e576-af83-467b-847d-8f3b2aabe1f8",
+      "ResourceId": "20260927:Nakayama:1",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "89f63672-baad-49d8-9447-a068e03460ad",
+      "ResourceId": "20260927:Hanshin:5",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "900c289b-8175-445b-a1ba-61505d24e26f",
+      "ResourceId": "20260927:Hanshin:6",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "9169fb95-a649-4054-bd99-156ef68296a5",
+      "ResourceId": "20260927:Nakayama:6",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "9a172174-93c8-4490-b4cd-5e0dcb19c662",
+      "ResourceId": "20260927:Nakayama:9",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "ae63d12f-b5c3-46fb-b8a3-a47e5b341ffe",
+      "ResourceId": "20260927:Nakayama:2",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "beded54d-6c3a-4e7a-816a-f3e43fe9a529",
+      "ResourceId": "20260927:Hanshin:7",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "dc678d2e-f8a5-41a8-8168-046a79079d83",
+      "ResourceId": "20260927:Hanshin:9",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "eacde937-0de2-46b8-bf45-ebd2bf67894f",
+      "ResourceId": "20260927:Hanshin:10",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "eb0edf5a-4a9a-4d17-bb3c-6deb26c29ade",
+      "ResourceId": "20260927:Hanshin:2",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "ed428a24-5360-4f77-8107-6a909cefa344",
+      "ResourceId": "20260927:Nakayama:10",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "f06d290d-bb0b-4e07-9f9f-1741378a6c6f",
+      "ResourceId": "20260927:Hanshin:4",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "f7016e6b-9da1-412e-be0f-182e97f4a768",
+      "ResourceId": "20260927:Hanshin:3",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "fd6d4a8e-1cbc-44a6-929a-2f5640b4577f",
+      "ResourceId": "20260927:Hanshin:1",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "05fe1c06-34c3-4cb5-875b-ad9c13b718b1",
+      "ResourceId": "20261003:Tokyo:8",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "b3d1600b-b82e-4bc4-8d5f-6901d0bcb245",
+      "ResourceId": "20261003:Kyoto:6",
+      "Definition": "race-detail",
+      "Status": 6,
+      "AttemptCount": 11,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "0160283b-9d23-4735-8881-819bd21c2b86",
+      "ResourceId": "20261003:Tokyo:8",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 3,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "0316efb4-7b70-423e-8a5d-165c6f3834c8",
+      "ResourceId": "20261003:Tokyo:12",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 11,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "08177b62-60f2-445b-ae93-d73f1091c3df",
+      "ResourceId": "20261003:Kyoto:6",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 1,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "0f15bba2-3ac9-4218-9b94-e1bc4b488880",
+      "ResourceId": "20261003:Tokyo:11",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 12,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "10f78d1d-1b3f-4a0c-a639-a237bd2dada1",
+      "ResourceId": "20261003:Kyoto:10",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 10,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "1245a86b-1419-4454-bb42-a789db353f6d",
+      "ResourceId": "20261003:Kyoto:1",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 6,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "1a5417dd-d6c8-4b81-92d0-435b684d0a6d",
+      "ResourceId": "20261003:Tokyo:4",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 11,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "298780ab-999d-4d99-90a0-cbb6ffadef70",
+      "ResourceId": "20261003:Kyoto:5",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 10,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "2f05c256-53a6-42b9-816c-29f10b723bf0",
+      "ResourceId": "20261003:Tokyo:5",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 11,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "535e0ff5-3bbd-4e4f-9ad6-c5dd4f20128f",
+      "ResourceId": "20261003:Kyoto:4",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 11,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "54deb32a-fb1e-4e36-9f0f-f0ed4cdfa496",
+      "ResourceId": "20261003:Kyoto:2",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 11,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "64017d46-778c-405e-ac4d-92f71071bebf",
+      "ResourceId": "20261003:Tokyo:9",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 12,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "667d1345-dbe6-4b9f-8be2-7841856c87a4",
+      "ResourceId": "20261003:Tokyo:2",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 6,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "7f2e8a7c-68a4-4ebb-add8-a5e28580a755",
+      "ResourceId": "20261003:Tokyo:3",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 7,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "80f70181-a15f-4f19-98c4-88f25195e47a",
+      "ResourceId": "20261003:Kyoto:3",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 7,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "8953f55e-5cbe-4795-b73f-d4032b2ecf41",
+      "ResourceId": "20261003:Tokyo:6",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 12,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "9abd0f81-27ed-4092-acd4-823b754c83b5",
+      "ResourceId": "20261003:Tokyo:10",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 10,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "b880916c-c87f-4701-8048-eef0d0b22a51",
+      "ResourceId": "20261003:Tokyo:7",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 8,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "c5f91983-ad3b-480d-afd2-e5c0082708dc",
+      "ResourceId": "20261003:Kyoto:9",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 8,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "e6289894-a0d1-4b3b-aeae-910e5c2ebab3",
+      "ResourceId": "20261003:Kyoto:11",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 9,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "edfe78fd-567d-4b50-b8f8-34398b4946f1",
+      "ResourceId": "20261003:Kyoto:7",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 8,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "f04913ed-178c-451c-b31a-6ad38e2bb646",
+      "ResourceId": "20261003:Kyoto:12",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 10,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "f4c34c92-44e4-40f6-8bcf-1d3d9e0581b8",
+      "ResourceId": "20261003:Kyoto:8",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 10,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "ff46f51a-4fe1-4df3-9740-3a8b5d373be1",
+      "ResourceId": "20261003:Tokyo:1",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 8,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "1ebda82f-7519-4cb4-a2f9-89272651b548",
+      "ResourceId": "20261004:Tokyo:6",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 13,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "201f5854-877c-4464-af66-b82c83d0b11d",
+      "ResourceId": "20261004:Kyoto:11",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 2,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "2b643bb2-5608-404f-9609-3a0f7a269638",
+      "ResourceId": "20261004:Tokyo:9",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 6,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "4611a949-5d0c-4675-9696-0869270fe1a5",
+      "ResourceId": "20261004:Kyoto:12",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 13,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "51c480ac-b72e-49a6-afcd-1296548065a2",
+      "ResourceId": "20261004:Kyoto:2",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 5,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "57a46b49-6ef4-4e2d-ba61-0ed280f0edef",
+      "ResourceId": "20261004:Kyoto:1",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 13,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "61c979a6-9628-4c47-8bd1-ba9463352c0e",
+      "ResourceId": "20261004:Kyoto:10",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 15,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "63766725-20b2-41d9-892c-4374a1e0decc",
+      "ResourceId": "20261004:Tokyo:2",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 13,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "709bca1c-6de1-4ca6-af74-2857aba8da75",
+      "ResourceId": "20261004:Kyoto:4",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 5,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "779e5ce9-7baf-4e4f-8885-80adcc3b17b3",
+      "ResourceId": "20261004:Kyoto:8",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 13,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "79c574b3-3b6e-453c-adde-1e794da1dad6",
+      "ResourceId": "20261004:Kyoto:9",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 6,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "970ed132-41fc-4500-8579-c57578fa5f5b",
+      "ResourceId": "20261004:Tokyo:10",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 5,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "9c493592-ad87-4d67-b64e-03dbf4bfbd11",
+      "ResourceId": "20261004:Tokyo:3",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 5,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "b6ec6f27-f44f-4041-b155-0937d58202d6",
+      "ResourceId": "20261004:Tokyo:5",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 13,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "b735da18-cbe2-4b78-9c3c-21b45ad73e41",
+      "ResourceId": "20261004:Tokyo:1",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 13,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "c36c4fe5-5f5d-4cfb-bd27-05d153f9a1c4",
+      "ResourceId": "20261004:Kyoto:3",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 6,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "c7005516-c284-4c31-ac12-da388c565d68",
+      "ResourceId": "20261004:Tokyo:7",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 5,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "d26a5ac4-4df4-4fca-b759-ca6131f12728",
+      "ResourceId": "20261004:Tokyo:4",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 5,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "da184c14-0462-4c1a-b3bc-726637d60b61",
+      "ResourceId": "20261004:Kyoto:5",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 13,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "e545371a-63a3-46ec-8c1c-57559469e331",
+      "ResourceId": "20261004:Kyoto:7",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 13,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "e8d24f27-45d8-47b2-abd4-f8461be7d2d7",
+      "ResourceId": "20261004:Tokyo:11",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 2,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "e9fef510-c4ca-4b54-b9eb-67e9288878ab",
+      "ResourceId": "20261004:Tokyo:12",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 5,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "eb05ad71-3ce9-4517-b1a6-aeae4c7fdb0a",
+      "ResourceId": "20261004:Tokyo:8",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 13,
+      "Revision": 6,
+      "Lane": 0
+    },
+    {
+      "TaskId": "ec871561-40b7-4159-8e38-32ddf930c257",
+      "ResourceId": "20261004:Kyoto:6",
+      "Definition": "race-detail",
+      "Status": 5,
+      "AttemptCount": 13,
+      "Revision": 6,
+      "Lane": 0
+    }
+  ]
+}

@@ -155,6 +155,130 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
     }
 
     [TestMethod]
+    public async Task DiscoveryBatch_ReplaysSameParentSafelyAndRecoveryPreservesAcceptedChildReceipts()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "collection-discovery-replay-e2e", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
+            { StateDirectory = directory }));
+            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
+                1, "initial", false);
+            await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", CollectionResourceType.Race,
+                HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail,
+                "artifact state machine", false);
+            await store.RegisterDefinitionAsync(new("race-odds"), "Race odds", CollectionResourceType.RaceOdds,
+                1, "initial", false);
+
+            var builder = WebApplication.CreateBuilder();
+            builder.WebHost.UseTestServer();
+            builder.Services.AddSingleton(store);
+            builder.Services.AddSingleton<ICollectionDispatchTelemetry, NullCollectionDispatchTelemetry>();
+            using var domain = new SqliteDbContextProvider();
+            builder.Services.AddSingleton<IDbContextProvider<EventStoreDbContext>>(domain);
+            await using var app = builder.Build();
+            app.MapCollectionApiV2Endpoints();
+            await app.StartAsync();
+            using var client = app.GetTestClient();
+
+            var date = new DateOnly(2026, 9, 12);
+            var now = DateTimeOffset.UtcNow;
+            var parentResource = new ResourceKey(CollectionResourceType.Race, "JRA", $"discovery:{date:yyyyMMdd}00");
+            var originalReceipt = await store.RequestAsync(parentResource, new("race-discovery"), 1,
+                CollectionReason.Discovery, now, CollectionLane.Realtime, 100, effectiveDate: date);
+            var originalTaskId = originalReceipt.TaskId!.Value;
+            var originalLease = await store.AcquireAsync(originalTaskId, 1, now, TimeSpan.FromMinutes(15));
+            Assert.IsNotNull(originalLease);
+
+            var race = new RaceId(date, RaceCourse.Tokyo, 11);
+            var sessions = new DiscoverySessionFactory(date, race);
+            var requestSink = new RecordingRequestSink(new CollectionRequestApiClient(client));
+            var schedule = new ScheduleWorkflow(date);
+            var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero));
+            var handler = new JraRaceDiscoveryCollectionHandler(sessions,
+                _ => schedule, requestSink, timeProvider: timeProvider);
+
+            var first = await handler.CollectAsync(originalLease, CancellationToken.None);
+            Assert.AreEqual(CollectionAttemptResult.Succeeded, first.Result);
+            var firstOutcomes = requestSink.Responses.Single().Outcomes;
+            Assert.IsTrue(firstOutcomes.All(outcome => outcome.Status == "Created"));
+            var originalReceipts = firstOutcomes.Select(outcome => (outcome.ItemKey, outcome.RequestId, outcome.TaskId))
+                .OrderBy(outcome => outcome.ItemKey, StringComparer.Ordinal).ToArray();
+
+            var unchangedReplay = await handler.CollectAsync(originalLease, CancellationToken.None);
+            Assert.AreEqual(CollectionAttemptResult.Succeeded, unchangedReplay.Result);
+            var unchangedOutcomes = requestSink.Responses[1].Outcomes;
+            Assert.IsTrue(unchangedOutcomes.All(outcome => outcome.Status == "Reused"));
+            CollectionAssert.AreEqual(originalReceipts,
+                unchangedOutcomes.Select(outcome => (outcome.ItemKey, outcome.RequestId, outcome.TaskId))
+                    .OrderBy(outcome => outcome.ItemKey, StringComparer.Ordinal).ToArray());
+
+            var navigator = sessions.Navigator;
+            navigator.StartTime = new TimeOnly(16, 0);
+            var changedReplay = await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
+                handler.CollectAsync(originalLease, CancellationToken.None));
+            StringAssert.Contains(changedReplay.Message, "race:20260912:Tokyo:11|Rejected|IdempotencyMismatch");
+            StringAssert.Contains(changedReplay.Message, "odds:20260912:Tokyo:11|Rejected|IdempotencyMismatch");
+            Assert.HasCount(3, await store.GetTasksAsync(limit: 10),
+                "A rejected changed replay must not rebind or duplicate the two accepted child tasks.");
+
+            using (var failureResponse = await client.PostAsJsonAsync(
+                       $"api/v2/internal/collection/tasks/{originalTaskId}/attempts",
+                       new CompleteCollectionTaskAttemptRequest(new CompleteCollectionTaskAttemptInputDto(
+                           originalLease.LeaseToken, CollectionAttemptResult.PermanentFailure,
+                           "InvalidOperationException", changedReplay.Message))
+                       { Id = originalTaskId }))
+                failureResponse.EnsureSuccessStatusCode();
+
+            using var originalDetailResponse = await client.GetAsync(
+                $"api/v2/admin/collection/resources/Race/JRA/{Uri.EscapeDataString(parentResource.Id)}/definitions/race-discovery?historyPageSize=10");
+            Assert.AreEqual(System.Net.HttpStatusCode.OK, originalDetailResponse.StatusCode);
+            var originalDetailBody = await originalDetailResponse.Content
+                .ReadFromJsonAsync<GetCollectionResourceDetailResponse>();
+            Assert.IsNotNull(originalDetailBody);
+            Assert.IsTrue(originalDetailBody.Resource.Attempts.Any(attempt =>
+                attempt.ErrorCode == "InvalidOperationException" && attempt.ErrorMessage == changedReplay.Message));
+            var failure = originalDetailBody.Resource.Failures!.Single();
+            Assert.AreEqual("InvalidOperationException", failure.ErrorCode);
+            Assert.AreEqual(changedReplay.Message, failure.ErrorMessage);
+
+            using var recoveryResponse = await client.PostAsJsonAsync("api/v2/admin/collection/recovery-batches",
+                new CreateCollectionRecoveryBatchRequest(new CreateCollectionRecoveryBatchInputDto(
+                    "NotificationIds", NotificationIds: [failure.NotificationId])));
+            Assert.AreEqual(System.Net.HttpStatusCode.Accepted, recoveryResponse.StatusCode);
+            var recoveryBody = await recoveryResponse.Content.ReadFromJsonAsync<CreateCollectionRecoveryBatchResponse>();
+            Assert.IsNotNull(recoveryBody);
+            Assert.AreEqual(1, recoveryBody.Recovery.SelectedCount);
+            var recoveryTaskId = recoveryBody.Recovery.TaskIds.Single();
+
+            navigator.StartTime = new TimeOnly(15, 30);
+            navigator.CardUrl = "https://example.test/card/11";
+            await store.SetPausedAsync(false, null, DateTimeOffset.UtcNow, CancellationToken.None);
+            var recoveryHandler = new JraRaceDiscoveryCollectionHandler(sessions,
+                _ => schedule, requestSink, timeProvider: timeProvider);
+            await new CollectionPlatformWorkerClient(client,
+                    new CollectionDefinitionHandlerRegistry([recoveryHandler]))
+                .ExecuteAsync(new(recoveryTaskId, 1), CancellationToken.None);
+
+            var recoveryOutcomes = requestSink.Responses.Last().Outcomes;
+            Assert.IsTrue(recoveryOutcomes.All(outcome => outcome.Status == "Reused"));
+            CollectionAssert.AreEqual(originalReceipts,
+                recoveryOutcomes.Select(outcome => (outcome.ItemKey, outcome.RequestId, outcome.TaskId))
+                    .OrderBy(outcome => outcome.ItemKey, StringComparer.Ordinal).ToArray());
+            var finalTasks = await store.GetTasksAsync(limit: 10);
+            Assert.HasCount(4, finalTasks);
+            Assert.IsTrue(originalReceipts.All(receipt => finalTasks.Any(task => task.TaskId == receipt.TaskId)));
+            Assert.AreEqual(CollectionTaskStatus.Succeeded,
+                finalTasks.Single(task => task.TaskId == recoveryTaskId).Status);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public async Task FutureUnpublishedDiscovery_TraversesQueueAndProjectsAsWaitingWithoutFailureNotification()
     {
         var directory = Path.Combine(Path.GetTempPath(), "collection-discovery-waiting-e2e", Guid.NewGuid().ToString("N"));
@@ -319,6 +443,8 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
     private sealed class DiscoveryNavigator(DateOnly date, RaceId race) : IJraNavigator
     {
         public List<(DateOnly Date, RaceCourse Course)> RaceListRequests { get; } = [];
+        public TimeOnly StartTime { get; set; } = new(15, 30);
+        public string CardUrl { get; set; } = "https://example.test/card/11";
 
         public Task<IJraPage> ToRaceListAsync(DateOnly requestedDate, RaceCourse course,
             CancellationToken cancellationToken = default)
@@ -326,8 +452,8 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             RaceListRequests.Add((requestedDate, course));
             return Task.FromResult<IJraPage>(new JraRaceListPage("https://example.test/races", date,
                 RaceCourse.Tokyo,
-                [new RaceSummary(race, "E2E race", new TimeOnly(15, 30),
-                    "https://example.test/card/11", "https://example.test/result/11")]));
+                [new RaceSummary(race, "E2E race", StartTime,
+                    CardUrl, "https://example.test/result/11")]));
         }
 
         public Task<IJraPage> ToKeibaTopAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
@@ -352,5 +478,24 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
         public Task<IReadOnlyList<PageLinkSnapshot>> GetLinksAsync(int maxResults = 0, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> SearchAsync(string query, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> GoBackAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    private sealed class RecordingRequestSink(ICollectionRequestSink inner) : ICollectionRequestSink
+    {
+        public List<CollectionRequestBulkResponse> Responses { get; } = [];
+
+        public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, int requestedRevision,
+            CollectionReason reason, CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
+            IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken)
+            => inner.RequestAsync(resource, definition, requestedRevision, reason, lane, priority, explicitUrl,
+                effectiveDate, attributes, cancellationToken);
+
+        public async Task<CollectionRequestBulkResponse> RequestManyAsync(CollectionRequestBulkRequest request,
+            CancellationToken cancellationToken)
+        {
+            var response = await inner.RequestManyAsync(request, cancellationToken);
+            Responses.Add(response);
+            return response;
+        }
     }
 }

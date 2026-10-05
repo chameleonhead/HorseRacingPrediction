@@ -53,7 +53,35 @@ public sealed class CollectionRequestBatchEndpointTests
             CollectionAssert.AreEqual(new[] { "Reused", "Rejected" },
                 replay.Outcomes.Select(x => x.Status).ToArray());
             Assert.AreEqual(first.Outcomes[0].RequestId, replay.Outcomes[0].RequestId);
+            Assert.AreEqual(first.Outcomes[0].TaskId, replay.Outcomes[0].TaskId);
             Assert.HasCount(1, await store.GetTasksAsync());
+
+            var distinctBatch = request with
+            {
+                BatchId = "race-subjects:recovered-parent",
+                Items = [request.Items[0]],
+            };
+            var distinctBatchReplay = await PostAsync(client, distinctBatch);
+            Assert.AreEqual("Reused", distinctBatchReplay.Outcomes.Single().Status);
+            Assert.AreEqual(first.Outcomes[0].RequestId, distinctBatchReplay.Outcomes.Single().RequestId);
+            Assert.AreEqual(first.Outcomes[0].TaskId, distinctBatchReplay.Outcomes.Single().TaskId);
+            Assert.HasCount(1, await store.GetTasksAsync(),
+                "A different batch identity must still return the same ordinary discovery task receipt.");
+
+            var changedReplay = request with
+            {
+                Items =
+                [
+                    request.Items[0] with { Attributes = new Dictionary<string, string> { ["startTime"] = "16:00" } },
+                    request.Items[1],
+                ],
+            };
+            var mismatch = await PostAsync(client, changedReplay);
+            Assert.AreEqual("Rejected", mismatch.Outcomes[0].Status);
+            Assert.AreEqual("IdempotencyMismatch", mismatch.Outcomes[0].ErrorCode);
+            Assert.IsNull(mismatch.Outcomes[0].RequestId);
+            Assert.HasCount(1, await store.GetTasksAsync(),
+                "A changed fingerprint must reject without rebinding or duplicating the accepted request.");
 
             var duplicate = request with { Items = [request.Items[0], request.Items[0]] };
             Assert.AreEqual(HttpStatusCode.BadRequest,

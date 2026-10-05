@@ -1,0 +1,11 @@
+{
+ "schemaVersion":2,"changeId":"20261005_race-discovery-recovery","taskId":"T2","attemptId":"T2-A1","state":"completed","taskDifficulty":"medium","acceptanceCriteria":["AC1","AC2","AC4"],
+ "route":{"tier":"worker","requestedModel":"gpt-6-luna","observedModel":null,"observationSource":null,"modelTelemetryReason":"Runtime model unavailable; existing Luna/high route selected"},
+ "usage":{"availability":"unavailable","totalTokens":null,"reason":"Runtime usage unavailable"},
+ "scope":["src/HorseRacingPrediction.Collector/CollectionPlatform/JraRaceCollectionHandlers.cs","tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/JraRaceDiscoveryCollectionHandlerTests.cs","tests/HorseRacingPrediction.Api.Tests/CollectionRequestBatchEndpointTests.cs","tests/HorseRacingPrediction.Api.Tests/CollectionCompletionTransportTests.cs","tests/HorseRacingPrediction.Api.Tests/CollectionPlatformDiscoveryEndToEndTests.cs"],
+ "review":{"usageAvailability":"unavailable","totalTokens":null,"activeMinutes":null,"reason":"Review usage and active time not exposed"},
+ "overhead":{"availability":"unavailable","preparationMinutes":null,"integrationMinutes":null,"auditMinutes":null,"reason":"Active effort not captured"},
+ "elapsed":{"availability":"unavailable","minutes":null,"reason":"Reliable worker active elapsed effort unavailable"},
+ "startRevision":"2e511b4d; original incident artifact untracked, unrelated dirty policy files preserved","endRevisionOrPatch":"patch:b77614ff9fc84c5e74579a2a89ff5e96dd16c822",
+ "outcome":{"verificationPassed":true,"qualityPassed":true,"scopePassed":true,"independentChallenge":"Lead verified unchanged rejection predicates and safe canonical output; null-key/count and generated HTTP-detail/partial-receipt counterexamples added and tested","retries":2,"leadCorrections":0,"reviewPasses":2,"promoted":false,"escapedDefects":0,"escalations":0,"reviewMode":"detailed","detailReviewReason":"AC1 malformed/redaction-count and AC2 generated-detail/mixed-receipt proof gaps","decision":"accept"}
+}

@@ -301,14 +301,73 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         var schedule = new FakeJraScheduleCollectionWorkflow
         { CoursesByDate = target => target == date ? [RaceCourse.Tokyo] : [] };
 
-        foreach (var mode in new[] { "rejected", "missing" })
+        foreach (var mode in new[]
+                 {
+                     "rejected", "missing", "invalid-created", "invalid-created-unknown-code", "invalid-held",
+                     "invalid-accepted",
+                 })
         {
             var sink = new RecordingBatchSink(mode);
-            await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
+            var exception = await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
                 new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink,
                         timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero)))
                     .CollectAsync(CreateDiscoveryTask(date), CancellationToken.None));
+            StringAssert.Contains(exception.Message, "Race discovery batch response rejected");
+            if (mode == "rejected")
+            {
+                StringAssert.Contains(exception.Message, "race:20260912:Tokyo:1");
+                StringAssert.Contains(exception.Message, "InvalidRequest");
+            }
+            if (mode == "missing")
+            {
+                StringAssert.Contains(exception.Message, "odds:20260912:Tokyo:1|Missing");
+                StringAssert.Contains(exception.Message, "missing=1");
+            }
+            if (mode is "invalid-created" or "invalid-held" or "invalid-accepted")
+                StringAssert.Contains(exception.Message, "invalidReceipt=2");
+            if (mode == "invalid-created-unknown-code")
+            {
+                StringAssert.Contains(exception.Message, "invalidReceipt=2");
+                StringAssert.Contains(exception.Message, "redactedTokens=2");
+                StringAssert.Contains(exception.Message, "truncated=true");
+                Assert.IsFalse(exception.Message.Contains("unknown-api-key", StringComparison.Ordinal));
+            }
         }
+    }
+
+    [TestMethod]
+    public async Task Discovery_BatchDiagnosticRedactsUnknownResponseTokensAndCapsAsciiOutput()
+    {
+        var date = new DateOnly(2026, 9, 12);
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                RaceCardListFactory = (target, course) => new JraRaceListPage(
+                    "https://example.test/list?token=expected-url-secret", target, course,
+                    [new(new(target, course, 1), "race", new(15, 0), null,
+                        "https://example.test/card?credential=source-url-secret")]),
+            },
+        };
+        var schedule = new FakeJraScheduleCollectionWorkflow
+        { CoursesByDate = target => target == date ? [RaceCourse.Tokyo] : [] };
+        var exception = await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
+            new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule,
+                    new RecordingBatchSink("unsafe"),
+                    timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero)))
+                .CollectAsync(CreateDiscoveryTask(date), CancellationToken.None));
+
+        StringAssert.Contains(exception.Message, "race:20260912:Tokyo:1");
+        StringAssert.Contains(exception.Message, "Rejected|Redacted");
+        StringAssert.Contains(exception.Message, "extra=2");
+        StringAssert.Contains(exception.Message, "duplicate=1");
+        StringAssert.Contains(exception.Message, "invalidStatus=1");
+        StringAssert.Contains(exception.Message, "truncated=true");
+        Assert.IsFalse(exception.Message.Contains("secret", StringComparison.OrdinalIgnoreCase));
+        Assert.IsFalse(exception.Message.Contains("https://", StringComparison.OrdinalIgnoreCase));
+        Assert.IsFalse(exception.Message.Contains("credential-key", StringComparison.OrdinalIgnoreCase));
+        Assert.IsTrue(exception.Message.All(character => character <= 0x7f));
+        Assert.IsLessThanOrEqualTo(2048, System.Text.Encoding.ASCII.GetByteCount(exception.Message));
     }
 
     [TestMethod]
@@ -747,11 +806,41 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         public Task<CollectionRequestBulkResponse> RequestManyAsync(CollectionRequestBulkRequest request,
             CancellationToken cancellationToken)
         {
-            var outcomes = request.Items.Select((item, index) => new CollectionRequestBulkOutcomeDto(
+            if (failureMode == "unsafe")
+            {
+                var unsafeOutcomes = new CollectionRequestBulkOutcomeDto[]
+                {
+                    new(request.Items[0].ItemKey, "Rejected", ErrorCode: "credential-key-secret",
+                        Message: "secret response body"),
+                    new(request.Items[0].ItemKey, "secret-status-token", ErrorCode: "api-key-secret",
+                        Message: "secret status body"),
+                    new("race:unexpected-secret-token", "Rejected", ErrorCode: "InvalidRequest",
+                        Message: "secret extra body"),
+                    new(null!, "Rejected", ErrorCode: "InvalidRequest", Message: "null key secret body"),
+                };
+                return Task.FromResult(new CollectionRequestBulkResponse(unsafeOutcomes));
+            }
+            var outcomes = request.Items.Select(item => new CollectionRequestBulkOutcomeDto(
                 item.ItemKey,
-                failureMode == "rejected" ? "Rejected" : "Created",
-                RequestId: Guid.NewGuid(), TaskId: Guid.NewGuid(), CreatedTask: true,
-                ErrorCode: failureMode == "rejected" ? "RejectedForTest" : null,
+                failureMode switch
+                {
+                    "rejected" => "Rejected",
+                    "invalid-held" => "Held",
+                    "invalid-accepted" => "Accepted",
+                    _ => "Created",
+                },
+                RequestId: failureMode is "invalid-created" or "invalid-created-unknown-code" or "invalid-held"
+                    ? null : Guid.NewGuid(),
+                TaskId: failureMode switch
+                {
+                    "invalid-created" or "invalid-created-unknown-code" => null,
+                    "invalid-held" => Guid.Empty,
+                    "invalid-accepted" => Guid.NewGuid(),
+                    _ => Guid.NewGuid(),
+                },
+                CreatedTask: true,
+                ErrorCode: failureMode == "rejected" ? "InvalidRequest"
+                    : failureMode == "invalid-created-unknown-code" ? "unknown-api-key" : null,
                 Message: failureMode == "rejected" ? "Rejected for regression test." : null)).ToArray();
             if (failureMode == "missing" && outcomes.Length > 0) outcomes = outcomes[..^1];
             var response = new CollectionRequestBulkResponse(outcomes);
