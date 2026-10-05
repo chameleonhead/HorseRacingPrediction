@@ -3,16 +3,16 @@
   "changeId": "20261006_collection-query-efficiency",
   "taskId": "T3",
   "attemptId": "T3-A1",
-  "state": "active",
+  "state": "completed",
   "taskDifficulty": "medium",
   "acceptanceCriteria": ["AC1", "AC2", "AC3", "AC4", "AC5"],
   "route": {"tier": "worker", "requestedModel": "gpt-6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "runtime did not expose model telemetry"},
   "usage": {"availability": "unavailable", "totalTokens": null, "reason": "runtime did not expose worker usage"},
   "scope": ["read-only"],
-  "review": {"usageAvailability": null, "totalTokens": null, "activeMinutes": null, "reason": null},
-  "overhead": {"availability": null, "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": null},
-  "elapsed": {"availability": null, "minutes": null, "reason": null},
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "review usage and active time unavailable"},
+  "overhead": {"availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "active overhead telemetry unavailable"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "reliable worker elapsed effort unavailable"},
   "startRevision": "09566e95abdbed47abc31447338a58478376a240",
-  "endRevisionOrPatch": null,
-  "outcome": {"verificationPassed": null, "qualityPassed": null, "scopePassed": null, "independentChallenge": null, "retries": null, "leadCorrections": null, "reviewPasses": null, "promoted": null, "escapedDefects": null, "escalations": null, "reviewMode": null, "detailReviewReason": null, "decision": null}
+  "endRevisionOrPatch": "0a5a6858ceade6d3f90e38089e2ac9792438923e normalized frozen source matches Ubuntu snapshot",
+  "outcome": {"verificationPassed": true, "qualityPassed": true, "scopePassed": true, "independentChallenge": "Lead independently inspected bounded gate log tails, zero-warning Release build and frozen blob hashes; full solution tests both variants 1628 pass/1 skip. Unchanged Terraform/container inputs reserved for exact-SHA remote verification, not newly claimed local proof.", "retries": 2, "leadCorrections": 0, "reviewPasses": 1, "promoted": false, "escapedDefects": 0, "escalations": 0, "reviewMode": "ac-group", "detailReviewReason": null, "decision": "accept"}
 }

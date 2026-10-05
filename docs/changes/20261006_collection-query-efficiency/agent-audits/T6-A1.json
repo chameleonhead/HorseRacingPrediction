@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261006_collection-query-efficiency",
+  "taskId": "T6",
+  "attemptId": "T6-A1",
+  "state": "active",
+  "taskDifficulty": "low",
+  "acceptanceCriteria": ["AC3", "AC4"],
+  "route": {"tier": "worker", "requestedModel": "gpt-6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "runtime did not expose model telemetry"},
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "runtime did not expose worker usage"},
+  "scope": ["read-only"],
+  "review": {"usageAvailability": null, "totalTokens": null, "activeMinutes": null, "reason": null},
+  "overhead": {"availability": null, "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": null},
+  "elapsed": {"availability": null, "minutes": null, "reason": null},
+  "startRevision": "0a5a6858ceade6d3f90e38089e2ac9792438923e",
+  "endRevisionOrPatch": null,
+  "outcome": {"verificationPassed": null, "qualityPassed": null, "scopePassed": null, "independentChallenge": null, "retries": null, "leadCorrections": null, "reviewPasses": null, "promoted": null, "escapedDefects": null, "escalations": null, "reviewMode": null, "detailReviewReason": null, "decision": null}
+}
