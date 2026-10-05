@@ -1225,16 +1225,17 @@ public sealed partial class CollectionPlatformStore
         CancellationToken cancellationToken = default)
     {
         await using var db = CreateDbContext();
-        var rows = await (from state in db.States.AsNoTracking()
-                          join item in db.Resources.AsNoTracking() on state.ResourcePk equals item.ResourcePk
-                          where state.Status != CollectionStateStatus.Collecting
-                          select new { state, item }).ToListAsync(cancellationToken).ConfigureAwait(false);
-        return rows.Where(x => x.state.NextCollectionAt is not null && x.state.NextCollectionAt <= now)
-            .OrderBy(x => x.state.NextCollectionAt).Take(Math.Max(1, limit))
-            .Select(x => new CollectionStateSnapshot(
-                new(x.item.Type, x.item.Provider, x.item.ResourceId), new(x.state.DefinitionId),
-                x.state.AppliedRevision, x.state.RequiredRevision, x.state.LastCollectedAt,
-                x.state.NextCollectionAt, x.state.Status)).ToList();
+        return await (from state in db.States.AsNoTracking()
+                      join item in db.Resources.AsNoTracking() on state.ResourcePk equals item.ResourcePk
+                      where state.Status != CollectionStateStatus.Collecting
+                          && state.NextCollectionAt != null
+                          && state.NextCollectionAt <= now
+                      orderby state.NextCollectionAt
+                      select new CollectionStateSnapshot(
+                          new(item.Type, item.Provider, item.ResourceId), new(state.DefinitionId),
+                          state.AppliedRevision, state.RequiredRevision, state.LastCollectedAt,
+                          state.NextCollectionAt, state.Status))
+            .Take(Math.Max(1, limit)).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<int> ReclaimExpiredLeasesAsync(DateTimeOffset now,
@@ -1907,11 +1908,9 @@ public sealed partial class CollectionPlatformStore
             await db.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
             await using var tx = ((SqliteConnection)db.Database.GetDbConnection()).BeginTransaction(deferred: false);
             db.Database.UseTransaction(tx);
-            var before = await db.ExecutionLeases.CountAsync(x => (x.Status == "StartPending" || x.Status == "Running")
-                && x.LeaseExpiresAt <= now, cancellationToken).ConfigureAwait(false);
-            await ReclaimExpiredExecutionLeasesAsync(db, now, cancellationToken).ConfigureAwait(false);
+            var reclaimed = await ReclaimExpiredExecutionLeasesAsync(db, now, cancellationToken).ConfigureAwait(false);
             await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
-            return before;
+            return reclaimed;
         }
         finally { _gate.Release(); }
     }
@@ -4214,7 +4213,7 @@ public sealed partial class CollectionPlatformStore
 
     private sealed record DateRangeImpact(DateOnly From, DateOnly To);
 
-    private static async Task ReclaimExpiredExecutionLeasesAsync(CollectionPlatformDbContext db, DateTimeOffset now,
+    private static async Task<int> ReclaimExpiredExecutionLeasesAsync(CollectionPlatformDbContext db, DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         var expired = await db.ExecutionLeases.Where(x => (x.Status == "StartPending" || x.Status == "Running")
@@ -4226,6 +4225,7 @@ public sealed partial class CollectionPlatformStore
             lease.FinishedAt = now;
         }
         if (expired.Count > 0) await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return expired.Count;
     }
 
     private static async Task ReleaseUnstartedDispatchesAsync(CollectionPlatformDbContext db, Guid envelopeId,

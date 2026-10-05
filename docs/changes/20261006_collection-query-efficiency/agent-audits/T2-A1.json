@@ -3,16 +3,16 @@
   "changeId": "20261006_collection-query-efficiency",
   "taskId": "T2",
   "attemptId": "T2-A1",
-  "state": "active",
+  "state": "completed",
   "taskDifficulty": "medium",
   "acceptanceCriteria": ["AC1", "AC2", "AC4"],
   "route": {"tier": "worker", "requestedModel": "gpt-6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "runtime did not expose model telemetry"},
   "usage": {"availability": "unavailable", "totalTokens": null, "reason": "runtime did not expose worker usage"},
   "scope": ["src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.cs", "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionPlatformStoreTests.cs"],
-  "review": {"usageAvailability": null, "totalTokens": null, "activeMinutes": null, "reason": null},
-  "overhead": {"availability": null, "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": null},
-  "elapsed": {"availability": null, "minutes": null, "reason": null},
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "review usage and active time unavailable"},
+  "overhead": {"availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "active overhead telemetry unavailable"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "reliable worker elapsed effort unavailable"},
   "startRevision": "09566e95abdbed47abc31447338a58478376a240",
-  "endRevisionOrPatch": null,
-  "outcome": {"verificationPassed": null, "qualityPassed": null, "scopePassed": null, "independentChallenge": null, "retries": null, "leadCorrections": null, "reviewPasses": null, "promoted": null, "escapedDefects": null, "escalations": null, "reviewMode": null, "detailReviewReason": null, "decision": null}
+  "endRevisionOrPatch": "Store SHA256 3f0ad859; StoreTests SHA256 399a6eb2 (full hashes in record)",
+  "outcome": {"verificationPassed": true, "qualityPassed": true, "scopePassed": true, "independentChallenge": "Lead reviewed inclusive expiry, offset cutoff and full snapshot counterexamples; existing Collector425/API47 regressions passed; independent Ubuntu suite remains delivery gate", "retries": 2, "leadCorrections": 1, "reviewPasses": 1, "promoted": false, "escapedDefects": 0, "escalations": 0, "reviewMode": "ac-group", "detailReviewReason": null, "decision": "accept"}
 }

@@ -18,6 +18,8 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 [TestClass]
 public sealed class CollectionPlatformStoreTests
 {
+    public TestContext TestContext { get; set; } = null!;
+
     [TestMethod]
     public async Task IncompleteResult_WorkerTransportPersistsEvidenceAndFiveMinuteRetry()
     {
@@ -1554,6 +1556,231 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task GetDueStatesAsync_FiltersOrdersAndLimitsInSqlWithLegacyTieBoundary()
+    {
+        var databasePath = Path.Combine(_directory, "due-query.db");
+        var capture = new SqlCommandCaptureInterceptor();
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={databasePath};Pooling=False")
+            .AddInterceptors(capture).Options;
+        var store = new CollectionPlatformStore(options);
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.FromHours(9));
+        var dueIds = new List<string>();
+        var tiedIds = new List<string> { "due-tie-a", "due-tie-b", "due-tie-c" };
+
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            var resources = new List<CollectionResourceEntity>();
+            var states = new List<CollectionStateEntity>();
+            var nextResourcePk = 1L;
+            void Add(string id, CollectionStateStatus status, DateTimeOffset? next)
+            {
+                resources.Add(new CollectionResourceEntity
+                {
+                    ResourcePk = nextResourcePk,
+                    Type = CollectionResourceType.Horse,
+                    Provider = "JRA",
+                    ResourceId = id,
+                    AttributesJson = "{}",
+                    CreatedAt = now,
+                });
+                states.Add(new CollectionStateEntity
+                {
+                    ResourcePk = nextResourcePk++,
+                    DefinitionId = "due-query",
+                    AppliedRevision = 1,
+                    RequiredRevision = 1,
+                    Status = status,
+                    NextCollectionAt = next,
+                    UpdatedAt = now,
+                });
+            }
+
+            // 499 distinct timestamps precede a three-row tie at the limit-500 boundary.
+            for (var i = 0; i < 499; i++)
+            {
+                var id = $"due-{i:D3}";
+                dueIds.Add(id);
+                var next = now.AddMinutes(-600 + i);
+                if (i == 1) next = next.ToOffset(TimeSpan.FromHours(-5)); // Same instant, different stored input offset.
+                Add(id, CollectionStateStatus.RefreshDue, next);
+            }
+            var tieTime = now.AddMinutes(-1);
+            foreach (var id in tiedIds) Add(id, CollectionStateStatus.Stale, tieTime);
+            dueIds.AddRange(tiedIds);
+            Add("due-now", CollectionStateStatus.Pending, now.ToOffset(TimeSpan.FromHours(-5)));
+            dueIds.Add("due-now");
+            Add("future", CollectionStateStatus.Pending, now.AddTicks(1));
+            Add("null-next", CollectionStateStatus.Pending, null);
+            Add("collecting", CollectionStateStatus.Collecting, now.AddMinutes(-700));
+            for (var i = 0; i < 1_000; i++)
+            {
+                Add($"future-{i:D4}", CollectionStateStatus.Pending, now.AddDays(1));
+                Add($"null-{i:D4}", CollectionStateStatus.Stale, null);
+                Add($"collecting-{i:D4}", CollectionStateStatus.Collecting, now.AddDays(-1));
+            }
+            db.Resources.AddRange(resources);
+            db.States.AddRange(states);
+            await db.SaveChangesAsync();
+        }
+
+        capture.Clear();
+        var first = await store.GetDueStatesAsync(now, 1);
+        Assert.AreEqual("due-000", first.Single().Resource.Id);
+
+        var captured = capture.Commands.Single(x => x.CommandText.Contains("collection_states", StringComparison.Ordinal));
+        StringAssert.Contains(captured.CommandText, "NextCollectionAt");
+        StringAssert.Contains(captured.CommandText, "LIMIT");
+        StringAssert.Contains(captured.CommandText, "ORDER BY");
+        Assert.IsTrue(captured.CommandText.Contains("Status", StringComparison.Ordinal)
+            && captured.CommandText.Contains("<>", StringComparison.Ordinal),
+            $"The provider must push down the excluded Collecting state. SQL: {captured.CommandText}; parameters: "
+            + string.Join(", ", captured.Parameters.Select(x => $"{x.Name}={x.Value ?? "<null>"}")));
+        Assert.IsFalse(captured.CommandText.Contains("COUNT(", StringComparison.OrdinalIgnoreCase));
+        var plan = await ExplainQueryAsync(options, captured);
+        Assert.IsNotEmpty(plan, "The captured EF SQLite query should produce an EXPLAIN QUERY PLAN result.");
+        TestContext.WriteLine($"Due-state SQL: {captured.CommandText}");
+        TestContext.WriteLine($"Due-state EXPLAIN QUERY PLAN: {string.Join(" | ", plan)}");
+
+        var zeroLimit = await store.GetDueStatesAsync(now, 0);
+        var negativeLimit = await store.GetDueStatesAsync(now, -10);
+        Assert.AreEqual("due-000", zeroLimit.Single().Resource.Id);
+        Assert.AreEqual("due-000", negativeLimit.Single().Resource.Id);
+
+        var baselineNonTied = await GetDueStatesReferenceAsync(options, now, 499);
+        var optimizedNonTied = await store.GetDueStatesAsync(now, 499);
+        CollectionAssert.AreEqual(baselineNonTied.ToArray(), optimizedNonTied.ToArray());
+        var offsetCutoffNonTied = await store.GetDueStatesAsync(now.ToOffset(TimeSpan.Zero), 499);
+        CollectionAssert.AreEqual(optimizedNonTied.ToArray(), offsetCutoffNonTied.ToArray());
+
+        var defaultLimit = await store.GetDueStatesAsync(now);
+        Assert.HasCount(500, defaultLimit);
+        CollectionAssert.AreEqual(dueIds.Take(499).ToArray(),
+            defaultLimit.Take(499).Select(x => x.Resource.Id).ToArray());
+        Assert.IsTrue(tiedIds.Contains(defaultLimit[499].Resource.Id),
+            "At the legacy unspecified tie boundary, any one of the three equally due rows may be selected.");
+        Assert.IsTrue(defaultLimit.All(x => x.NextCollectionAt <= now));
+
+        var all = await store.GetDueStatesAsync(now, 600);
+        Assert.HasCount(dueIds.Count, all);
+        CollectionAssert.AreEquivalent(dueIds.Order().ToArray(), all.Select(x => x.Resource.Id).Order().ToArray());
+        Assert.IsTrue(all.Zip(all.Skip(1), (left, right) => left.NextCollectionAt <= right.NextCollectionAt).All(x => x));
+        var allAtOffsetCutoff = await store.GetDueStatesAsync(now.ToOffset(TimeSpan.FromHours(-5)), 600);
+        CollectionAssert.AreEquivalent(all.ToArray(), allAtOffsetCutoff.ToArray());
+    }
+
+    [TestMethod]
+    public async Task ReclaimExpiredExecutionLeasesAsync_QueriesOnceAndPreservesReturnAndReleaseBehavior()
+    {
+        var databasePath = Path.Combine(_directory, "execution-lease-query.db");
+        var capture = new SqlCommandCaptureInterceptor();
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={databasePath};Pooling=False")
+            .AddInterceptors(capture).Options;
+        var store = new CollectionPlatformStore(options);
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", CollectionResourceType.Horse, 7,
+            "Initial profile extractor", false);
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.FromHours(9));
+        var request = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var pending = (await store.GetPendingDispatchesAsync(now, 10)).Single();
+        var envelopeId = Guid.NewGuid();
+        var reservationToken = Guid.NewGuid().ToString("N");
+        var wakeId = Guid.NewGuid();
+        Assert.IsTrue(await store.TryReserveDispatchesWithinCapacityAsync([pending.OutboxId], reservationToken,
+            envelopeId, wakeId, now, TimeSpan.FromMinutes(1), 1));
+
+        var startPendingId = Guid.NewGuid();
+        var runningId = Guid.NewGuid();
+        var unexpiredId = Guid.NewGuid();
+        var completedId = Guid.NewGuid();
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            db.ExecutionLeases.AddRange(
+                new CollectionExecutionLeaseEntity
+                {
+                    ExecutionBatchId = startPendingId,
+                    DispatchEnvelopeId = envelopeId,
+                    WakeId = wakeId,
+                    ReservationToken = reservationToken,
+                    LeaseToken = "start-pending",
+                    Status = "StartPending",
+                    LeaseExpiresAt = now.AddSeconds(-1),
+                    CreatedAt = now.AddMinutes(-1),
+                },
+                new CollectionExecutionLeaseEntity
+                {
+                    ExecutionBatchId = runningId,
+                    DispatchEnvelopeId = Guid.NewGuid(),
+                    WakeId = Guid.NewGuid(),
+                    ReservationToken = "running-expired-reservation",
+                    LeaseToken = "running-expired",
+                    Status = "Running",
+                    LeaseExpiresAt = now,
+                    CreatedAt = now.AddMinutes(-1),
+                    StartedAt = now.AddMinutes(-1),
+                },
+                new CollectionExecutionLeaseEntity
+                {
+                    ExecutionBatchId = unexpiredId,
+                    DispatchEnvelopeId = Guid.NewGuid(),
+                    WakeId = Guid.NewGuid(),
+                    ReservationToken = "running-live-reservation",
+                    LeaseToken = "running-live",
+                    Status = "Running",
+                    LeaseExpiresAt = now.AddSeconds(1),
+                    CreatedAt = now,
+                    StartedAt = now,
+                },
+                new CollectionExecutionLeaseEntity
+                {
+                    ExecutionBatchId = completedId,
+                    DispatchEnvelopeId = Guid.NewGuid(),
+                    WakeId = Guid.NewGuid(),
+                    ReservationToken = "completed-reservation",
+                    LeaseToken = "completed",
+                    Status = "Completed",
+                    LeaseExpiresAt = now.AddMinutes(-1),
+                    CreatedAt = now.AddMinutes(-2),
+                    FinishedAt = now.AddMinutes(-1),
+                });
+            await db.SaveChangesAsync();
+        }
+
+        capture.Clear();
+        Assert.AreEqual(2, await store.ReclaimExpiredExecutionLeasesAsync(now));
+        var reclaimSelects = capture.Commands.Where(x => x.CommandText.Contains("collection_execution_leases",
+            StringComparison.OrdinalIgnoreCase) && x.CommandText.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)).ToArray();
+        Assert.HasCount(1, reclaimSelects, "Expired StartPending and Running rows must be selected in one query.");
+        Assert.IsFalse(reclaimSelects[0].CommandText.Contains("COUNT(", StringComparison.OrdinalIgnoreCase));
+
+        await using (var verify = new CollectionPlatformDbContext(options))
+        {
+            Assert.AreEqual("Expired", (await verify.ExecutionLeases.SingleAsync(x => x.ExecutionBatchId == startPendingId)).Status);
+            Assert.AreEqual("Expired", (await verify.ExecutionLeases.SingleAsync(x => x.ExecutionBatchId == runningId)).Status);
+            Assert.AreEqual("Running", (await verify.ExecutionLeases.SingleAsync(x => x.ExecutionBatchId == unexpiredId)).Status);
+            Assert.AreEqual("Completed", (await verify.ExecutionLeases.SingleAsync(x => x.ExecutionBatchId == completedId)).Status);
+            var released = await verify.DispatchOutbox.SingleAsync(x => x.OutboxId == pending.OutboxId);
+            Assert.IsNull(released.DispatchedAt);
+            Assert.IsNull(released.ReservationToken);
+            Assert.IsNull(released.EnvelopeId);
+        }
+
+        capture.Clear();
+        Assert.AreEqual(0, await store.ReclaimExpiredExecutionLeasesAsync(now),
+            "A second pass must not reclaim terminal leases again.");
+        Assert.HasCount(1, capture.Commands.Where(x => x.CommandText.Contains("collection_execution_leases",
+            StringComparison.OrdinalIgnoreCase) && x.CommandText.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)));
+        capture.Clear();
+        Assert.AreEqual(1, await store.ReclaimExpiredExecutionLeasesAsync(now.AddSeconds(1)),
+            "Lease expiry is inclusive at the exact LeaseExpiresAt boundary.");
+        Assert.HasCount(1, capture.Commands.Where(x => x.CommandText.Contains("collection_execution_leases",
+            StringComparison.OrdinalIgnoreCase) && x.CommandText.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)));
+        capture.Clear();
+        Assert.AreEqual(0, await store.ReclaimExpiredExecutionLeasesAsync(now.AddSeconds(1)));
+        Assert.AreEqual(request.TaskId, (await store.GetPendingDispatchesAsync(now.AddSeconds(2), 10)).Single().Notification.TaskId);
+    }
+
+    [TestMethod]
     public async Task SuccessfulExplicitUrl_IsPromotedToVerifiedResourceLocation()
     {
         var store = await CreateStoreAsync();
@@ -2957,6 +3184,72 @@ public sealed class CollectionPlatformStoreTests
         {
             Commits++;
             return Task.CompletedTask;
+        }
+    }
+
+    private static async Task<IReadOnlyList<CollectionStateSnapshot>> GetDueStatesReferenceAsync(
+        DbContextOptions<CollectionPlatformDbContext> options, DateTimeOffset now, int limit)
+    {
+        await using var db = new CollectionPlatformDbContext(options);
+        var rows = await (from state in db.States.AsNoTracking()
+                          join item in db.Resources.AsNoTracking() on state.ResourcePk equals item.ResourcePk
+                          where state.Status != CollectionStateStatus.Collecting
+                          select new { state, item }).ToListAsync();
+        return rows.Where(x => x.state.NextCollectionAt is not null && x.state.NextCollectionAt <= now)
+            .OrderBy(x => x.state.NextCollectionAt).Take(Math.Max(1, limit))
+            .Select(x => new CollectionStateSnapshot(
+                new(x.item.Type, x.item.Provider, x.item.ResourceId), new(x.state.DefinitionId),
+                x.state.AppliedRevision, x.state.RequiredRevision, x.state.LastCollectedAt,
+                x.state.NextCollectionAt, x.state.Status)).ToList();
+    }
+
+    private static async Task<IReadOnlyList<string>> ExplainQueryAsync(
+        DbContextOptions<CollectionPlatformDbContext> options, CapturedSql query)
+    {
+        await using var db = new CollectionPlatformDbContext(options);
+        await db.Database.OpenConnectionAsync();
+        await using var command = db.Database.GetDbConnection().CreateCommand();
+        command.CommandText = $"EXPLAIN QUERY PLAN {query.CommandText}";
+        foreach (var parameter in query.Parameters)
+        {
+            var copy = command.CreateParameter();
+            copy.ParameterName = parameter.Name;
+            copy.Value = parameter.Value ?? DBNull.Value;
+            command.Parameters.Add(copy);
+        }
+        var rows = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync()) rows.Add(reader.GetString(3));
+        return rows;
+    }
+
+    private sealed record CapturedSql(string CommandText, IReadOnlyList<SqlParameterValue> Parameters);
+    private sealed record SqlParameterValue(string Name, object? Value);
+
+    private sealed class SqlCommandCaptureInterceptor : DbCommandInterceptor
+    {
+        public List<CapturedSql> Commands { get; } = [];
+
+        public void Clear() => Commands.Clear();
+
+        private void Capture(DbCommand command) => Commands.Add(new CapturedSql(command.CommandText,
+            command.Parameters.Cast<DbParameter>()
+                .Select(parameter => new SqlParameterValue(parameter.ParameterName,
+                    parameter.Value is DBNull ? null : parameter.Value)).ToArray()));
+
+        public override InterceptionResult<DbDataReader> ReaderExecuting(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result)
+        {
+            Capture(command);
+            return result;
+        }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            Capture(command);
+            return ValueTask.FromResult(result);
         }
     }
 
