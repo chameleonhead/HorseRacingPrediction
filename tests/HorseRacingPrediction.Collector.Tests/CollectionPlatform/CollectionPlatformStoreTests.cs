@@ -1639,6 +1639,10 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsFalse(captured.CommandText.Contains("COUNT(", StringComparison.OrdinalIgnoreCase));
         var plan = await ExplainQueryAsync(options, captured);
         Assert.IsNotEmpty(plan, "The captured EF SQLite query should produce an EXPLAIN QUERY PLAN result.");
+        Assert.IsTrue(plan.Any(x => x.Contains("SEARCH c USING INDEX IX_collection_states_NextCollectionAt",
+            StringComparison.Ordinal)), string.Join(" | ", plan));
+        Assert.IsFalse(plan.Any(x => x.Contains("TEMP B-TREE FOR ORDER BY", StringComparison.Ordinal)),
+            string.Join(" | ", plan));
         TestContext.WriteLine($"Due-state SQL: {captured.CommandText}");
         TestContext.WriteLine($"Due-state EXPLAIN QUERY PLAN: {string.Join(" | ", plan)}");
 
@@ -1982,11 +1986,190 @@ public sealed class CollectionPlatformStoreTests
         await connection.OpenAsync();
         await using var history = connection.CreateCommand();
         history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
-        Assert.AreEqual(23L, (long)(await history.ExecuteScalarAsync())!);
+        Assert.AreEqual(24L, (long)(await history.ExecuteScalarAsync())!);
         await using var existing = connection.CreateCommand();
         existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
         Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
     }
+
+    [TestMethod]
+    public async Task Startup_FreshSchemaCreatesNonUniqueDueTimeIndex()
+    {
+        var databasePath = Path.Combine(_directory, "fresh-due-index.db");
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={databasePath};Pooling=False").Options;
+        _ = new CollectionPlatformStore(options);
+
+        await using var db = new CollectionPlatformDbContext(options);
+        var modelIndex = db.Model.FindEntityType(typeof(CollectionStateEntity))!.GetIndexes()
+            .SingleOrDefault(x => x.GetDatabaseName() == "IX_collection_states_NextCollectionAt");
+        Assert.IsNotNull(modelIndex);
+        Assert.IsFalse(modelIndex.IsUnique);
+        CollectionAssert.AreEqual(new[] { "NextCollectionAt" }, modelIndex.Properties.Select(x => x.Name).ToArray());
+        Assert.AreEqual(24, await ReadCollectionSchemaVersionAsync(options));
+
+        var metadata = await ReadSqliteIndexDefinitionAsync(databasePath, "IX_collection_states_NextCollectionAt");
+        Assert.IsNotNull(metadata);
+        Assert.IsFalse(metadata.Unique);
+        Assert.IsFalse(metadata.Partial);
+        CollectionAssert.AreEqual(new[] { "NextCollectionAt" }, metadata.Columns);
+    }
+
+    [TestMethod]
+    public async Task Startup_Version23AddsOnlyDueTimeIndexAndPreservesRowsAndHistory()
+    {
+        var databasePath = Path.Combine(_directory, "version-23-due-index.db");
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={databasePath};Pooling=False").Options;
+        var store = new CollectionPlatformStore(options);
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", CollectionResourceType.Horse, 7,
+            "Initial profile extractor", false);
+        var now = new DateTimeOffset(2026, 10, 6, 1, 0, 0, TimeSpan.Zero);
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken, now.AddMinutes(1),
+            new(CollectionAttemptResult.Succeeded, NextCollectionAt: now.AddDays(1))));
+        var beforeRows = await CaptureDueIndexMigrationRowsAsync(options, receipt.TaskId!.Value);
+        var indexesAt24 = await ReadSqliteIndexNamesAsync(databasePath);
+        Assert.Contains("IX_collection_states_NextCollectionAt", indexesAt24);
+        Assert.Contains("IX_collection_states_Status_NextCollectionAt", indexesAt24);
+
+        // The only v24 schema delta is this additive index; removing it and restoring the v23
+        // history marker yields the previous-schema fixture without altering any prior table/index.
+        await using (var connection = new SqliteConnection($"Data Source={databasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var downgrade = connection.CreateCommand();
+            downgrade.CommandText = """
+                DROP INDEX IX_collection_states_NextCollectionAt;
+                DELETE FROM collection_schema_history WHERE version >= 24;
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (23, 'v23-fixture');
+                """;
+            await downgrade.ExecuteNonQueryAsync();
+        }
+
+        Assert.AreEqual(23, await ReadCollectionSchemaVersionAsync(options));
+        Assert.IsNull(await ReadSqliteIndexDefinitionAsync(databasePath, "IX_collection_states_NextCollectionAt"));
+        var historyBefore = await ReadCollectionSchemaHistoryAsync(databasePath);
+        var indexesBefore = await ReadSqliteIndexNamesAsync(databasePath);
+        Assert.AreEqual(1, historyBefore.Count);
+        Assert.AreEqual((23, "v23-fixture"), historyBefore.Single());
+        Assert.Contains("IX_collection_states_Status_NextCollectionAt", indexesBefore);
+
+        _ = new CollectionPlatformStore(options);
+        _ = new CollectionPlatformStore(options);
+
+        Assert.AreEqual(24, await ReadCollectionSchemaVersionAsync(options));
+        var historyAfter = await ReadCollectionSchemaHistoryAsync(databasePath);
+        CollectionAssert.AreEqual(new[] { (23, "v23-fixture") }, historyAfter.Take(1).ToArray());
+        Assert.AreEqual(1, historyAfter.Count(x => x.Version == 24), "Repeated startup must append v24 once.");
+        var indexesAfter = await ReadSqliteIndexNamesAsync(databasePath);
+        CollectionAssert.AreEqual(indexesBefore.Order().ToArray(),
+            indexesAfter.Where(x => x != "IX_collection_states_NextCollectionAt").Order().ToArray(),
+            "The migration must preserve every pre-existing state index.");
+        Assert.Contains("IX_collection_states_NextCollectionAt", indexesAfter);
+        Assert.AreEqual((23, "v23-fixture"), historyAfter[0], "The old history row and timestamp must be unchanged.");
+
+        var metadata = await ReadSqliteIndexDefinitionAsync(databasePath, "IX_collection_states_NextCollectionAt");
+        Assert.IsNotNull(metadata);
+        Assert.IsFalse(metadata.Unique, "Equal due timestamps must remain representable.");
+        Assert.IsFalse(metadata.Partial);
+        CollectionAssert.AreEqual(new[] { "NextCollectionAt" }, metadata.Columns);
+        Assert.AreEqual(beforeRows, await CaptureDueIndexMigrationRowsAsync(options, receipt.TaskId!.Value),
+            "The v23 to v24 index migration must preserve resource, state, request, task, and attempt rows.");
+    }
+
+    private static async Task<int> ReadCollectionSchemaVersionAsync(DbContextOptions<CollectionPlatformDbContext> options)
+    {
+        await using var db = new CollectionPlatformDbContext(options);
+        return await db.Database.SqlQueryRaw<int>(
+            "SELECT COALESCE(MAX(version), 0) AS Value FROM collection_schema_history").SingleAsync();
+    }
+
+    private static async Task<List<(int Version, string AppliedAt)>> ReadCollectionSchemaHistoryAsync(string databasePath)
+    {
+        await using var connection = new SqliteConnection($"Data Source={databasePath};Pooling=False");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT version, applied_at FROM collection_schema_history ORDER BY version;";
+        await using var reader = await command.ExecuteReaderAsync();
+        var rows = new List<(int Version, string AppliedAt)>();
+        while (await reader.ReadAsync()) rows.Add((reader.GetInt32(0), reader.GetString(1)));
+        return rows;
+    }
+
+    private static async Task<string[]> ReadSqliteIndexNamesAsync(string databasePath)
+    {
+        await using var connection = new SqliteConnection($"Data Source={databasePath};Pooling=False");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA index_list('collection_states');";
+        await using var reader = await command.ExecuteReaderAsync();
+        var names = new List<string>();
+        while (await reader.ReadAsync()) names.Add(reader.GetString(1));
+        return names.ToArray();
+    }
+
+    private static async Task<SqliteIndexDefinition?> ReadSqliteIndexDefinitionAsync(string databasePath, string indexName)
+    {
+        await using var connection = new SqliteConnection($"Data Source={databasePath};Pooling=False");
+        await connection.OpenAsync();
+        bool? unique = null;
+        bool? partial = null;
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "PRAGMA index_list('collection_states');";
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                if (reader.GetString(1) != indexName) continue;
+                unique = reader.GetInt32(2) != 0;
+                partial = reader.GetInt32(4) != 0;
+            }
+        }
+        if (unique is null || partial is null) return null;
+        var columns = new List<string>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = $"PRAGMA index_info('{indexName}');";
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) columns.Add(reader.GetString(2));
+        }
+        return new SqliteIndexDefinition(unique.Value, partial.Value, columns.ToArray());
+    }
+
+    private static async Task<DueIndexMigrationRows> CaptureDueIndexMigrationRowsAsync(
+        DbContextOptions<CollectionPlatformDbContext> options, Guid taskId)
+    {
+        await using var db = new CollectionPlatformDbContext(options);
+        var task = await db.Tasks.AsNoTracking().SingleAsync(x => x.TaskId == taskId);
+        var resource = await db.Resources.AsNoTracking().SingleAsync(x => x.ResourcePk == task.ResourcePk);
+        var state = await db.States.AsNoTracking().SingleAsync(x => x.ResourcePk == task.ResourcePk
+            && x.DefinitionId == task.DefinitionId);
+        var request = await db.Requests.AsNoTracking().SingleAsync(x => x.RequestId == task.RequestId);
+        var attempt = await db.Attempts.AsNoTracking().SingleAsync(x => x.TaskId == taskId);
+        return new(db.Resources.Count(), db.States.Count(), db.Requests.Count(), db.Tasks.Count(), db.Attempts.Count(),
+            resource.ResourcePk, resource.Type, resource.Provider, resource.ResourceId,
+            state.DefinitionId, state.AppliedRevision, state.RequiredRevision, state.LastCollectedAt,
+            state.NextCollectionAt, state.Status,
+            request.RequestId, request.RequestedAt, request.Reason,
+            task.TaskId, task.RequestId, task.Status, task.AvailableAt, task.CreatedAt, task.DispatchGeneration,
+            task.AttemptCount, attempt.AttemptId, attempt.AttemptNumber, attempt.Result, attempt.StartedAt,
+            attempt.FinishedAt);
+    }
+
+    private sealed record SqliteIndexDefinition(bool Unique, bool Partial, string[] Columns);
+
+    private sealed record DueIndexMigrationRows(int Resources, int States, int Requests, int Tasks, int Attempts,
+        long ResourcePk, CollectionResourceType ResourceType, string Provider, string ResourceId,
+        string DefinitionId, int AppliedRevision, int RequiredRevision, DateTimeOffset? LastCollectedAt,
+        DateTimeOffset? NextCollectionAt, CollectionStateStatus StateStatus,
+        Guid RequestId, DateTimeOffset RequestedAt, CollectionReason Reason,
+        Guid TaskId, Guid TaskRequestId, CollectionTaskStatus TaskStatus, DateTimeOffset TaskAvailableAt,
+        DateTimeOffset TaskCreatedAt, long DispatchGeneration, int AttemptCount,
+        Guid AttemptId, int AttemptNumber, CollectionAttemptResult AttemptResult, DateTimeOffset AttemptStartedAt,
+        DateTimeOffset? AttemptFinishedAt);
 
     [TestMethod]
     public async Task Startup_RejectsIncompleteUnversionedDatabase()
@@ -2292,7 +2475,7 @@ public sealed class CollectionPlatformStoreTests
             $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 23;";
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 24;";
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 

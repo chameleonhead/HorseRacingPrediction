@@ -5,7 +5,7 @@
   "attemptId": "T3-A1",
   "state": "active",
   "taskDifficulty": "medium",
-  "acceptanceCriteria": ["AC1", "AC2", "AC3", "AC4"],
+  "acceptanceCriteria": ["AC1", "AC2", "AC3", "AC4", "AC5"],
   "route": {"tier": "worker", "requestedModel": "gpt-6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "runtime did not expose model telemetry"},
   "usage": {"availability": "unavailable", "totalTokens": null, "reason": "runtime did not expose worker usage"},
   "scope": ["read-only"],

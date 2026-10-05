@@ -1309,7 +1309,7 @@ public sealed class CollectionDispatchStarvationReproductionTests
             Assert.AreEqual(1, await verify.Database.SqlQueryRaw<int>(
                 "SELECT COUNT(*) AS Value FROM collection_dispatcher_fairness_state WHERE StateId = 1")
                 .SingleAsync(), "Schema migration initializes exactly one dispatcher fairness record.");
-            Assert.AreEqual(23, await verify.Database.SqlQueryRaw<int>(
+            Assert.AreEqual(24, await verify.Database.SqlQueryRaw<int>(
                 "SELECT version AS Value FROM collection_schema_history ORDER BY version DESC LIMIT 1")
                 .SingleAsync(), "The genuine v18 fixture must migrate through the current schema.");
         }
@@ -1406,33 +1406,38 @@ public sealed class CollectionDispatchStarvationReproductionTests
                 await db.SaveChangesAsync();
                 await db.Database.ExecuteSqlRawAsync(
                     "DROP INDEX IX_collection_task_outbox_TaskId_DispatchGeneration_DispatchedAt; " +
+                    "DROP INDEX IX_collection_states_NextCollectionAt; " +
                     "DELETE FROM collection_schema_history WHERE version >= 23; " +
                     "INSERT OR IGNORE INTO collection_schema_history (version, applied_at) VALUES (22, 'v22-fixture');");
             }
 
             Assert.AreEqual(22, await ReadCollectionSchemaVersionAsync(dbOptions));
             Assert.AreEqual(0, await ReadOutboxLookupIndexCountAsync(dbOptions));
+            Assert.AreEqual(0, await ReadDueTimeIndexCountAsync(dbOptions),
+                "The genuine v22 fixture must not already contain the v24 due-time index.");
             var schemaHistoryBefore = await ReadCollectionSchemaHistoryAsync(dbOptions);
 
             _ = new CollectionPlatformStore(options);
             _ = new CollectionPlatformStore(options);
 
             await using var verify = new CollectionPlatformDbContext(dbOptions);
-            Assert.AreEqual(23, await ReadCollectionSchemaVersionAsync(dbOptions));
+            Assert.AreEqual(24, await ReadCollectionSchemaVersionAsync(dbOptions));
             Assert.AreEqual(1, await ReadOutboxLookupIndexCountAsync(dbOptions),
                 "The v22-to-v23 migration must add the lookup index exactly once.");
+            Assert.AreEqual(1, await ReadDueTimeIndexCountAsync(dbOptions),
+                "The v24 migration must add the due-time index exactly once.");
             var index = await ReadOutboxLookupIndexDefinitionAsync(databasePath);
             Assert.IsFalse(index.Unique, "Duplicate evidence must remain representable; the new index is non-unique.");
             Assert.IsFalse(index.Partial, "The index must cover every outbox row; migration must not add a partial predicate.");
             CollectionAssert.AreEqual(new[] { "TaskId", "DispatchGeneration", "DispatchedAt" }, index.Columns.ToArray(),
                 "The index column order must match the correlated lookup predicate.");
             var schemaHistoryAfter = await ReadCollectionSchemaHistoryAsync(dbOptions);
-            Assert.AreEqual(schemaHistoryBefore.Count + 1, schemaHistoryAfter.Count,
-                "Reopening the v23 database must not append a second migration record.");
+            Assert.AreEqual(schemaHistoryBefore.Count + 2, schemaHistoryAfter.Count,
+                "The v22 database must append v23 and v24 exactly once each.");
             CollectionAssert.AreEqual(schemaHistoryBefore.Select(x => $"{x.Version}|{x.AppliedAt}").ToArray(),
                 schemaHistoryAfter.Take(schemaHistoryBefore.Count).Select(x => $"{x.Version}|{x.AppliedAt}").ToArray(),
                 "Every pre-existing schema-history row and applied timestamp must be preserved.");
-            Assert.AreEqual(23, schemaHistoryAfter[^1].Version);
+            Assert.AreEqual(24, schemaHistoryAfter[^1].Version);
             var preserved = await verify.DispatchOutbox.SingleAsync(x => x.OutboxId == outboxId);
             Assert.AreEqual(taskId, preserved.TaskId);
             Assert.AreEqual(generation, preserved.DispatchGeneration);
@@ -1558,6 +1563,14 @@ public sealed class CollectionDispatchStarvationReproductionTests
         return await db.Database.SqlQueryRaw<int>(
             "SELECT COUNT(*) AS Value FROM sqlite_master WHERE type = 'index' " +
             "AND name = 'IX_collection_task_outbox_TaskId_DispatchGeneration_DispatchedAt'").SingleAsync();
+    }
+
+    private static async Task<int> ReadDueTimeIndexCountAsync(DbContextOptions<CollectionPlatformDbContext> options)
+    {
+        await using var db = new CollectionPlatformDbContext(options);
+        return await db.Database.SqlQueryRaw<int>(
+            "SELECT COUNT(*) AS Value FROM sqlite_master WHERE type = 'index' AND name = 'IX_collection_states_NextCollectionAt'")
+            .SingleAsync();
     }
 
     private static async Task<List<(int Version, string AppliedAt)>> ReadCollectionSchemaHistoryAsync(

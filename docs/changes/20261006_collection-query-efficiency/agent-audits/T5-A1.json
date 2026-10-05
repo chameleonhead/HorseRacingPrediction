@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261006_collection-query-efficiency",
+  "taskId": "T5",
+  "attemptId": "T5-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC2", "AC4", "AC5"],
+  "route": {"tier": "worker", "requestedModel": "gpt-6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "runtime did not expose model telemetry"},
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "runtime did not expose worker usage"},
+  "scope": ["src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformDbContext.cs", "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformSchemaMigrator.cs", "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionPlatformStoreTests.cs", "tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs"],
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "review usage and active time unavailable"},
+  "overhead": {"availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "active overhead telemetry unavailable"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "reliable worker elapsed effort unavailable"},
+  "startRevision": "3a4b9471",
+  "endRevisionOrPatch": "four-file frozen hashes in governing record",
+  "outcome": {"verificationPassed": true, "qualityPassed": true, "scopePassed": true, "independentChallenge": "Lead verified additive-only SQL/model diff and genuinev22 missing-index counterexample; independent existing migration/dispatch regressions and pending Ubuntu delivery gate", "retries": 1, "leadCorrections": 1, "reviewPasses": 1, "promoted": false, "escapedDefects": 0, "escalations": 0, "reviewMode": "ac-group", "detailReviewReason": null, "decision": "accept"}
+}

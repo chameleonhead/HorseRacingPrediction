@@ -85,6 +85,7 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
             e.ToTable("collection_states"); e.HasKey(x => new { x.ResourcePk, x.DefinitionId });
             e.Property(x => x.Status).HasConversion<string>();
             e.HasIndex(x => new { x.Status, x.NextCollectionAt });
+            e.HasIndex(x => x.NextCollectionAt);
         });
         modelBuilder.Entity<CollectionRequestEntity>(e =>
         {
