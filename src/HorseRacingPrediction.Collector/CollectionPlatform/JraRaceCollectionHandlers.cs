@@ -12,7 +12,9 @@ using HorseRacingPrediction.Contracts.Collection;
 using HorseRacingPrediction.Contracts.Common.Time;
 using HorseRacingPrediction.Contracts.Races;
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
@@ -212,7 +214,7 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
         var chunks = orderedRaceRequests.Chunk(500).ToArray();
         for (var chunkIndex = 0; chunkIndex < chunks.Length; chunkIndex++)
         {
-            var batchId = $"race-discovery:{task.TaskId:N}:c{chunkIndex}";
+            var batchId = CreateDiscoveryBatchId(task, chunkIndex, chunks[chunkIndex]);
             var response = await requests.RequestManyAsync(new(batchId, chunks[chunkIndex]), cancellationToken)
                 .ConfigureAwait(false);
             ValidateDiscoveryBatchResponse(chunks[chunkIndex], response);
@@ -235,6 +237,47 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
     }
 
     private bool IsFutureJst(DateOnly date) => date > TodayJst();
+
+    internal static string CreateDiscoveryBatchId(LeasedCollectionTask task, int chunkIndex,
+        IReadOnlyList<CollectionRequestBulkItemDto> items)
+    {
+        var legacyBatchId = $"race-discovery:{task.TaskId:N}:c{chunkIndex}";
+        if (task.Reason is CollectionReason.Backfill or CollectionReason.PeriodRecollection
+            || items.Any(item => !string.Equals(item.Reason, CollectionReason.Discovery.ToString(),
+                StringComparison.Ordinal)))
+            return legacyBatchId;
+
+        var digest = ComputeDiscoveryBatchContentDigest(items);
+        return $"race-discovery:v2:{task.TaskId:N}:c{chunkIndex}:{digest}";
+    }
+
+    internal static string ComputeDiscoveryBatchContentDigest(
+        IReadOnlyList<CollectionRequestBulkItemDto> items)
+    {
+        var canonicalItems = items.Select(item => new DiscoveryBatchItemContent(
+                item.ItemKey,
+                item.ResourceType,
+                item.Provider,
+                item.ResourceId,
+                item.DefinitionId,
+                item.RequestedRevision,
+                item.Reason,
+                item.Lane,
+                item.Priority,
+                item.ExplicitUrl,
+                item.EffectiveDate,
+                item.Attributes?.OrderBy(pair => pair.Key, StringComparer.Ordinal).ToArray()))
+            .OrderBy(item => item.ItemKey, StringComparer.Ordinal)
+            .ThenBy(item => JsonSerializer.Serialize(item), StringComparer.Ordinal)
+            .ToArray();
+        var payload = JsonSerializer.Serialize(canonicalItems);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private sealed record DiscoveryBatchItemContent(string ItemKey, string ResourceType, string Provider,
+        string ResourceId, string DefinitionId, int RequestedRevision, string Reason, string Lane, int Priority,
+        string? ExplicitUrl, DateOnly? EffectiveDate, KeyValuePair<string, string>[]? Attributes);
 
     private static void ValidateDiscoveryBatchResponse(IReadOnlyList<CollectionRequestBulkItemDto> items,
         CollectionRequestBulkResponse response)

@@ -30,6 +30,8 @@
 
 2026-10-05 承認済み実装中: `race-discovery` の一括子登録が拒否・欠落・重複・不正receiptにより失敗した場合、既存の検証条件と`InvalidOperationException`分類を維持し、既存の試行`ErrorMessage`へ2048 ASCII bytes以内の診断要約を残す。件数と省略・切詰めを明示し、呼出側で生成した正規race/oddsキー、既知status・拒否codeだけを表示する。自由文、URL、payload、認証情報や未知server値は記録しない。過去に失われた応答を推測復元しない。通知復旧は別の親Taskを作るため、その成功だけで元の同一batch再送条件が修正されたとは判定しない。実装・配備・対象限定復旧の正本は[discovery失敗の診断と復旧](changes/20261005_race-discovery-recovery/README.md)。
 
+通常のDiscovery子登録は、親Task・chunkと正規化した要求内容のSHA256から決定的なv2 batch IDを生成する。同一内容の再送は同じID、公開時刻などが変化した新しい観測は別IDとなるが、既存のresource・definition・revisionの重複抑止により登録済み・完了済みの子Taskを再利用する。API側の同一batch IDへの内容不一致拒否は維持する。Backfill・PeriodRecollection親、およびDiscovery以外の子を含むchunkでは従来のIDを保持し、明示的な再取得の意味を変えない。ランダム値・現在時刻・試行回数によるID変更はしない。
+
 - Resource: 何を取得するか。provider と論理 ID で識別し URL を Identity にしない。
 - CollectionDefinition: Resource の何を観測するか。
 - CollectionRevision: どの抽出仕様で観測するか。

@@ -205,29 +205,83 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             Assert.IsTrue(firstOutcomes.All(outcome => outcome.Status == "Created"));
             var originalReceipts = firstOutcomes.Select(outcome => (outcome.ItemKey, outcome.RequestId, outcome.TaskId))
                 .OrderBy(outcome => outcome.ItemKey, StringComparer.Ordinal).ToArray();
+            var originalBatchId = requestSink.Requests[0].BatchId;
+            Assert.IsTrue(originalBatchId.StartsWith($"race-discovery:v2:{originalTaskId:N}:c0:", StringComparison.Ordinal));
 
             var unchangedReplay = await handler.CollectAsync(originalLease, CancellationToken.None);
             Assert.AreEqual(CollectionAttemptResult.Succeeded, unchangedReplay.Result);
             var unchangedOutcomes = requestSink.Responses[1].Outcomes;
             Assert.IsTrue(unchangedOutcomes.All(outcome => outcome.Status == "Reused"));
+            Assert.AreEqual(originalBatchId, requestSink.Requests[1].BatchId);
             CollectionAssert.AreEqual(originalReceipts,
                 unchangedOutcomes.Select(outcome => (outcome.ItemKey, outcome.RequestId, outcome.TaskId))
                     .OrderBy(outcome => outcome.ItemKey, StringComparer.Ordinal).ToArray());
 
             var navigator = sessions.Navigator;
+            var raceTaskId = originalReceipts.Single(receipt => receipt.ItemKey.StartsWith("race:", StringComparison.Ordinal))
+                .TaskId!.Value;
+            var terminalRaceTime = DateTimeOffset.UtcNow.AddMinutes(1);
+            var terminalRaceLease = await store.AcquireAsync(raceTaskId, 1, terminalRaceTime, TimeSpan.FromMinutes(15));
+            Assert.IsNotNull(terminalRaceLease);
+            Assert.IsTrue(await store.CompleteAttemptAsync(raceTaskId, terminalRaceLease.LeaseToken,
+                terminalRaceTime.AddSeconds(1), new(CollectionAttemptResult.Succeeded)));
+            var terminalAttemptCount = (await store.GetTasksAsync(limit: 10))
+                .Single(task => task.TaskId == raceTaskId).AttemptCount;
+
             navigator.StartTime = new TimeOnly(16, 0);
-            var changedReplay = await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
+            var changedReplay = await handler.CollectAsync(originalLease, CancellationToken.None);
+            Assert.AreEqual(CollectionAttemptResult.Succeeded, changedReplay.Result);
+            Assert.AreNotEqual(originalBatchId, requestSink.Requests[2].BatchId);
+            var changedOutcomes = requestSink.Responses[2].Outcomes;
+            Assert.IsTrue(changedOutcomes.All(outcome => outcome.Status == "Reused"));
+            CollectionAssert.AreEqual(originalReceipts,
+                changedOutcomes.Select(outcome => (outcome.ItemKey, outcome.RequestId, outcome.TaskId))
+                    .OrderBy(outcome => outcome.ItemKey, StringComparer.Ordinal).ToArray());
+            var afterChangedReplay = await store.GetTasksAsync(limit: 10);
+            Assert.HasCount(3, afterChangedReplay);
+            Assert.AreEqual(CollectionTaskStatus.Succeeded,
+                afterChangedReplay.Single(task => task.TaskId == raceTaskId).Status);
+            Assert.AreEqual(terminalAttemptCount,
+                afterChangedReplay.Single(task => task.TaskId == raceTaskId).AttemptCount,
+                "Changed discovery content must reuse an already-terminal ordinary child without a new attempt.");
+
+            navigator.AdditionalRace = new RaceId(date, RaceCourse.Tokyo, 12);
+            var addedItemReplay = await handler.CollectAsync(originalLease, CancellationToken.None);
+            Assert.AreEqual(CollectionAttemptResult.Succeeded, addedItemReplay.Result);
+            Assert.AreNotEqual(requestSink.Requests[2].BatchId, requestSink.Requests[3].BatchId);
+            var addedItemOutcomes = requestSink.Responses[3].Outcomes;
+            Assert.AreEqual(3, addedItemOutcomes.Count);
+            Assert.IsTrue(addedItemOutcomes.Where(outcome => originalReceipts.Any(receipt =>
+                    receipt.ItemKey == outcome.ItemKey))
+                .All(outcome => outcome.Status == "Reused"));
+            CollectionAssert.AreEqual(originalReceipts,
+                addedItemOutcomes.Where(outcome => originalReceipts.Any(receipt =>
+                        receipt.ItemKey == outcome.ItemKey))
+                    .Select(outcome => (outcome.ItemKey, outcome.RequestId, outcome.TaskId))
+                    .OrderBy(outcome => outcome.ItemKey, StringComparer.Ordinal).ToArray());
+            var addedRaceOutcome = addedItemOutcomes.Single(outcome => outcome.ItemKey == "race:20260912:Tokyo:12");
+            Assert.AreEqual("Created", addedRaceOutcome.Status);
+            Assert.IsNotNull(addedRaceOutcome.TaskId);
+            Assert.IsFalse(originalReceipts.Any(receipt => receipt.TaskId == addedRaceOutcome.TaskId));
+            Assert.HasCount(4, await store.GetTasksAsync(limit: 10));
+
+            // Keep the store/API mismatch guard covered through the real handler completion/readback path.
+            // Pinning the original caller identity is test-only; production uses the content-scoped identity above.
+            navigator.AdditionalRace = null;
+            navigator.StartTime = new TimeOnly(16, 30);
+            requestSink.BatchIdOverride = originalBatchId;
+            var changedReplayRejected = await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
                 handler.CollectAsync(originalLease, CancellationToken.None));
-            StringAssert.Contains(changedReplay.Message, "race:20260912:Tokyo:11|Rejected|IdempotencyMismatch");
-            StringAssert.Contains(changedReplay.Message, "odds:20260912:Tokyo:11|Rejected|IdempotencyMismatch");
-            Assert.HasCount(3, await store.GetTasksAsync(limit: 10),
-                "A rejected changed replay must not rebind or duplicate the two accepted child tasks.");
+            StringAssert.Contains(changedReplayRejected.Message, "race:20260912:Tokyo:11|Rejected|IdempotencyMismatch");
+            StringAssert.Contains(changedReplayRejected.Message, "odds:20260912:Tokyo:11|Rejected|IdempotencyMismatch");
+            Assert.HasCount(4, await store.GetTasksAsync(limit: 10),
+                "A same-batch-ID content mismatch must not duplicate accepted children.");
 
             using (var failureResponse = await client.PostAsJsonAsync(
                        $"api/v2/internal/collection/tasks/{originalTaskId}/attempts",
                        new CompleteCollectionTaskAttemptRequest(new CompleteCollectionTaskAttemptInputDto(
                            originalLease.LeaseToken, CollectionAttemptResult.PermanentFailure,
-                           "InvalidOperationException", changedReplay.Message))
+                           "InvalidOperationException", changedReplayRejected.Message))
                        { Id = originalTaskId }))
                 failureResponse.EnsureSuccessStatusCode();
 
@@ -238,10 +292,11 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
                 .ReadFromJsonAsync<GetCollectionResourceDetailResponse>();
             Assert.IsNotNull(originalDetailBody);
             Assert.IsTrue(originalDetailBody.Resource.Attempts.Any(attempt =>
-                attempt.ErrorCode == "InvalidOperationException" && attempt.ErrorMessage == changedReplay.Message));
+                attempt.ErrorCode == "InvalidOperationException"
+                && attempt.ErrorMessage == changedReplayRejected.Message));
             var failure = originalDetailBody.Resource.Failures!.Single();
             Assert.AreEqual("InvalidOperationException", failure.ErrorCode);
-            Assert.AreEqual(changedReplay.Message, failure.ErrorMessage);
+            Assert.AreEqual(changedReplayRejected.Message, failure.ErrorMessage);
 
             using var recoveryResponse = await client.PostAsJsonAsync("api/v2/admin/collection/recovery-batches",
                 new CreateCollectionRecoveryBatchRequest(new CreateCollectionRecoveryBatchInputDto(
@@ -254,6 +309,7 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
 
             navigator.StartTime = new TimeOnly(15, 30);
             navigator.CardUrl = "https://example.test/card/11";
+            requestSink.BatchIdOverride = null;
             await store.SetPausedAsync(false, null, DateTimeOffset.UtcNow, CancellationToken.None);
             var recoveryHandler = new JraRaceDiscoveryCollectionHandler(sessions,
                 _ => schedule, requestSink, timeProvider: timeProvider);
@@ -267,8 +323,9 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
                 recoveryOutcomes.Select(outcome => (outcome.ItemKey, outcome.RequestId, outcome.TaskId))
                     .OrderBy(outcome => outcome.ItemKey, StringComparer.Ordinal).ToArray());
             var finalTasks = await store.GetTasksAsync(limit: 10);
-            Assert.HasCount(4, finalTasks);
+            Assert.HasCount(5, finalTasks);
             Assert.IsTrue(originalReceipts.All(receipt => finalTasks.Any(task => task.TaskId == receipt.TaskId)));
+            Assert.IsTrue(finalTasks.Any(task => task.TaskId == addedRaceOutcome.TaskId));
             Assert.AreEqual(CollectionTaskStatus.Succeeded,
                 finalTasks.Single(task => task.TaskId == recoveryTaskId).Status);
         }
@@ -445,15 +502,20 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
         public List<(DateOnly Date, RaceCourse Course)> RaceListRequests { get; } = [];
         public TimeOnly StartTime { get; set; } = new(15, 30);
         public string CardUrl { get; set; } = "https://example.test/card/11";
+        public RaceId? AdditionalRace { get; set; }
 
         public Task<IJraPage> ToRaceListAsync(DateOnly requestedDate, RaceCourse course,
             CancellationToken cancellationToken = default)
         {
             RaceListRequests.Add((requestedDate, course));
+            var races = new List<RaceSummary>
+            {
+                new(race, "E2E race", StartTime, CardUrl, "https://example.test/result/11"),
+            };
+            if (AdditionalRace is { } additionalRace)
+                races.Add(new(additionalRace, "E2E added race", null, null, null));
             return Task.FromResult<IJraPage>(new JraRaceListPage("https://example.test/races", date,
-                RaceCourse.Tokyo,
-                [new RaceSummary(race, "E2E race", StartTime,
-                    CardUrl, "https://example.test/result/11")]));
+                RaceCourse.Tokyo, races));
         }
 
         public Task<IJraPage> ToKeibaTopAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
@@ -483,6 +545,8 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
     private sealed class RecordingRequestSink(ICollectionRequestSink inner) : ICollectionRequestSink
     {
         public List<CollectionRequestBulkResponse> Responses { get; } = [];
+        public List<CollectionRequestBulkRequest> Requests { get; } = [];
+        public string? BatchIdOverride { get; set; }
 
         public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, int requestedRevision,
             CollectionReason reason, CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
@@ -493,7 +557,9 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
         public async Task<CollectionRequestBulkResponse> RequestManyAsync(CollectionRequestBulkRequest request,
             CancellationToken cancellationToken)
         {
-            var response = await inner.RequestManyAsync(request, cancellationToken);
+            var submitted = BatchIdOverride is { } batchId ? request with { BatchId = batchId } : request;
+            Requests.Add(submitted);
+            var response = await inner.RequestManyAsync(submitted, cancellationToken);
             Responses.Add(response);
             return response;
         }

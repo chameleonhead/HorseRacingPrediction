@@ -1,0 +1,9 @@
+{
+ "schemaVersion":2,"changeId":"20261005_race-discovery-recovery","taskId":"T5","attemptId":"T5-A1","state":"completed","taskDifficulty":"medium","acceptanceCriteria":["AC2","AC3","AC4"],
+ "route":{"tier":"worker","requestedModel":"gpt-6-luna","observedModel":null,"observationSource":null,"modelTelemetryReason":"Existing Luna/high route selected; runtime model telemetry unavailable"},
+ "usage":{"availability":"unavailable","totalTokens":null,"reason":"Runtime usage unavailable"},
+ "scope":["src/HorseRacingPrediction.Collector/CollectionPlatform/JraRaceCollectionHandlers.cs","tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/JraRaceDiscoveryCollectionHandlerTests.cs","tests/HorseRacingPrediction.Api.Tests/CollectionPlatformDiscoveryEndToEndTests.cs"],
+ "review":{"usageAvailability":"unavailable","totalTokens":null,"activeMinutes":null,"reason":"Review usage/time unavailable"},"overhead":{"availability":"unavailable","preparationMinutes":null,"integrationMinutes":null,"auditMinutes":null,"reason":"Effort unavailable"},"elapsed":{"availability":"unavailable","minutes":null,"reason":"Worker effort unavailable"},
+ "startRevision":"ac0f1711a0e4cfd474726b88ade0623e43504dcd","endRevisionOrPatch":"patch:1FF820E4DD2038AE8400394759265F9FF461F81BE9C52ED9829AE32AACD81491",
+ "outcome":{"verificationPassed":true,"qualityPassed":true,"scopePassed":true,"independentChallenge":"Unchanged store guards, terminal-child E2E IDs/attempt counts and explicit parent exclusions; Lead required cross-culture comparison","retries":1,"leadCorrections":1,"reviewPasses":2,"promoted":false,"escapedDefects":0,"escalations":0,"reviewMode":"detailed","detailReviewReason":"Cross-culture proof missing from initial AC-group evidence","decision":"accept"}
+}

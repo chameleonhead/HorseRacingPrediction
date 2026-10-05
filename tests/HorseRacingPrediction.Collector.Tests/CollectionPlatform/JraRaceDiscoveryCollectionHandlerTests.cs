@@ -6,6 +6,7 @@ using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using Microsoft.Extensions.Options;
+using System.Globalization;
 
 using HorseRacingPrediction.Contracts.Collection;
 
@@ -14,6 +15,98 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 [TestClass]
 public sealed class JraRaceDiscoveryCollectionHandlerTests
 {
+    [TestMethod]
+    public void DiscoveryBatchId_IsContentScopedCanonicalAndPreservesExcludedParentIdentity()
+    {
+        var date = new DateOnly(2026, 9, 12);
+        var task = CreateDiscoveryTask(date) with
+        { TaskId = Guid.Parse("11111111-1111-1111-1111-111111111111") };
+        var item = CreateDiscoveryBatchItem(date);
+        var additionalItem = item with
+        {
+            ItemKey = "race:20260912:Tokyo:12",
+            ResourceId = "20260912:Tokyo:12",
+            Attributes = new Dictionary<string, string>
+            {
+                ["number"] = "12",
+                ["course"] = "東京",
+            },
+        };
+        var reorderedAttributes = item with
+        {
+            Attributes = new Dictionary<string, string>
+            {
+                ["startTime"] = "15:30",
+                ["number"] = "11",
+                ["course"] = "東京",
+            },
+        };
+        var originalCulture = CultureInfo.CurrentCulture;
+        var originalUiCulture = CultureInfo.CurrentUICulture;
+        string baseline;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("tr-TR");
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("tr-TR");
+            baseline = JraRaceDiscoveryCollectionHandler.CreateDiscoveryBatchId(task, 3,
+                [item, additionalItem]);
+            Assert.AreEqual(baseline, JraRaceDiscoveryCollectionHandler.CreateDiscoveryBatchId(task, 3,
+                [additionalItem, reorderedAttributes]));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+            CultureInfo.CurrentUICulture = originalUiCulture;
+        }
+
+        Assert.AreEqual(baseline, JraRaceDiscoveryCollectionHandler.CreateDiscoveryBatchId(task, 3,
+            [additionalItem, reorderedAttributes]),
+            "Content identity must be independent of the process culture.");
+        Assert.IsTrue(baseline.StartsWith($"race-discovery:v2:{task.TaskId:N}:c3:", StringComparison.Ordinal));
+        Assert.IsLessThanOrEqualTo(128, baseline.Length);
+        Assert.AreEqual(64, baseline.Split(':')[4].Length);
+
+        var changedRequestFields = new CollectionRequestBulkItemDto[]
+        {
+            item with { ItemKey = "race:20260912:Tokyo:12" },
+            item with { ResourceType = "RaceOdds" },
+            item with { Provider = "OTHER" },
+            item with { ResourceId = "20260912:Tokyo:12" },
+            item with { DefinitionId = "other-definition" },
+            item with { RequestedRevision = item.RequestedRevision + 1 },
+            item with { Reason = CollectionReason.ManualRefresh.ToString() },
+            item with { Lane = CollectionLane.Background.ToString() },
+            item with { Priority = item.Priority + 1 },
+            item with { ExplicitUrl = "https://example.test/card/12" },
+            item with { EffectiveDate = date.AddDays(1) },
+            item with
+            {
+                Attributes = new Dictionary<string, string>
+                {
+                    ["course"] = "東京",
+                    ["number"] = "11",
+                    ["startTime"] = "16:00",
+                },
+            },
+        };
+        foreach (var changedItem in changedRequestFields)
+            Assert.AreNotEqual(JraRaceDiscoveryCollectionHandler.ComputeDiscoveryBatchContentDigest([item]),
+                JraRaceDiscoveryCollectionHandler.ComputeDiscoveryBatchContentDigest([changedItem]),
+                $"A changed request-affecting field must change the content digest: {changedItem.ItemKey}");
+
+        var legacyBatchId = $"race-discovery:{task.TaskId:N}:c3";
+        var oddsOnlyDiscoveryChunk = new[] { item with { ItemKey = "odds:20260912:Tokyo:11" } };
+        foreach (var excludedParentReason in new[] { CollectionReason.Backfill, CollectionReason.PeriodRecollection })
+        {
+            var excludedParent = task with { Reason = excludedParentReason };
+            Assert.AreEqual(legacyBatchId,
+                JraRaceDiscoveryCollectionHandler.CreateDiscoveryBatchId(excludedParent, 3, oddsOnlyDiscoveryChunk));
+        }
+        Assert.AreEqual(legacyBatchId,
+            JraRaceDiscoveryCollectionHandler.CreateDiscoveryBatchId(task, 3,
+                [item with { Reason = CollectionReason.Backfill.ToString() }]));
+    }
+
     [TestMethod]
     [TestCategory("External")]
     public async Task OfficialCancelledDay_RealScheduleNavigatorParserAndHandler_ContinueHanshin()
@@ -768,6 +861,19 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         new(CollectionResourceType.Race, "JRA", $"discovery:{date:yyyyMMdd}00"), new("race-discovery"), 1,
         CollectionReason.Discovery, CollectionLane.Realtime, 70, "lease", DateTimeOffset.UtcNow.AddMinutes(5),
         date, new Dictionary<string, string>());
+
+    private static CollectionRequestBulkItemDto CreateDiscoveryBatchItem(DateOnly date) => new(
+        $"race:{date:yyyyMMdd}:Tokyo:11", CollectionResourceType.Race.ToString(), "JRA",
+        $"{date:yyyyMMdd}:Tokyo:11", "race-detail",
+        HorseRacingPrediction.Contracts.Collection.CollectionDefinitionRevisions.RaceDetail,
+        CollectionReason.Discovery.ToString(), CollectionLane.Realtime.ToString(), 100,
+        "https://example.test/card/11", date,
+        new Dictionary<string, string>
+        {
+            ["course"] = "東京",
+            ["number"] = "11",
+            ["startTime"] = "15:30",
+        });
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
