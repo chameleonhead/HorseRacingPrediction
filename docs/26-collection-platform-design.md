@@ -32,7 +32,7 @@
 
 通常のDiscovery子登録は、親Task・chunkと正規化した要求内容のSHA256から決定的なv2 batch IDを生成する。同一内容の再送は同じID、公開時刻などが変化した新しい観測は別IDとなるが、既存のresource・definition・revisionの重複抑止により登録済み・完了済みの子Taskを再利用する。API側の同一batch IDへの内容不一致拒否は維持する。Backfill・PeriodRecollection親、およびDiscovery以外の子を含むchunkでは従来のIDを保持し、明示的な再取得の意味を変えない。ランダム値・現在時刻・試行回数によるID変更はしない。
 
-配送ループの既定値とAPI設定は1秒であり、各周期でlease回収・lane状態・配送候補を問い合わせる。[2026-10-06のクエリ効率化](changes/20261006_collection-query-efficiency/README.md)では、周期・サービス・復旧条件を維持し、execution leaseの重複検索と予定状態の全件materializationを減らす。予定時刻が同じ候補間の順序は未規定のまま、期限優先・対象条件・上限を維持する。承認済みの追加対象は予定時刻の非一意インデックス（schema24）1本で、期限の範囲検索と時刻順の走査を支え、既存データ・索引は保持する。旧5秒化案は実装しない。CPUの全原因を特定・解消したとは扱わない。
+配送ループの既定値とAPI設定は1秒であり、各周期でlease回収・lane状態・配送候補を問い合わせる。[2026-10-06のクエリ効率化](changes/20261006_collection-query-efficiency/README.md)は本番配備済みで、周期・サービス・復旧条件を維持し、execution leaseの重複検索と予定状態の全件materializationを減らす。予定時刻が同じ候補間の順序は未規定のまま、期限優先・対象条件・上限を維持する。追加した予定時刻の非一意インデックス（schema24）1本は、期限の範囲検索と時刻順の走査を支え、既存データ・索引は保持する。旧5秒化案は実装しない。別の調教師プロフィール取得障害により収集は停止を維持しており、実稼働下の改善率は未検証。CPUの全原因を特定・解消したとは扱わない。
 
 - Resource: 何を取得するか。provider と論理 ID で識別し URL を Identity にしない。
 - CollectionDefinition: Resource の何を観測するか。

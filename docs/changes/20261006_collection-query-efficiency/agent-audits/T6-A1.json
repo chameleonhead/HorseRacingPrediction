@@ -3,16 +3,16 @@
   "changeId": "20261006_collection-query-efficiency",
   "taskId": "T6",
   "attemptId": "T6-A1",
-  "state": "active",
+  "state": "completed",
   "taskDifficulty": "low",
   "acceptanceCriteria": ["AC3", "AC4"],
   "route": {"tier": "worker", "requestedModel": "gpt-6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "runtime did not expose model telemetry"},
   "usage": {"availability": "unavailable", "totalTokens": null, "reason": "runtime did not expose worker usage"},
   "scope": ["read-only"],
-  "review": {"usageAvailability": null, "totalTokens": null, "activeMinutes": null, "reason": null},
-  "overhead": {"availability": null, "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": null},
-  "elapsed": {"availability": null, "minutes": null, "reason": null},
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "review usage and active time unavailable"},
+  "overhead": {"availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "active overhead telemetry unavailable"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "reliable worker elapsed effort unavailable"},
   "startRevision": "0a5a6858ceade6d3f90e38089e2ac9792438923e",
-  "endRevisionOrPatch": null,
-  "outcome": {"verificationPassed": null, "qualityPassed": null, "scopePassed": null, "independentChallenge": null, "retries": null, "leadCorrections": null, "reviewPasses": null, "promoted": null, "escapedDefects": null, "escalations": null, "reviewMode": null, "detailReviewReason": null, "decision": null}
+  "endRevisionOrPatch": "read-only source taxonomy at 0a5a6858 and allowlisted production counterexample in governing record",
+  "outcome": {"verificationPassed": true, "qualityPassed": true, "scopePassed": true, "independentChallenge": "Lead matched source-defined RetiredLinkMissing in both attempt and notice, independently confirmed due state and new Ready task; worker traced unchanged next-time/ScheduledRefresh requeue plus no reversible trainer hold. Safety decision is preserve pause, not claim recovery.", "retries": 0, "leadCorrections": 0, "reviewPasses": 1, "promoted": false, "escapedDefects": 0, "escalations": 0, "reviewMode": "ac-group", "detailReviewReason": null, "decision": "accept"}
 }
