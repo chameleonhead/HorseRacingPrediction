@@ -1,7 +1,9 @@
 {
- "schemaVersion":2,"changeId":"20261005_race-discovery-recovery","taskId":"T3","attemptId":"T3-A1","state":"active","taskDifficulty":"medium","acceptanceCriteria":["AC1","AC2","AC3","AC4"],
+ "schemaVersion":2,"changeId":"20261005_race-discovery-recovery","taskId":"T3","attemptId":"T3-A1","state":"completed","taskDifficulty":"medium","acceptanceCriteria":["AC1","AC2","AC3","AC4"],
  "route":{"tier":"worker","requestedModel":"gpt-6-luna","observedModel":null,"observationSource":null,"modelTelemetryReason":"Existing Luna/high verifier route selected; runtime telemetry unavailable"},
  "usage":{"availability":"unavailable","totalTokens":null,"reason":"Runtime usage unavailable"},
  "scope":["read-only repository","ephemeral Ubuntu container workspace"],
- "review":{},"overhead":{},"elapsed":{},"startRevision":"2e511b4d; approved T2 patch not frozen yet","endRevisionOrPatch":null,"outcome":{}
+ "review":{"usageAvailability":"unavailable","totalTokens":null,"activeMinutes":null,"reason":"Review usage/time unavailable"},"overhead":{"availability":"unavailable","preparationMinutes":null,"integrationMinutes":null,"auditMinutes":null,"reason":"Effort unavailable"},"elapsed":{"availability":"unavailable","minutes":null,"reason":"Worker effort unavailable"},
+ "startRevision":"d182618d8784c1f877efbcc71096a796d81f6eb5","endRevisionOrPatch":"d182618d8784c1f877efbcc71096a796d81f6eb5",
+ "outcome":{"verificationPassed":true,"qualityPassed":true,"scopePassed":true,"independentChallenge":"Lead independently matched5 hashes and unchanged manifests; original lifecycle14cases rerun and fullCI/deploy1624pass, semantic local-host repair checks","retries":1,"leadCorrections":0,"reviewPasses":2,"promoted":false,"escapedDefects":0,"escalations":0,"reviewMode":"detailed","detailReviewReason":"VF1 init/reaping gate failure; baseline coverage warnings classified with unchanged manifest evidence","decision":"accept"}
 }

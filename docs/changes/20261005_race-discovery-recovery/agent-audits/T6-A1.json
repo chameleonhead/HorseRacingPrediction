@@ -1,0 +1,9 @@
+{
+ "schemaVersion":2,"changeId":"20261005_race-discovery-recovery","taskId":"T6","attemptId":"T6-A1","state":"completed","taskDifficulty":"low","acceptanceCriteria":["AC4"],
+ "route":{"tier":"worker","requestedModel":"gpt-6-luna","observedModel":null,"observationSource":null,"modelTelemetryReason":"Existing Luna/high executor route selected; runtime telemetry unavailable"},
+ "usage":{"availability":"unavailable","totalTokens":null,"reason":"Runtime usage unavailable"},
+ "scope":[".github/workflows/app-ci.yml"],
+ "review":{"usageAvailability":"unavailable","totalTokens":null,"activeMinutes":null,"reason":"Review usage/time unavailable"},"overhead":{"availability":"unavailable","preparationMinutes":null,"integrationMinutes":null,"auditMinutes":null,"reason":"Effort unavailable"},"elapsed":{"availability":"unavailable","minutes":null,"reason":"Worker effort unavailable"},
+ "startRevision":"d182618d8784c1f877efbcc71096a796d81f6eb5","endRevisionOrPatch":"patch:59E5107E926FFF0673D4726F72B94698EF7053DBE64AC1AF9370EB27DFA5BA0E",
+ "outcome":{"verificationPassed":true,"qualityPassed":true,"scopePassed":true,"independentChallenge":"Official Node24/input contract, parsed sole-node equality, unchanged5 source hashes; Lead diff review and corrected Gitblob-vs-SHA256 provenance","retries":0,"leadCorrections":1,"reviewPasses":2,"promoted":false,"escapedDefects":0,"escalations":0,"reviewMode":"detailed","detailReviewReason":"Initial handoff mislabeled Gitblob IDs as normalized SHA256; corrected mechanical hashes match T3/Lead","decision":"accept"}
+}
