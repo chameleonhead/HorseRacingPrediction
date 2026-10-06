@@ -3,16 +3,64 @@
   "changeId": "20261006_batch-collection-candidates",
   "taskId": "T2",
   "attemptId": "T2-A1",
-  "state": "active",
+  "state": "completed",
   "taskDifficulty": "medium",
-  "acceptanceCriteria": ["AC1", "AC3"],
-  "route": {"tier": "worker", "requestedModel": "gpt-6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "runtime did not expose model telemetry"},
-  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "runtime did not expose worker usage"},
-  "scope": ["src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.cs", "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionModels.cs", "src/HorseRacingPrediction.Api/CollectionController/CollectionScheduleService.cs", "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionPlatformStoreTests.cs", "tests/HorseRacingPrediction.Api.Tests/CollectionPlatformOperationsServicesTests.cs"],
-  "review": {"usageAvailability": null, "totalTokens": null, "activeMinutes": null, "reason": null},
-  "overhead": {"availability": null, "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": null},
-  "elapsed": {"availability": null, "minutes": null, "reason": null},
+  "acceptanceCriteria": [
+    "AC1",
+    "AC3"
+  ],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose model telemetry"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime did not expose worker usage"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.cs",
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionModels.cs",
+    "src/HorseRacingPrediction.Api/CollectionController/CollectionScheduleService.cs",
+    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionPlatformStoreTests.cs",
+    "tests/HorseRacingPrediction.Api.Tests/CollectionPlatformOperationsServicesTests.cs"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review telemetry unavailable"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "active effort telemetry unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable effort telemetry unavailable"
+  },
   "startRevision": "2f81ed32361daefcb1c10a47020e5708fd006c49",
-  "endRevisionOrPatch": null,
-  "outcome": {}
+  "endRevisionOrPatch": "T2 five-file working diff on 93875458; candidate batch/sequential scheduler tests",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Lead AC1/AC3 attributable integrated diff matches frozen A and unchanged dedup; existing Collector428/API434+skip1 regression suites passed. Reader lifecycle independent proof retained in T4.",
+    "retries": 1,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
 }

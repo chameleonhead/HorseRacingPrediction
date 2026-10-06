@@ -13,27 +13,32 @@ public sealed class CollectionScheduleService(CollectionPlatformStore store,
         while (!stoppingToken.IsCancellationRequested)
         {
             var now = HorseRacingPrediction.Contracts.Common.Time.JstTime.Now();
-            var reclaimed = await store.ReclaimExpiredLeasesAsync(now, stoppingToken).ConfigureAwait(false);
-            if (reclaimed > 0) logger.LogWarning("Reclaimed {Count} expired collection leases.", reclaimed);
-            foreach (var state in await store.GetDueStatesAsync(now, cancellationToken: stoppingToken).ConfigureAwait(false))
-            {
-                var schedule = _policy.Evaluate(state.Resource, state, now);
-                if (!schedule.ShouldCollect) continue;
-                if (await store.HasActiveTaskAsync(state.Resource, state.Definition, stoppingToken).ConfigureAwait(false))
-                    continue;
-                try
-                {
-                    await store.RequestAsync(state.Resource, state.Definition, state.RequiredRevision,
-                        CollectionReason.ScheduledRefresh, now, schedule.Lane, (int)schedule.Priority,
-                        cancellationToken: stoppingToken).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Failed to schedule due resource {Resource}/{Definition}",
-                        state.Resource, state.Definition);
-                }
-            }
+            await RunOnceAsync(now, stoppingToken).ConfigureAwait(false);
             await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken).ConfigureAwait(false);
+        }
+    }
+
+    internal async Task RunOnceAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var reclaimed = await store.ReclaimExpiredLeasesAsync(now, cancellationToken).ConfigureAwait(false);
+        if (reclaimed > 0) logger.LogWarning("Reclaimed {Count} expired collection leases.", reclaimed);
+        foreach (var candidate in await store.GetDueScheduleCandidatesAsync(now,
+                     cancellationToken: cancellationToken).ConfigureAwait(false))
+        {
+            var state = candidate.State;
+            var schedule = _policy.Evaluate(state.Resource, state, now);
+            if (!schedule.ShouldCollect || candidate.HasActiveTask) continue;
+            try
+            {
+                await store.RequestAsync(state.Resource, state.Definition, state.RequiredRevision,
+                    CollectionReason.ScheduledRefresh, now, schedule.Lane, (int)schedule.Priority,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to schedule due resource {Resource}/{Definition}",
+                    state.Resource, state.Definition);
+            }
         }
     }
 }

@@ -1238,6 +1238,29 @@ public sealed partial class CollectionPlatformStore
             .Take(Math.Max(1, limit)).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<CollectionScheduleCandidate>> GetDueScheduleCandidatesAsync(
+        DateTimeOffset now, int limit = 500, CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var dueWindow = (from state in db.States.AsNoTracking()
+                         join item in db.Resources.AsNoTracking() on state.ResourcePk equals item.ResourcePk
+                         where state.Status != CollectionStateStatus.Collecting
+                             && state.NextCollectionAt != null
+                             && state.NextCollectionAt <= now
+                         orderby state.NextCollectionAt
+                         select new { state, item })
+            .Take(Math.Max(1, limit));
+
+        return await dueWindow.Select(x => new CollectionScheduleCandidate(
+                new CollectionStateSnapshot(
+                    new(x.item.Type, x.item.Provider, x.item.ResourceId), new(x.state.DefinitionId),
+                    x.state.AppliedRevision, x.state.RequiredRevision, x.state.LastCollectedAt,
+                    x.state.NextCollectionAt, x.state.Status),
+                db.ActiveTasks.Any(active => active.ResourcePk == x.state.ResourcePk
+                    && active.DefinitionId == x.state.DefinitionId)))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<int> ReclaimExpiredLeasesAsync(DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {

@@ -27,6 +27,8 @@ public sealed record CollectionStateSnapshot(ResourceKey Resource, CollectionDef
     DateTimeOffset? NextCollectionAt, CollectionStateStatus Status,
     IReadOnlyList<RaceArtifactSnapshot>? RaceArtifacts = null);
 
+public sealed record CollectionScheduleCandidate(CollectionStateSnapshot State, bool HasActiveTask);
+
 public sealed record CollectionRequestReceipt(Guid RequestId, Guid? TaskId, bool CreatedTask, bool DeferredByRepairHold = false);
 public sealed record CollectionRequestBatchItem(string ItemKey, ResourceKey Resource,
     CollectionDefinitionId Definition, int RequestedRevision, CollectionReason Reason,

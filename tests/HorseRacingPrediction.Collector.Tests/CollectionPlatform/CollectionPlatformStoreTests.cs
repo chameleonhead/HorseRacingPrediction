@@ -1671,6 +1671,130 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsTrue(all.Zip(all.Skip(1), (left, right) => left.NextCollectionAt <= right.NextCollectionAt).All(x => x));
         var allAtOffsetCutoff = await store.GetDueStatesAsync(now.ToOffset(TimeSpan.FromHours(-5)), 600);
         CollectionAssert.AreEquivalent(all.ToArray(), allAtOffsetCutoff.ToArray());
+
+        var candidateDefaultLimit = await store.GetDueScheduleCandidatesAsync(now);
+        Assert.HasCount(500, candidateDefaultLimit);
+        CollectionAssert.AreEqual(defaultLimit.Take(499).ToArray(),
+            candidateDefaultLimit.Take(499).Select(x => x.State).ToArray());
+        Assert.IsTrue(tiedIds.Contains(candidateDefaultLimit[499].State.Resource.Id));
+        Assert.IsTrue(candidateDefaultLimit.All(x => !x.HasActiveTask));
+        var candidateZeroLimit = await store.GetDueScheduleCandidatesAsync(now, 0);
+        var candidateNegativeLimit = await store.GetDueScheduleCandidatesAsync(now, -10);
+        Assert.AreEqual("due-000", candidateZeroLimit.Single().State.Resource.Id);
+        Assert.AreEqual("due-000", candidateNegativeLimit.Single().State.Resource.Id);
+
+        var candidateAll = await store.GetDueScheduleCandidatesAsync(now, 600);
+        var candidatesById = candidateAll.ToDictionary(x => x.State.Resource.Id, x => x.State);
+        var snapshotsById = all.ToDictionary(x => x.Resource.Id);
+        CollectionAssert.AreEquivalent(snapshotsById.Keys.Order().ToArray(), candidatesById.Keys.Order().ToArray());
+        foreach (var (id, snapshot) in snapshotsById)
+            Assert.AreEqual(snapshot, candidatesById[id], $"Candidate snapshot changed for {id}.");
+        Assert.IsFalse(candidateAll.Any(x => x.HasActiveTask));
+        Assert.IsTrue(candidateAll.All(x => x.State.NextCollectionAt <= now));
+        var candidateOffset = await store.GetDueScheduleCandidatesAsync(now.ToOffset(TimeSpan.FromHours(-5)), 600);
+        CollectionAssert.AreEquivalent(candidateAll.Select(x => x.State).ToArray(),
+            candidateOffset.Select(x => x.State).ToArray());
+
+        capture.Clear();
+        _ = await store.GetDueScheduleCandidatesAsync(now);
+        var candidateQuery = capture.Commands.Single(x => x.CommandText.Contains("collection_states", StringComparison.Ordinal));
+        StringAssert.Contains(candidateQuery.CommandText, "EXISTS");
+        StringAssert.Contains(candidateQuery.CommandText, "ORDER BY");
+        StringAssert.Contains(candidateQuery.CommandText, "LIMIT");
+        Assert.IsFalse(candidateQuery.CommandText.Contains("COUNT(", StringComparison.OrdinalIgnoreCase));
+        TestContext.WriteLine($"Due schedule candidates SQL: {candidateQuery.CommandText}");
+    }
+
+    [TestMethod]
+    public async Task GetDueScheduleCandidatesAsync_ProjectsActiveFlagWithoutRefillingFirst500Window()
+    {
+        var databasePath = Path.Combine(_directory, "due-candidate-window.db");
+        var capture = new SqlCommandCaptureInterceptor();
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={databasePath};Pooling=False")
+            .AddInterceptors(capture).Options;
+        var store = new CollectionPlatformStore(options);
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.FromHours(9));
+        var resources = new List<CollectionResourceEntity>();
+        var states = new List<CollectionStateEntity>();
+        var activeTasks = new List<CollectionActiveTaskEntity>();
+        for (var index = 0; index < 1_001; index++)
+        {
+            var resourcePk = index + 1L;
+            resources.Add(new CollectionResourceEntity
+            {
+                ResourcePk = resourcePk,
+                Type = CollectionResourceType.Horse,
+                Provider = "JRA",
+                ResourceId = $"window-{index:D4}",
+                AttributesJson = "{}",
+                CreatedAt = now,
+            });
+            states.Add(new CollectionStateEntity
+            {
+                ResourcePk = resourcePk,
+                DefinitionId = "due-window",
+                AppliedRevision = 2,
+                RequiredRevision = 4,
+                LastCollectedAt = now.AddDays(-2),
+                NextCollectionAt = now.AddMinutes(-1_001 + index),
+                Status = CollectionStateStatus.RefreshDue,
+                UpdatedAt = now,
+            });
+            if (index < 500)
+                activeTasks.Add(new CollectionActiveTaskEntity
+                {
+                    ResourcePk = resourcePk,
+                    DefinitionId = "due-window",
+                    TaskId = Guid.NewGuid(),
+                });
+        }
+        activeTasks.Add(new CollectionActiveTaskEntity
+        {
+            ResourcePk = 501,
+            DefinitionId = "another-definition",
+            TaskId = Guid.NewGuid(),
+        });
+        activeTasks.Add(new CollectionActiveTaskEntity
+        {
+            ResourcePk = 1_001,
+            DefinitionId = "due-window",
+            TaskId = Guid.NewGuid(),
+        });
+
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            db.Resources.AddRange(resources);
+            db.States.AddRange(states);
+            db.ActiveTasks.AddRange(activeTasks);
+            await db.SaveChangesAsync();
+        }
+
+        var originalWindow = await store.GetDueStatesAsync(now);
+        capture.Clear();
+        var candidates = await store.GetDueScheduleCandidatesAsync(now);
+
+        Assert.HasCount(500, originalWindow);
+        Assert.HasCount(500, candidates);
+        CollectionAssert.AreEqual(originalWindow.ToArray(), candidates.Select(x => x.State).ToArray());
+        Assert.IsTrue(candidates.All(x => x.HasActiveTask));
+        Assert.IsFalse(candidates.Any(x => x.State.Resource.Id == "window-0500"),
+            "The inactive 501st due resource must not refill the original first-500 window.");
+        capture.Clear();
+        var extendedWindow = await store.GetDueScheduleCandidatesAsync(now, 501);
+        Assert.AreEqual(501, extendedWindow.Count);
+        Assert.IsTrue(extendedWindow.Take(500).All(x => x.HasActiveTask));
+        Assert.IsFalse(extendedWindow[500].HasActiveTask,
+            "An active key must match both ResourcePk and DefinitionId.");
+
+        var sql = capture.Commands.Single(x => x.CommandText.Contains("collection_states", StringComparison.Ordinal));
+        StringAssert.Contains(sql.CommandText, "EXISTS");
+        StringAssert.Contains(sql.CommandText, "LIMIT");
+        Assert.IsFalse(sql.CommandText.Contains("NOT EXISTS", StringComparison.OrdinalIgnoreCase),
+            "Active tasks are projected, not filtered before the legacy limit.");
+        Assert.AreEqual(1, capture.Commands.Count(x => x.CommandText.Contains("collection_states", StringComparison.Ordinal)),
+            "The active-task flag must be part of the single due candidate query.");
+        TestContext.WriteLine($"Active first-500 SQL: {sql.CommandText}");
     }
 
     [TestMethod]

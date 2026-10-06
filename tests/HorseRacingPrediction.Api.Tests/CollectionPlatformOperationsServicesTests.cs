@@ -1,5 +1,6 @@
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
@@ -158,6 +159,95 @@ public sealed class CollectionPlatformOperationsServicesTests
             (await store.GetTasksAsync()).Single(x => x.TaskId == taskId).Status);
     }
 
+    [TestMethod]
+    public async Task ScheduleService_RunOnceEvaluatesWindowSequentiallyAndDeduplicatesArrivalAfterSnapshot()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.FromHours(9));
+        var activeResource = new ResourceKey(CollectionResourceType.Horse, "JRA", "schedule-active");
+        var scheduledResource = new ResourceKey(CollectionResourceType.Horse, "JRA", "schedule-new");
+        var lateResource = new ResourceKey(CollectionResourceType.Horse, "JRA", "schedule-late");
+        var activeReceipt = await store.RequestAsync(activeResource, new("horse-profile"), 1,
+            CollectionReason.Initial, now.AddMinutes(-3));
+
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False").Options;
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            var resources = new[] { scheduledResource, lateResource }
+                .Select(resource => new CollectionResourceEntity
+                {
+                    Type = resource.Type,
+                    Provider = resource.Provider,
+                    ResourceId = resource.Id,
+                    AttributesJson = "{}",
+                    CreatedAt = now,
+                }).ToArray();
+            db.Resources.AddRange(resources);
+            await db.SaveChangesAsync();
+
+            var active = await db.Resources.SingleAsync(x => x.ResourceId == activeResource.Id);
+            db.States.Single(x => x.ResourcePk == active.ResourcePk && x.DefinitionId == "horse-profile")
+                .NextCollectionAt = now.AddSeconds(-3);
+            foreach (var (resource, index) in resources.Select((resource, index) => (resource, index)))
+            {
+                db.States.Add(new CollectionStateEntity
+                {
+                    ResourcePk = resource.ResourcePk,
+                    DefinitionId = "horse-profile",
+                    AppliedRevision = 1,
+                    RequiredRevision = 1,
+                    LastCollectedAt = now.AddDays(-1),
+                    NextCollectionAt = now.AddSeconds(-2 + index),
+                    Status = CollectionStateStatus.RefreshDue,
+                    UpdatedAt = now,
+                });
+            }
+            await db.SaveChangesAsync();
+        }
+
+        CollectionRequestReceipt? lateArrival = null;
+        var policy = new RecordingSchedulePolicy(state =>
+        {
+            if (state.Resource == lateResource && lateArrival is null)
+                lateArrival = store.RequestAsync(lateResource, new("horse-profile"), 1,
+                    CollectionReason.Initial, now).GetAwaiter().GetResult();
+        });
+        var service = new CollectionScheduleService(store, [policy],
+            NullLogger<CollectionScheduleService>.Instance);
+
+        await service.RunOnceAsync(now, CancellationToken.None);
+
+        CollectionAssert.AreEqual(new[] { activeResource.Id, scheduledResource.Id, lateResource.Id },
+            policy.EvaluatedResourceIds);
+        Assert.IsNotNull(activeReceipt.TaskId);
+        Assert.IsNotNull(lateArrival?.TaskId);
+        var tasks = await store.GetTasksAsync();
+        Assert.HasCount(3, tasks);
+        Assert.AreEqual(1, tasks.Count(x => x.Resource == activeResource));
+        Assert.AreEqual(1, tasks.Count(x => x.Resource == scheduledResource));
+        Assert.AreEqual(1, tasks.Count(x => x.Resource == lateResource));
+        Assert.AreEqual(lateArrival!.TaskId, tasks.Single(x => x.Resource == lateResource).TaskId,
+            "The RequestAsync guard must reuse the task created after the candidate snapshot.");
+    }
+
+    [TestMethod]
+    public async Task ScheduleService_RunOnceHonorsCancellationBeforeScheduling()
+    {
+        var store = await CreateStoreAsync();
+        var policy = new RecordingSchedulePolicy();
+        var service = new CollectionScheduleService(store, [policy],
+            NullLogger<CollectionScheduleService>.Instance);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            service.RunOnceAsync(DateTimeOffset.UtcNow, cancellation.Token));
+
+        Assert.IsEmpty(policy.EvaluatedResourceIds);
+        Assert.IsEmpty(await store.GetTasksAsync());
+    }
+
     private async Task<CollectionPlatformStore> CreateStoreAsync()
     {
         var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
@@ -171,6 +261,19 @@ public sealed class CollectionPlatformOperationsServicesTests
 
     private static CollectionDispatchEnvelope CreateEnvelope(Guid taskId, long generation) => new(Guid.NewGuid(),
         new("JRA", new("horse-profile"), null, CollectionLane.Normal), [new(taskId, generation)]);
+
+    private sealed class RecordingSchedulePolicy(Action<CollectionStateSnapshot>? onEvaluate = null)
+        : ICollectionSchedulePolicy
+    {
+        public List<string> EvaluatedResourceIds { get; } = [];
+
+        public CollectionSchedule Evaluate(ResourceKey resource, CollectionStateSnapshot state, DateTimeOffset now)
+        {
+            EvaluatedResourceIds.Add(resource.Id);
+            onEvaluate?.Invoke(state);
+            return new(true, state.NextCollectionAt, CollectionPriority.Normal, CollectionLane.Normal, "test");
+        }
+    }
 
     private static CollectionPlatformDeadLetterReconciler CreateReconciler(CollectionPlatformStore store,
         ICollectionPlatformTaskQueue queue) => new(store, queue,
