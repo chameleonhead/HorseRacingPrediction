@@ -1909,6 +1909,136 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task ReserveDispatchesWithoutActiveHolds_ProjectsDistinctEligibleLanesInSql()
+    {
+        var databasePath = Path.Combine(_directory, "dispatch-eligible-lanes.db");
+        var capture = new SqlCommandCaptureInterceptor();
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={databasePath};Pooling=False")
+            .AddInterceptors(capture).Options;
+        var store = new CollectionPlatformStore(options);
+        var now = new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.Zero);
+        var lanes = new[] { CollectionLane.Realtime, CollectionLane.Normal, CollectionLane.Background };
+        var resources = new List<CollectionResourceEntity>();
+        var requests = new List<CollectionRequestEntity>();
+        var tasks = new List<CollectionTaskEntity>();
+        var outboxes = new List<CollectionDispatchOutboxEntity>();
+        Guid? selectedRealtimeOutboxId = null;
+
+        void AddTask(string resourceId, CollectionLane lane, bool includeInQuery = true,
+            bool futureTask = false, bool futureOutbox = false, DateTimeOffset? leaseExpiresAt = null,
+            bool duplicateOutbox = false, bool staleGeneration = false)
+        {
+            var requestId = Guid.NewGuid();
+            var taskId = Guid.NewGuid();
+            var outboxId = Guid.NewGuid();
+            var resourcePk = resources.Count + 1;
+            resources.Add(new()
+            {
+                ResourcePk = resourcePk,
+                Type = CollectionResourceType.Horse,
+                Provider = "test",
+                ResourceId = resourceId,
+                CreatedAt = now.AddHours(-1),
+            });
+            requests.Add(new()
+            {
+                RequestId = requestId,
+                ResourcePk = resourcePk,
+                DefinitionId = "horse-profile",
+                RequestedRevision = 1,
+                Reason = CollectionReason.Initial,
+                Lane = lane,
+                Priority = 50,
+                RequestedAt = now,
+            });
+            var task = new CollectionTaskEntity
+            {
+                TaskId = taskId,
+                RequestId = requestId,
+                ResourcePk = resourcePk,
+                DefinitionId = "horse-profile",
+                RequestedRevision = 1,
+                Status = CollectionTaskStatus.Ready,
+                Lane = lane,
+                Priority = 50,
+                AvailableAt = futureTask ? now.AddSeconds(1) : now,
+                CreatedAt = now.AddMinutes(-5),
+                UpdatedAt = now,
+                DispatchGeneration = 1,
+                LeaseExpiresAt = leaseExpiresAt,
+            };
+            tasks.Add(task);
+            var outbox = new CollectionDispatchOutboxEntity
+            {
+                OutboxId = outboxId,
+                TaskId = taskId,
+                DispatchGeneration = staleGeneration ? 2 : task.DispatchGeneration,
+                AvailableAt = futureOutbox ? now.AddSeconds(1) : now,
+                CreatedAt = now.AddMinutes(-5),
+            };
+            outboxes.Add(outbox);
+            if (duplicateOutbox)
+                outboxes.Add(new()
+                {
+                    OutboxId = Guid.NewGuid(),
+                    TaskId = taskId,
+                    DispatchGeneration = outbox.DispatchGeneration,
+                    AvailableAt = outbox.AvailableAt,
+                    CreatedAt = outbox.CreatedAt,
+                });
+            if (includeInQuery && lane == CollectionLane.Realtime && selectedRealtimeOutboxId is null)
+                selectedRealtimeOutboxId = outboxId;
+        }
+
+        for (var index = 0; index < 600; index++)
+            AddTask($"backlog-{index:D4}", lanes[index % lanes.Length]);
+        AddTask("invalid-stale-generation", CollectionLane.Realtime, includeInQuery: false, staleGeneration: true);
+        AddTask("invalid-future-task", CollectionLane.Normal, includeInQuery: false, futureTask: true);
+        AddTask("invalid-future-outbox", CollectionLane.Background, includeInQuery: false, futureOutbox: true);
+        AddTask("invalid-live-lease", CollectionLane.Realtime, includeInQuery: false,
+            leaseExpiresAt: now.AddSeconds(1));
+        AddTask("valid-expired-lease", CollectionLane.Normal, includeInQuery: false, leaseExpiresAt: now);
+        AddTask("invalid-duplicate-outbox", CollectionLane.Background, includeInQuery: false, duplicateOutbox: true);
+
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            db.Resources.AddRange(resources);
+            await db.SaveChangesAsync();
+            db.Requests.AddRange(requests);
+            await db.SaveChangesAsync();
+            db.Tasks.AddRange(tasks);
+            await db.SaveChangesAsync();
+            db.DispatchOutbox.AddRange(outboxes);
+            await db.SaveChangesAsync();
+        }
+
+        capture.Clear();
+        var outcome = await store.ReserveDispatchesWithinCapacityAsync([selectedRealtimeOutboxId!.Value],
+            "no-hold-candidate", Guid.NewGuid(), Guid.NewGuid(), now, TimeSpan.FromMinutes(1), 10);
+
+        Assert.AreEqual(CollectionDispatchCycleOutcome.Reserved, outcome,
+            "A large eligible backlog containing all three lanes must preserve the allocator's Realtime choice.");
+        var laneQuery = capture.Commands.Single(command =>
+            command.CommandText.Contains("SELECT DISTINCT", StringComparison.OrdinalIgnoreCase)
+            && command.CommandText.Contains("collection_task_outbox", StringComparison.OrdinalIgnoreCase)
+            && command.CommandText.Contains("collection_tasks", StringComparison.OrdinalIgnoreCase)
+            && command.CommandText.Contains("LeaseExpiresAt", StringComparison.OrdinalIgnoreCase));
+        TestContext.WriteLine($"Eligible lane SQL: {laneQuery.CommandText}");
+        var fromOffset = laneQuery.CommandText.IndexOf("FROM", StringComparison.OrdinalIgnoreCase);
+        Assert.IsGreaterThan(0, fromOffset);
+        var selectProjection = laneQuery.CommandText[..fromOffset].Trim();
+        Assert.IsTrue(selectProjection.StartsWith("SELECT DISTINCT", StringComparison.OrdinalIgnoreCase));
+        Assert.IsTrue(selectProjection.EndsWith(".\"Lane\"", StringComparison.Ordinal), selectProjection);
+        Assert.IsFalse(selectProjection.Contains(','), "Only the lane scalar may be returned by the no-hold query.");
+        StringAssert.Contains(laneQuery.CommandText, "LeaseExpiresAt");
+        StringAssert.Contains(laneQuery.CommandText, "DispatchGeneration");
+        StringAssert.Contains(laneQuery.CommandText, "AvailableAt");
+        StringAssert.Contains(laneQuery.CommandText, "COUNT(");
+        Assert.IsTrue(laneQuery.CommandText.Contains("SELECT DISTINCT", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [TestMethod]
     public async Task SuccessfulExplicitUrl_IsPromotedToVerifiedResourceLocation()
     {
         var store = await CreateStoreAsync();

@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261006_batch-collection-candidates",
+  "taskId": "T3",
+  "attemptId": "T3-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": [
+    "AC2",
+    "AC3"
+  ],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose model telemetry"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime did not expose worker usage"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.cs",
+    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionPlatformStoreTests.cs",
+    "tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs",
+    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/RaceRepairHoldTests.cs"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review telemetry unavailable"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "active effort telemetry unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable effort telemetry unavailable"
+  },
+  "startRevision": "d077cdc4",
+  "endRevisionOrPatch": "T3 Store/Collector StoreTests/RaceRepairHoldTests working diff on d077cdc4",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Lead integrated AC2/AC3 review retained all predicates/guards/atomic order. Existing dispatcher and hold regressions pass. Scalar projection assertion strengthened; independent reader/tracking proof owned by T4.",
+    "retries": 3,
+    "leadCorrections": 1,
+    "reviewPasses": 2,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "detailed",
+    "detailReviewReason": "No-hold test initially lacked scalar-only projection proof; Lead required exact SELECT assertion then returned to AC group.",
+    "decision": "accept"
+  }
+}

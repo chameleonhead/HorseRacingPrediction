@@ -152,6 +152,52 @@ public sealed class RaceRepairHoldTests
     }
 
     [TestMethod]
+    public async Task ReservationRechecksMutableRaceIdentityAfterHeldTaskIdSnapshot()
+    {
+        var options = new CollectionPlatformOptions
+        {
+            StateDirectory = Path.Combine(Path.GetTempPath(), "hrp-hold-mutable-resolver", Guid.NewGuid().ToString("N")),
+        };
+        var resolver = new MutableRaceIdentityResolver("race-not-held");
+        var store = new CollectionPlatformStore(Options.Create(options), resolver);
+        var now = DateTimeOffset.UtcNow;
+        await store.RegisterDefinitionAsync(Detail, "detail", CollectionResourceType.Race, 4, "current revision", false);
+        var receipt = await store.RequestAsync(Target, Detail, 4, CollectionReason.Initial, now);
+        var databasePath = Path.Combine(options.StateDirectory, options.DatabaseFileName);
+        var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={databasePath};Pooling=False").Options;
+        Guid outboxId;
+        await using (var db = new CollectionPlatformDbContext(dbOptions))
+        {
+            outboxId = (await db.DispatchOutbox.SingleAsync(x => x.TaskId == receipt.TaskId)).OutboxId;
+            db.RaceRepairHolds.Add(new RaceRepairHoldEntity
+            {
+                RaceId = RaceId,
+                Generation = 1,
+                OperationId = Guid.NewGuid().ToString(),
+                Reason = "mutable identity regression",
+                CreatedAt = now,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        resolver.ChangeAfterCalls(2, RaceId);
+        var outcome = await store.ReserveDispatchesWithinCapacityAsync([outboxId], "mutable-hold-candidate",
+            Guid.NewGuid(), Guid.NewGuid(), now, TimeSpan.FromMinutes(1), 1);
+
+        Assert.AreEqual(CollectionDispatchCycleOutcome.ReserveConflict, outcome,
+            "A resource that becomes a held race during lane enumeration must not be reserved based only on the earlier task-ID snapshot.");
+        Assert.AreEqual(3, resolver.Calls,
+            "Identity was resolved for the task-ID snapshot, selected-row guard, then again during eligible-lane enumeration.");
+        await using (var verify = new CollectionPlatformDbContext(dbOptions))
+        {
+            var unchanged = await verify.DispatchOutbox.SingleAsync(x => x.OutboxId == outboxId);
+            Assert.IsNull(unchanged.ReservationToken);
+            Assert.IsNull(unchanged.EnvelopeId);
+        }
+    }
+
+    [TestMethod]
     public async Task BatchTasklessBindingSurvivesReleaseAndTerminalReplay()
     {
         var (store, _) = await CreateAsync();
@@ -281,5 +327,28 @@ public sealed class RaceRepairHoldTests
         await store.RegisterDefinitionAsync(Detail, "detail", CollectionResourceType.Race, 2, "old revision", false);
         await store.RegisterDefinitionAsync(Detail, "detail", CollectionResourceType.Race, 4, "confirmed numbers", false);
         return (store, options);
+    }
+
+    private sealed class MutableRaceIdentityResolver(string initialRaceId) : IRaceResourceIdentityResolver
+    {
+        private string _beforeMutation = initialRaceId;
+        private string? _afterMutation;
+        private int _changeAfterCalls = int.MaxValue;
+        private int _calls;
+
+        public int Calls => Volatile.Read(ref _calls);
+
+        public void ChangeAfterCalls(int calls, string raceId)
+        {
+            _afterMutation = raceId;
+            _changeAfterCalls = calls;
+            Interlocked.Exchange(ref _calls, 0);
+        }
+
+        public string? Resolve(string resourceId, IReadOnlyDictionary<string, string> attributes)
+        {
+            var call = Interlocked.Increment(ref _calls);
+            return call <= _changeAfterCalls ? _beforeMutation : _afterMutation ?? _beforeMutation;
+        }
     }
 }
