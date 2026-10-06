@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261006_batch-collection-candidates",
+  "taskId": "T1",
+  "attemptId": "T1-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC1", "AC2", "AC3", "AC4"],
+  "route": {"tier": "worker", "requestedModel": "gpt-6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "runtime did not expose model telemetry"},
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "runtime did not expose worker usage"},
+  "scope": ["read-only"],
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "review telemetry unavailable"},
+  "overhead": {"availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "active overhead telemetry unavailable"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "reliable worker elapsed effort unavailable"},
+  "startRevision": "2f81ed32361daefcb1c10a47020e5708fd006c49",
+  "endRevisionOrPatch": "read-only source plan at 2f81ed32; actual EF/SQLite scratch proof and hold10/10",
+  "outcome": {"verificationPassed": true, "qualityPassed": true, "scopePassed": true, "independentChallenge": "Lead independently reran scratch actual EF A EXISTS/DISTINCT/stream proof, checked reservation immediate transaction and allocator membership-only semantics; changing production resolver disproved mask-only equivalence and prompted conditional safe design. Populated parity/mutable-resolver regressions still mandatory after approval.", "retries": 0, "leadCorrections": 1, "reviewPasses": 1, "promoted": false, "escapedDefects": 0, "escalations": 0, "reviewMode": "ac-group", "detailReviewReason": null, "decision": "accept"}
+}
