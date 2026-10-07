@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261007_background-processing-reorganization",
+  "taskId": "I3b",
+  "attemptId": "I3b-A1",
+  "state": "active",
+  "taskDifficulty": "high",
+  "acceptanceCriteria": [
+    "AC3",
+    "AC5",
+    "AC6",
+    "AC7"
+  ],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "existing high route; telemetry unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "usage unavailable"
+  },
+  "scope": [
+    "read-only"
+  ],
+  "review": {
+    "usageAvailability": null,
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": null
+  },
+  "overhead": {
+    "availability": null,
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": null
+  },
+  "elapsed": {
+    "availability": null,
+    "minutes": null,
+    "reason": null
+  },
+  "startRevision": "0decdedf",
+  "endRevisionOrPatch": null,
+  "outcome": {}
+}

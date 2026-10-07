@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261007_background-processing-reorganization",
+  "taskId": "I1",
+  "attemptId": "I1-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": [
+    "AC1",
+    "AC7"
+  ],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "requested high; runtime model telemetry unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "worker usage unavailable"
+  },
+  "scope": [
+    "read-only"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review telemetry unavailable"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "effort unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "effort unavailable"
+  },
+  "startRevision": "0decdedf",
+  "endRevisionOrPatch": "eight-file I1 patch inventory in README; relinquished scope to I2/I3",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Lead inspected atomic/pure caller path; strengthened stale-snapshot counterexample. Collector441 and API441/1skip passed; true concurrent writer proof remains I4.",
+    "retries": 2,
+    "leadCorrections": 1,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

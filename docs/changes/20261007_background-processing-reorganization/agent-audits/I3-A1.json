@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261007_background-processing-reorganization",
+  "taskId": "I3",
+  "attemptId": "I3-A1",
+  "state": "active",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": [
+    "AC2",
+    "AC5",
+    "AC7"
+  ],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "existing high route; telemetry unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "usage unavailable"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.Api/CollectionController/CollectionBackgroundSchedulerRegistration.cs",
+    "src/HorseRacingPrediction.Api/CollectionController/CollectionScheduleService.cs",
+    "src/HorseRacingPrediction.Api/CollectionController/CollectionPlanningScheduler.cs",
+    "src/HorseRacingPrediction.Api/CollectionController/CollectionMaintenanceCoordinator.cs",
+    "src/HorseRacingPrediction.Api/CollectionController/CollectionProducerCadencePolicy.cs",
+    "src/HorseRacingPrediction.Api/CollectionController/CollectionBackgroundRuntimeOptions.cs",
+    "src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformOperationsServices.cs",
+    "src/HorseRacingPrediction.Api/Program.cs",
+    "tests/HorseRacingPrediction.Api.Tests/CollectionBackgroundSchedulerRegistrationTests.cs",
+    "tests/HorseRacingPrediction.Api.Tests/CollectionPlatformOperationsServicesTests.cs",
+    "tests/HorseRacingPrediction.Api.Tests/CollectionPlanningSchedulerCadenceTests.cs",
+    "tests/HorseRacingPrediction.Api.Tests/CollectionMaintenanceCoordinatorTests.cs",
+    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionScheduleSweepPolicyTests.cs"
+  ],
+  "review": {
+    "usageAvailability": null,
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": null
+  },
+  "overhead": {
+    "availability": null,
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": null
+  },
+  "elapsed": {
+    "availability": null,
+    "minutes": null,
+    "reason": null
+  },
+  "startRevision": "0decdedf",
+  "endRevisionOrPatch": null,
+  "outcome": {}
+}

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261007_background-processing-reorganization",
+  "taskId": "T1",
+  "attemptId": "T1-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": [
+    "AC1",
+    "AC2",
+    "AC4",
+    "AC5"
+  ],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose model telemetry"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime did not expose worker usage"
+  },
+  "scope": [
+    "read-only"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review telemetry unavailable"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "active effort telemetry unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable elapsed effort unavailable"
+  },
+  "startRevision": "0decdedf",
+  "endRevisionOrPatch": "read-only source findings at 0decdedf; proposal README",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Lead checked RequestCore transaction and dispatcher; challenged failed-state snapshot race, pause producers and unbounded backfill. Findings accepted as source analysis, not runtime proof.",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

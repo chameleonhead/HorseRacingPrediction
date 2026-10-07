@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261007_background-processing-reorganization",
+  "taskId": "D1",
+  "attemptId": "D1-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": [
+    "AC3",
+    "AC6"
+  ],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "existing requested Luna high route; observed model unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "worker usage telemetry unavailable"
+  },
+  "scope": [
+    "read-only"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review telemetry unavailable"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "effort telemetry unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable elapsed effort unavailable"
+  },
+  "startRevision": "0decdedf",
+  "endRevisionOrPatch": "read-only findings at 0decdedf; detailed design documents",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Lead checked hole-recovery and DTOs; rejected unnecessary manual PeriodRecollection prohibition. Source evidence only.",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 2,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

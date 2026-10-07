@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261007_background-processing-reorganization",
+  "taskId": "I2",
+  "attemptId": "I2-A1",
+  "state": "active",
+  "taskDifficulty": "high",
+  "acceptanceCriteria": [
+    "AC3",
+    "AC4",
+    "AC7"
+  ],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "requested high; telemetry unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "worker usage unavailable"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.RaceRepairHolds.cs",
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.cs",
+    "src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformOutboxDispatcher.cs",
+    "src/HorseRacingPrediction.Api/DomainRaceResourceIdentityResolver.cs",
+    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/RaceRepairHoldTests.cs",
+    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionPlatformStoreTests.cs",
+    "tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionExecutionContractsTests.cs",
+    "tests/HorseRacingPrediction.Api.Tests/CollectionDispatchStarvationReproductionTests.cs",
+    "tests/HorseRacingPrediction.Api.Tests/CollectionPlatformOutboxDispatcherTests.cs",
+    "tests/HorseRacingPrediction.Api.Tests/SharedCollectionIdentityTests.cs"
+  ],
+  "review": {
+    "usageAvailability": null,
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": null
+  },
+  "overhead": {
+    "availability": null,
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": null
+  },
+  "elapsed": {
+    "availability": null,
+    "minutes": null,
+    "reason": null
+  },
+  "startRevision": "0decdedf",
+  "endRevisionOrPatch": null,
+  "outcome": {}
+}
