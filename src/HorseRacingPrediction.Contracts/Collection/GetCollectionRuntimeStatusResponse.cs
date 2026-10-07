@@ -1,0 +1,3 @@
+namespace HorseRacingPrediction.Contracts.Collection;
+
+public sealed record GetCollectionRuntimeStatusResponse(CollectionRuntimeStatusDto Runtime);
