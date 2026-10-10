@@ -2550,7 +2550,7 @@
     {
       "name": "ICollectionApi",
       "namespace": "HorseRacingPrediction.ApiClient.Collection",
-      "operationCount": 44,
+      "operationCount": 45,
       "operations": [
         {
           "family": "Collection",
@@ -2947,6 +2947,27 @@
             }
           ],
           "endpointFile": "GetCollectionMonitoringFindingsEndpoint.cs",
+          "queryParameters": []
+        },
+        {
+          "family": "Collection",
+          "interface": "ICollectionApi",
+          "method": "GetCollectionRuntimeStatusAsync",
+          "httpMethod": "GET",
+          "path": "/api/v2/admin/collection/operations/runtime-status",
+          "requestPresent": false,
+          "requestBodyPresent": false,
+          "requestContract": null,
+          "bodyInputType": null,
+          "routeParameters": [],
+          "responsePresent": true,
+          "responseContracts": [
+            {
+              "type": "HorseRacingPrediction.Contracts.Collection.GetCollectionRuntimeStatusResponse",
+              "status": 200
+            }
+          ],
+          "endpointFile": "GetCollectionRuntimeStatusEndpoint.cs",
           "queryParameters": []
         },
         {

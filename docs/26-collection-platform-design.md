@@ -1,8 +1,8 @@
 # Resource 中心の競馬情報収集基盤
 
-> 2026-10-07 バックグラウンド再編の追加受け入れ条件（未実装）: 原則として再編のために既存の収集データ・識別子・関連・処理状態・履歴を書き換えない。変更が必要なら、対象・対応関係・バックアップ・途中失敗からの再実行・移行前後の意味的整合性・復旧を検証した移行方式を事前承認する。通常の収集保存・ジョブ状態遷移は一律に禁止しない。移行可能性の実証や本番移行の許可を得たとは扱わない。[データ保持または移行の基準RC8](changes/20261007_background-processing-reorganization/README.md)を参照。
+> バックグラウンド再編のデータ保持条件: 既存の収集データ・識別子・関連・処理状態・履歴を再編だけのために書き換えない。承認済みschema25は回復用メタデータ2表と索引を追加し、既存業務行を移行時に変更しない。通常の収集保存・ジョブ状態遷移は許可する。本番移行の許可・実施済みとは扱わない。[データ保持または移行の基準RC8](changes/20261007_background-processing-reorganization/README.md)を参照。
 
-> 2026-10-08 実装承認済み（実装・検証中、未配備）: [バックグラウンド処理の再編](changes/20261007_background-processing-reorganization/README.md)では、配送は1秒の独立ループ、予定登録・Discovery計画は有限処理のproducer、task lease回収は独立Watchdogとする。Backfillの型付き進捗メタデータ、保留判定のlive限定ページ処理、稼働時刻の表示までを必須範囲とする。コア判定はDB・外部通信・実時間待機なしで単体テスト可能にし、transaction・同時実行・データ保持は実DBでも検証する。既存業務データを書き換える移行や本番配備は実行していない。受け入れ条件RC1–RC9と承認済み詳細設計を正とし、実装完了・配備済みとはまだ扱わない。
+> 2026-10-10 ローカル実装・検証済み（未配備）: [バックグラウンド処理の再編](changes/20261007_background-processing-reorganization/README.md)では、配送は1秒の独立ループ、予定登録・Discovery計画は有限処理のproducer、task lease回収は独立Watchdogとする。Backfillの型付き進捗メタデータ、保留判定のlive限定ページ処理、稼働時刻の表示を実装した。コア判定はDB・外部通信・実時間待機なしで単体テスト可能にし、transaction・同時実行・データ保持は実DBでも検証した。既存業務データを書き換える移行や本番配備は実行していない。受け入れ条件RC1–RC9と承認済み詳細設計・検証結果を正とし、Lightsail CPU改善や配備済みとは扱わない。
 
 > 2026-09-27 承認済み暫定対処（本番未配備）: 内部馬identity APIの既知の根拠不足/複数候補は422と構造化codeを返し、型付きでworkerへ伝える。当該taskを要確認に残して全体収集を継続する。旧APIの同じcodeの409も互換として認識するが、未知409・identity矛盾の安全停止は維持し、同定規則は緩めない。保存済みprofileは保持し、未完了の子探索を成功化しない。[停止境界と受け入れ条件](changes/20260927_isolate-identity-resolution-failures/README.md)を参照。
 
@@ -19,6 +19,29 @@
 設計変更の承認と実装進捗は [change record](changes/20260911_unified-collection-platform/README.md) を正とする。既存収集ジョブは compatibility layer として残さず、新基盤へ controlled cutover 後に production code から削除する。完全置換の論点は [decision record](changes/20260911_unified-collection-platform/decisions/full-job-replacement.md) に定義する。2026-09-11 に承認され、実装中である。
 
 ## Core concepts
+
+### バックグラウンド処理の責務とテスト境界（2026-10-10、ローカル実装・検証済み）
+
+配送は1秒周期を維持し、予定再取得と新規Discovery計画だけを`CollectionMaintenanceCoordinator`にまとめる。各処理の完了から次の周期を計算し、遅れた周期の追い付き実行や重複実行はしない。task lease回収は独立Watchdog、execution envelope回収は配送側の責務とする。バックグラウンド有効時のWatchdogは1分、有効でなければ自身の有効フラグと設定周期に従う。DBのwriterロックは共有するため、独立サービス化を回復時間の上限保証と解釈しない。
+
+予定候補はFailed・active taskをSQLで除外し、期限と安定キーで最大500件ずつ走査する。要求登録時にもwriter transaction内で条件を再確認する。保留判定はactive holdを一度読み、対象となるlive resourceのキーをSQL内の接続専用一時表へ一度抽出してから、128件ずつ解決する。全候補をアプリのメモリへ展開せず、判定済みsnapshotだけを後続SQLで使用する。一時表は正常・失敗・キャンセル時に破棄し、片付けに失敗した接続は再利用しない。予約・新規取得では同一envelope全体を直前に再検証し、履歴を省くために安全判定を省略しない。
+
+過去データの周期的回復は、旧batchの分類を最大10件、型が確定したbatchを最大5件・各7日まで処理する。Backfillと期間再取得の意味は分離し、分類根拠が不十分なものは要確認のまま保持する。日付要求と進捗は同じwriter transactionで確定する。手動作成の同期応答・日単位のreceipt契約は維持する。
+
+| 純粋な判定 | 入力と出力 | 実際の効果を検証する境界 |
+| --- | --- | --- |
+| `CollectionScheduleSweepPolicy` | 候補・時刻・cursorから次の判断 | SQL候補取得とtransaction内の再確認・要求登録 |
+| `CollectionProducerCadencePolicy` | 明示時刻・完了状態から次回周期 | HostedServiceのキャンセル・失敗分離・独立回収 |
+| `CollectionBatchRecoveryPolicy` | 集計済み根拠・日付範囲から分類・chunk | 実SQLでの根拠検証、業務更新とcursorの一括commit |
+| `CollectionRuntimeStatusTransitionPolicy` | snapshot・cycle token・時刻・件数から次状態 | recorderの同期制御、実処理の結果、HTTP/client/UI |
+
+判定コアにDB、DI container、ネットワーク、静的現在時刻、実時間待機を持ち込まない。純粋関数のテストだけで安全性を完了扱いにせず、実SQLite・HTTP・ブラウザーのテストを併用する。
+
+`/jobs/operations`の運用状況には8処理のAPIインスタンス内の稼働記録を表示する。最終正常確認と実進行を区別し、対象なしの周期を進行実績に数えない。再起動前の記録は推測復元しない。取得は認証済み`GET /api/v2/admin/collection/operations/runtime-status`、応答は`runtime`、cache禁止。監視タブ表示中だけ更新し、既存の3レーン進行表示は別の情報として維持する。
+
+schema25適用後は、schema24までしか扱えない旧実行ファイルに戻しても起動できない。DBを巻き戻したりschema履歴を書き換えたりせず、対応版で停止を維持して業務データを保持し、対応する修正版へ進む復旧を基本とする。停止中起動・backup/restore・旧実行ファイルの拒否は変更記録のI4bでローカル検証済みだが、本番で実施済みとは扱わない。本番配備・移行・再開は別途許可が必要。
+
+I4bで、一時停止と従来の無効設定だけでは起動時の主体自動復旧・停止通知の記録更新が止まらないことを再現した。API側の自動処理を明示的に中断する[MaintenanceMode](changes/20261007_background-processing-reorganization/decisions/recovery-suspension.md)は実装・ローカル検証済みである。CollectionPlatform:MaintenanceModeは既定false、起動時に読み取り、trueではAPI側の自動処理と起動時自動復旧・通知を停止する。管理用の参照・明示操作は維持する。既存通知設定の意味を変更せず、外部workerの停止や本番有効化を保証・許可したとは扱わない。
 
 > 2026-09-26 新規・空データ環境向け: [馬を基準とする出走識別](changes/20260926_horse-based-race-entry/README.md)を採用する。公式馬IDのある暫定Cardを保存した場合も、PersistCardの後に番号確定待ちstageを記録し、Currentにせず15分後の再取得を維持する。番号未確定ではResult・予想へ進めない。既知の出走identity入力エラーだけをIsolatedに分類し、未知の永続化・投影障害のStopPipelineは維持する。新旧データ混在・既存移行・本番運用は対象外。
 >

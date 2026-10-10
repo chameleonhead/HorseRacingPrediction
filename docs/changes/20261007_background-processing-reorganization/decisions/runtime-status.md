@@ -1,6 +1,6 @@
 # Runtime status contract (D3)
 
-Proposed 2026-10-08. RC6/RC8. Existing source evidence: Jobs.razor already displays per-lane LastStartedAt/LastCompletedAt from persisted task progress; CollectionOperations.razor has an authorized `/jobs/operations?tab=monitoring` page, a 30-second refresh, and reusable FluentDataGrid/UiState components. The existing dashboard GET loads progress, up to 10,000 notifications and all backfills; it must not be called more frequently merely to observe loop liveness.
+Approved 2026-10-08 as part of the parent D1–D3 implementation contract (original proposal date unchanged). RC6/RC8. Existing source evidence: Jobs.razor already displays per-lane LastStartedAt/LastCompletedAt from persisted task progress; CollectionOperations.razor has an authorized `/jobs/operations?tab=monitoring` page, a 30-second refresh, and reusable FluentDataGrid/UiState components. The existing dashboard GET loads progress, up to 10,000 notifications and all backfills; it must not be called more frequently merely to observe loop liveness.
 
 ## State ownership and bounded storage
 
