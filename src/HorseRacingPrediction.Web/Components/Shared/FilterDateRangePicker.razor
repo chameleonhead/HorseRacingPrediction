@@ -1,5 +1,6 @@
 <div class="date-range-filter">
-    <FilterSelection Label="開催日"
+    <FilterSelection @key="Enabled"
+                     Label="開催日"
                      Value="@(Enabled ? DateRangeSelection : null)"
                      ValueChanged="OnSelectionChanged"
                      Items="@DateRangeOptions" />
@@ -10,6 +11,8 @@
             <label>
                 から
                 <FluentDatePicker TValue="DateOnly?"
+                                  Autofocus="@FocusStartDate"
+                                  AriaLabel="開始日"
                                   Placeholder="開始日"
                                   Value="@From"
                                   ValueChanged="FromChanged" />
@@ -17,6 +20,7 @@
             <label>
                 まで
                 <FluentDatePicker TValue="DateOnly?"
+                                  AriaLabel="終了日"
                                   Placeholder="終了日"
                                   Value="@To"
                                   ValueChanged="ToChanged" />
@@ -41,10 +45,18 @@
     [Parameter] public bool Enabled { get; set; }
     [Parameter] public EventCallback<bool> EnabledChanged { get; set; }
 
+    private bool FocusStartDate { get; set; }
+
     private async Task OnSelectionChanged(string? value)
     {
         var enabled = value == DateRangeSelection;
         await EnabledChanged.InvokeAsync(enabled);
+
+        if (enabled)
+        {
+            FocusStartDate = true;
+            await InvokeAsync(StateHasChanged);
+        }
 
         if (!enabled)
         {

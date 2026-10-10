@@ -1,7 +1,13 @@
-<FluentBadge Id="@AnchorId" Padding="12px" @onclick="TogglePopover">
+<button id="@AnchorId"
+        type="button"
+        class="filter-selection-trigger"
+        aria-haspopup="listbox"
+        aria-expanded="@(IsOpened ? "true" : "false")"
+        aria-label="@TriggerLabel"
+        @onclick="TogglePopover">
     <span style="font-weight: normal">@Label:</span>
     <strong>@SelectionSummary</strong>
-</FluentBadge>
+</button>
 
 <FluentPopover AnchorId="@AnchorId" @bind-Opened="IsOpened" Padding="0">
     @if (Multiple)
@@ -40,6 +46,7 @@
 
     private readonly string AnchorId = $"filter-selection-{Guid.NewGuid():N}";
     private bool IsOpened { get; set; }
+    private string TriggerLabel => $"{Label}: {SelectionSummary}";
 
     private IEnumerable<FilterSelectionOption> SelectedOptions
         => Items.Where(item => SelectedValues.Contains(item.Value));

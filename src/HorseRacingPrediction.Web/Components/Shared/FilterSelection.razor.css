@@ -1,0 +1,22 @@
+.filter-selection-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 40px;
+    padding: 8px 12px;
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.filter-selection-trigger:hover {
+    background: var(--colorNeutralBackground2);
+}
+
+.filter-selection-trigger:focus-visible {
+    outline: 2px solid var(--colorBrandBackground);
+    outline-offset: 2px;
+}
