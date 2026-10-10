@@ -7,32 +7,9 @@
                          ValueChanged="OnCourseInput"
                          Items="@CourseOptions" />
 
-        <div class="date-range-filter">
-            <FilterSelection Label="開催日"
-                             Value="@(DateRangeEnabled ? DateRangeSelection : null)"
-                             ValueChanged="OnDateRangeSelectionChanged"
-                             Items="@DateRangeOptions" />
-
-            @if (DateRangeEnabled)
-            {
-                <div class="date-range-inputs">
-                    <label>
-                        から
-                        <FluentDatePicker TValue="DateOnly?"
-                                          Placeholder="開始日"
-                                          Value="@From"
-                                          ValueChanged="OnFromChange" />
-                    </label>
-                    <label>
-                        まで
-                        <FluentDatePicker TValue="DateOnly?"
-                                          Placeholder="終了日"
-                                          Value="@To"
-                                          ValueChanged="OnToChange" />
-                    </label>
-                </div>
-            }
-        </div>
+        <FilterDateRangePicker @bind-From="From"
+                               @bind-To="To"
+                               @bind-Enabled="DateRangeEnabled" />
     </div>
 
     <div class="search-actions">
@@ -62,14 +39,6 @@
         new("小倉", "小倉競馬場")
     ];
 
-    private const string DateRangeSelection = "range";
-
-    private static readonly FilterSelectionOption[] DateRangeOptions =
-    [
-        new(string.Empty, "すべて"),
-        new(DateRangeSelection, "期間を指定")
-    ];
-
     [Parameter] public string? Name { get; set; }
     [Parameter] public EventCallback<string?> NameChanged { get; set; }
     [Parameter] public string? Course { get; set; }
@@ -89,21 +58,4 @@
     private Task OnCourseInput(string? args)
         => CourseChanged.InvokeAsync(args);
 
-    private async Task OnDateRangeSelectionChanged(string? value)
-    {
-        var enabled = value == DateRangeSelection;
-        await DateRangeEnabledChanged.InvokeAsync(enabled);
-
-        if (!enabled)
-        {
-            await FromChanged.InvokeAsync(null);
-            await ToChanged.InvokeAsync(null);
-        }
-    }
-
-    private Task OnFromChange(DateOnly? value)
-        => FromChanged.InvokeAsync(value);
-
-    private Task OnToChange(DateOnly? value)
-        => ToChanged.InvokeAsync(value);
 }

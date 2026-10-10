@@ -1,0 +1,55 @@
+<div class="date-range-filter">
+    <FilterSelection Label="開催日"
+                     Value="@(Enabled ? DateRangeSelection : null)"
+                     ValueChanged="OnSelectionChanged"
+                     Items="@DateRangeOptions" />
+
+    @if (Enabled)
+    {
+        <div class="date-range-inputs">
+            <label>
+                から
+                <FluentDatePicker TValue="DateOnly?"
+                                  Placeholder="開始日"
+                                  Value="@From"
+                                  ValueChanged="FromChanged" />
+            </label>
+            <label>
+                まで
+                <FluentDatePicker TValue="DateOnly?"
+                                  Placeholder="終了日"
+                                  Value="@To"
+                                  ValueChanged="ToChanged" />
+            </label>
+        </div>
+    }
+</div>
+
+@code {
+    private const string DateRangeSelection = "range";
+
+    private static readonly FilterSelectionOption[] DateRangeOptions =
+    [
+        new(string.Empty, "すべて"),
+        new(DateRangeSelection, "期間を指定")
+    ];
+
+    [Parameter] public DateOnly? From { get; set; }
+    [Parameter] public EventCallback<DateOnly?> FromChanged { get; set; }
+    [Parameter] public DateOnly? To { get; set; }
+    [Parameter] public EventCallback<DateOnly?> ToChanged { get; set; }
+    [Parameter] public bool Enabled { get; set; }
+    [Parameter] public EventCallback<bool> EnabledChanged { get; set; }
+
+    private async Task OnSelectionChanged(string? value)
+    {
+        var enabled = value == DateRangeSelection;
+        await EnabledChanged.InvokeAsync(enabled);
+
+        if (!enabled)
+        {
+            await FromChanged.InvokeAsync(null);
+            await ToChanged.InvokeAsync(null);
+        }
+    }
+}
