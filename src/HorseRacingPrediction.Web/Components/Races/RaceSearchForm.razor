@@ -1,4 +1,11 @@
 <div class="race-search-form" role="search">
+    <nav class="race-period-tabs" aria-label="開催期間">
+        <button type="button" class="@(IsSelected(PeriodToday) ? "selected" : null)" aria-pressed="@(IsSelected(PeriodToday) ? "true" : "false")" @onclick="() => SelectPeriodAsync(PeriodToday)">今日</button>
+        <button type="button" class="@(IsSelected(PeriodWeek) ? "selected" : null)" aria-pressed="@(IsSelected(PeriodWeek) ? "true" : "false")" @onclick="() => SelectPeriodAsync(PeriodWeek)">今週</button>
+        <button type="button" class="@(IsSelected(PeriodMonth) ? "selected" : null)" aria-pressed="@(IsSelected(PeriodMonth) ? "true" : "false")" @onclick="() => SelectPeriodAsync(PeriodMonth)">今月</button>
+        <button type="button" class="@(IsSelected(PeriodAll) ? "selected" : null)" aria-pressed="@(IsSelected(PeriodAll) ? "true" : "false")" @onclick="() => SelectPeriodAsync(PeriodAll)">すべての期間</button>
+    </nav>
+
     <FluentTextInput Class="race-name-filter" Placeholder="レース名" Value="@Name" @oninput="OnNameInput" />
 
     <div class="race-filter-group">
@@ -24,6 +31,11 @@
 }
 
 @code {
+    private const string PeriodToday = "today";
+    private const string PeriodWeek = "week";
+    private const string PeriodMonth = "month";
+    private const string PeriodAll = "all";
+
     private static readonly FilterSelectionOption[] CourseOptions =
     [
         new(string.Empty, "すべて"),
@@ -52,6 +64,61 @@
     [Parameter] public EventCallback OnSearch { get; set; }
     [Parameter] public EventCallback OnClear { get; set; }
     [Parameter] public string? ValidationMessage { get; set; }
+
+    [Inject] private TimeProvider TimeProvider { get; set; } = null!;
+
+    private DateOnly Today => DateOnly.FromDateTime(TimeProvider.GetUtcNow().ToOffset(TimeSpan.FromHours(9)).Date);
+
+    private bool IsSelected(string period)
+    {
+        if (period == PeriodAll)
+        {
+            return From is null && To is null;
+        }
+
+        var (start, end) = GetPeriod(period);
+        return From == start && To == end;
+    }
+
+    private async Task SelectPeriodAsync(string period)
+    {
+        DateOnly? start = null;
+        DateOnly? end = null;
+
+        if (period != PeriodAll)
+        {
+            (start, end) = GetPeriod(period);
+        }
+
+        await FromChanged.InvokeAsync(start);
+        await ToChanged.InvokeAsync(end);
+        await DateRangeEnabledChanged.InvokeAsync(period != PeriodAll);
+        await OnSearch.InvokeAsync();
+    }
+
+    private (DateOnly Start, DateOnly End) GetPeriod(string period)
+    {
+        return period switch
+        {
+            PeriodToday => (Today, Today),
+            PeriodWeek => WeekRange(),
+            PeriodMonth => MonthRange(),
+            _ => throw new ArgumentOutOfRangeException(nameof(period))
+        };
+    }
+
+    private (DateOnly Start, DateOnly End) WeekRange()
+    {
+        var start = Today.AddDays(-(((int)Today.DayOfWeek + 6) % 7));
+        return (start, start.AddDays(6));
+    }
+
+    private (DateOnly Start, DateOnly End) MonthRange()
+    {
+        var start = new DateOnly(Today.Year, Today.Month, 1);
+        return (start, new DateOnly(Today.Year, Today.Month, DateTime.DaysInMonth(Today.Year, Today.Month)));
+    }
+
     private Task OnNameInput(ChangeEventArgs args)
         => NameChanged.InvokeAsync(args.Value?.ToString());
 

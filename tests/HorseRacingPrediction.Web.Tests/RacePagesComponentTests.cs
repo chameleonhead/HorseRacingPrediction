@@ -99,11 +99,41 @@ public sealed class RacePagesComponentTests
         });
     }
 
+    [TestMethod]
+    public async Task RaceList_PeriodTabs_ApplyTodayWeekMonthAndAllPeriods()
+    {
+        using var handler = new RaceApiHandler();
+        using var context = CreateContext(handler);
+        var cut = context.Render<Races>();
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "テストレース"));
+
+        await cut.Find("nav[aria-label='開催期間'] button").ClickAsync();
+        Assert.AreEqual("2026-10-07", handler.LastRequestDateFrom);
+        Assert.AreEqual("2026-10-07", handler.LastRequestDateTo);
+        Assert.IsTrue(cut.Markup.Contains("今日</button>", StringComparison.Ordinal));
+
+        await FindPeriodTab(cut, "今週").ClickAsync();
+        Assert.AreEqual("2026-10-05", handler.LastRequestDateFrom);
+        Assert.AreEqual("2026-10-11", handler.LastRequestDateTo);
+
+        await FindPeriodTab(cut, "今月").ClickAsync();
+        Assert.AreEqual("2026-10-01", handler.LastRequestDateFrom);
+        Assert.AreEqual("2026-10-31", handler.LastRequestDateTo);
+
+        await FindPeriodTab(cut, "すべての期間").ClickAsync();
+        Assert.IsNull(handler.LastRequestDateFrom);
+        Assert.IsNull(handler.LastRequestDateTo);
+    }
+
+    private static AngleSharp.Dom.IElement FindPeriodTab(IRenderedComponent<Races> cut, string text)
+        => cut.FindAll("nav[aria-label='開催期間'] button").Single(button => button.TextContent.Trim() == text);
+
     private static BunitContext CreateContext(RaceApiHandler handler)
     {
         var context = new BunitContext();
         context.JSInterop.Mode = JSRuntimeMode.Loose;
         context.Services.AddFluentUIComponents();
+        context.Services.AddSingleton<TimeProvider>(new FrozenTimeProvider(new DateTimeOffset(2026, 10, 7, 2, 0, 0, TimeSpan.Zero)));
         context.Services.AddHorseRacingApiClient(options =>
         {
             options.BaseAddress = new Uri("http://localhost");
@@ -128,6 +158,8 @@ public sealed class RacePagesComponentTests
         public string? LastRequestPath { get; private set; }
         public int LastRequestPage { get; private set; }
         public string? LastRequestRaceName { get; private set; }
+        public string? LastRequestDateFrom { get; private set; }
+        public string? LastRequestDateTo { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -137,6 +169,8 @@ public sealed class RacePagesComponentTests
                 SearchCount++;
                 LastRequestPage = int.TryParse(GetQuery(request, "page"), out var page) ? page : 1;
                 LastRequestRaceName = GetQuery(request, "raceName");
+                LastRequestDateFrom = GetQuery(request, "raceDateFrom");
+                LastRequestDateTo = GetQuery(request, "raceDateTo");
                 var response = Search ?? new SearchRacesResponse(
                     [new("R001", new DateOnly(2026, 10, 3), "中山", 11, "テストレース", RaceStatus.ResultDeclared, 1, "テストホース", DateTimeOffset.UtcNow)],
                     new PaginationDto(LastRequestPage, 1, 2, 2));
@@ -164,5 +198,10 @@ public sealed class RacePagesComponentTests
                 .Select(parts => new { Key = Uri.UnescapeDataString(parts[0]), Value = Uri.UnescapeDataString(parts[1].Replace('+', ' ')) })
                 .FirstOrDefault(pair => pair.Key == key)?.Value;
         }
+    }
+
+    private sealed class FrozenTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
     }
 }

@@ -6,6 +6,41 @@
     margin-bottom: 16px;
 }
 
+.race-period-tabs {
+    display: flex;
+    flex: 1 0 100%;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--colorNeutralStroke1);
+}
+
+.race-period-tabs button {
+    min-height: 44px;
+    padding: 8px 16px;
+    color: var(--colorNeutralForeground2);
+    font: inherit;
+    white-space: nowrap;
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+}
+
+.race-period-tabs button:hover {
+    color: var(--colorNeutralForeground1);
+    background: var(--colorNeutralBackground2);
+}
+
+.race-period-tabs button.selected {
+    color: var(--colorBrandForeground1);
+    font-weight: 600;
+    border-bottom-color: var(--colorBrandBackground);
+}
+
+.race-period-tabs button:focus-visible {
+    outline: 2px solid var(--colorBrandBackground);
+    outline-offset: -2px;
+}
+
 .race-name-filter {
     flex: 1 1 240px;
     min-width: min(100%, 220px);
@@ -28,5 +63,10 @@
 
     .race-filter-group {
         align-items: stretch;
+    }
+
+    .race-period-tabs button {
+        flex: 1 0 auto;
+        padding-inline: 12px;
     }
 }
