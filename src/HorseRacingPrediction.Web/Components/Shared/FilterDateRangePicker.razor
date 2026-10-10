@@ -6,8 +6,7 @@
                      Items="@Options" />
 </div>
 
-<FluentDialog Hidden="@(!IsDrawerOpen)"
-              HiddenChanged="OnDrawerHiddenChanged"
+<FluentDialog @ref="Drawer"
               Modal="true"
               Alignment="DialogAlignment.End"
               AriaLabelledby="@DrawerTitleId"
@@ -81,6 +80,7 @@
 
     [Inject] private TimeProvider TimeProvider { get; set; } = null!;
 
+    private FluentDialog? Drawer { get; set; }
     private readonly string DrawerTitleId = $"date-range-title-{Guid.NewGuid():N}";
     private DateOnly? DraftFrom { get; set; }
     private DateOnly? DraftTo { get; set; }
@@ -154,6 +154,7 @@
             DraftTo = To;
             ValidationMessage = null;
             IsDrawerOpen = true;
+            await Drawer!.ShowAsync();
             return;
         }
 
@@ -189,16 +190,19 @@
         await EnabledChanged.InvokeAsync(true);
         await OnDateFilterChanged.InvokeAsync();
         IsDrawerOpen = false;
+        await Drawer!.HideAsync();
         ValidationMessage = null;
     }
 
-    private void CancelDrawer()
+    private async Task CancelDrawer()
     {
         IsDrawerOpen = false;
         ValidationMessage = null;
+        if (Drawer is not null)
+        {
+            await Drawer.HideAsync();
+        }
     }
-
-    private void OnDrawerHiddenChanged(bool hidden) => IsDrawerOpen = !hidden;
 
     private void OnDraftFromChanged(DateOnly? value)
     {
