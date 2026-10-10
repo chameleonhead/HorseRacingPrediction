@@ -1,7 +1,9 @@
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using System.Data.Common;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Options;
 
 using HorseRacingPrediction.Contracts.Collection;
@@ -128,8 +130,10 @@ public sealed class RaceRepairHoldTests
         Assert.IsFalse(hold.IsQuiescent);
         Assert.AreEqual(1, hold.UnresolvedLeases);
         var replay = await store.AcquireNextExecutionAsync(wake, "message", now, TimeSpan.FromSeconds(45));
-        Assert.HasCount(1, replay.Envelope!.Tasks);
-        Assert.AreEqual(other.TaskId, replay.Envelope.Tasks[0].TaskId);
+        Assert.AreEqual(CollectionExecutionAcquireStatus.Acquired, replay.Status);
+        Assert.AreEqual(2, replay.Envelope!.Tasks.Count,
+            "An already-acquired replay must retain its original whole envelope after a repair hold appears.");
+        CollectionAssert.AreEquivalent(new[] { first.TaskId, other.TaskId }, replay.Envelope.Tasks.Select(x => x.TaskId).ToArray());
         Assert.IsTrue(await store.StartExecutionAsync(execution.ExecutionBatchId!.Value, new(execution.LeaseToken!, 60), now));
         Assert.IsNull(await store.AcquireAsync(first.TaskId!.Value, 1, now, TimeSpan.FromMinutes(1)));
         Assert.IsNotNull(await store.AcquireAsync(other.TaskId!.Value, 1, now, TimeSpan.FromMinutes(1)));
@@ -152,7 +156,7 @@ public sealed class RaceRepairHoldTests
     }
 
     [TestMethod]
-    public async Task ReservationRechecksMutableRaceIdentityAfterHeldTaskIdSnapshot()
+    public async Task ReservationRechecksMutableRaceIdentityAfterHeldResourceSnapshot()
     {
         var options = new CollectionPlatformOptions
         {
@@ -185,16 +189,213 @@ public sealed class RaceRepairHoldTests
         var outcome = await store.ReserveDispatchesWithinCapacityAsync([outboxId], "mutable-hold-candidate",
             Guid.NewGuid(), Guid.NewGuid(), now, TimeSpan.FromMinutes(1), 1);
 
-        Assert.AreEqual(CollectionDispatchCycleOutcome.ReserveConflict, outcome,
-            "A resource that becomes a held race during lane enumeration must not be reserved based only on the earlier task-ID snapshot.");
+        Assert.AreEqual(CollectionDispatchCycleOutcome.CandidateRejected, outcome,
+            "A resource that becomes a held race during candidate enumeration must not be reserved based only on its earlier snapshot.");
         Assert.AreEqual(3, resolver.Calls,
-            "Identity was resolved for the task-ID snapshot, selected-row guard, then again during eligible-lane enumeration.");
+            "Identity was resolved for the selected-row snapshot, then rechecked during candidate enumeration and immediately before writing.");
         await using (var verify = new CollectionPlatformDbContext(dbOptions))
         {
             var unchanged = await verify.DispatchOutbox.SingleAsync(x => x.OutboxId == outboxId);
             Assert.IsNull(unchanged.ReservationToken);
             Assert.IsNull(unchanged.EnvelopeId);
         }
+    }
+
+    [TestMethod]
+    public async Task DispatchWithoutActiveHoldsSkipsIdentityResolution()
+    {
+        var options = new CollectionPlatformOptions
+        {
+            StateDirectory = Path.Combine(Path.GetTempPath(), "hrp-hold-no-holds", Guid.NewGuid().ToString("N")),
+        };
+        var resolver = new MutableRaceIdentityResolver("race-not-held");
+        var store = new CollectionPlatformStore(Options.Create(options), resolver);
+        var now = DateTimeOffset.UtcNow;
+        await store.RegisterDefinitionAsync(Detail, "detail", CollectionResourceType.Race, 4, "current revision", false);
+        await store.RequestAsync(Target, Detail, 4, CollectionReason.Initial, now);
+        resolver.ChangeAfterCalls(int.MaxValue, "race-not-held");
+
+        var pending = (await store.GetPendingDispatchesAsync(now, 10)).Single();
+        var outcome = await store.ReserveDispatchesWithinCapacityAsync([pending.OutboxId], "no-active-holds",
+            Guid.NewGuid(), Guid.NewGuid(), now, TimeSpan.FromMinutes(1), 1);
+
+        Assert.AreEqual(CollectionDispatchCycleOutcome.Reserved, outcome);
+        Assert.AreEqual(0, resolver.Calls,
+            "The no-hold fast path must not resolve race identities or materialize the TEMP snapshot.");
+    }
+
+    [TestMethod]
+    public async Task ReservationSnapshotConservativelyRejectsIdentityThatBecomesUnheld()
+    {
+        var options = new CollectionPlatformOptions
+        {
+            StateDirectory = Path.Combine(Path.GetTempPath(), "hrp-hold-mutable-release", Guid.NewGuid().ToString("N")),
+        };
+        var resolver = new MutableRaceIdentityResolver(RaceId);
+        var store = new CollectionPlatformStore(Options.Create(options), resolver);
+        var now = DateTimeOffset.UtcNow;
+        await store.RegisterDefinitionAsync(Detail, "detail", CollectionResourceType.Race, 4, "current revision", false);
+        var receipt = await store.RequestAsync(Target, Detail, 4, CollectionReason.Initial, now);
+        var databasePath = Path.Combine(options.StateDirectory, options.DatabaseFileName);
+        var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={databasePath};Pooling=False").Options;
+        Guid outboxId;
+        await using (var db = new CollectionPlatformDbContext(dbOptions))
+        {
+            outboxId = (await db.DispatchOutbox.SingleAsync(x => x.TaskId == receipt.TaskId)).OutboxId;
+            db.RaceRepairHolds.Add(new RaceRepairHoldEntity
+            {
+                RaceId = RaceId,
+                Generation = 1,
+                OperationId = Guid.NewGuid().ToString(),
+                Reason = "mutable identity regression",
+                CreatedAt = now,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        resolver.ChangeAfterCalls(1, "race-not-held");
+        var outcome = await store.ReserveDispatchesWithinCapacityAsync([outboxId], "mutable-release-candidate",
+            Guid.NewGuid(), Guid.NewGuid(), now, TimeSpan.FromMinutes(1), 1);
+
+        Assert.AreEqual(CollectionDispatchCycleOutcome.CandidateRejected, outcome,
+            "The operation snapshot must conservatively exclude a resource that later maps away from the held race.");
+        Assert.AreEqual(1, resolver.Calls);
+        await using var verify = new CollectionPlatformDbContext(dbOptions);
+        var unchanged = await verify.DispatchOutbox.SingleAsync(x => x.OutboxId == outboxId);
+        Assert.IsNull(unchanged.ReservationToken);
+        Assert.IsNull(unchanged.EnvelopeId);
+    }
+
+    [TestMethod]
+    public async Task CancelledPendingHoldSnapshotCleansTempTableBeforePooledConnectionReuse()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "hrp-hold-temp-cleanup", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var databasePath = Path.Combine(directory, "collection.db");
+        using var cancellation = new CancellationTokenSource();
+        var interceptor = new CancelOnHeldResourcePageInterceptor(cancellation);
+        var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={databasePath};Pooling=True;Default Timeout=30")
+            .AddInterceptors(interceptor)
+            .Options;
+        var store = new CollectionPlatformStore(dbOptions);
+        var now = DateTimeOffset.UtcNow;
+        await store.RegisterDefinitionAsync(Detail, "detail", CollectionResourceType.Race, 4, "current revision", false);
+        await store.RequestAsync(Target, Detail, 4, CollectionReason.Initial, now);
+        await using (var db = new CollectionPlatformDbContext(dbOptions))
+        {
+            db.RaceRepairHolds.Add(new RaceRepairHoldEntity
+            {
+                RaceId = "race-unrelated-active-hold",
+                Generation = 1,
+                OperationId = Guid.NewGuid().ToString(),
+                Reason = "cleanup test",
+                CreatedAt = now,
+            });
+            await db.SaveChangesAsync();
+        }
+        interceptor.Arm();
+
+        var cancelled = false;
+        try { await store.GetPendingDispatchesAsync(now, 10, cancellation.Token); }
+        catch (OperationCanceledException) { cancelled = true; }
+        Assert.IsTrue(cancelled, $"Expected page cancellation. Intercepted resource page count: {interceptor.CancelledResourcePageCount}; last command: {interceptor.LastCommandText}");
+
+        Assert.HasCount(1, await store.GetPendingDispatchesAsync(now, 10),
+            "The same pooled SQLite connection must remain usable and must not retain the TEMP snapshot table.");
+    }
+
+    [TestMethod]
+    public async Task PartialHeldTempTableCreationFailureCleansBothTablesThroughStoreEntryPoint()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "hrp-hold-partial-temp-create", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var databasePath = Path.Combine(directory, "collection.db");
+        var connectionString = $"Data Source={databasePath};Pooling=True;Default Timeout=30";
+        var interceptor = new PrecreateHeldWorklistConnectionInterceptor();
+        var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite(connectionString)
+            .AddInterceptors(interceptor)
+            .Options;
+        var store = new CollectionPlatformStore(dbOptions);
+        var now = DateTimeOffset.UtcNow;
+        await store.RegisterDefinitionAsync(Detail, "detail", CollectionResourceType.Race, 4, "current revision", false);
+        await store.RequestAsync(Target, Detail, 4, CollectionReason.Initial, now);
+        await store.HoldRaceForRepairAsync(RaceId, Guid.NewGuid().ToString(), 0, "partial TEMP create", now);
+
+        interceptor.Arm();
+        await Assert.ThrowsExactlyAsync<SqliteException>(() => store.GetPendingDispatchesAsync(now, 10));
+        Assert.AreEqual(1, interceptor.PrecreatedWorklistCount,
+            "The failure must occur after the Store opened its operation connection and pre-created the second TEMP table.");
+
+        Assert.IsEmpty(await store.GetPendingDispatchesAsync(now, 10),
+            "The subsequent Store operation must succeed, proving both temporary tables were cleaned after partial creation failed.");
+    }
+
+    [TestMethod]
+    public async Task PendingHoldResolutionInputsStayFixedWhenTaskHistoryGrowsTenfold()
+    {
+        var options = new CollectionPlatformOptions
+        {
+            StateDirectory = Path.Combine(Path.GetTempPath(), "hrp-hold-history-scale", Guid.NewGuid().ToString("N")),
+        };
+        var resolver = new MutableRaceIdentityResolver("race-not-held");
+        var store = new CollectionPlatformStore(Options.Create(options), resolver);
+        var now = DateTimeOffset.UtcNow;
+        await store.RegisterDefinitionAsync(Detail, "detail", CollectionResourceType.Race, 4, "current revision", false);
+        var receipt = await store.RequestAsync(Target, Detail, 4, CollectionReason.Initial, now);
+        var databasePath = Path.Combine(options.StateDirectory, options.DatabaseFileName);
+        var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={databasePath};Pooling=False").Options;
+        long resourcePk;
+        await using (var db = new CollectionPlatformDbContext(dbOptions))
+        {
+            resourcePk = await db.Tasks.Where(x => x.TaskId == receipt.TaskId)
+                .Select(x => x.ResourcePk).SingleAsync();
+            db.RaceRepairHolds.Add(new RaceRepairHoldEntity
+            {
+                RaceId = "race-unrelated-active-hold",
+                Generation = 1,
+                OperationId = Guid.NewGuid().ToString(),
+                Reason = "history scale test",
+                CreatedAt = now,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        resolver.ChangeAfterCalls(int.MaxValue, "race-not-held");
+        var initial = await store.GetPendingDispatchesAsync(now, 10);
+        Assert.HasCount(1, initial);
+        Assert.AreEqual(1, resolver.Calls);
+
+        await using (var db = new CollectionPlatformDbContext(dbOptions))
+        {
+            db.Tasks.AddRange(Enumerable.Range(0, 10).Select(index => new CollectionTaskEntity
+            {
+                TaskId = Guid.NewGuid(),
+                RequestId = Guid.NewGuid(),
+                ResourcePk = resourcePk,
+                DefinitionId = Detail.Value,
+                RequestedRevision = 4,
+                Status = CollectionTaskStatus.Succeeded,
+                Lane = CollectionLane.Normal,
+                Priority = 1,
+                AvailableAt = now.AddDays(-2),
+                CreatedAt = now.AddDays(-2).AddTicks(index),
+                UpdatedAt = now.AddDays(-2),
+                FinishedAt = now.AddDays(-1),
+                DispatchGeneration = 1,
+                AttemptCount = 1,
+            }));
+            await db.SaveChangesAsync();
+        }
+
+        resolver.ChangeAfterCalls(int.MaxValue, "race-not-held");
+        var withHistory = await store.GetPendingDispatchesAsync(now, 10);
+        Assert.HasCount(1, withHistory);
+        Assert.AreEqual(1, resolver.Calls,
+            "The recurring hold snapshot resolves the fixed live candidate set, not historical task rows.");
     }
 
     [TestMethod]
@@ -349,6 +550,52 @@ public sealed class RaceRepairHoldTests
         {
             var call = Interlocked.Increment(ref _calls);
             return call <= _changeAfterCalls ? _beforeMutation : _afterMutation ?? _beforeMutation;
+        }
+    }
+
+    private sealed class CancelOnHeldResourcePageInterceptor(CancellationTokenSource cancellation)
+        : DbCommandInterceptor
+    {
+        private int _armed;
+        private int _cancelledResourcePageCount;
+
+        public void Arm() => Interlocked.Exchange(ref _armed, 1);
+        public int CancelledResourcePageCount => Volatile.Read(ref _cancelledResourcePageCount);
+        public string? LastCommandText { get; private set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            LastCommandText = command.CommandText;
+            if (Volatile.Read(ref _armed) == 1
+                && command.CommandText.Contains("collection_resources", StringComparison.OrdinalIgnoreCase)
+                && Interlocked.Exchange(ref _armed, 0) == 1)
+            {
+                Interlocked.Increment(ref _cancelledResourcePageCount);
+                cancellation.Cancel();
+            }
+            return ValueTask.FromResult(result);
+        }
+    }
+
+    private sealed class PrecreateHeldWorklistConnectionInterceptor : DbConnectionInterceptor
+    {
+        private int _armed;
+        private int _precreatedWorklistCount;
+
+        public int PrecreatedWorklistCount => Volatile.Read(ref _precreatedWorklistCount);
+
+        public void Arm() => Interlocked.Exchange(ref _armed, 1);
+
+        public override async Task ConnectionOpenedAsync(DbConnection connection,
+            ConnectionEndEventData eventData, CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Exchange(ref _armed, 0) != 1) return;
+            await using var command = connection.CreateCommand();
+            command.CommandText = "CREATE TEMP TABLE HeldResourceWorklist (ResourcePk INTEGER PRIMARY KEY);";
+            await command.ExecuteNonQueryAsync(cancellationToken);
+            Interlocked.Increment(ref _precreatedWorklistCount);
         }
     }
 }

@@ -14,12 +14,17 @@ public sealed class DomainRaceResourceIdentityResolver(IDbContextProvider<EventS
     public string? Resolve(string resourceId, IReadOnlyDictionary<string, string> attributes)
     {
         var explicitId = attributes.GetValueOrDefault("domainRaceId");
-        using var db = provider.CreateContext();
+        // A direct domain key is already the binding, so this hot path must not acquire a
+        // second database context merely to resolve an identity it already has.
+        if (resourceId.StartsWith("race-", StringComparison.Ordinal) && Guid.TryParseExact(resourceId[5..], "D", out _))
+            return string.IsNullOrWhiteSpace(explicitId) || explicitId == resourceId ? resourceId : null;
+
         var parts = resourceId.Split(':');
         if (parts.Length == 3 && DateOnly.TryParseExact(parts[0], "yyyyMMdd", out var date)
             && RaceCourseIdentity.Canonicalize(parts[1]) is { } course
             && int.TryParse(parts[2], out var number) && number is >= 1 and <= 12)
         {
+            using var db = provider.CreateContext();
             var candidates = db.RacePredictionContexts.AsNoTracking()
                 .Where(x => x.RaceDate == date && x.RaceNumber == number).ToList();
             string resolved;
@@ -27,9 +32,6 @@ public sealed class DomainRaceResourceIdentityResolver(IDbContextProvider<EventS
             catch (InvalidOperationException) { return null; }
             return string.IsNullOrWhiteSpace(explicitId) || explicitId == resolved ? resolved : null;
         }
-        // A direct domain key is already the binding; contradictory metadata must not override it.
-        if (resourceId.StartsWith("race-", StringComparison.Ordinal) && Guid.TryParseExact(resourceId[5..], "D", out _))
-            return string.IsNullOrWhiteSpace(explicitId) || explicitId == resourceId ? resourceId : null;
         return null;
     }
 }

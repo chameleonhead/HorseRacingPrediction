@@ -32,6 +32,7 @@ namespace HorseRacingPrediction.ApiClient;
 [JsonSerializable(typeof(global::HorseRacingPrediction.Contracts.Collection.GetBackfillBatchResponse))]
 [JsonSerializable(typeof(global::HorseRacingPrediction.Contracts.Collection.GetCollectionDashboardResponse))]
 [JsonSerializable(typeof(global::HorseRacingPrediction.Contracts.Collection.GetCollectionMonitoringFindingsResponse))]
+[JsonSerializable(typeof(global::HorseRacingPrediction.Contracts.Collection.GetCollectionRuntimeStatusResponse))]
 [JsonSerializable(typeof(global::HorseRacingPrediction.Contracts.Collection.GetCollectionPipelineResponse))]
 [JsonSerializable(typeof(global::HorseRacingPrediction.Contracts.Collection.GetCollectionProgressResponse))]
 [JsonSerializable(typeof(global::HorseRacingPrediction.Contracts.Collection.GetCollectionResourceDetailRequest))]

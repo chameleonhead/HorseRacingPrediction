@@ -184,6 +184,44 @@ public sealed class ApiClientTransportTests
     }
 
     [TestMethod]
+    public async Task CollectionRuntimeStatus_UsesReadOnlyRouteAndDeserializesWrappedSnapshot()
+    {
+        var handler = new ApiClientTestCapturingHandler(_ => JsonResponse(HttpStatusCode.OK,
+            """{"runtime":{"instanceId":"d8d969b0-7d4a-4f93-9840-9b0ac90a4fa7","instanceStartedAtUtc":"2026-10-08T00:00:00Z","generatedAtUtc":"2026-10-08T00:00:01Z","actions":[{"action":7,"enabled":true,"effectiveInterval":null,"state":2,"reason":1,"lastStartedAtUtc":null,"lastCompletedAtUtc":null,"lastSuccessfulCycleAtUtc":"2026-10-08T00:00:01Z","lastProgressAtUtc":null,"lastDurationMilliseconds":0,"inspectedCount":0,"createdCount":0,"reclaimedCount":0,"sentCount":0,"completedCount":0,"consecutiveErrors":0}]}}"""));
+        using var services = CreateServices(handler);
+
+        using var response = await services.GetRequiredService<IApiClientFactory>()
+            .Create<ICollectionApi>().GetCollectionRuntimeStatusAsync();
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsNotNull(response.Content);
+        Assert.AreEqual(CollectionRuntimeAction.MetricDelivery, response.Content.Runtime.Actions.Single().Action);
+        Assert.IsNull(response.Content.Runtime.Actions.Single().EffectiveInterval);
+        Assert.AreEqual(CollectionRuntimeReason.NoDueWork, response.Content.Runtime.Actions.Single().Reason);
+        var captured = handler.Requests.Single();
+        Assert.AreEqual(HttpMethod.Get, captured.Method);
+        Assert.AreEqual("/api/v2/admin/collection/operations/runtime-status", captured.RequestUri!.AbsolutePath);
+        Assert.IsNull(captured.Body);
+    }
+
+    [TestMethod]
+    public async Task CollectionRuntimeStatus_CancellationTokenReachesHttpTransport()
+    {
+        var handler = new ApiClientTestCapturingHandler(async (_, cancellationToken) =>
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return new ApiClientTestCapturedResponse(HttpStatusCode.OK, "{}");
+        });
+        using var services = CreateServices(handler);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(80));
+
+        await Assert.ThrowsExactlyAsync<TaskCanceledException>(async () =>
+            await services.GetRequiredService<IApiClientFactory>().Create<ICollectionApi>()
+                .GetCollectionRuntimeStatusAsync(cancellation.Token));
+        Assert.IsTrue(handler.ObservedCancellation);
+    }
+
+    [TestMethod]
     public async Task CancellationToken_ReachesHttpTransport()
     {
         var handler = new ApiClientTestCapturingHandler(async (_, cancellationToken) =>

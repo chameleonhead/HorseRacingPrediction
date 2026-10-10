@@ -153,6 +153,8 @@ public sealed class SharedCollectionIdentityTests
         Assert.IsTrue(hold.Aliases.Contains("20370927:Tokyo:1"));
         Assert.IsFalse(await store.IsValidActiveRaceLeaseAsync(lease.TaskId, lease.LeaseToken, id));
         var resolver = app.Services.GetRequiredService<IRaceResourceIdentityResolver>();
+        Assert.AreEqual(id, resolver.Resolve(id, new Dictionary<string, string>()),
+            "A direct valid race GUID resolves without the date/course EventStore lookup path.");
         Assert.IsNull(resolver.Resolve("20370927:Tokyo:1", new Dictionary<string, string> { ["domainRaceId"] = "race-" + Guid.NewGuid() }));
     }
 

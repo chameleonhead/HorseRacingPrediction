@@ -21,23 +21,40 @@ public sealed class CollectionDispatchMetricQueueOptions
 }
 
 /// <summary>Bounded, best-effort telemetry path. Producers only perform a nonblocking TryWrite.</summary>
-public sealed class CollectionDispatchMetricQueue(
-    ICollectionDispatchMetricPublisher publisher,
-    IOptions<CollectionDispatchMetricQueueOptions> options,
-    ILogger<CollectionDispatchMetricQueue> logger) : ICollectionDispatchMetricQueue, IHostedService, IDisposable
+public sealed class CollectionDispatchMetricQueue : ICollectionDispatchMetricQueue, IHostedService, IDisposable
 {
-    private readonly CollectionDispatchMetricQueueOptions _options = Normalize(options.Value);
-    private readonly Channel<WorkItem> _channel = Channel.CreateBounded<WorkItem>(new BoundedChannelOptions(
-        Math.Clamp(options.Value.Capacity, 1, 4096))
-    {
-        FullMode = BoundedChannelFullMode.Wait,
-        SingleReader = true,
-        SingleWriter = false,
-        AllowSynchronousContinuations = false,
-    });
+    private readonly ICollectionDispatchMetricPublisher publisher;
+    private readonly ILogger<CollectionDispatchMetricQueue> logger;
+    private readonly CollectionRuntimeStatusRecorder? runtimeStatus;
+    private readonly CollectionDispatchMetricQueueOptions _options;
     private readonly CancellationTokenSource _stop = new();
     private Task? _worker;
     private long _droppedItems;
+
+    public CollectionDispatchMetricQueue(ICollectionDispatchMetricPublisher publisher,
+        IOptions<CollectionDispatchMetricQueueOptions> options, ILogger<CollectionDispatchMetricQueue> logger)
+        : this(publisher, options, logger, null)
+    {
+    }
+
+    internal CollectionDispatchMetricQueue(ICollectionDispatchMetricPublisher publisher,
+        IOptions<CollectionDispatchMetricQueueOptions> options, ILogger<CollectionDispatchMetricQueue> logger,
+        CollectionRuntimeStatusRecorder? runtimeStatus)
+    {
+        this.publisher = publisher;
+        this.logger = logger;
+        this.runtimeStatus = runtimeStatus;
+        _options = Normalize(options.Value);
+        _channel = Channel.CreateBounded<WorkItem>(new BoundedChannelOptions(_options.Capacity)
+        {
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleReader = true,
+            SingleWriter = false,
+            AllowSynchronousContinuations = false,
+        });
+    }
+
+    private readonly Channel<WorkItem> _channel;
 
     public bool TryEnqueueMetrics(IReadOnlyCollection<MetricDatum> metrics)
     {
@@ -125,6 +142,8 @@ public sealed class CollectionDispatchMetricQueue(
                 catch
                 {
                     logger.LogWarning("Collection dispatch telemetry snapshot query failed.");
+                    var failedToken = runtimeStatus?.BeginCycle(CollectionRuntimeAction.MetricDelivery);
+                    if (failedToken is { } cycleToken) runtimeStatus!.FailCycle(cycleToken);
                     continue;
                 }
 
@@ -164,12 +183,17 @@ public sealed class CollectionDispatchMetricQueue(
 
     private async Task<bool> PublishBatchAsync(List<MetricDatum> metrics, CancellationToken cancellationToken)
     {
+        var token = runtimeStatus?.BeginCycle(CollectionRuntimeAction.MetricDelivery);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_options.PublishTimeout);
         try
         {
             await publisher.PublishAsync(metrics.ToArray(), timeout.Token).WaitAsync(timeout.Token)
                 .ConfigureAwait(false);
+            if (token is { } progressToken) runtimeStatus!.RecordProgress(progressToken);
+            if (token is { } completedToken)
+                runtimeStatus!.CompleteCycle(completedToken, null,
+                    new(Inspected: metrics.Count, Sent: metrics.Count, Completed: metrics.Count));
             foreach (var metric in metrics)
             {
                 var dimensions = string.Join(',', metric.Dimensions.OrderBy(x => x.Name, StringComparer.Ordinal)
@@ -181,11 +205,19 @@ public sealed class CollectionDispatchMetricQueue(
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            if (token is { } failedToken) runtimeStatus!.FailCycle(failedToken);
             logger.LogWarning("Collection dispatch metric publish timed out; background publisher stopped.");
             return false;
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            if (token is { } cancelledToken) runtimeStatus!.CancelCycle(cancelledToken);
+            throw;
+        }
         catch
         {
+            if (token is { } failedToken) runtimeStatus!.FailCycle(failedToken,
+                new(Inspected: metrics.Count));
             logger.LogWarning("Collection dispatch metric publish failed.");
             return true;
         }

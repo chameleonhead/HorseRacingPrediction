@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 internal static class CollectionPlatformSchemaMigrator
 {
-    internal const int CurrentVersion = 24;
+    internal const int CurrentVersion = 25;
     private const string HistoryTable = "collection_schema_history";
 
     private static readonly string[] ModelTables =
@@ -624,6 +624,32 @@ internal static class CollectionPlatformSchemaMigrator
                 ("$appliedAt", (object)HorseRacingPrediction.Contracts.Common.Time.JstTime.ToDatabaseString(
                     HorseRacingPrediction.Contracts.Common.Time.JstTime.Now()))).ConfigureAwait(false);
             version = 24;
+        }
+
+        if (version < 25)
+        {
+            await ExecuteAsync(connection, """
+                CREATE TABLE IF NOT EXISTS collection_batch_recovery_progress (
+                    BatchId TEXT NOT NULL CONSTRAINT PK_collection_batch_recovery_progress PRIMARY KEY
+                        REFERENCES collection_backfill_batches (BatchId) ON DELETE CASCADE,
+                    Kind TEXT NOT NULL,
+                    NextDate TEXT NULL,
+                    LastVisitedSequence INTEGER NOT NULL,
+                    ReviewReason TEXT NULL,
+                    LastErrorCode TEXT NULL
+                );
+                CREATE INDEX IF NOT EXISTS IX_collection_batch_recovery_progress_Kind_LastVisitedSequence_BatchId
+                    ON collection_batch_recovery_progress (Kind, LastVisitedSequence, BatchId);
+                CREATE TABLE IF NOT EXISTS collection_batch_recovery_scan (
+                    ScanId INTEGER NOT NULL CONSTRAINT PK_collection_batch_recovery_scan PRIMARY KEY,
+                    LastBatchId TEXT NULL,
+                    VisitSequence INTEGER NOT NULL
+                );
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (25, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Common.Time.JstTime.ToDatabaseString(
+                    HorseRacingPrediction.Contracts.Common.Time.JstTime.Now()))).ConfigureAwait(false);
+            version = 25;
         }
 
         await ExecuteAsync(connection, """

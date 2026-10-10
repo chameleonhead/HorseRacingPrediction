@@ -145,7 +145,9 @@ internal static class CollectionContractMapper
     internal static BackfillBatchSnapshotDto ToDto(BackfillBatchSnapshot value)
         => new(value.BatchId, value.From, value.To, value.ExpectedDiscoveryDays, value.RegisteredDiscoveryDays,
             value.Pending, value.Running, value.Succeeded, value.Failed, value.Holes.Select(ToDto).ToArray(),
-            value.CreatedAt, value.ExpansionCompletedAt);
+            value.CreatedAt, value.ExpansionCompletedAt, value.Recovery is null ? null
+                : new(value.Recovery.Kind, value.Recovery.RecoveryState, value.Recovery.NextDate,
+                    value.Recovery.ReviewReason));
     internal static RacePeriodRecollectionPreviewDto ToDto(RacePeriodRecollectionPreview value)
         => new(value.From, value.To, value.InclusiveDays, value.Provider);
     internal static RacePeriodRecollectionReceiptDto ToDto(RacePeriodRecollectionReceipt value)

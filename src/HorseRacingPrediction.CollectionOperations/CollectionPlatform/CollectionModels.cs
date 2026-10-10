@@ -27,9 +27,16 @@ public sealed record CollectionStateSnapshot(ResourceKey Resource, CollectionDef
     DateTimeOffset? NextCollectionAt, CollectionStateStatus Status,
     IReadOnlyList<RaceArtifactSnapshot>? RaceArtifacts = null);
 
-public sealed record CollectionScheduleCandidate(CollectionStateSnapshot State, bool HasActiveTask);
+public sealed record CollectionScheduleCandidate(CollectionStateSnapshot State, bool HasActiveTask, long ResourcePk);
 
 public sealed record CollectionRequestReceipt(Guid RequestId, Guid? TaskId, bool CreatedTask, bool DeferredByRepairHold = false);
+public sealed record CollectionScheduleAttemptResult(CollectionScheduleSweepDecision Decision,
+    CollectionRequestReceipt? Receipt)
+{
+    public bool HasProgress => Receipt?.CreatedTask == true;
+    public bool WasDeferred => Receipt?.DeferredByRepairHold == true;
+    public bool WasReused => Receipt is { CreatedTask: false, DeferredByRepairHold: false };
+}
 public sealed record CollectionRequestBatchItem(string ItemKey, ResourceKey Resource,
     CollectionDefinitionId Definition, int RequestedRevision, CollectionReason Reason,
     CollectionLane Lane, int Priority, Uri? ExplicitUrl, DateOnly? EffectiveDate,
@@ -378,7 +385,15 @@ public sealed record CollectionWatchdogResult(int ReclaimedLeases, int Redispatc
 public sealed record BackfillBatchSnapshot(string BatchId, DateOnly From, DateOnly To,
     int ExpectedDiscoveryDays, int RegisteredDiscoveryDays, int Pending, int Running,
     int Succeeded, int Failed, IReadOnlyList<BackfillHole> Holes, DateTimeOffset CreatedAt,
-    DateTimeOffset? ExpansionCompletedAt);
+    DateTimeOffset? ExpansionCompletedAt, BackfillBatchRecovery? Recovery = null);
+public sealed record BackfillBatchRecovery(CollectionBatchKind Kind,
+    CollectionBatchRecoveryState RecoveryState, DateOnly? NextDate, string? ReviewReason);
+public enum CollectionBatchCycleStopReason
+{
+    Continue,
+    Paused,
+    BudgetExhausted,
+}
 public sealed record BackfillHole(ResourceKey Resource, CollectionDefinitionId Definition,
     CollectionTaskStatus Status, string? ErrorCode, string? ErrorMessage);
 public sealed record RacePeriodRecollectionPreview(DateOnly From, DateOnly To, int InclusiveDays,

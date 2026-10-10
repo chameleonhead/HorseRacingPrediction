@@ -1678,27 +1678,32 @@ public sealed class CollectionPlatformStoreTests
             candidateDefaultLimit.Take(499).Select(x => x.State).ToArray());
         Assert.IsTrue(tiedIds.Contains(candidateDefaultLimit[499].State.Resource.Id));
         Assert.IsTrue(candidateDefaultLimit.All(x => !x.HasActiveTask));
-        var candidateZeroLimit = await store.GetDueScheduleCandidatesAsync(now, 0);
-        var candidateNegativeLimit = await store.GetDueScheduleCandidatesAsync(now, -10);
+        var candidateZeroLimit = await store.GetDueScheduleCandidatesAsync(now, limit: 0);
+        var candidateNegativeLimit = await store.GetDueScheduleCandidatesAsync(now, limit: -10);
         Assert.AreEqual("due-000", candidateZeroLimit.Single().State.Resource.Id);
         Assert.AreEqual("due-000", candidateNegativeLimit.Single().State.Resource.Id);
 
-        var candidateAll = await store.GetDueScheduleCandidatesAsync(now, 600);
+        var candidateAll = await store.GetDueScheduleCandidatesAsync(now, limit: 600);
+        Assert.HasCount(500, candidateAll, "Scheduler candidate pages must never exceed the fixed 500-row bound.");
         var candidatesById = candidateAll.ToDictionary(x => x.State.Resource.Id, x => x.State);
-        var snapshotsById = all.ToDictionary(x => x.Resource.Id);
+        var snapshotsById = all.Take(500).ToDictionary(x => x.Resource.Id);
         CollectionAssert.AreEquivalent(snapshotsById.Keys.Order().ToArray(), candidatesById.Keys.Order().ToArray());
         foreach (var (id, snapshot) in snapshotsById)
             Assert.AreEqual(snapshot, candidatesById[id], $"Candidate snapshot changed for {id}.");
         Assert.IsFalse(candidateAll.Any(x => x.HasActiveTask));
         Assert.IsTrue(candidateAll.All(x => x.State.NextCollectionAt <= now));
-        var candidateOffset = await store.GetDueScheduleCandidatesAsync(now.ToOffset(TimeSpan.FromHours(-5)), 600);
+        var remainingCandidates = await store.GetDueScheduleCandidatesAsync(now,
+            CollectionScheduleSweepPolicy.CursorAfter(candidateAll[^1]), limit: 500);
+        Assert.HasCount(3, remainingCandidates, "Keyset continuation must surface all candidates beyond the first page.");
+        var candidateOffset = await store.GetDueScheduleCandidatesAsync(
+            now.ToOffset(TimeSpan.FromHours(-5)), limit: 600);
         CollectionAssert.AreEquivalent(candidateAll.Select(x => x.State).ToArray(),
             candidateOffset.Select(x => x.State).ToArray());
 
         capture.Clear();
         _ = await store.GetDueScheduleCandidatesAsync(now);
         var candidateQuery = capture.Commands.Single(x => x.CommandText.Contains("collection_states", StringComparison.Ordinal));
-        StringAssert.Contains(candidateQuery.CommandText, "EXISTS");
+        StringAssert.Contains(candidateQuery.CommandText, "NOT EXISTS");
         StringAssert.Contains(candidateQuery.CommandText, "ORDER BY");
         StringAssert.Contains(candidateQuery.CommandText, "LIMIT");
         Assert.IsFalse(candidateQuery.CommandText.Contains("COUNT(", StringComparison.OrdinalIgnoreCase));
@@ -1706,7 +1711,7 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
-    public async Task GetDueScheduleCandidatesAsync_ProjectsActiveFlagWithoutRefillingFirst500Window()
+    public async Task GetDueScheduleCandidatesAsync_ExcludesActiveRowsBeforeApplyingLimit()
     {
         var databasePath = Path.Combine(_directory, "due-candidate-window.db");
         var capture = new SqlCommandCaptureInterceptor();
@@ -1770,41 +1775,819 @@ public sealed class CollectionPlatformStoreTests
             await db.SaveChangesAsync();
         }
 
-        var originalWindow = await store.GetDueStatesAsync(now);
         capture.Clear();
         var candidates = await store.GetDueScheduleCandidatesAsync(now);
 
-        Assert.HasCount(500, originalWindow);
         Assert.HasCount(500, candidates);
-        CollectionAssert.AreEqual(originalWindow.ToArray(), candidates.Select(x => x.State).ToArray());
-        Assert.IsTrue(candidates.All(x => x.HasActiveTask));
-        Assert.IsFalse(candidates.Any(x => x.State.Resource.Id == "window-0500"),
-            "The inactive 501st due resource must not refill the original first-500 window.");
+        Assert.IsTrue(candidates.All(x => !x.HasActiveTask));
+        Assert.AreEqual("window-0500", candidates[0].State.Resource.Id,
+            "The first eligible row after 500 active rows must be visible in the bounded page.");
         capture.Clear();
-        var extendedWindow = await store.GetDueScheduleCandidatesAsync(now, 501);
-        Assert.AreEqual(501, extendedWindow.Count);
-        Assert.IsTrue(extendedWindow.Take(500).All(x => x.HasActiveTask));
-        Assert.IsFalse(extendedWindow[500].HasActiveTask,
-            "An active key must match both ResourcePk and DefinitionId.");
+        var extendedWindow = await store.GetDueScheduleCandidatesAsync(now, limit: 501);
+        Assert.AreEqual(500, extendedWindow.Count,
+            "Rows with an exact resource/definition active key are excluded before the limit.");
+        Assert.IsFalse(extendedWindow.Any(x => x.State.Resource.Id == "window-1000"),
+            "The active key for the final row must be excluded.");
+        Assert.IsTrue(extendedWindow.Any(x => x.State.Resource.Id == "window-0500"),
+            "An active key for another definition must not hide this candidate.");
 
         var sql = capture.Commands.Single(x => x.CommandText.Contains("collection_states", StringComparison.Ordinal));
-        StringAssert.Contains(sql.CommandText, "EXISTS");
+        StringAssert.Contains(sql.CommandText, "NOT EXISTS");
         StringAssert.Contains(sql.CommandText, "LIMIT");
-        Assert.IsFalse(sql.CommandText.Contains("NOT EXISTS", StringComparison.OrdinalIgnoreCase),
-            "Active tasks are projected, not filtered before the legacy limit.");
         Assert.AreEqual(1, capture.Commands.Count(x => x.CommandText.Contains("collection_states", StringComparison.Ordinal)),
-            "The active-task flag must be part of the single due candidate query.");
+            "Active filtering must remain in the single due candidate query.");
         TestContext.WriteLine($"Active first-500 SQL: {sql.CommandText}");
     }
 
     [TestMethod]
-    public async Task ReclaimExpiredExecutionLeasesAsync_QueriesOnceAndPreservesReturnAndReleaseBehavior()
+    public async Task GetDueScheduleCandidatesAsync_ExcludesFailedBeforeLimitAndUsesStableKeyset()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.FromHours(9));
+        await using (var db = new CollectionPlatformDbContext(
+                         new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                             .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False")
+                             .Options))
+        {
+            var resources = new[] { "failed-first", "eligible-a", "eligible-b" }.Select(id =>
+                new CollectionResourceEntity
+                {
+                    Type = CollectionResourceType.Horse,
+                    Provider = "JRA",
+                    ResourceId = id,
+                    AttributesJson = "{}",
+                    CreatedAt = now,
+                }).ToArray();
+            db.Resources.AddRange(resources);
+            await db.SaveChangesAsync();
+            db.States.AddRange(resources.Select((resource, index) => new CollectionStateEntity
+            {
+                ResourcePk = resource.ResourcePk,
+                DefinitionId = "horse-profile",
+                AppliedRevision = 1,
+                RequiredRevision = 1,
+                NextCollectionAt = now,
+                Status = index == 0 ? CollectionStateStatus.Failed : CollectionStateStatus.RefreshDue,
+                UpdatedAt = now,
+            }));
+            await db.SaveChangesAsync();
+        }
+
+        var firstPage = await store.GetDueScheduleCandidatesAsync(now, limit: 1);
+        Assert.AreEqual("eligible-a", firstPage.Single().State.Resource.Id);
+        var cursor = CollectionScheduleSweepPolicy.CursorAfter(firstPage.Single());
+        var secondPage = await store.GetDueScheduleCandidatesAsync(now, cursor, limit: 1);
+        Assert.AreEqual("eligible-b", secondPage.Single().State.Resource.Id);
+        Assert.IsEmpty(await store.GetDueScheduleCandidatesAsync(now,
+            CollectionScheduleSweepPolicy.CursorAfter(secondPage.Single()), limit: 1));
+    }
+
+    [TestMethod]
+    public async Task TryScheduleDueAsync_RejectsCandidateThatBecameFailedAfterRead()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.FromHours(9));
+        var candidate = await SeedDueStateAsync(store, now, "stale-failure");
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False")
+            .Options;
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            var state = await db.States.SingleAsync(x => x.ResourcePk == candidate.ResourcePk);
+            state.Status = CollectionStateStatus.Failed;
+            await db.SaveChangesAsync();
+        }
+
+        var decision = await store.TryScheduleDueAsync(candidate,
+            new(true, null, CollectionPriority.Normal, CollectionLane.Normal, "test"), now,
+            new AlwaysCollectSchedulePolicy());
+
+        Assert.IsFalse(decision.ShouldCollect);
+        Assert.AreEqual("failed", decision.Reason);
+        Assert.IsEmpty(await store.GetTasksAsync());
+    }
+
+    [TestMethod]
+    public async Task TryScheduleDueDetailedAsync_ReportsOnlyActualCreatedTaskAsProgress()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.FromHours(9));
+        var candidate = await SeedDueStateAsync(store, now, "detailed-schedule");
+
+        var result = await store.TryScheduleDueDetailedAsync(candidate,
+            new(true, null, CollectionPriority.Normal, CollectionLane.Normal, "test"), now,
+            new AlwaysCollectSchedulePolicy());
+
+        Assert.IsTrue(result.Decision.ShouldCollect);
+        Assert.IsNotNull(result.Receipt);
+        Assert.IsTrue(result.Receipt.CreatedTask);
+        Assert.IsTrue(result.HasProgress);
+        Assert.AreEqual(1, (await store.GetTasksAsync()).Count(x => x.Resource.Id == "detailed-schedule"));
+    }
+
+    [TestMethod]
+    public async Task TryScheduleDueDetailedAsync_RepairHoldDoesNotReportProgress()
+    {
+        var store = await CreateStoreAsync();
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
+            1, "initial", false);
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+        var raceId = $"race-{Guid.NewGuid():D}";
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False").Options;
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            var resource = new CollectionResourceEntity
+            {
+                Type = CollectionResourceType.Race,
+                Provider = "JRA",
+                ResourceId = raceId,
+                AttributesJson = "{}",
+                CreatedAt = now
+            };
+            db.Resources.Add(resource);
+            await db.SaveChangesAsync();
+            db.States.Add(new CollectionStateEntity
+            {
+                ResourcePk = resource.ResourcePk,
+                DefinitionId = "race-discovery",
+                AppliedRevision = 1,
+                RequiredRevision = 1,
+                NextCollectionAt = now,
+                Status = CollectionStateStatus.RefreshDue,
+                UpdatedAt = now
+            });
+            await db.SaveChangesAsync();
+        }
+        await store.HoldRaceForRepairAsync(raceId, Guid.NewGuid().ToString(), 0, "review", now);
+        var candidate = (await store.GetDueScheduleCandidatesAsync(now)).Single();
+
+        var result = await store.TryScheduleDueDetailedAsync(candidate,
+            new(true, null, CollectionPriority.Normal, CollectionLane.Normal, "test"), now,
+            new AlwaysCollectSchedulePolicy());
+
+        Assert.IsFalse(result.Decision.ShouldCollect);
+        Assert.AreEqual("repair-held", result.Decision.Reason);
+        Assert.IsNull(result.Receipt);
+        Assert.IsFalse(result.HasProgress);
+        Assert.IsEmpty(await store.GetTasksAsync());
+    }
+
+    [TestMethod]
+    public async Task TryScheduleDueAsync_RechecksActiveArrivalFromIndependentStore()
+    {
+        var store1 = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.FromHours(9));
+        var candidate = await SeedDueStateAsync(store1, now, "two-store-race");
+        var databasePath = Path.Combine(_directory, "collection-platform.db");
+        var independentOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={databasePath};Pooling=False;Default Timeout=29")
+            .Options;
+        var store2 = new CollectionPlatformStore(independentOptions);
+        await store2.RequestAsync(candidate.State.Resource, candidate.State.Definition, 7,
+            CollectionReason.Initial, now.AddSeconds(1));
+
+        var result = await store1.TryScheduleDueDetailedAsync(candidate,
+            new(true, null, CollectionPriority.Normal, CollectionLane.Normal, "test"), now.AddSeconds(2),
+            new AlwaysCollectSchedulePolicy());
+
+        Assert.IsFalse(result.Decision.ShouldCollect);
+        Assert.AreEqual("active", result.Decision.Reason);
+        Assert.IsNull(result.Receipt);
+        Assert.IsFalse(result.HasProgress, "An already-active task is not newly created progress.");
+        Assert.AreEqual(1, (await store1.GetTasksAsync()).Count(x => x.Resource.Id == "two-store-race"));
+    }
+
+    [TestMethod]
+    public async Task BatchRecovery_ManualTypedPathWritesMetadataAndRejectsKindCollision()
+    {
+        var store = await CreateStoreAsync();
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
+            1, "initial", false);
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+        var from = new DateOnly(2026, 9, 1);
+        var batch = await store.CreateOrResumeBackfillBatchAsync("typed-replay", "JRA", from, from, now);
+
+        Assert.AreEqual(CollectionBatchKind.Backfill, batch.Recovery?.Kind);
+        Assert.AreEqual(CollectionBatchRecoveryState.Completed, batch.Recovery?.RecoveryState);
+        Assert.IsNull(batch.Recovery?.NextDate);
+        await Assert.ThrowsExactlyAsync<CollectionBatchIdentityConflictException>(() =>
+            store.CreateOrResumeRacePeriodRecollectionAsync("typed-replay", "JRA", from, from, now));
+    }
+
+    [TestMethod]
+    public async Task BatchRecovery_TwoStoreManualReplayKeepsOneReceiptAndNoCursorRegression()
+    {
+        var firstStore = await CreateStoreAsync();
+        await firstStore.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
+            1, "initial", false);
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False").Options;
+        var secondStore = new CollectionPlatformStore(options);
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+        var date = new DateOnly(2026, 9, 1);
+
+        var receipts = await Task.WhenAll(
+            firstStore.CreateOrResumeRacePeriodRecollectionAsync("two-store-replay", "JRA", date, date, now),
+            secondStore.CreateOrResumeRacePeriodRecollectionAsync("two-store-replay", "JRA", date, date, now));
+
+        Assert.AreEqual(1, receipts.Sum(x => x.TasksCreated));
+        Assert.AreEqual(1, receipts.Sum(x => x.TasksReused));
+        Assert.AreEqual(1, (await firstStore.GetTasksAsync()).Count(x => x.Resource.Id == "recollection:20260901"));
+        var recovery = (await firstStore.GetBackfillBatchAsync("two-store-replay"))!.Recovery;
+        Assert.AreEqual(CollectionBatchKind.PeriodRecollection, recovery?.Kind);
+        Assert.AreEqual(CollectionBatchRecoveryState.Completed, recovery?.RecoveryState);
+    }
+
+    [TestMethod]
+    public async Task BackfillRecoveryCycle_IsBoundedAndPublishesOnlyCommittedCreatedCounts()
+    {
+        var store = await CreateStoreAsync();
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
+            1, "initial", false);
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+        var from = new DateOnly(2026, 1, 1);
+        var to = from.AddDays(100);
+        var databasePath = Path.Combine(_directory, "collection-platform.db");
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={databasePath};Pooling=False").Options;
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            db.BackfillBatches.Add(new BackfillBatchEntity
+            {
+                BatchId = "periodic-101",
+                Provider = "JRA",
+                From = from,
+                To = to,
+                CreatedAt = now
+            });
+            db.BatchRecoveryProgress.Add(new CollectionBatchRecoveryProgressEntity
+            {
+                BatchId = "periodic-101",
+                Kind = CollectionBatchKind.Backfill,
+                NextDate = from,
+                LastVisitedSequence = 0
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var notifications = new List<CollectionPlatformStore.CollectionBatchCycleResult>();
+        var result = await store.RunBackfillRecoveryCycleAsync(now, onChunkCommitted: notifications.Add);
+
+        Assert.AreEqual(1, result.BatchesVisited);
+        Assert.AreEqual(7, result.DatesVisited);
+        Assert.AreEqual(7, result.TasksCreated);
+        Assert.AreEqual(0, result.TasksReused);
+        Assert.AreEqual(7, notifications[^1].TasksCreated);
+        Assert.AreEqual(7, (await store.GetTasksAsync(limit: 100)).Count(x => x.Resource.Id.StartsWith("backfill:")));
+        await using var verify = new CollectionPlatformDbContext(options);
+        var progress = await verify.BatchRecoveryProgress.SingleAsync(x => x.BatchId == "periodic-101");
+        Assert.AreEqual(from.AddDays(7), progress.NextDate);
+        Assert.IsNull((await verify.BackfillBatches.SingleAsync(x => x.BatchId == "periodic-101")).ExpansionCompletedAt);
+    }
+
+    [TestMethod]
+    public async Task BackfillRecoveryCycle_PeriodRecollectionRequeuesDifferentBatchTerminalButReusesSameBatchTerminal()
+    {
+        var store = await CreateStoreAsync();
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
+            1, "initial", false);
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+        var from = new DateOnly(2026, 9, 1);
+        var secondDate = from.AddDays(1);
+        var oldBatch = await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "recollection:20260901"),
+            new("race-discovery"), 1, CollectionReason.PeriodRecollection, now, CollectionLane.Background,
+            (int)CollectionPriority.Background, batchId: "old-period-batch", effectiveDate: from,
+            attributes: new Dictionary<string, string> { ["batchId"] = "old-period-batch", ["backfillDate"] = "2026-09-01" });
+        var oldTask = oldBatch.TaskId ?? throw new InvalidOperationException("The old-batch fixture must create a task.");
+        Assert.IsTrue(await store.ReconcileDeadLetterAsync(oldTask, 1, now.AddSeconds(1), "old batch terminal"));
+
+        var sameBatch = await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "recollection:20260902"),
+            new("race-discovery"), 1, CollectionReason.PeriodRecollection, now, CollectionLane.Background,
+            (int)CollectionPriority.Background, batchId: "period-cycle", effectiveDate: secondDate,
+            attributes: new Dictionary<string, string> { ["batchId"] = "period-cycle", ["backfillDate"] = "2026-09-02" });
+        var sameTask = sameBatch.TaskId ?? throw new InvalidOperationException("The same-batch fixture must create a task.");
+        Assert.IsTrue(await store.ReconcileDeadLetterAsync(sameTask, 1, now.AddSeconds(1), "same batch terminal"));
+        await store.SetPausedAsync(false, null, now.AddSeconds(2));
+
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False")
+            .Options;
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            db.BackfillBatches.Add(new BackfillBatchEntity
+            { BatchId = "period-cycle", Provider = "JRA", From = from, To = secondDate, CreatedAt = now });
+            db.BatchRecoveryProgress.Add(new CollectionBatchRecoveryProgressEntity
+            { BatchId = "period-cycle", Kind = CollectionBatchKind.PeriodRecollection, NextDate = from });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await store.RunBackfillRecoveryCycleAsync(now.AddMinutes(1));
+
+        Assert.AreEqual(CollectionBatchCycleStopReason.Continue, result.StopReason);
+        Assert.AreEqual(1, result.BatchesVisited);
+        Assert.AreEqual(2, result.DatesVisited);
+        Assert.AreEqual(1, result.TasksCreated,
+            "A failed task from a different batch is a new request; a terminal request in this batch is reused.");
+        Assert.AreEqual(1, result.TasksReused);
+        var tasks = await store.GetTasksAsync(limit: 100);
+        Assert.AreEqual(2, tasks.Count(x => x.Resource.Id == "recollection:20260901"));
+        Assert.AreEqual(1, tasks.Count(x => x.Resource.Id == "recollection:20260902"));
+        Assert.AreEqual(1, tasks.Count(x => x.Resource.Id == "recollection:20260901" && x.Status == CollectionTaskStatus.Ready));
+        Assert.AreEqual(1, tasks.Count(x => x.Resource.Id == "recollection:20260902" && x.Status == CollectionTaskStatus.DeadLetter));
+        var recovery = (await store.GetBackfillBatchAsync("period-cycle"))!.Recovery;
+        Assert.AreEqual(CollectionBatchKind.PeriodRecollection, recovery?.Kind);
+        Assert.AreEqual(CollectionBatchRecoveryState.Completed, recovery?.RecoveryState);
+    }
+
+    [TestMethod]
+    public async Task BackfillRecoveryCycle_MidChunkSqlFailureRollsBackPriorDateAndCursor()
+    {
+        var store = await CreateStoreAsync();
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
+            1, "initial", false);
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+        var from = new DateOnly(2026, 9, 1);
+        var second = from.AddDays(1);
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False")
+            .Options;
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            db.BackfillBatches.Add(new BackfillBatchEntity
+            { BatchId = "mid-chunk-failure", Provider = "JRA", From = from, To = from.AddDays(6), CreatedAt = now });
+            db.BatchRecoveryProgress.Add(new CollectionBatchRecoveryProgressEntity
+            { BatchId = "mid-chunk-failure", Kind = CollectionBatchKind.Backfill, NextDate = from });
+            await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TRIGGER FailSecondRecoveryTask BEFORE INSERT ON collection_tasks
+                WHEN NEW.ResourcePk = (SELECT ResourcePk FROM collection_resources
+                    WHERE ResourceId = 'backfill:20260902' AND Provider = 'JRA')
+                BEGIN
+                    SELECT CASE WHEN NOT EXISTS (
+                        SELECT 1 FROM collection_tasks t JOIN collection_resources r ON r.ResourcePk = t.ResourcePk
+                        WHERE r.ResourceId = 'backfill:20260901' AND r.Provider = 'JRA'
+                    ) THEN RAISE(ABORT, 'first date request was not written before second date') END;
+                    SELECT RAISE(ABORT, 'injected second-date failure');
+                END;
+                """);
+        }
+
+        await Assert.ThrowsExactlyAsync<Microsoft.EntityFrameworkCore.DbUpdateException>(
+            () => store.RunBackfillRecoveryCycleAsync(now));
+
+        await using (var verify = new CollectionPlatformDbContext(options))
+        {
+            var progress = await verify.BatchRecoveryProgress.SingleAsync(x => x.BatchId == "mid-chunk-failure");
+            Assert.AreEqual(from, progress.NextDate);
+            Assert.AreEqual("RequestFailed", progress.LastErrorCode);
+            Assert.AreEqual(0, await verify.Requests.CountAsync(x => x.BatchId == "mid-chunk-failure"));
+            Assert.AreEqual(0, await verify.Tasks.CountAsync());
+            Assert.AreEqual(0, await verify.Resources.CountAsync(x => x.ResourceId.StartsWith("backfill:")));
+            await verify.Database.ExecuteSqlRawAsync("DROP TRIGGER FailSecondRecoveryTask;");
+        }
+
+        var retry = await store.RunBackfillRecoveryCycleAsync(now.AddMinutes(1));
+        Assert.AreEqual(7, retry.DatesVisited);
+        Assert.AreEqual(7, retry.TasksCreated);
+        await using var final = new CollectionPlatformDbContext(options);
+        var completed = await final.BatchRecoveryProgress.SingleAsync(x => x.BatchId == "mid-chunk-failure");
+        Assert.IsNull(completed.NextDate);
+        Assert.IsNull(completed.LastErrorCode);
+        Assert.AreEqual(7, await final.Requests.CountAsync(x => x.BatchId == "mid-chunk-failure"));
+        Assert.AreEqual(7, await final.Tasks.CountAsync());
+    }
+
+    [TestMethod]
+    public async Task BackfillRecoveryCycle_LegacyScanCapsAtTenAndEventuallyVisitsRemainder()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+        var date = new DateOnly(2026, 9, 1);
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False")
+            .Options;
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            for (var index = 0; index < 11; index++)
+            {
+                var id = $"legacy-{index:D2}";
+                db.BackfillBatches.Add(new BackfillBatchEntity
+                { BatchId = id, Provider = "JRA", From = date, To = date, CreatedAt = now.AddSeconds(index) });
+            }
+            await db.SaveChangesAsync();
+        }
+
+        var first = await store.RunBackfillRecoveryCycleAsync(now);
+        Assert.AreEqual(10, first.LegacyRowsInspected);
+        Assert.AreEqual(0, first.TasksCreated);
+        await using (var verify = new CollectionPlatformDbContext(options))
+        {
+            Assert.AreEqual(10, await verify.BatchRecoveryProgress.CountAsync());
+            Assert.AreEqual(10, (await verify.BatchRecoveryProgress.Select(x => x.Kind).ToListAsync())
+                .Count(x => x == CollectionBatchKind.Unknown));
+        }
+
+        var second = await store.RunBackfillRecoveryCycleAsync(now.AddMinutes(1));
+        Assert.AreEqual(1, second.LegacyRowsInspected);
+        Assert.AreEqual(0, second.TasksCreated);
+        await using var final = new CollectionPlatformDbContext(options);
+        Assert.AreEqual(11, await final.BatchRecoveryProgress.CountAsync());
+        Assert.AreEqual(11, await final.BatchRecoveryProgress.CountAsync(x => x.Kind == CollectionBatchKind.Unknown
+            && x.ReviewReason == "NoRootEvidence"));
+    }
+
+    [TestMethod]
+    public async Task BackfillRecoveryCycle_ManualReplayBetweenChunksDoesNotRegressCheckpointOrDuplicateTasks()
+    {
+        var store = await CreateStoreAsync();
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
+            1, "initial", false);
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+        var from = new DateOnly(2026, 1, 1);
+        var to = from.AddDays(13);
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False")
+            .Options;
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            db.BackfillBatches.Add(new BackfillBatchEntity
+            { BatchId = "manual-interleave", Provider = "JRA", From = from, To = to, CreatedAt = now });
+            db.BatchRecoveryProgress.Add(new CollectionBatchRecoveryProgressEntity
+            { BatchId = "manual-interleave", Kind = CollectionBatchKind.Backfill, NextDate = from });
+            await db.SaveChangesAsync();
+        }
+
+        BackfillBatchSnapshot? manualReplay = null;
+        var periodic = await store.RunBackfillRecoveryCycleAsync(now, onChunkCommitted: committed =>
+        {
+            if (committed.TasksCreated == 7)
+                manualReplay = store.CreateOrResumeBackfillBatchAsync("manual-interleave", "JRA", from, to,
+                    now.AddSeconds(1)).GetAwaiter().GetResult();
+        });
+
+        Assert.AreEqual(7, periodic.DatesVisited);
+        Assert.AreEqual(7, periodic.TasksCreated);
+        Assert.IsNotNull(manualReplay);
+        Assert.AreEqual(CollectionBatchRecoveryState.Completed, manualReplay.Recovery?.RecoveryState);
+        Assert.AreEqual(14, (await store.GetTasksAsync(limit: 100)).Count(x => x.Resource.Id.StartsWith("backfill:")));
+        var afterReplay = (await store.GetBackfillBatchAsync("manual-interleave"))!;
+        Assert.IsNull(afterReplay.Recovery?.NextDate);
+        Assert.IsNotNull(afterReplay.ExpansionCompletedAt);
+
+        var laterPeriodic = await store.RunBackfillRecoveryCycleAsync(now.AddMinutes(1));
+        Assert.AreEqual(0, laterPeriodic.BatchesVisited);
+        Assert.AreEqual(14, (await store.GetTasksAsync(limit: 100)).Count(x => x.Resource.Id.StartsWith("backfill:")));
+        var final = (await store.GetBackfillBatchAsync("manual-interleave"))!;
+        Assert.AreEqual(afterReplay.Recovery?.NextDate, final.Recovery?.NextDate);
+        Assert.AreEqual(afterReplay.ExpansionCompletedAt, final.ExpansionCompletedAt);
+        Assert.AreEqual(CollectionBatchRecoveryState.Completed, final.Recovery?.RecoveryState);
+    }
+
+    [TestMethod]
+    public async Task BackfillRecoveryCycle_ZeroAndMixedEvidenceStayNeedsReviewWithoutRepeatedClassification()
+    {
+        var store = await CreateStoreAsync();
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
+            1, "initial", false);
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+        var date = new DateOnly(2026, 9, 1);
+        await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "backfill:20260901"),
+            new("race-discovery"), 1, CollectionReason.Backfill, now, CollectionLane.Background,
+            (int)CollectionPriority.Background, batchId: "mixed-evidence", effectiveDate: date,
+            attributes: new Dictionary<string, string> { ["batchId"] = "mixed-evidence", ["backfillDate"] = "2026-09-01" });
+        await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "recollection:20260901"),
+            new("race-discovery"), 1, CollectionReason.PeriodRecollection, now, CollectionLane.Background,
+            (int)CollectionPriority.Background, batchId: "mixed-evidence", effectiveDate: date,
+            attributes: new Dictionary<string, string> { ["batchId"] = "mixed-evidence", ["backfillDate"] = "2026-09-01" });
+
+        var databasePath = Path.Combine(_directory, "collection-platform.db");
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={databasePath};Pooling=False").Options;
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            db.BackfillBatches.AddRange(
+                new BackfillBatchEntity { BatchId = "zero-evidence", Provider = "JRA", From = date, To = date, CreatedAt = now },
+                new BackfillBatchEntity { BatchId = "mixed-evidence", Provider = "JRA", From = date, To = date, CreatedAt = now });
+            await db.SaveChangesAsync();
+        }
+
+        var firstNotifications = new List<CollectionPlatformStore.CollectionBatchCycleResult>();
+        var firstCycle = await store.RunBackfillRecoveryCycleAsync(now, onChunkCommitted: firstNotifications.Add);
+        Assert.AreEqual(2, firstCycle.LegacyRowsInspected);
+        Assert.AreEqual(0, firstCycle.TasksCreated);
+        Assert.AreEqual(0, firstNotifications[^1].TasksCreated,
+            "Classifying metadata does not count as task-creation progress.");
+        var zero = (await store.GetBackfillBatchAsync("zero-evidence"))!.Recovery;
+        var mixed = (await store.GetBackfillBatchAsync("mixed-evidence"))!.Recovery;
+        Assert.AreEqual(CollectionBatchKind.Unknown, zero?.Kind);
+        Assert.AreEqual(CollectionBatchRecoveryState.NeedsReview, zero?.RecoveryState);
+        Assert.AreEqual("NoRootEvidence", zero?.ReviewReason);
+        Assert.AreEqual(CollectionBatchKind.Unknown, mixed?.Kind);
+        Assert.AreEqual("MixedOrUnsupportedReasons", mixed?.ReviewReason);
+
+        var secondCycle = await store.RunBackfillRecoveryCycleAsync(now.AddMinutes(5));
+        Assert.AreEqual(0, secondCycle.LegacyRowsInspected);
+        Assert.AreEqual(2, (await store.GetTasksAsync()).Count(x => x.Resource.Id.StartsWith("backfill:")
+            || x.Resource.Id.StartsWith("recollection:")));
+    }
+
+    [TestMethod]
+    public async Task BackfillRecoveryCycle_MalformedMetadataAndNoncanonicalResourceIdsBecomeReviewRows()
+    {
+        var store = await CreateStoreAsync();
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
+            1, "initial", false);
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+        var from = new DateOnly(2026, 2, 1);
+        var to = new DateOnly(2026, 3, 31);
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False").Options;
+
+        await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "backfill:20260202-extra"),
+            new("race-discovery"), 1, CollectionReason.Backfill, now, CollectionLane.Background,
+            (int)CollectionPriority.Background, batchId: "trailing-id", effectiveDate: new(2026, 2, 2),
+            attributes: new Dictionary<string, string> { ["batchId"] = "trailing-id", ["backfillDate"] = "2026-02-02" });
+        await store.RequestAsync(new(CollectionResourceType.Race, "JRA", "backfill:20260230"),
+            new("race-discovery"), 1, CollectionReason.Backfill, now, CollectionLane.Background,
+            (int)CollectionPriority.Background, batchId: "invalid-date", effectiveDate: new(2026, 2, 28),
+            attributes: new Dictionary<string, string> { ["batchId"] = "invalid-date", ["backfillDate"] = "2026-02-30" });
+
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            var resource = new CollectionResourceEntity
+            {
+                Type = CollectionResourceType.Race,
+                Provider = "JRA",
+                ResourceId = "backfill:20260203",
+                AttributesJson = "{}",
+                CreatedAt = now
+            };
+            db.Resources.Add(resource);
+            db.BackfillBatches.AddRange(new[] { "trailing-id", "invalid-date", "malformed-json" }
+                .Select(id => new BackfillBatchEntity
+                { BatchId = id, Provider = "JRA", From = from, To = to, CreatedAt = now }));
+            await db.SaveChangesAsync();
+            db.Requests.Add(new CollectionRequestEntity
+            {
+                RequestId = Guid.NewGuid(),
+                ResourcePk = resource.ResourcePk,
+                DefinitionId = "race-discovery",
+                RequestedRevision = 1,
+                Reason = CollectionReason.Backfill,
+                Lane = CollectionLane.Background,
+                Priority = (int)CollectionPriority.Background,
+                MetadataJson = "{not-json",
+                RequestedAt = now,
+                BatchId = "malformed-json"
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await store.RunBackfillRecoveryCycleAsync(now);
+        Assert.AreEqual(3, result.LegacyRowsInspected);
+        foreach (var id in new[] { "trailing-id", "invalid-date", "malformed-json" })
+        {
+            var recovery = (await store.GetBackfillBatchAsync(id))!.Recovery;
+            Assert.AreEqual(CollectionBatchKind.Unknown, recovery?.Kind, id);
+            Assert.AreEqual(CollectionBatchRecoveryState.NeedsReview, recovery?.RecoveryState, id);
+        }
+    }
+
+    [TestMethod]
+    public async Task BackfillRecoveryCycle_FailedChunkLeavesCursorAndRecordsAllowlistedError()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+        var date = new DateOnly(2026, 9, 1);
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False").Options;
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            db.BackfillBatches.Add(new BackfillBatchEntity
+            { BatchId = "missing-definition", Provider = "JRA", From = date, To = date, CreatedAt = now });
+            db.BatchRecoveryProgress.Add(new CollectionBatchRecoveryProgressEntity
+            { BatchId = "missing-definition", Kind = CollectionBatchKind.Backfill, NextDate = date });
+            await db.SaveChangesAsync();
+        }
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => store.RunBackfillRecoveryCycleAsync(now));
+
+        await using var verify = new CollectionPlatformDbContext(options);
+        var progress = await verify.BatchRecoveryProgress.SingleAsync(x => x.BatchId == "missing-definition");
+        Assert.AreEqual(date, progress.NextDate);
+        Assert.AreEqual("RequestFailed", progress.LastErrorCode);
+        Assert.IsNull((await verify.BackfillBatches.SingleAsync(x => x.BatchId == "missing-definition")).ExpansionCompletedAt);
+        Assert.AreEqual(0, await verify.Tasks.CountAsync());
+    }
+
+    [TestMethod]
+    public async Task BackfillRecoveryCycle_ObserverFailureCannotReplayCommittedChunk()
+    {
+        var store = await CreateStoreAsync();
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
+            1, "initial", false);
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+        var date = new DateOnly(2026, 9, 1);
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False").Options;
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            db.BackfillBatches.Add(new BackfillBatchEntity
+            { BatchId = "observer-throw", Provider = "JRA", From = date, To = date, CreatedAt = now });
+            db.BatchRecoveryProgress.Add(new CollectionBatchRecoveryProgressEntity
+            { BatchId = "observer-throw", Kind = CollectionBatchKind.Backfill, NextDate = date });
+            await db.SaveChangesAsync();
+        }
+
+        var first = await store.RunBackfillRecoveryCycleAsync(now, onChunkCommitted: _ => throw new InvalidOperationException("observer"));
+        var retry = await store.RunBackfillRecoveryCycleAsync(now.AddMinutes(5));
+
+        Assert.AreEqual(1, first.TasksCreated);
+        Assert.AreEqual(0, retry.TasksCreated);
+        Assert.AreEqual(1, (await store.GetTasksAsync()).Count(x => x.Resource.Id == "backfill:20260901"));
+    }
+
+    [TestMethod]
+    public async Task BackfillRecoveryCycle_CancellationAfterFirstCommitRetainsCumulativeCounts()
+    {
+        var store = await CreateStoreAsync();
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
+            1, "initial", false);
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+        var from = new DateOnly(2026, 1, 1);
+        var to = from.AddDays(100);
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False").Options;
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            foreach (var batchId in new[] { "a-first", "b-second" })
+            {
+                db.BackfillBatches.Add(new BackfillBatchEntity
+                { BatchId = batchId, Provider = "JRA", From = from, To = to, CreatedAt = now });
+                db.BatchRecoveryProgress.Add(new CollectionBatchRecoveryProgressEntity
+                { BatchId = batchId, Kind = CollectionBatchKind.Backfill, NextDate = from });
+            }
+            await db.SaveChangesAsync();
+        }
+
+        using var cancellation = new CancellationTokenSource();
+        CollectionPlatformStore.CollectionBatchCycleResult? published = null;
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            store.RunBackfillRecoveryCycleAsync(now, cancellation.Token, result =>
+            {
+                if (result.TasksCreated >= 7)
+                {
+                    published = result;
+                    cancellation.Cancel();
+                }
+            }));
+
+        Assert.IsNotNull(published);
+        Assert.AreEqual(7, published.TasksCreated);
+        Assert.AreEqual(7, published.DatesVisited);
+        Assert.AreEqual(1, published.BatchesVisited);
+        await using var verify = new CollectionPlatformDbContext(options);
+        Assert.AreEqual(7, await verify.Tasks.CountAsync());
+        Assert.AreEqual(from.AddDays(7), (await verify.BatchRecoveryProgress.SingleAsync(x => x.BatchId == "a-first")).NextDate);
+        Assert.AreEqual(from, (await verify.BatchRecoveryProgress.SingleAsync(x => x.BatchId == "b-second")).NextDate);
+    }
+
+    [TestMethod]
+    public async Task BackfillRecoveryCycle_PauseAfterFirstCommitReturnsCumulativeCountsAndResumesCheckpoint()
+    {
+        var store = await CreateStoreAsync();
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
+            1, "initial", false);
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+        var from = new DateOnly(2026, 1, 1);
+        var to = from.AddDays(100);
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False").Options;
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            foreach (var batchId in new[] { "a-first", "b-second" })
+            {
+                db.BackfillBatches.Add(new BackfillBatchEntity
+                { BatchId = batchId, Provider = "JRA", From = from, To = to, CreatedAt = now });
+                db.BatchRecoveryProgress.Add(new CollectionBatchRecoveryProgressEntity
+                { BatchId = batchId, Kind = CollectionBatchKind.Backfill, NextDate = from });
+            }
+            await db.SaveChangesAsync();
+        }
+
+        var continuationChecks = 0;
+        var paused = await store.RunBackfillRecoveryCycleAsync(now, shouldContinue: _ =>
+            Task.FromResult(++continuationChecks == 3
+                ? CollectionBatchCycleStopReason.Paused
+                : CollectionBatchCycleStopReason.Continue));
+
+        Assert.AreEqual(CollectionBatchCycleStopReason.Paused, paused.StopReason);
+        Assert.AreEqual(7, paused.TasksCreated);
+        Assert.AreEqual(7, paused.DatesVisited);
+        Assert.AreEqual(1, paused.BatchesVisited);
+        await using (var verify = new CollectionPlatformDbContext(options))
+        {
+            Assert.AreEqual(from.AddDays(7),
+                (await verify.BatchRecoveryProgress.SingleAsync(x => x.BatchId == "a-first")).NextDate);
+            Assert.AreEqual(from,
+                (await verify.BatchRecoveryProgress.SingleAsync(x => x.BatchId == "b-second")).NextDate);
+        }
+
+        var resumed = await store.RunBackfillRecoveryCycleAsync(now.AddSeconds(1));
+        Assert.AreEqual(2, resumed.BatchesVisited);
+        Assert.AreEqual(7, resumed.TasksCreated);
+        Assert.AreEqual(0, resumed.TasksReused);
+        Assert.AreEqual(14, resumed.DatesVisited);
+    }
+
+    [TestMethod]
+    public async Task BackfillRecoveryCycle_EmptyCycleSkipsWriterAndDoesNotSeedScanState()
+    {
+        var path = Path.Combine(_directory, "empty-recovery-cycle.db");
+        var counter = new TransactionCounterInterceptor();
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={path};Pooling=False")
+            .AddInterceptors(counter).Options;
+        var store = new CollectionPlatformStore(options);
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
+            1, "initial", false);
+        counter.Commits = 0;
+
+        var first = await store.RunBackfillRecoveryCycleAsync(DateTimeOffset.UtcNow);
+        var repeated = await store.RunBackfillRecoveryCycleAsync(DateTimeOffset.UtcNow.AddMinutes(1));
+
+        Assert.AreEqual(0, first.LegacyRowsInspected);
+        Assert.AreEqual(0, first.BatchesVisited);
+        Assert.AreEqual(0, repeated.LegacyRowsInspected);
+        Assert.AreEqual(0, repeated.BatchesVisited);
+        Assert.AreEqual(0, counter.Commits,
+            "A read-only empty-candidate hint must not open a writer transaction or persist heartbeat metadata.");
+        await using var verify = new CollectionPlatformDbContext(options);
+        Assert.AreEqual(0, await verify.BatchRecoveryScans.CountAsync());
+        Assert.AreEqual(0, await verify.BatchRecoveryProgress.CountAsync());
+    }
+
+    [TestMethod]
+    public async Task BackfillRecoveryCycle_VisitsAtMostFiveBatchesAndFairlyResumesAfterRestart()
+    {
+        var path = Path.Combine(_directory, "fair-recovery-cycle.db");
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={path};Pooling=False").Options;
+        var store = new CollectionPlatformStore(options);
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
+            1, "initial", false);
+        var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+        var from = new DateOnly(2026, 1, 1);
+        var to = from.AddDays(100);
+        await using (var db = new CollectionPlatformDbContext(options))
+        {
+            foreach (var id in new[] { "a", "b", "c", "d", "e", "f" })
+            {
+                db.BackfillBatches.Add(new BackfillBatchEntity
+                { BatchId = id, Provider = $"P{id}", From = from, To = to, CreatedAt = now });
+                db.BatchRecoveryProgress.Add(new CollectionBatchRecoveryProgressEntity
+                { BatchId = id, Kind = CollectionBatchKind.Backfill, NextDate = from });
+            }
+            await db.SaveChangesAsync();
+        }
+
+        var first = await store.RunBackfillRecoveryCycleAsync(now);
+        Assert.AreEqual(5, first.BatchesVisited);
+        Assert.AreEqual(35, first.DatesVisited);
+        Assert.AreEqual(35, first.TasksCreated);
+        await using (var verify = new CollectionPlatformDbContext(options))
+        {
+            Assert.AreEqual(from, (await verify.BatchRecoveryProgress.SingleAsync(x => x.BatchId == "f")).NextDate);
+            foreach (var id in new[] { "a", "b", "c", "d", "e" })
+                Assert.AreEqual(from.AddDays(7),
+                    (await verify.BatchRecoveryProgress.SingleAsync(x => x.BatchId == id)).NextDate, id);
+        }
+
+        var restarted = new CollectionPlatformStore(options);
+        var second = await restarted.RunBackfillRecoveryCycleAsync(now.AddSeconds(1));
+        Assert.AreEqual(5, second.BatchesVisited);
+        Assert.AreEqual(35, second.DatesVisited);
+        await using var final = new CollectionPlatformDbContext(options);
+        Assert.AreEqual(from.AddDays(7),
+            (await final.BatchRecoveryProgress.SingleAsync(x => x.BatchId == "f")).NextDate,
+            "The previously unvisited batch must run first after restart due to its oldest sequence.");
+        foreach (var id in new[] { "a", "b", "c", "d" })
+            Assert.AreEqual(from.AddDays(14),
+                (await final.BatchRecoveryProgress.SingleAsync(x => x.BatchId == id)).NextDate, id);
+        Assert.AreEqual(from.AddDays(7),
+            (await final.BatchRecoveryProgress.SingleAsync(x => x.BatchId == "e")).NextDate);
+    }
+
+    [TestMethod]
+    public async Task ReclaimExpiredExecutionLeasesAsync_UsesNoExpiryHintAndPreservesReturnAndReleaseBehavior()
     {
         var databasePath = Path.Combine(_directory, "execution-lease-query.db");
         var capture = new SqlCommandCaptureInterceptor();
+        var transactionCounter = new TransactionCounterInterceptor();
         var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
             .UseSqlite($"Data Source={databasePath};Pooling=False")
-            .AddInterceptors(capture).Options;
+            .AddInterceptors(capture, transactionCounter).Options;
         var store = new CollectionPlatformStore(options);
         await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", CollectionResourceType.Horse, 7,
             "Initial profile extractor", false);
@@ -1878,8 +2661,9 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual(2, await store.ReclaimExpiredExecutionLeasesAsync(now));
         var reclaimSelects = capture.Commands.Where(x => x.CommandText.Contains("collection_execution_leases",
             StringComparison.OrdinalIgnoreCase) && x.CommandText.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)).ToArray();
-        Assert.HasCount(1, reclaimSelects, "Expired StartPending and Running rows must be selected in one query.");
-        Assert.IsFalse(reclaimSelects[0].CommandText.Contains("COUNT(", StringComparison.OrdinalIgnoreCase));
+        Assert.HasCount(2, reclaimSelects,
+            "The indexed expiry hint must precede the single query that selects expired StartPending and Running rows.");
+        Assert.IsFalse(reclaimSelects.Any(x => x.CommandText.Contains("COUNT(", StringComparison.OrdinalIgnoreCase)));
 
         await using (var verify = new CollectionPlatformDbContext(options))
         {
@@ -1894,14 +2678,17 @@ public sealed class CollectionPlatformStoreTests
         }
 
         capture.Clear();
+        var commitsBeforeNoExpiryHint = transactionCounter.Commits;
         Assert.AreEqual(0, await store.ReclaimExpiredExecutionLeasesAsync(now),
             "A second pass must not reclaim terminal leases again.");
         Assert.HasCount(1, capture.Commands.Where(x => x.CommandText.Contains("collection_execution_leases",
             StringComparison.OrdinalIgnoreCase) && x.CommandText.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)));
+        Assert.AreEqual(commitsBeforeNoExpiryHint, transactionCounter.Commits,
+            "The no-expired-lease hint must return before opening an immediate writer transaction.");
         capture.Clear();
         Assert.AreEqual(1, await store.ReclaimExpiredExecutionLeasesAsync(now.AddSeconds(1)),
             "Lease expiry is inclusive at the exact LeaseExpiresAt boundary.");
-        Assert.HasCount(1, capture.Commands.Where(x => x.CommandText.Contains("collection_execution_leases",
+        Assert.HasCount(2, capture.Commands.Where(x => x.CommandText.Contains("collection_execution_leases",
             StringComparison.OrdinalIgnoreCase) && x.CommandText.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)));
         capture.Clear();
         Assert.AreEqual(0, await store.ReclaimExpiredExecutionLeasesAsync(now.AddSeconds(1)));
@@ -2240,7 +3027,7 @@ public sealed class CollectionPlatformStoreTests
         await connection.OpenAsync();
         await using var history = connection.CreateCommand();
         history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
-        Assert.AreEqual(24L, (long)(await history.ExecuteScalarAsync())!);
+        Assert.AreEqual(25L, (long)(await history.ExecuteScalarAsync())!);
         await using var existing = connection.CreateCommand();
         existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
         Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
@@ -2260,7 +3047,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsNotNull(modelIndex);
         Assert.IsFalse(modelIndex.IsUnique);
         CollectionAssert.AreEqual(new[] { "NextCollectionAt" }, modelIndex.Properties.Select(x => x.Name).ToArray());
-        Assert.AreEqual(24, await ReadCollectionSchemaVersionAsync(options));
+        Assert.AreEqual(25, await ReadCollectionSchemaVersionAsync(options));
 
         var metadata = await ReadSqliteIndexDefinitionAsync(databasePath, "IX_collection_states_NextCollectionAt");
         Assert.IsNotNull(metadata);
@@ -2296,6 +3083,8 @@ public sealed class CollectionPlatformStoreTests
             await connection.OpenAsync();
             await using var downgrade = connection.CreateCommand();
             downgrade.CommandText = """
+                DROP TABLE collection_batch_recovery_scan;
+                DROP TABLE collection_batch_recovery_progress;
                 DROP INDEX IX_collection_states_NextCollectionAt;
                 DELETE FROM collection_schema_history WHERE version >= 24;
                 INSERT INTO collection_schema_history (version, applied_at) VALUES (23, 'v23-fixture');
@@ -2314,13 +3103,15 @@ public sealed class CollectionPlatformStoreTests
         _ = new CollectionPlatformStore(options);
         _ = new CollectionPlatformStore(options);
 
-        Assert.AreEqual(24, await ReadCollectionSchemaVersionAsync(options));
+        Assert.AreEqual(25, await ReadCollectionSchemaVersionAsync(options));
         var historyAfter = await ReadCollectionSchemaHistoryAsync(databasePath);
         CollectionAssert.AreEqual(new[] { (23, "v23-fixture") }, historyAfter.Take(1).ToArray());
         Assert.AreEqual(1, historyAfter.Count(x => x.Version == 24), "Repeated startup must append v24 once.");
+        Assert.AreEqual(1, historyAfter.Count(x => x.Version == 25), "Repeated startup must append v25 once.");
         var indexesAfter = await ReadSqliteIndexNamesAsync(databasePath);
         CollectionAssert.AreEqual(indexesBefore.Order().ToArray(),
-            indexesAfter.Where(x => x != "IX_collection_states_NextCollectionAt").Order().ToArray(),
+            indexesAfter.Where(x => x is not ("IX_collection_states_NextCollectionAt"
+                or "IX_collection_batch_recovery_progress_Kind_LastVisitedSequence_BatchId")).Order().ToArray(),
             "The migration must preserve every pre-existing state index.");
         Assert.Contains("IX_collection_states_NextCollectionAt", indexesAfter);
         Assert.AreEqual((23, "v23-fixture"), historyAfter[0], "The old history row and timestamp must be unchanged.");
@@ -2332,6 +3123,77 @@ public sealed class CollectionPlatformStoreTests
         CollectionAssert.AreEqual(new[] { "NextCollectionAt" }, metadata.Columns);
         Assert.AreEqual(beforeRows, await CaptureDueIndexMigrationRowsAsync(options, receipt.TaskId!.Value),
             "The v23 to v24 index migration must preserve resource, state, request, task, and attempt rows.");
+        await using (var migrated = new CollectionPlatformDbContext(options))
+        {
+            Assert.AreEqual(0, await migrated.BatchRecoveryProgress.CountAsync());
+            Assert.AreEqual(0, await migrated.BatchRecoveryScans.CountAsync());
+        }
+    }
+
+    [TestMethod]
+    public async Task Startup_Version24AddsEmptyRecoverySidecarsAndPreservesLegacyBatchRows()
+    {
+        var databasePath = Path.Combine(_directory, "version-24-batch-recovery.db");
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={databasePath};Pooling=False").Options;
+        var store = new CollectionPlatformStore(options);
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", CollectionResourceType.Race,
+            1, "initial", false);
+        var now = new DateTimeOffset(2026, 10, 6, 1, 0, 0, TimeSpan.Zero);
+        var date = new DateOnly(2026, 9, 1);
+        await store.CreateOrResumeBackfillBatchAsync("legacy-v24", "JRA", date, date, now);
+        var task = (await store.GetTasksAsync()).Single(x => x.Resource.Id == "backfill:20260901");
+        var lease = await store.AcquireAsync(task.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        Assert.IsTrue(await store.CompleteAttemptAsync(task.TaskId, lease.LeaseToken, now.AddMinutes(1),
+            new(CollectionAttemptResult.Succeeded)));
+
+        var rowsBefore = await CaptureDueIndexMigrationRowsAsync(options, task.TaskId);
+        DateTimeOffset createdAtBefore;
+        DateTimeOffset? completedAtBefore;
+        await using (var before = new CollectionPlatformDbContext(options))
+        {
+            var batch = await before.BackfillBatches.SingleAsync(x => x.BatchId == "legacy-v24");
+            Assert.AreEqual("JRA", batch.Provider);
+            Assert.AreEqual(date, batch.From);
+            Assert.AreEqual(date, batch.To);
+            createdAtBefore = batch.CreatedAt;
+            completedAtBefore = batch.ExpansionCompletedAt;
+        }
+
+        await using (var connection = new SqliteConnection($"Data Source={databasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var downgrade = connection.CreateCommand();
+            downgrade.CommandText = """
+                DROP TABLE collection_batch_recovery_scan;
+                DROP TABLE collection_batch_recovery_progress;
+                DROP INDEX IF EXISTS IX_collection_batch_recovery_progress_Kind_LastVisitedSequence_BatchId;
+                DELETE FROM collection_schema_history WHERE version >= 25;
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (24, 'v24-fixture');
+                """;
+            await downgrade.ExecuteNonQueryAsync();
+        }
+        Assert.AreEqual(24, await ReadCollectionSchemaVersionAsync(options));
+
+        _ = new CollectionPlatformStore(options);
+        _ = new CollectionPlatformStore(options);
+
+        Assert.AreEqual(25, await ReadCollectionSchemaVersionAsync(options));
+        var history = await ReadCollectionSchemaHistoryAsync(databasePath);
+        Assert.AreEqual(1, history.Count(x => x.Version == 25), "Repeated startup must append v25 once.");
+        Assert.AreEqual((24, "v24-fixture"), history.Single(x => x.Version == 24));
+        Assert.AreEqual(rowsBefore, await CaptureDueIndexMigrationRowsAsync(options, task.TaskId),
+            "The populated v24 request/task/state/resource/attempt links must remain byte-for-byte represented.");
+        await using var after = new CollectionPlatformDbContext(options);
+        var preserved = await after.BackfillBatches.SingleAsync(x => x.BatchId == "legacy-v24");
+        Assert.AreEqual("JRA", preserved.Provider);
+        Assert.AreEqual(date, preserved.From);
+        Assert.AreEqual(date, preserved.To);
+        Assert.AreEqual(createdAtBefore, preserved.CreatedAt);
+        Assert.AreEqual(completedAtBefore, preserved.ExpansionCompletedAt);
+        Assert.AreEqual(0, await after.BatchRecoveryProgress.CountAsync());
+        Assert.AreEqual(0, await after.BatchRecoveryScans.CountAsync());
     }
 
     private static async Task<int> ReadCollectionSchemaVersionAsync(DbContextOptions<CollectionPlatformDbContext> options)
@@ -2729,7 +3591,7 @@ public sealed class CollectionPlatformStoreTests
             $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 24;";
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 25;";
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 
@@ -3236,6 +4098,45 @@ public sealed class CollectionPlatformStoreTests
         await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", CollectionResourceType.Horse, 7,
             "Initial profile extractor", false);
         return store;
+    }
+
+    private async Task<CollectionScheduleCandidate> SeedDueStateAsync(
+        CollectionPlatformStore store, DateTimeOffset now, string resourceId)
+    {
+        var resource = new CollectionResourceEntity
+        {
+            Type = CollectionResourceType.Horse,
+            Provider = "JRA",
+            ResourceId = resourceId,
+            AttributesJson = "{}",
+            CreatedAt = now,
+        };
+        await using (var db = new CollectionPlatformDbContext(new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                         .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False")
+                         .Options))
+        {
+            db.Resources.Add(resource);
+            await db.SaveChangesAsync();
+            db.States.Add(new CollectionStateEntity
+            {
+                ResourcePk = resource.ResourcePk,
+                DefinitionId = HorseProfile.Value,
+                AppliedRevision = 7,
+                RequiredRevision = 7,
+                NextCollectionAt = now,
+                Status = CollectionStateStatus.RefreshDue,
+                UpdatedAt = now,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        return (await store.GetDueScheduleCandidatesAsync(now)).Single();
+    }
+
+    private sealed class AlwaysCollectSchedulePolicy : ICollectionSchedulePolicy
+    {
+        public CollectionSchedule Evaluate(ResourceKey resource, CollectionStateSnapshot state, DateTimeOffset now)
+            => new(true, now.AddHours(1), CollectionPriority.Normal, CollectionLane.Normal, "test-due");
     }
 
     [TestMethod]

@@ -37,11 +37,17 @@ public sealed class CollectionApiV2RouteContractTests
             .ToArray();
 
         var canonicalRows = rows.Where(x => x.Canonical is not null).ToArray();
-        var expectedRoutes = canonicalRows.Select(x => x.Canonical!.Value)
+        var historicalExpectedRoutes = canonicalRows.Select(x => x.Canonical!.Value)
             .Select(x => new RouteIdentity(x.Method, Normalize(x.Path.Split('?')[0])))
             .Distinct().ToArray();
-        Assert.AreEqual(59, expectedRoutes.Length,
-            "The route contract has 59 distinct method/path registrations.");
+        Assert.AreEqual(59, historicalExpectedRoutes.Length,
+            "The historical route contract retains its 59 distinct method/path registrations.");
+        // Additive runtime-status route from the approved 20261007 background-processing design;
+        // do not rewrite the older route migration's legacy/retirement ledger.
+        var runtimeStatusRoute = new RouteIdentity("GET", "/api/v2/admin/collection/operations/runtime-status");
+        var expectedRoutes = historicalExpectedRoutes.Append(runtimeStatusRoute).Distinct().ToArray();
+        Assert.AreEqual(60, expectedRoutes.Length,
+            "The current route contract includes the 59 historical routes and the additive runtime endpoint.");
 
         var scopedRegistrations = mapped.Where(x => IsMigrationScope(x.Path)).ToArray();
         var actualCounts = scopedRegistrations.GroupBy(x => x)

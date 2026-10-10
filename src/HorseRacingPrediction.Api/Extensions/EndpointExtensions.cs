@@ -8,6 +8,7 @@ public static class EndpointExtensions
         global::HorseRacingPrediction.Api.Endpoints.Subjects.PutSubjectProfileEndpoint.Map(endpoints);
         global::HorseRacingPrediction.Api.Endpoints.Races.CreateRaceFromScheduleEndpoint.Map(endpoints);
         global::HorseRacingPrediction.Api.Endpoints.Collection.GetCollectionMonitoringFindingsEndpoint.Map(endpoints);
+        global::HorseRacingPrediction.Api.Endpoints.Collection.GetCollectionRuntimeStatusEndpoint.Map(endpoints);
         global::HorseRacingPrediction.Api.Endpoints.Collection.SetCollectionPipelineEndpoint.Map(endpoints);
         global::HorseRacingPrediction.Api.Endpoints.Collection.PreviewRaceDetailMigrationEndpoint.Map(endpoints);
         global::HorseRacingPrediction.Api.Endpoints.Collection.ApplyRaceDetailMigrationEndpoint.Map(endpoints);

@@ -2,10 +2,14 @@ using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Contracts.Collection;
 using HorseRacingPrediction.Api.CollectionController;
+using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.Api.Web.ApiBrowsing;
+using HorseRacingPrediction.Api.Endpoints.Collection;
 using HorseRacingPrediction.Predictor.Scheduling;
 using EventFlow.EntityFramework;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -14,6 +18,42 @@ namespace HorseRacingPrediction.Api.Tests;
 [TestClass]
 public sealed class CollectionClientContractIntegrationTests
 {
+    [TestMethod]
+    public async Task CollectionRuntimeStatusAdminClient_ReadsAuthenticatedWrappedSnapshotOverHttp()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        builder.Services.Configure<ApiKeyOptions>(options =>
+        {
+            options.HeaderName = "X-Api-Key";
+            options.Key = TestApplicationFactory.TestApiKey;
+        });
+        builder.Services.AddSingleton(new CollectionRuntimeStatusRecorder(
+            Enum.GetValues<CollectionRuntimeAction>().Select(action => new CollectionRuntimeActionConfiguration(
+                action, Enabled: true, EffectiveInterval: action == CollectionRuntimeAction.MetricDelivery
+                    ? null : TimeSpan.FromSeconds(30)))));
+
+        var app = builder.Build();
+        app.UseApiKeyProtection();
+        GetCollectionRuntimeStatusEndpoint.Map(app);
+        await app.StartAsync();
+        await using var lifetime = app;
+        using var transport = app.GetTestClient();
+        var api = new AdminApiClient(transport,
+            new AdminApiBaseAddressResolver(app.Services.GetRequiredService<IServer>()),
+            Options.Create(new ApiKeyOptions { HeaderName = "X-Api-Key", Key = TestApplicationFactory.TestApiKey }));
+
+        var response = await api.GetCollectionRuntimeStatusAsync();
+
+        Assert.IsNotNull(response);
+        Assert.AreNotEqual(Guid.Empty, response.Runtime.InstanceId);
+        Assert.HasCount(8, response.Runtime.Actions);
+        CollectionAssert.AreEqual(Enum.GetValues<CollectionRuntimeAction>(),
+            response.Runtime.Actions.Select(action => action.Action).ToArray());
+        Assert.IsNull(response.Runtime.Actions.Single(action => action.Action == CollectionRuntimeAction.MetricDelivery)
+            .EffectiveInterval);
+    }
+
     [TestMethod]
     public async Task CollectionRequestApiClient_SingleAndBatchRequestsReachWrappedResourceEndpoints()
     {

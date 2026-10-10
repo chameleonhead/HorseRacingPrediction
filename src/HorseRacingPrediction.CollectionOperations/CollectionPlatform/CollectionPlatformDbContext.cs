@@ -34,6 +34,8 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
     public DbSet<CollectionFailureNotificationEntity> FailureNotifications => Set<CollectionFailureNotificationEntity>();
     public DbSet<SubjectIdentificationSelectionEntity> SubjectIdentificationSelections => Set<SubjectIdentificationSelectionEntity>();
     public DbSet<BackfillBatchEntity> BackfillBatches => Set<BackfillBatchEntity>();
+    public DbSet<CollectionBatchRecoveryProgressEntity> BatchRecoveryProgress => Set<CollectionBatchRecoveryProgressEntity>();
+    public DbSet<CollectionBatchRecoveryScanEntity> BatchRecoveryScans => Set<CollectionBatchRecoveryScanEntity>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -183,6 +185,19 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
         {
             e.ToTable("collection_backfill_batches"); e.HasKey(x => x.BatchId);
             e.HasIndex(x => new { x.Provider, x.From, x.To });
+        });
+        modelBuilder.Entity<CollectionBatchRecoveryProgressEntity>(e =>
+        {
+            e.ToTable("collection_batch_recovery_progress"); e.HasKey(x => x.BatchId);
+            e.Property(x => x.Kind).HasConversion<string>();
+            e.HasIndex(x => new { x.Kind, x.LastVisitedSequence, x.BatchId });
+            e.HasOne<BackfillBatchEntity>().WithOne()
+                .HasForeignKey<CollectionBatchRecoveryProgressEntity>(x => x.BatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<CollectionBatchRecoveryScanEntity>(e =>
+        {
+            e.ToTable("collection_batch_recovery_scan"); e.HasKey(x => x.ScanId);
         });
     }
 }

@@ -18,8 +18,16 @@ internal static class CreateBackfillBatchEndpoint
             var to = from.AddMonths(1).AddDays(-1);
             var batchId = string.IsNullOrWhiteSpace(input.BatchId)
                 ? $"{input.Provider.Trim().ToLowerInvariant()}:{input.Year:D4}-{input.Month:D2}" : input.BatchId;
-            var batch = await store.CreateOrResumeBackfillBatchAsync(batchId, input.Provider, from, to, JstTime.Now(), token);
-            return Results.Accepted($"/api/v2/admin/collection/backfill-batches/{Uri.EscapeDataString(batchId)}",
-                new CreateBackfillBatchResponse(CollectionContractMapper.ToDto(batch)));
-        }).Produces<CreateBackfillBatchResponse>(StatusCodes.Status202Accepted);
+            try
+            {
+                var batch = await store.CreateOrResumeBackfillBatchAsync(batchId, input.Provider, from, to, JstTime.Now(), token);
+                return Results.Accepted($"/api/v2/admin/collection/backfill-batches/{Uri.EscapeDataString(batchId)}",
+                    new CreateBackfillBatchResponse(CollectionContractMapper.ToDto(batch)));
+            }
+            catch (CollectionBatchIdentityConflictException ex)
+            {
+                return Results.Conflict(new { code = ex.Code });
+            }
+        }).Produces<CreateBackfillBatchResponse>(StatusCodes.Status202Accepted)
+        .Produces(StatusCodes.Status409Conflict);
 }

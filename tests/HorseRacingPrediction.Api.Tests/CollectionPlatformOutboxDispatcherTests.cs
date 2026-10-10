@@ -2,6 +2,9 @@ using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using System.Data.Common;
 
 using HorseRacingPrediction.Contracts.Collection;
 
@@ -10,6 +13,63 @@ namespace HorseRacingPrediction.Api.Tests;
 [TestClass]
 public sealed class CollectionPlatformOutboxDispatcherTests
 {
+    [TestMethod]
+    public async Task DefinitelyFullExecutionCapacitySkipsCandidateAndIdentityQueries()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "platform-capacity-hint", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var capture = new DispatchSqlCaptureInterceptor();
+            var dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                .UseSqlite($"Data Source={Path.Combine(directory, "collection-platform.db")};Pooling=False")
+                .AddInterceptors(capture).Options;
+            var store = new CollectionPlatformStore(dbOptions);
+            var now = DateTimeOffset.UtcNow;
+            await store.RegisterDefinitionAsync(new("horse-profile"), "horse", CollectionResourceType.Horse, 1,
+                "initial", false);
+            await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "capacity-hint"),
+                new("horse-profile"), 1, CollectionReason.Initial, now);
+            await using (var db = new CollectionPlatformDbContext(dbOptions))
+            {
+                db.ExecutionLeases.Add(new CollectionExecutionLeaseEntity
+                {
+                    ExecutionBatchId = Guid.NewGuid(),
+                    DispatchEnvelopeId = Guid.NewGuid(),
+                    WakeId = Guid.NewGuid(),
+                    ReservationToken = "active-capacity-hint",
+                    LeaseToken = "active-capacity-hint",
+                    Status = "Running",
+                    LeaseExpiresAt = now.AddMinutes(1),
+                    CreatedAt = now,
+                    StartedAt = now,
+                });
+                await db.SaveChangesAsync();
+            }
+            Assert.IsTrue(await store.IsExecutionCapacityDefinitelyFullAsync(1, now));
+            capture.Commands.Clear();
+            var queue = new RecordingQueue();
+            var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
+                Options.Create(new CollectionQueueOptions
+                {
+                    Enabled = true,
+                    AggregationDelayMilliseconds = 0,
+                    MaxInFlightEnvelopes = 1,
+                }), NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
+
+            await dispatcher.DispatchOnceAsync(CancellationToken.None);
+
+            Assert.IsEmpty(queue.Messages);
+            Assert.IsFalse(capture.Commands.Any(command => command.Contains("collection_task_outbox",
+                    StringComparison.OrdinalIgnoreCase)),
+                "A full live-lease lower bound must return before pending, capacity-category, or reservation queries.");
+            Assert.IsFalse(capture.Commands.Any(command => command.Contains("collection_resources",
+                    StringComparison.OrdinalIgnoreCase)),
+                "A full-capacity dispatcher cycle must not resolve candidate identities.");
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
     [TestMethod]
     public async Task HostedLoop_RetriesAfterCycleFailure_AndDispatchesWithoutRestart()
     {
@@ -413,6 +473,41 @@ public sealed class CollectionPlatformOutboxDispatcherTests
         {
             lock (_gate) Messages.Add(envelope);
             return Task.FromResult(new CollectionQueueSendReceipt(Guid.NewGuid().ToString("N")));
+        }
+    }
+
+    private sealed class DispatchSqlCaptureInterceptor : DbCommandInterceptor
+    {
+        public List<string> Commands { get; } = [];
+
+        public override InterceptionResult<DbDataReader> ReaderExecuting(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result)
+        {
+            Commands.Add(command.CommandText);
+            return result;
+        }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            Commands.Add(command.CommandText);
+            return ValueTask.FromResult(result);
+        }
+
+        public override InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result)
+        {
+            Commands.Add(command.CommandText);
+            return result;
+        }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            Commands.Add(command.CommandText);
+            return ValueTask.FromResult(result);
         }
     }
 

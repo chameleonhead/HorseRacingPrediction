@@ -24,6 +24,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Data.Sqlite;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Microsoft.OpenApi;
+using Microsoft.Extensions.Options;
 using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -134,7 +135,11 @@ builder.Services.AddSingleton<IRaceResourceIdentityResolver, HorseRacingPredicti
 builder.Services.AddSingleton<IAmazonCloudWatch>(_ => new AmazonCloudWatchClient());
 builder.Services.AddSingleton<ICollectionDispatchMetricPublisher, CloudWatchCollectionDispatchMetricPublisher>();
 builder.Services.Configure<CollectionDispatchMetricQueueOptions>(builder.Configuration.GetSection("CollectionDispatchTelemetryQueue"));
-builder.Services.AddSingleton<CollectionDispatchMetricQueue>();
+builder.Services.AddSingleton<CollectionDispatchMetricQueue>(services => new CollectionDispatchMetricQueue(
+    services.GetRequiredService<ICollectionDispatchMetricPublisher>(),
+    services.GetRequiredService<IOptions<CollectionDispatchMetricQueueOptions>>(),
+    services.GetRequiredService<ILogger<CollectionDispatchMetricQueue>>(),
+    services.GetRequiredService<CollectionRuntimeStatusRecorder>()));
 builder.Services.AddSingleton<ICollectionDispatchMetricQueue>(services =>
     services.GetRequiredService<CollectionDispatchMetricQueue>());
 builder.Services.AddSingleton<CollectionDispatchTelemetry>();
@@ -147,17 +152,37 @@ builder.Services.AddSingleton<CollectionMonitoringService>();
 builder.Services.AddSingleton<ICollectionSchedulePolicy, JraCollectionSchedulePolicy>();
 builder.Services.AddSingleton<INamedRevisionImpactCondition, HorseProfileLegacyLayoutRevisionCondition>();
 builder.Services.AddSingleton<INamedRevisionImpactCondition, RaceResultDeadHeatBeforeRevisionFiveCondition>();
-builder.Services.AddCollectionBackgroundSchedulers(
-    builder.Configuration.GetValue("CollectionOrchestration:BackgroundSchedulersEnabled", true));
 builder.Services.AddSingleton<CollectionQueueCircuitBreakerState>();
 var collectionQueueSection = builder.Configuration.GetSection(CollectionQueueOptions.SectionName);
 builder.Services.Configure<CollectionQueueOptions>(collectionQueueSection);
+var maintenanceMode = builder.Configuration.GetValue($"{CollectionPlatformOptions.SectionName}:MaintenanceMode", false);
+builder.Services.PostConfigure<CollectionQueueOptions>(options =>
+{
+    if (maintenanceMode) options.Enabled = false;
+});
 builder.Services.Configure<CollectionJobWatchdogOptions>(
     builder.Configuration.GetSection(CollectionJobWatchdogOptions.SectionName));
+var backgroundSchedulersEnabled = builder.Configuration.GetValue("CollectionOrchestration:BackgroundSchedulersEnabled", true);
+var watchdogEnabled = builder.Configuration.GetValue($"{CollectionJobWatchdogOptions.SectionName}:Enabled", true);
+var watchdogIntervalMinutes = builder.Configuration.GetValue($"{CollectionJobWatchdogOptions.SectionName}:IntervalMinutes", 5);
+var queueEnabled = !maintenanceMode && collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled));
+var localQueueEnabled = string.Equals(collectionQueueSection[nameof(CollectionQueueOptions.Provider)] ?? "Sqs",
+    "Local", StringComparison.OrdinalIgnoreCase);
+var deadLetterSection = builder.Configuration.GetSection(CollectionDeadLetterQueueReconcilerOptions.SectionName);
+builder.Services.AddCollectionBackgroundSchedulers(
+    backgroundSchedulersEnabled,
+    watchdogEnabled,
+    watchdogIntervalMinutes,
+    queueEnabled,
+    collectionQueueSection.GetValue(nameof(CollectionQueueOptions.DispatchIntervalSeconds), 1),
+    deadLetterReconcilerEnabled: deadLetterSection.GetValue(nameof(CollectionDeadLetterQueueReconcilerOptions.Enabled), true),
+    deadLetterIntervalSeconds: deadLetterSection.GetValue(nameof(CollectionDeadLetterQueueReconcilerOptions.IntervalSeconds), 30),
+    metricDeliveryEnabled: queueEnabled && !localQueueEnabled,
+    alertsEnabled: true,
+    maintenanceMode: maintenanceMode);
 builder.Services.Configure<CollectionDeadLetterQueueReconcilerOptions>(
-    builder.Configuration.GetSection(CollectionDeadLetterQueueReconcilerOptions.SectionName));
-builder.Services.AddHostedService<CollectionPlatformWatchdogService>();
-if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)))
+    deadLetterSection);
+if (queueEnabled)
 {
     if (string.Equals(collectionQueueSection[nameof(CollectionQueueOptions.Provider)], "Local", StringComparison.OrdinalIgnoreCase))
     {
@@ -185,9 +210,21 @@ if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)
         builder.Services.AddSingleton<ICollectionPlatformTaskQueue>(services =>
             (SqsCollectionTaskQueue)services.GetRequiredService<ICollectionTaskQueue>());
     }
-    builder.Services.AddSingleton<CollectionPlatformOutboxDispatcher>();
+    builder.Services.AddSingleton<CollectionPlatformOutboxDispatcher>(services => new CollectionPlatformOutboxDispatcher(
+        services.GetRequiredService<CollectionPlatformStore>(),
+        services.GetRequiredService<ICollectionPlatformTaskQueue>(),
+        services.GetRequiredService<IOptions<CollectionQueueOptions>>(),
+        services.GetRequiredService<ILogger<CollectionPlatformOutboxDispatcher>>(),
+        services.GetRequiredService<ICollectionDispatchTelemetry>(),
+        services.GetRequiredService<CollectionRuntimeStatusRecorder>()));
     builder.Services.AddHostedService(services => services.GetRequiredService<CollectionPlatformOutboxDispatcher>());
-    builder.Services.AddHostedService<CollectionPlatformDeadLetterReconciler>();
+    builder.Services.AddHostedService<CollectionPlatformDeadLetterReconciler>(services =>
+        new CollectionPlatformDeadLetterReconciler(
+            services.GetRequiredService<CollectionPlatformStore>(),
+            services.GetRequiredService<ICollectionPlatformTaskQueue>(),
+            services.GetRequiredService<IOptions<CollectionDeadLetterQueueReconcilerOptions>>(),
+            services.GetRequiredService<ILogger<CollectionPlatformDeadLetterReconciler>>(),
+            services.GetRequiredService<CollectionRuntimeStatusRecorder>()));
 }
 else
 {
@@ -197,12 +234,19 @@ else
 }
 var jobFailureNotificationSection = builder.Configuration.GetSection(JobFailureNotificationOptions.SectionName);
 builder.Services.Configure<JobFailureNotificationOptions>(jobFailureNotificationSection);
-// SNSクライアント自体とCollectionPipelineAlertPublisher（収集ジョブ全体停止アラート）は、
-// JobFailureNotifications:Enabled のON/OFFに関わらず常に登録する。SNSサブスクリプションは
-// 運用側で作成済みの前提で、アプリ側の設定トグルで送信有無を左右させないため。
+// SNSクライアントとPublisherは通常モードでは常に登録する。JobFailureNotifications:Enabledは
+// 既存契約どおりPublisherの送信可否を制御しない。MaintenanceModeだけは自動配送ホストを登録しない。
 builder.Services.AddSingleton<IAmazonSimpleNotificationService>(_ => new AmazonSimpleNotificationServiceClient());
 builder.Services.AddSingleton<ICollectionPipelineAlertPublisher, SnsCollectionPipelineAlertPublisher>();
-builder.Services.AddHostedService<CollectionPipelineAlertDispatchService>();
+if (!maintenanceMode)
+{
+    builder.Services.AddHostedService<CollectionPipelineAlertDispatchService>(services =>
+        new CollectionPipelineAlertDispatchService(
+            services.GetRequiredService<CollectionPlatformStore>(),
+            services.GetRequiredService<ICollectionPipelineAlertPublisher>(),
+            services.GetRequiredService<ILogger<CollectionPipelineAlertDispatchService>>(),
+            services.GetRequiredService<CollectionRuntimeStatusRecorder>()));
+}
 
 builder.Services.AddEventFlow(options =>
 {
@@ -235,23 +279,22 @@ await collectionPlatform.RegisterDefinitionAsync(new("race-odds"), "Race odds", 
 await SubjectCollectionDefinitions.RegisterAsync(collectionPlatform);
 
 await app.Services.GetRequiredService<SqliteDatabaseMigrator>().MigrateAsync();
-var subjectRecovery = await SubjectIdentificationAutoRecovery.RunOnceAsync(collectionPlatform, app.Logger);
-app.Logger.LogInformation(
-    "Subject identification recovery examined {Examined}, created {Recovered}, reused {Reused}, suppressed {Suppressed}, skipped {Skipped}, failed {Failed}.",
-    subjectRecovery.Examined, subjectRecovery.Recovered, subjectRecovery.Reused,
-    subjectRecovery.Suppressed, subjectRecovery.Skipped, subjectRecovery.Failed);
-// 起動直後はホストサービス（Dispatcher/Watchdog）自体も初回サイクルを即時実行するが、
-// 直前にクラッシュ復旧中の初期化（ResumeIfNeeded）がメンテナンス中の場合は、その完了を
-// 待たずに終わってしまい、完了後に誰も再トリガーしないまま次の定期実行（最大数時間後）
-// まで新規ジョブが投入されない空白が生じ得る。ここで初期化完了を待った上でSQSキューの
-// 滞留状況を調査し、ディスパッチ・監視サイクルを明示的に1回実行することでその空白を埋める。
-// CollectionTaskOutboxDispatcher / CollectionJobWatchdogService は CollectionQueue.Enabled
-// が true の場合のみDIへ登録される（SQS未使用のローカル開発環境等では登録されない）。
-// 以前はこのガードがなく、Enabled=false（既定値）のローカル実行で
-// 「No service for type 'CollectionTaskOutboxDispatcher' has been registered.」という
-// InvalidOperationExceptionがログに出続けていた（キャッチはされるためプロセスは落ちないが、
-// 起動のたびに無意味なエラーログが発生していた）。
-if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)))
+if (maintenanceMode)
+{
+    app.Logger.LogInformation("CollectionPlatform:MaintenanceMode is enabled; automatic collection startup actions are suspended.");
+}
+else
+{
+    var subjectRecovery = await SubjectIdentificationAutoRecovery.RunOnceAsync(collectionPlatform, app.Logger);
+    app.Logger.LogInformation(
+        "Subject identification recovery examined {Examined}, created {Recovered}, reused {Reused}, suppressed {Suppressed}, skipped {Skipped}, failed {Failed}.",
+        subjectRecovery.Examined, subjectRecovery.Recovered, subjectRecovery.Reused,
+        subjectRecovery.Suppressed, subjectRecovery.Skipped, subjectRecovery.Failed);
+}
+// キューが有効な場合は、起動後にキュー深度を記録して dispatcher を一度実行する。
+// Watchdog は独立した設定のホストサービスであり、この起動時キックでは呼び出さない。
+// MaintenanceMode では queueEnabled が false となり、このキックを含む自動処理を停止する。
+if (queueEnabled)
 {
     _ = Task.Run(async () =>
     {

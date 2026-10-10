@@ -31,11 +31,18 @@ internal static class CreateRecollectionBatchEndpoint
                 if (error is not null) return Results.BadRequest(new { message = error });
                 var batchId = string.IsNullOrWhiteSpace(input.BatchId)
                     ? $"recollection:{input.From:yyyyMMdd}-{input.To:yyyyMMdd}:{Guid.NewGuid():N}" : input.BatchId.Trim();
-                var result = await store.CreateOrResumeRacePeriodRecollectionAsync(batchId, input.Provider,
-                    input.From.Value, input.To.Value, JstTime.Now(), token);
-                return Results.Accepted($"/api/v2/admin/collection/backfill-batches/{Uri.EscapeDataString(batchId)}",
-                    new CreateRecollectionBatchResponse(CollectionContractMapper.ToDto(
-                        new CollectionRecollectionBatchResponse(input.Mode, null, result))));
+                try
+                {
+                    var result = await store.CreateOrResumeRacePeriodRecollectionAsync(batchId, input.Provider,
+                        input.From.Value, input.To.Value, JstTime.Now(), token);
+                    return Results.Accepted($"/api/v2/admin/collection/backfill-batches/{Uri.EscapeDataString(batchId)}",
+                        new CreateRecollectionBatchResponse(CollectionContractMapper.ToDto(
+                            new CollectionRecollectionBatchResponse(input.Mode, null, result))));
+                }
+                catch (CollectionBatchIdentityConflictException ex)
+                {
+                    return Results.Conflict(new { code = ex.Code });
+                }
             }
             return Results.BadRequest(new { message = "Mode must be Revision or RacePeriod." });
         })

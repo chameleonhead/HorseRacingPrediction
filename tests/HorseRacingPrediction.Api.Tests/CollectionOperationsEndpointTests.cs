@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 
 using HorseRacingPrediction.Contracts.Collection;
 
@@ -363,6 +364,50 @@ public sealed class CollectionOperationsEndpointTests
     }
 
     [TestMethod]
+    public async Task PeriodRecollectionRecovery_ExpandsOnlyActualFailedResourceHole()
+    {
+        var directory = CreateDirectory();
+        try
+        {
+            var store = await CreateStoreAsync(directory);
+            var now = DateTimeOffset.UtcNow.AddMinutes(-2);
+            var batch = await store.CreateOrResumeRacePeriodRecollectionAsync("period-hole", "JRA",
+                new(2026, 9, 12), new(2026, 9, 13), now);
+            Assert.AreEqual(CollectionBatchKind.PeriodRecollection, batch.Batch.Recovery?.Kind);
+            var tasks = await store.GetTasksAsync(limit: 100);
+            Assert.HasCount(2, tasks);
+            var failed = tasks.Single(x => x.Resource.Id == "recollection:20260912");
+            Assert.IsTrue(await store.ReconcileDeadLetterAsync(failed.TaskId, 1, now.AddSeconds(1), "period hole"));
+
+            await using var app = await CreateApplicationAsync(store);
+            using var client = app.GetTestClient();
+            var detail = await client.GetFromJsonAsync<GetBackfillBatchResponse>(
+                "/api/v2/admin/collection/backfill-batches/period-hole");
+            Assert.IsNotNull(detail?.Batch);
+            Assert.AreEqual(CollectionBatchKind.PeriodRecollection, detail.Batch.Recovery?.Kind);
+            Assert.HasCount(1, detail.Batch.Holes);
+            Assert.AreEqual("recollection:20260912", detail.Batch.Holes.Single().Resource.Id);
+
+            using var response = await client.PostAsJsonAsync(
+                "/api/v2/admin/collection/backfill-batches/period-hole/recovery-batches", new { });
+            Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
+            var recovery = (await response.Content.ReadFromJsonAsync<RecoverBackfillHolesResponse>())?.Recovery;
+            Assert.IsNotNull(recovery);
+            Assert.AreEqual(1, recovery.Holes);
+            Assert.AreEqual(1, recovery.TasksCreated);
+
+            var after = await store.GetTasksAsync(limit: 100);
+            Assert.AreEqual(1, after.Count(x => x.Resource.Id == "recollection:20260912"
+                && x.Status == CollectionTaskStatus.Ready));
+            Assert.AreEqual(1, after.Count(x => x.Resource.Id == "recollection:20260913"));
+            Assert.AreEqual(3, after.Count);
+            Assert.AreEqual(CollectionBatchKind.PeriodRecollection,
+                (await store.GetBackfillBatchAsync("period-hole"))?.Recovery?.Kind);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [TestMethod]
     public async Task FailureGroups_AggregateSameCauseAndRecoveryCreatesNormalRequests()
     {
         var directory = CreateDirectory();
@@ -518,6 +563,37 @@ public sealed class CollectionOperationsEndpointTests
             Assert.IsNotNull(result);
             Assert.AreEqual(1, result.Holes);
             Assert.AreEqual(1, result.TasksCreated);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [TestMethod]
+    public async Task BackfillCreation_ExposesRecoveryMetadataAndRejectsRecollectionKindReuse()
+    {
+        var directory = CreateDirectory();
+        try
+        {
+            var store = await CreateStoreAsync(directory);
+            await using var app = await CreateApplicationAsync(store);
+            using var client = app.GetTestClient();
+
+            using var backfillResponse = await client.PostAsJsonAsync(
+                "/api/v2/admin/collection/backfill-batches",
+                new CreateBackfillBatchRequest(new(2026, 9, "JRA", "typed-collision")));
+            Assert.AreEqual(HttpStatusCode.Accepted, backfillResponse.StatusCode);
+            var backfill = await backfillResponse.Content.ReadFromJsonAsync<CreateBackfillBatchResponse>();
+            Assert.AreEqual(CollectionBatchKind.Backfill, backfill?.Batch.Recovery?.Kind);
+            Assert.AreEqual(CollectionBatchRecoveryState.Completed, backfill?.Batch.Recovery?.RecoveryState);
+            Assert.IsNull(backfill?.Batch.Recovery?.NextDate);
+
+            using var conflict = await client.PostAsJsonAsync(
+                "/api/v2/admin/collection/recollection-batches",
+                new CreateRecollectionBatchRequest(new("RacePeriod", Provider: "JRA",
+                    From: new(2026, 9, 1), To: new(2026, 9, 30), BatchId: "typed-collision")));
+            Assert.AreEqual(HttpStatusCode.Conflict, conflict.StatusCode);
+            var payload = await conflict.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.AreEqual("BatchKindConflict", payload.GetProperty("code").GetString());
+            Assert.AreEqual(0, (await store.GetTasksAsync()).Count(x => x.Resource.Id.StartsWith("recollection:")));
         }
         finally { Directory.Delete(directory, true); }
     }

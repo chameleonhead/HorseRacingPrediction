@@ -188,6 +188,23 @@ public sealed class BackfillBatchEntity
     public DateTimeOffset? ExpansionCompletedAt { get; set; }
 }
 
+public sealed class CollectionBatchRecoveryProgressEntity
+{
+    public string BatchId { get; set; } = string.Empty;
+    public CollectionBatchKind Kind { get; set; }
+    public DateOnly? NextDate { get; set; }
+    public long LastVisitedSequence { get; set; }
+    public string? ReviewReason { get; set; }
+    public string? LastErrorCode { get; set; }
+}
+
+public sealed class CollectionBatchRecoveryScanEntity
+{
+    public int ScanId { get; set; }
+    public string? LastBatchId { get; set; }
+    public long VisitSequence { get; set; }
+}
+
 public sealed class CollectionActiveTaskEntity
 {
     public long ResourcePk { get; set; }

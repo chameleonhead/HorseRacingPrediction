@@ -21,6 +21,7 @@ public interface ICollectionApi
     Task<ApiResponse<global::HorseRacingPrediction.Contracts.Collection.GetBackfillBatchResponse>> GetBackfillBatchAsync(global::HorseRacingPrediction.Contracts.Collection.GetBackfillBatchRequest request, CancellationToken cancellationToken = default);
     Task<ApiResponse<global::HorseRacingPrediction.Contracts.Collection.GetCollectionDashboardResponse>> GetCollectionDashboardAsync(CancellationToken cancellationToken = default);
     Task<ApiResponse<global::HorseRacingPrediction.Contracts.Collection.GetCollectionMonitoringFindingsResponse>> GetCollectionMonitoringFindingsAsync(CancellationToken cancellationToken = default);
+    Task<ApiResponse<global::HorseRacingPrediction.Contracts.Collection.GetCollectionRuntimeStatusResponse>> GetCollectionRuntimeStatusAsync(CancellationToken cancellationToken = default);
     Task<ApiResponse<global::HorseRacingPrediction.Contracts.Collection.GetCollectionPipelineResponse>> GetCollectionPipelineAsync(CancellationToken cancellationToken = default);
     Task<ApiResponse<global::HorseRacingPrediction.Contracts.Collection.GetCollectionProgressResponse>> GetCollectionProgressAsync(CancellationToken cancellationToken = default);
     Task<ApiResponse<global::HorseRacingPrediction.Contracts.Collection.GetCollectionResourceDetailResponse>> GetCollectionResourceDetailAsync(global::HorseRacingPrediction.Contracts.Collection.GetCollectionResourceDetailRequest request, CancellationToken cancellationToken = default);

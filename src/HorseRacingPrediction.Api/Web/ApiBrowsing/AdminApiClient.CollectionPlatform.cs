@@ -21,6 +21,13 @@ public sealed partial class AdminApiClient
     public Task<CollectionOperationsDashboard?> GetCollectionOperationsDashboardAsync(CancellationToken token = default)
         => GetCollectionJsonAsync<CollectionOperationsDashboard>($"{CollectionPlatformPath}/operations/dashboard", "Dashboard", token);
 
+    public async Task<GetCollectionRuntimeStatusResponse?> GetCollectionRuntimeStatusAsync(CancellationToken token = default)
+    {
+        var runtime = await GetCollectionJsonAsync<CollectionRuntimeStatusDto>(
+            $"{CollectionPlatformPath}/operations/runtime-status", "Runtime", token).ConfigureAwait(false);
+        return runtime is null ? null : new(runtime);
+    }
+
     public Task<CollectionPipelineState?> GetCollectionPipelineAsync(CancellationToken token = default)
         => GetCollectionJsonAsync<CollectionPipelineState>($"{CollectionPlatformPath}/pipeline-state", "Pipeline", token);
 

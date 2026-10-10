@@ -30,7 +30,7 @@ public sealed class ApiClientJsonContractTests
     ];
 
     [TestMethod]
-    public void PublicSurface_Has135OperationMethodsWithTypedRequestAndResponseShapes()
+    public void PublicSurface_Has136OperationMethodsWithTypedRequestAndResponseShapes()
     {
         var expected = new Dictionary<Type, (int Operations, int Requests, int Responses)>
         {
@@ -46,7 +46,7 @@ public sealed class ApiClientJsonContractTests
             [typeof(IRepairsApi)] = (7, 5, 7),
             [typeof(IIdentityApi)] = (2, 2, 2),
             [typeof(ISubjectsApi)] = (2, 2, 1),
-            [typeof(ICollectionApi)] = (44, 30, 40)
+            [typeof(ICollectionApi)] = (45, 30, 41)
         };
         foreach (var api in ApiInterfaces)
         {
@@ -59,7 +59,7 @@ public sealed class ApiClientJsonContractTests
         }
 
         var methods = ApiInterfaces.SelectMany(api => api.GetMethods()).ToArray();
-        Assert.HasCount(135, methods);
+        Assert.HasCount(136, methods);
 
         var dataOperations = 0;
         var noDataOperations = 0;
@@ -94,12 +94,12 @@ public sealed class ApiClientJsonContractTests
             responses.Add(responseType);
         }
 
-        Assert.AreEqual(94, dataOperations);
+        Assert.AreEqual(95, dataOperations);
         Assert.AreEqual(41, noDataOperations);
         Assert.AreEqual(117, methods.Sum(method => method.GetParameters().Count(parameter =>
             parameter.ParameterType != typeof(CancellationToken))));
         Assert.AreEqual(117, requests.Count);
-        Assert.AreEqual(94, responses.Count);
+        Assert.AreEqual(95, responses.Count);
     }
 
     [TestMethod]
@@ -203,7 +203,7 @@ public sealed class ApiClientJsonContractTests
             }
         }
 
-        Assert.AreEqual(135, expectedCount);
+        Assert.AreEqual(136, expectedCount);
     }
 
     private static void EnqueueWireTypes(Type type, Queue<Type> queue)

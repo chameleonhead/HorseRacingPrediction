@@ -1300,6 +1300,13 @@ public sealed class CollectionDispatchStarvationReproductionTests
             Assert.AreEqual(envelopeId, preserved.EnvelopeId);
             Assert.IsNull(preserved.WakeId,
                 "A pre-v19 reservation has no verifiable wake identity and must not be assigned one during migration.");
+            var taskRow = await verify.Tasks.SingleAsync(x => x.TaskId == receipt.TaskId);
+            Assert.AreEqual(receipt.RequestId, taskRow.RequestId);
+            var requestRow = await verify.Requests.SingleAsync(x => x.RequestId == receipt.RequestId);
+            Assert.AreEqual(taskRow.ResourcePk, requestRow.ResourcePk);
+            var resourceRow = await verify.Resources.SingleAsync(x => x.ResourcePk == taskRow.ResourcePk);
+            Assert.AreEqual("SCHEMA-19", resourceRow.ResourceId,
+                "A genuine v18 migration must preserve the full resource/request/task/outbox identity chain.");
             var legacyWakeAcquire = await migrated.AcquireNextExecutionAsync(
                 new(wakeId, envelopeId, token), "legacy-wake", now.AddSeconds(2), TimeSpan.FromSeconds(45));
             Assert.AreEqual(CollectionExecutionAcquireStatus.NoWork, legacyWakeAcquire.Status,
@@ -1309,7 +1316,15 @@ public sealed class CollectionDispatchStarvationReproductionTests
             Assert.AreEqual(1, await verify.Database.SqlQueryRaw<int>(
                 "SELECT COUNT(*) AS Value FROM collection_dispatcher_fairness_state WHERE StateId = 1")
                 .SingleAsync(), "Schema migration initializes exactly one dispatcher fairness record.");
-            Assert.AreEqual(24, await verify.Database.SqlQueryRaw<int>(
+            Assert.AreEqual(0, await verify.BatchRecoveryProgress.CountAsync(),
+                "A populated v18 upgrade must not invent typed batch classifications.");
+            Assert.AreEqual(0, await verify.BatchRecoveryScans.CountAsync(),
+                "A populated v18 upgrade must not invent recovery scan heartbeat metadata.");
+            _ = new CollectionPlatformStore(options);
+            Assert.AreEqual(1, await verify.Database.SqlQueryRaw<int>(
+                "SELECT COUNT(*) AS Value FROM collection_schema_history WHERE version = 25").SingleAsync(),
+                "Repeated startup must not duplicate the v25 migration record.");
+            Assert.AreEqual(25, await verify.Database.SqlQueryRaw<int>(
                 "SELECT version AS Value FROM collection_schema_history ORDER BY version DESC LIMIT 1")
                 .SingleAsync(), "The genuine v18 fixture must migrate through the current schema.");
         }
@@ -1421,7 +1436,7 @@ public sealed class CollectionDispatchStarvationReproductionTests
             _ = new CollectionPlatformStore(options);
 
             await using var verify = new CollectionPlatformDbContext(dbOptions);
-            Assert.AreEqual(24, await ReadCollectionSchemaVersionAsync(dbOptions));
+            Assert.AreEqual(25, await ReadCollectionSchemaVersionAsync(dbOptions));
             Assert.AreEqual(1, await ReadOutboxLookupIndexCountAsync(dbOptions),
                 "The v22-to-v23 migration must add the lookup index exactly once.");
             Assert.AreEqual(1, await ReadDueTimeIndexCountAsync(dbOptions),
@@ -1432,12 +1447,14 @@ public sealed class CollectionDispatchStarvationReproductionTests
             CollectionAssert.AreEqual(new[] { "TaskId", "DispatchGeneration", "DispatchedAt" }, index.Columns.ToArray(),
                 "The index column order must match the correlated lookup predicate.");
             var schemaHistoryAfter = await ReadCollectionSchemaHistoryAsync(dbOptions);
-            Assert.AreEqual(schemaHistoryBefore.Count + 2, schemaHistoryAfter.Count,
-                "The v22 database must append v23 and v24 exactly once each.");
+            Assert.AreEqual(schemaHistoryBefore.Count + 3, schemaHistoryAfter.Count,
+                "The v22 database must append v23, v24, and v25 exactly once each.");
             CollectionAssert.AreEqual(schemaHistoryBefore.Select(x => $"{x.Version}|{x.AppliedAt}").ToArray(),
                 schemaHistoryAfter.Take(schemaHistoryBefore.Count).Select(x => $"{x.Version}|{x.AppliedAt}").ToArray(),
                 "Every pre-existing schema-history row and applied timestamp must be preserved.");
-            Assert.AreEqual(24, schemaHistoryAfter[^1].Version);
+            Assert.AreEqual(25, schemaHistoryAfter[^1].Version);
+            Assert.AreEqual(1, schemaHistoryAfter.Count(x => x.Version == 25),
+                "Repeated startup must append the v25 sidecar migration exactly once.");
             var preserved = await verify.DispatchOutbox.SingleAsync(x => x.OutboxId == outboxId);
             Assert.AreEqual(taskId, preserved.TaskId);
             Assert.AreEqual(generation, preserved.DispatchGeneration);
@@ -1451,6 +1468,10 @@ public sealed class CollectionDispatchStarvationReproductionTests
                 taskAfter.Lane, taskAfter.Priority, taskAfter.AvailableAt, taskAfter.CreatedAt,
                 taskAfter.UpdatedAt, taskAfter.DispatchGeneration, taskAfter.RaceHoldGeneration,
                 taskAfter.AttemptCount, taskAfter.MetadataJson), "The v22 task row must remain unchanged by migration.");
+            Assert.AreEqual(0, await verify.BatchRecoveryProgress.CountAsync(),
+                "A populated v22 upgrade must not infer batch classification eagerly.");
+            Assert.AreEqual(0, await verify.BatchRecoveryScans.CountAsync(),
+                "A populated v22 upgrade must not create scan cursor rows until recovery work exists.");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

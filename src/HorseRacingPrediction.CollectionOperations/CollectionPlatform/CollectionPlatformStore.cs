@@ -1238,29 +1238,6 @@ public sealed partial class CollectionPlatformStore
             .Take(Math.Max(1, limit)).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<CollectionScheduleCandidate>> GetDueScheduleCandidatesAsync(
-        DateTimeOffset now, int limit = 500, CancellationToken cancellationToken = default)
-    {
-        await using var db = CreateDbContext();
-        var dueWindow = (from state in db.States.AsNoTracking()
-                         join item in db.Resources.AsNoTracking() on state.ResourcePk equals item.ResourcePk
-                         where state.Status != CollectionStateStatus.Collecting
-                             && state.NextCollectionAt != null
-                             && state.NextCollectionAt <= now
-                         orderby state.NextCollectionAt
-                         select new { state, item })
-            .Take(Math.Max(1, limit));
-
-        return await dueWindow.Select(x => new CollectionScheduleCandidate(
-                new CollectionStateSnapshot(
-                    new(x.item.Type, x.item.Provider, x.item.ResourceId), new(x.state.DefinitionId),
-                    x.state.AppliedRevision, x.state.RequiredRevision, x.state.LastCollectedAt,
-                    x.state.NextCollectionAt, x.state.Status),
-                db.ActiveTasks.Any(active => active.ResourcePk == x.state.ResourcePk
-                    && active.DefinitionId == x.state.DefinitionId)))
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-    }
-
     public async Task<int> ReclaimExpiredLeasesAsync(DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {
@@ -1654,39 +1631,73 @@ public sealed partial class CollectionPlatformStore
         DateTimeOffset? scanAvailableAt = null, Guid? scanOutboxId = null)
     {
         await using var db = CreateDbContext();
-        if (await db.Controls.AsNoTracking().AnyAsync(x => x.ControlId == "pipeline" && x.IsPaused, cancellationToken))
-            return [];
-        var aggregationCutoff = now.AddMilliseconds(-Math.Max(0, aggregationDelayMilliseconds));
-        var heldTaskIds = await HeldTaskIdsAsync(db, cancellationToken).ConfigureAwait(false);
-        var query = from outbox in db.DispatchOutbox.AsNoTracking()
-                    join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
-                    join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
-                    where outbox.DispatchedAt == null
-                          && (outbox.ReservedUntilUnixMilliseconds == null
-                              || outbox.ReservedUntilUnixMilliseconds <= now.ToUnixTimeMilliseconds())
-                          && task.Status == CollectionTaskStatus.Ready
-                          && task.DispatchGeneration == outbox.DispatchGeneration
-                          && task.AvailableAt <= now && outbox.AvailableAt <= now
-                          && (task.DefinitionId == "race-odds" || outbox.CreatedAt <= aggregationCutoff)
-                          && !heldTaskIds.Contains(task.TaskId)
-                          && db.DispatchOutbox.Count(other => other.TaskId == task.TaskId
-                              && other.DispatchGeneration == task.DispatchGeneration
-                              && other.DispatchedAt == null) == 1
-                    select new { outbox, task, resource };
-        var pageSize = Math.Clamp(maxCount, 1, 4096);
-        var perLanePageSize = Math.Max(1, pageSize / Enum.GetValues<CollectionLane>().Length);
-        var pending = new List<PendingCollectionDispatch>(pageSize);
-        foreach (var lane in Enum.GetValues<CollectionLane>())
+        await db.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var connection = (SqliteConnection)db.Database.GetDbConnection();
+        var snapshotCreated = false;
+        Exception? operationException = null;
+        try
         {
-            var laneQuery = query.Where(x => x.task.Lane == lane);
-            // A cursor is only a stable tie-breaker inside the allocator. Filtering out everything
-            // before it lets a continuous arrival stream permanently hide higher-priority work.
-            var laneRows = await laneQuery.OrderByDescending(x => x.task.Priority)
-                .ThenBy(x => x.outbox.AvailableAt).ThenBy(x => x.outbox.OutboxId)
-                .Take(perLanePageSize).ToListAsync(cancellationToken).ConfigureAwait(false);
-            pending.AddRange(laneRows.Select(x => ToPendingDispatch(x.outbox, x.task, x.resource)));
+            await using var transaction = connection.BeginTransaction(deferred: true);
+            db.Database.UseTransaction(transaction);
+            if (await db.Controls.AsNoTracking().AnyAsync(x => x.ControlId == "pipeline" && x.IsPaused, cancellationToken))
+            {
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return [];
+            }
+
+            var aggregationCutoff = now.AddMilliseconds(-Math.Max(0, aggregationDelayMilliseconds));
+            var query = from outbox in db.DispatchOutbox.AsNoTracking()
+                        join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
+                        join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+                        where outbox.DispatchedAt == null
+                              && (outbox.ReservedUntilUnixMilliseconds == null
+                                  || outbox.ReservedUntilUnixMilliseconds <= now.ToUnixTimeMilliseconds())
+                              && task.Status == CollectionTaskStatus.Ready
+                              && task.DispatchGeneration == outbox.DispatchGeneration
+                              && task.AvailableAt <= now && outbox.AvailableAt <= now
+                              && (task.DefinitionId == "race-odds" || outbox.CreatedAt <= aggregationCutoff)
+                              && db.DispatchOutbox.Count(other => other.TaskId == task.TaskId
+                                  && other.DispatchGeneration == task.DispatchGeneration
+                                  && other.DispatchedAt == null) == 1
+                        select new { outbox, task, resource };
+
+            var heldRaceIds = await ActiveHoldIdsAsync(db, cancellationToken).ConfigureAwait(false);
+            if (heldRaceIds.Length > 0)
+            {
+                snapshotCreated = true;
+                await CreateHeldResourceSnapshotTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
+                await PopulateHeldResourceSnapshotAsync(db, connection, transaction,
+                    query.Select(x => x.resource.ResourcePk), heldRaceIds, cancellationToken).ConfigureAwait(false);
+                var heldResourcePks = HeldResourcePks(db);
+                query = query.Where(x => !heldResourcePks.Contains(x.resource.ResourcePk));
+            }
+
+            var pageSize = Math.Clamp(maxCount, 1, 4096);
+            var perLanePageSize = Math.Max(1, pageSize / Enum.GetValues<CollectionLane>().Length);
+            var pending = new List<PendingCollectionDispatch>(pageSize);
+            foreach (var lane in Enum.GetValues<CollectionLane>())
+            {
+                var laneQuery = query.Where(x => x.task.Lane == lane);
+                // A cursor is only a stable tie-breaker inside the allocator. Filtering out everything
+                // before it lets a continuous arrival stream permanently hide higher-priority work.
+                var laneRows = await laneQuery.OrderByDescending(x => x.task.Priority)
+                    .ThenBy(x => x.outbox.AvailableAt).ThenBy(x => x.outbox.OutboxId)
+                    .Take(perLanePageSize).ToListAsync(cancellationToken).ConfigureAwait(false);
+                pending.AddRange(laneRows.Select(x => ToPendingDispatch(x.outbox, x.task, x.resource)));
+            }
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return pending.OrderBy(x => x.AvailableAt).ThenBy(x => x.OutboxId).Take(pageSize).ToList();
         }
-        return pending.OrderBy(x => x.AvailableAt).ThenBy(x => x.OutboxId).Take(pageSize).ToList();
+        catch (Exception ex)
+        {
+            operationException = ex;
+            throw;
+        }
+        finally
+        {
+            if (snapshotCreated) await DropHeldResourceSnapshotAsync(connection, operationException).ConfigureAwait(false);
+        }
     }
 
     private static PendingCollectionDispatch ToPendingDispatch(CollectionDispatchOutboxEntity outbox,
@@ -1705,6 +1716,21 @@ public sealed partial class CollectionPlatformStore
         return state is null ? CollectionLaneDispatchState.Empty
             : new CollectionLaneDispatchState(state.ConsecutiveRealtime, ParseLane(state.LastNonRealtimeLane),
                 state.ScanAvailableAt, state.ScanOutboxId);
+    }
+
+    /// <summary>
+    /// Returns a conservative fast-path hint based only on live execution leases. A false result
+    /// does not grant capacity; the reservation transaction remains authoritative.
+    /// </summary>
+    public async Task<bool> IsExecutionCapacityDefinitelyFullAsync(int maxInFlightEnvelopes,
+        DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        var capacity = Math.Max(1, maxInFlightEnvelopes);
+        await using var db = CreateDbContext();
+        var active = db.ExecutionLeases.AsNoTracking().Where(x =>
+            (x.Status == "StartPending" || x.Status == "Running") && x.LeaseExpiresAt > now);
+        return await active.Select(x => x.ExecutionBatchId).Take(capacity).CountAsync(cancellationToken)
+            .ConfigureAwait(false) >= capacity;
     }
 
     public async Task<bool> TryReserveDispatchesWithinCapacityAsync(IReadOnlyCollection<Guid> outboxIds,
@@ -1743,33 +1769,81 @@ public sealed partial class CollectionPlatformStore
         {
             await using var db = CreateDbContext();
             await db.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-            await using var tx = ((SqliteConnection)db.Database.GetDbConnection()).BeginTransaction(deferred: false);
-            db.Database.UseTransaction(tx);
-            if (await db.Controls.AnyAsync(x => x.ControlId == "pipeline" && x.IsPaused, cancellationToken))
-                return CollectionDispatchCycleOutcome.CandidateRejected;
+            var connection = (SqliteConnection)db.Database.GetDbConnection();
+            var snapshotCreated = false;
+            Exception? operationException = null;
+            try
+            {
+                await using (var tx = connection.BeginTransaction(deferred: false))
+                {
+                    db.Database.UseTransaction(tx);
+                    if (await db.Controls.AnyAsync(x => x.ControlId == "pipeline" && x.IsPaused, cancellationToken))
+                        return CollectionDispatchCycleOutcome.CandidateRejected;
 
-            var inFlight = await db.ExecutionLeases.CountAsync(x =>
-                (x.Status == "StartPending" || x.Status == "Running") && x.LeaseExpiresAt > now,
-                cancellationToken).ConfigureAwait(false);
-            var executionEnvelopeIds = db.ExecutionLeases.Select(x => x.DispatchEnvelopeId);
-            var heldTaskIds = await HeldTaskIdsAsync(db, cancellationToken);
-            var heldIds = await ActiveHoldIdsAsync(db, cancellationToken).ConfigureAwait(false);
-            var aggregationCutoff = now.AddMilliseconds(-Math.Max(0, aggregationDelayMilliseconds));
-            var legacyInFlight = await (from outbox in db.DispatchOutbox
-                                        join task in db.Tasks on outbox.TaskId equals task.TaskId
-                                        where outbox.EnvelopeId != null && outbox.DispatchedAt != null
-                                              && !heldTaskIds.Contains(task.TaskId)
-                                              && outbox.DispatchGeneration == task.DispatchGeneration
-                                              && (task.Status == CollectionTaskStatus.Ready
-                                                  || task.Status == CollectionTaskStatus.Running)
-                                              && !executionEnvelopeIds.Contains(outbox.EnvelopeId.Value)
-                                        select outbox.EnvelopeId).Distinct().CountAsync(cancellationToken)
-                .ConfigureAwait(false);
-            var reservedRows = await (from outbox in db.DispatchOutbox
+                    var capacity = Math.Max(1, maxInFlightEnvelopes);
+                    var inFlight = await db.ExecutionLeases.AsNoTracking().Where(x =>
+                            (x.Status == "StartPending" || x.Status == "Running") && x.LeaseExpiresAt > now)
+                        .Select(x => x.ExecutionBatchId).Take(capacity).CountAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    if (inFlight >= capacity) return CollectionDispatchCycleOutcome.CapacityFull;
+
+                    var executionEnvelopeIds = db.ExecutionLeases.Select(x => x.DispatchEnvelopeId);
+                    var heldIds = await ActiveHoldIdsAsync(db, cancellationToken).ConfigureAwait(false);
+                    if (heldIds.Length > 0)
+                    {
+                        snapshotCreated = true;
+                        await CreateHeldResourceSnapshotTableAsync(connection, tx, cancellationToken).ConfigureAwait(false);
+                    }
+                    var heldResourcePks = heldIds.Length == 0 ? null : HeldResourcePks(db);
+                    var aggregationCutoff = now.AddMilliseconds(-Math.Max(0, aggregationDelayMilliseconds));
+
+                    var legacyRows = from outbox in db.DispatchOutbox.AsNoTracking()
+                                     join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
+                                     join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+                                     where outbox.EnvelopeId != null && outbox.DispatchedAt != null
+                                           && outbox.DispatchGeneration == task.DispatchGeneration
+                                           && (task.Status == CollectionTaskStatus.Ready
+                                               || task.Status == CollectionTaskStatus.Running)
+                                           && !executionEnvelopeIds.Contains(outbox.EnvelopeId.Value)
+                                     select new { EnvelopeId = outbox.EnvelopeId!.Value, resource.ResourcePk };
+                    if (heldIds.Length > 0)
+                        await PopulateHeldResourceSnapshotAsync(db, connection, tx,
+                            legacyRows.Select(x => x.ResourcePk), heldIds, cancellationToken).ConfigureAwait(false);
+                    var unheldLegacyEnvelopeIds = heldIds.Length == 0 ? legacyRows.Select(x => x.EnvelopeId)
+                        : legacyRows.Where(x => !heldResourcePks!.Contains(x.ResourcePk)).Select(x => x.EnvelopeId);
+                    var legacyInFlight = await unheldLegacyEnvelopeIds.Distinct().CountAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    if (inFlight + legacyInFlight >= capacity) return CollectionDispatchCycleOutcome.CapacityFull;
+
+                    var reservedRows = from outbox in db.DispatchOutbox.AsNoTracking()
+                                       join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
+                                       join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+                                       where outbox.DispatchedAt == null && outbox.EnvelopeId != null
+                                             && outbox.ReservedUntilUnixMilliseconds > now.ToUnixTimeMilliseconds()
+                                             && task.Status == CollectionTaskStatus.Ready
+                                             && task.DispatchGeneration == outbox.DispatchGeneration
+                                             && task.AvailableAt <= now && outbox.AvailableAt <= now
+                                             && (task.DefinitionId == "race-odds" || outbox.CreatedAt <= aggregationCutoff)
+                                             && db.DispatchOutbox.Count(other => other.TaskId == task.TaskId
+                                                 && other.DispatchGeneration == task.DispatchGeneration
+                                                 && other.DispatchedAt == null) == 1
+                                       select new { EnvelopeId = outbox.EnvelopeId!.Value, resource.ResourcePk };
+                    if (heldIds.Length > 0)
+                        await PopulateHeldResourceSnapshotAsync(db, connection, tx,
+                            reservedRows.Select(x => x.ResourcePk), heldIds, cancellationToken).ConfigureAwait(false);
+                    var unheldReservedEnvelopeIds = heldIds.Length == 0 ? reservedRows.Select(x => x.EnvelopeId)
+                        : reservedRows.Where(x => !heldResourcePks!.Contains(x.ResourcePk)).Select(x => x.EnvelopeId);
+                    var reserved = await unheldReservedEnvelopeIds.Distinct().CountAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    if (inFlight + legacyInFlight + reserved >= capacity)
+                        return CollectionDispatchCycleOutcome.CapacityFull;
+
+                    var rows = await (from outbox in db.DispatchOutbox
                                       join task in db.Tasks on outbox.TaskId equals task.TaskId
                                       join resource in db.Resources on task.ResourcePk equals resource.ResourcePk
-                                      where outbox.DispatchedAt == null && outbox.EnvelopeId != null
-                                            && outbox.ReservedUntilUnixMilliseconds > now.ToUnixTimeMilliseconds()
+                                      where ids.Contains(outbox.OutboxId) && outbox.DispatchedAt == null
+                                            && (outbox.ReservedUntilUnixMilliseconds == null
+                                                || outbox.ReservedUntilUnixMilliseconds <= now.ToUnixTimeMilliseconds())
                                             && task.Status == CollectionTaskStatus.Ready
                                             && task.DispatchGeneration == outbox.DispatchGeneration
                                             && task.AvailableAt <= now && outbox.AvailableAt <= now
@@ -1777,87 +1851,91 @@ public sealed partial class CollectionPlatformStore
                                             && db.DispatchOutbox.Count(other => other.TaskId == task.TaskId
                                                 && other.DispatchGeneration == task.DispatchGeneration
                                                 && other.DispatchedAt == null) == 1
-                                      select new { outbox.EnvelopeId, outbox.TaskId, resource }).ToListAsync(cancellationToken)
-                .ConfigureAwait(false);
-            var reserved = reservedRows.Where(x => !heldTaskIds.Contains(x.TaskId)
-                    && !MatchesHold(x.resource, heldIds))
-                .Select(x => x.EnvelopeId).Distinct().Count();
-            if (inFlight + legacyInFlight + reserved >= Math.Max(1, maxInFlightEnvelopes))
-                return CollectionDispatchCycleOutcome.CapacityFull;
+                                      select new { outbox, task, resource }).ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    if (rows.Count != ids.Length || rows.Select(x => x.task.Lane).Distinct().Count() != 1)
+                        return CollectionDispatchCycleOutcome.CandidateRejected;
+                    var selectedResourcePks = rows.Select(x => (long)x.resource.ResourcePk).ToArray();
 
-            var rows = await (from outbox in db.DispatchOutbox
-                              join task in db.Tasks on outbox.TaskId equals task.TaskId
-                              join resource in db.Resources on task.ResourcePk equals resource.ResourcePk
-                              where ids.Contains(outbox.OutboxId) && outbox.DispatchedAt == null
-                                    && (outbox.ReservedUntilUnixMilliseconds == null
-                                        || outbox.ReservedUntilUnixMilliseconds <= now.ToUnixTimeMilliseconds())
-                                    && task.Status == CollectionTaskStatus.Ready
-                                    && task.DispatchGeneration == outbox.DispatchGeneration
-                                    && task.AvailableAt <= now && outbox.AvailableAt <= now
-                                    && (task.DefinitionId == "race-odds" || outbox.CreatedAt <= aggregationCutoff)
-                                    && db.DispatchOutbox.Count(other => other.TaskId == task.TaskId
-                                        && other.DispatchGeneration == task.DispatchGeneration
-                                        && other.DispatchedAt == null) == 1
-                              select new { outbox, task, resource }).ToListAsync(cancellationToken)
-                .ConfigureAwait(false);
-            if (rows.Count != ids.Length || rows.Any(x => heldTaskIds.Contains(x.task.TaskId)
-                    || MatchesHold(x.resource, heldIds)))
-                return CollectionDispatchCycleOutcome.CandidateRejected;
-            if (rows.Select(x => x.task.Lane).Distinct().Count() != 1)
-                return CollectionDispatchCycleOutcome.CandidateRejected;
+                    if (heldIds.Length > 0)
+                    {
+                        await PopulateHeldResourceSnapshotAsync(db, connection, tx,
+                            db.Resources.Where(resource => selectedResourcePks.Contains(resource.ResourcePk))
+                                .Select(resource => resource.ResourcePk), heldIds, cancellationToken)
+                            .ConfigureAwait(false);
+                        if (await HeldResourcePks(db).Where(resourcePk => selectedResourcePks.Contains(resourcePk))
+                                .AnyAsync(cancellationToken).ConfigureAwait(false))
+                            return CollectionDispatchCycleOutcome.CandidateRejected;
+                    }
+                    if (heldIds.Length > 0 && rows.Any(x => MatchesHold(x.resource, heldIds)))
+                        return CollectionDispatchCycleOutcome.CandidateRejected;
 
-            var eligibleRows = from outbox in db.DispatchOutbox.AsNoTracking()
-                               join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
-                               join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
-                               where outbox.DispatchedAt == null
-                                     && (outbox.ReservedUntilUnixMilliseconds == null
-                                         || outbox.ReservedUntilUnixMilliseconds <= now.ToUnixTimeMilliseconds())
-                                     && task.Status == CollectionTaskStatus.Ready
-                                     && task.DispatchGeneration == outbox.DispatchGeneration
-                                     && task.AvailableAt <= now && outbox.AvailableAt <= now
-                                     && (!task.LeaseExpiresAt.HasValue || task.LeaseExpiresAt <= now)
-                                     && (task.DefinitionId == "race-odds" || outbox.CreatedAt <= aggregationCutoff)
-                                     && db.DispatchOutbox.Count(other => other.TaskId == task.TaskId
-                                         && other.DispatchGeneration == task.DispatchGeneration
-                                         && other.DispatchedAt == null) == 1
-                               select new { task.Lane, task.TaskId, resource };
-            var eligibleLaneSet = new HashSet<CollectionLane>();
-            if (heldIds.Length == 0)
-            {
-                var distinctEligibleLanes = await eligibleRows.Select(x => x.Lane).Distinct()
-                    .ToArrayAsync(cancellationToken).ConfigureAwait(false);
-                eligibleLaneSet.UnionWith(distinctEligibleLanes);
-            }
-            else
-            {
-                await foreach (var row in eligibleRows.AsAsyncEnumerable().WithCancellation(cancellationToken))
-                {
-                    if (!heldTaskIds.Contains(row.TaskId) && !MatchesHold(row.resource, heldIds))
-                        eligibleLaneSet.Add(row.Lane);
+                    var eligibleRows = from outbox in db.DispatchOutbox.AsNoTracking()
+                                       join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
+                                       join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+                                       where outbox.DispatchedAt == null
+                                             && (outbox.ReservedUntilUnixMilliseconds == null
+                                                 || outbox.ReservedUntilUnixMilliseconds <= now.ToUnixTimeMilliseconds())
+                                             && task.Status == CollectionTaskStatus.Ready
+                                             && task.DispatchGeneration == outbox.DispatchGeneration
+                                             && task.AvailableAt <= now && outbox.AvailableAt <= now
+                                             && (!task.LeaseExpiresAt.HasValue || task.LeaseExpiresAt <= now)
+                                             && (task.DefinitionId == "race-odds" || outbox.CreatedAt <= aggregationCutoff)
+                                             && db.DispatchOutbox.Count(other => other.TaskId == task.TaskId
+                                                 && other.DispatchGeneration == task.DispatchGeneration
+                                                 && other.DispatchedAt == null) == 1
+                                       select new { task.Lane, resource.ResourcePk };
+                    if (heldIds.Length > 0)
+                    {
+                        await PopulateHeldResourceSnapshotAsync(db, connection, tx,
+                            eligibleRows.Select(x => x.ResourcePk), heldIds, cancellationToken).ConfigureAwait(false);
+                        eligibleRows = eligibleRows.Where(x => !heldResourcePks!.Contains(x.ResourcePk));
+                    }
+                    var eligibleLanes = await eligibleRows.Select(x => x.Lane).Distinct()
+                        .ToArrayAsync(cancellationToken).ConfigureAwait(false);
+                    var fairness = await db.DispatcherFairnessStates.SingleAsync(x => x.StateId == 1, cancellationToken)
+                        .ConfigureAwait(false);
+                    var currentFairness = new CollectionLaneDispatchState(fairness.ConsecutiveRealtime,
+                        ParseLane(fairness.LastNonRealtimeLane), fairness.ScanAvailableAt, fairness.ScanOutboxId);
+                    if (new CollectionLaneAllocator().SelectLane(eligibleLanes, currentFairness) != rows[0].task.Lane)
+                        return CollectionDispatchCycleOutcome.ReserveConflict;
+                    // Identity resolution may depend on mutable aliases. Recheck the chosen rows
+                    // after candidate enumeration and immediately before any reservation write.
+                    if (heldIds.Length > 0 && rows.Any(x => MatchesHold(x.resource, heldIds)))
+                        return CollectionDispatchCycleOutcome.CandidateRejected;
+                    await AdvanceDispatcherFairnessAsync(db, rows.Select(x => x.outbox).ToArray(), rows[0].task.Lane, now,
+                        cancellationToken).ConfigureAwait(false);
+                    BeforeReservationExpiryTimeRead?.Invoke();
+                    var reservedUntilUnixMilliseconds = reservationTimeProvider().Add(duration).ToUnixTimeMilliseconds();
+                    foreach (var row in rows)
+                    {
+                        row.outbox.ReservationToken = reservationToken;
+                        // Eligibility and fairness use the cycle snapshot; only the reservation lifetime uses fresh time.
+                        row.outbox.ReservedUntilUnixMilliseconds = reservedUntilUnixMilliseconds;
+                        row.outbox.EnvelopeId = envelopeId;
+                        row.outbox.WakeId = wakeId == Guid.Empty ? null : wakeId;
+                    }
+                    if (heldIds.Length > 0)
+                    {
+                        if (await HeldResourcePks(db).Where(resourcePk => selectedResourcePks.Contains(resourcePk))
+                                .AnyAsync(cancellationToken).ConfigureAwait(false)
+                            || rows.Any(x => MatchesHold(x.resource, heldIds)))
+                            return CollectionDispatchCycleOutcome.CandidateRejected;
+                    }
+                    await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return CollectionDispatchCycleOutcome.Reserved;
                 }
             }
-            var eligibleLanes = eligibleLaneSet.ToArray();
-            var fairness = await db.DispatcherFairnessStates.SingleAsync(x => x.StateId == 1, cancellationToken)
-                .ConfigureAwait(false);
-            var currentFairness = new CollectionLaneDispatchState(fairness.ConsecutiveRealtime,
-                ParseLane(fairness.LastNonRealtimeLane), fairness.ScanAvailableAt, fairness.ScanOutboxId);
-            if (new CollectionLaneAllocator().SelectLane(eligibleLanes, currentFairness) != rows[0].task.Lane)
-                return CollectionDispatchCycleOutcome.ReserveConflict;
-            await AdvanceDispatcherFairnessAsync(db, rows.Select(x => x.outbox).ToArray(), rows[0].task.Lane, now,
-                cancellationToken).ConfigureAwait(false);
-            BeforeReservationExpiryTimeRead?.Invoke();
-            var reservedUntilUnixMilliseconds = reservationTimeProvider().Add(duration).ToUnixTimeMilliseconds();
-            foreach (var row in rows)
+            catch (Exception ex)
             {
-                row.outbox.ReservationToken = reservationToken;
-                // Eligibility and fairness use the cycle snapshot; only the reservation lifetime uses fresh time.
-                row.outbox.ReservedUntilUnixMilliseconds = reservedUntilUnixMilliseconds;
-                row.outbox.EnvelopeId = envelopeId;
-                row.outbox.WakeId = wakeId == Guid.Empty ? null : wakeId;
+                operationException = ex;
+                throw;
             }
-            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
-            return CollectionDispatchCycleOutcome.Reserved;
+            finally
+            {
+                if (snapshotCreated) await DropHeldResourceSnapshotAsync(connection, operationException).ConfigureAwait(false);
+            }
         }
         finally { _gate.Release(); }
     }
@@ -1940,6 +2018,11 @@ public sealed partial class CollectionPlatformStore
         try
         {
             await using var db = CreateDbContext();
+            var hasExpired = await db.ExecutionLeases.AsNoTracking().AnyAsync(x =>
+                (x.Status == "StartPending" || x.Status == "Running") && x.LeaseExpiresAt <= now,
+                cancellationToken).ConfigureAwait(false);
+            if (!hasExpired) return 0;
+
             await db.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
             await using var tx = ((SqliteConnection)db.Database.GetDbConnection()).BeginTransaction(deferred: false);
             db.Database.UseTransaction(tx);
@@ -2008,7 +2091,9 @@ public sealed partial class CollectionPlatformStore
                 var matchingLease = existing.Status == "StartPending" && existing.LeaseExpiresAt > now
                     && existing.WakeId == wake.WakeId && existing.ReservationToken == wake.ReservationToken;
                 var priorEnvelope = matchingLease
-                    ? await BuildExecutionEnvelopeAsync(db, wake.DispatchEnvelopeId, cancellationToken).ConfigureAwait(false)
+                    ? await BuildExecutionEnvelopeAsync(db, wake.DispatchEnvelopeId, cancellationToken,
+                        ignoreRepairHolds: true)
+                        .ConfigureAwait(false)
                     : null;
                 await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
                 if (!matchingLease)
@@ -2052,17 +2137,7 @@ public sealed partial class CollectionPlatformStore
                     }))
                 return NoWork(CollectionExecutionNoWorkReason.TaskIneligible);
 
-            var heldTaskIds = await HeldTaskIdsAsync(db, cancellationToken).ConfigureAwait(false);
             var heldIds = await ActiveHoldIdsAsync(db, cancellationToken).ConfigureAwait(false);
-            if (rows.Any(row => heldTaskIds.Contains(row.TaskId)))
-                return NoWork(CollectionExecutionNoWorkReason.RepairHold);
-            foreach (var row in rows)
-            {
-                if (await db.DispatchOutbox.CountAsync(other => other.TaskId == row.TaskId
-                        && other.DispatchGeneration == row.DispatchGeneration && other.DispatchedAt == null,
-                        cancellationToken).ConfigureAwait(false) != 1)
-                    return NoWork(CollectionExecutionNoWorkReason.ReservationInconsistent);
-            }
             var resources = await (from task in db.Tasks
                                    join resource in db.Resources on task.ResourcePk equals resource.ResourcePk
                                    where taskIds.Contains(task.TaskId)
@@ -2070,18 +2145,45 @@ public sealed partial class CollectionPlatformStore
                 .ConfigureAwait(false);
             if (resources.Count != rows.Count)
                 return NoWork(CollectionExecutionNoWorkReason.ResourceUnavailable);
-            if (resources.Any(x => MatchesHold(x.resource, heldIds)))
-                return NoWork(CollectionExecutionNoWorkReason.RepairHold);
+            foreach (var row in rows)
+            {
+                if (await db.DispatchOutbox.CountAsync(other => other.TaskId == row.TaskId
+                        && other.DispatchGeneration == row.DispatchGeneration && other.DispatchedAt == null,
+                        cancellationToken).ConfigureAwait(false) != 1)
+                    return NoWork(CollectionExecutionNoWorkReason.ReservationInconsistent);
+            }
             if (await db.ExecutionLeases.AnyAsync(x => x.DispatchEnvelopeId == wake.DispatchEnvelopeId
                     && (x.Status == "StartPending" || x.Status == "Running") && x.LeaseExpiresAt > now,
                     cancellationToken).ConfigureAwait(false))
                 return NoWork(CollectionExecutionNoWorkReason.LeaseConflict);
 
-            var envelope = await BuildExecutionEnvelopeAsync(db, wake.DispatchEnvelopeId, cancellationToken)
+            var envelope = await BuildExecutionEnvelopeAsync(db, wake.DispatchEnvelopeId, cancellationToken, heldIds,
+                    rejectHeldEnvelope: true)
                 .ConfigureAwait(false);
-            if (envelope is null || envelope.Tasks.Count != rows.Count
+            if (envelope is null)
+                return NoWork(heldIds.Length > 0
+                    ? CollectionExecutionNoWorkReason.RepairHold
+                    : CollectionExecutionNoWorkReason.EnvelopeInvalid);
+            if (envelope.Tasks.Count != rows.Count
                 || envelope.Tasks.Select(x => x.TaskId).ToHashSet().SetEquals(taskIds) is false)
                 return NoWork(CollectionExecutionNoWorkReason.EnvelopeInvalid);
+
+            if (heldIds.Length > 0)
+            {
+                var currentResources = await (from task in db.Tasks
+                                              join resource in db.Resources on task.ResourcePk equals resource.ResourcePk
+                                              where taskIds.Contains(task.TaskId)
+                                              select new { task.TaskId, resource }).ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                if (currentResources.Count != rows.Count)
+                    return NoWork(CollectionExecutionNoWorkReason.ResourceUnavailable);
+                if (await HasRepairHoldForResourcesAsync(db,
+                        (SqliteConnection)db.Database.GetDbConnection(), tx,
+                        currentResources.Select(x => x.resource.ResourcePk).ToArray(), heldIds, cancellationToken)
+                    .ConfigureAwait(false)
+                    || currentResources.Any(x => MatchesHold(x.resource, heldIds)))
+                    return NoWork(CollectionExecutionNoWorkReason.RepairHold);
+            }
 
             var lease = new CollectionExecutionLeaseEntity
             {
@@ -3736,48 +3838,20 @@ public sealed partial class CollectionPlatformStore
         try
         {
             await using var db = CreateDbContext();
-            var batch = await db.BackfillBatches.SingleOrDefaultAsync(x => x.BatchId == batchId, cancellationToken);
-            if (batch is null)
-            {
-                db.BackfillBatches.Add(new BackfillBatchEntity
-                {
-                    BatchId = batchId,
-                    Provider = provider,
-                    From = from,
-                    To = to,
-                    CreatedAt = now
-                });
-                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            }
-            else if (batch.Provider != provider || batch.From != from || batch.To != to)
-                throw new InvalidOperationException($"Backfill batch '{batchId}' already exists with another range.");
+            await EnsureTypedBatchAsync(db, batchId, provider, from, to, CollectionBatchKind.Backfill,
+                now, cancellationToken).ConfigureAwait(false);
         }
         finally { _gate.Release(); }
 
-        for (var date = from; date <= to; date = date.AddDays(1))
+        var date = from;
+        while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var resource = new ResourceKey(CollectionResourceType.Race, provider, $"backfill:{date:yyyyMMdd}");
-            if (await GetStateAsync(resource, new("race-discovery"), cancellationToken).ConfigureAwait(false) is not null)
-                continue;
-            await RequestAsync(resource, new("race-discovery"), 1, CollectionReason.Backfill, now,
-                CollectionLane.Background, (int)CollectionPriority.Background, batchId: batchId,
-                effectiveDate: date, attributes: new Dictionary<string, string>
-                {
-                    ["batchId"] = batchId,
-                    ["backfillDate"] = date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
-                }, cancellationToken: cancellationToken).ConfigureAwait(false);
+            await ProcessManualBatchDateAsync(batchId, date, CollectionBatchKind.Backfill, now,
+                cancellationToken).ConfigureAwait(false);
+            if (date == to) break;
+            date = date.AddDays(1);
         }
-
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            await using var db = CreateDbContext();
-            var batch = await db.BackfillBatches.SingleAsync(x => x.BatchId == batchId, cancellationToken);
-            batch.ExpansionCompletedAt ??= now;
-            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        }
-        finally { _gate.Release(); }
         return (await GetBackfillBatchAsync(batchId, cancellationToken).ConfigureAwait(false))!;
     }
 
@@ -3793,50 +3867,23 @@ public sealed partial class CollectionPlatformStore
         try
         {
             await using var db = CreateDbContext();
-            var batch = await db.BackfillBatches.SingleOrDefaultAsync(x => x.BatchId == batchId, cancellationToken);
-            if (batch is null)
-            {
-                db.BackfillBatches.Add(new BackfillBatchEntity
-                {
-                    BatchId = batchId,
-                    Provider = provider,
-                    From = from,
-                    To = to,
-                    CreatedAt = now
-                });
-                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            }
-            else if (batch.Provider != provider || batch.From != from || batch.To != to)
-                throw new InvalidOperationException($"Recollection batch '{batchId}' already exists with another range.");
+            await EnsureTypedBatchAsync(db, batchId, provider, from, to, CollectionBatchKind.PeriodRecollection,
+                now, cancellationToken).ConfigureAwait(false);
         }
         finally { _gate.Release(); }
 
         var created = 0;
         var reused = 0;
-        for (var date = from; date <= to; date = date.AddDays(1))
+        var date = from;
+        while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var resource = new ResourceKey(CollectionResourceType.Race, provider, $"recollection:{date:yyyyMMdd}");
-            var receipt = await RequestAsync(resource, new("race-discovery"), 1,
-                CollectionReason.PeriodRecollection, now, CollectionLane.Background,
-                (int)CollectionPriority.Background, batchId: batchId, effectiveDate: date,
-                attributes: new Dictionary<string, string>
-                {
-                    ["batchId"] = batchId,
-                    ["backfillDate"] = date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
-                }, cancellationToken: cancellationToken).ConfigureAwait(false);
+            var receipt = await ProcessManualBatchDateAsync(batchId, date,
+                CollectionBatchKind.PeriodRecollection, now, cancellationToken).ConfigureAwait(false);
             if (receipt.CreatedTask) created++; else reused++;
+            if (date == to) break;
+            date = date.AddDays(1);
         }
-
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            await using var db = CreateDbContext();
-            var batch = await db.BackfillBatches.SingleAsync(x => x.BatchId == batchId, cancellationToken);
-            batch.ExpansionCompletedAt ??= now;
-            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        }
-        finally { _gate.Release(); }
 
         var snapshot = (await GetBackfillBatchAsync(batchId, cancellationToken).ConfigureAwait(false))!;
         return new(snapshot, created, reused);
@@ -3882,12 +3929,13 @@ public sealed partial class CollectionPlatformStore
             }).ToList();
         var expected = batch.To.DayNumber - batch.From.DayNumber + 1;
         var discoveryDays = rows.Count(x => x.task.DefinitionId == "race-discovery");
+        var recovery = await ReadRecoveryMetadataAsync(db, batch, cancellationToken).ConfigureAwait(false);
         return new(batch.BatchId, batch.From, batch.To, expected, discoveryDays,
             rows.Count(x => x.task.Status is CollectionTaskStatus.Pending or CollectionTaskStatus.Ready
                 or CollectionTaskStatus.RetryWaiting or CollectionTaskStatus.WaitingDiscovery),
             rows.Count(x => x.task.Status == CollectionTaskStatus.Running),
             rows.Count(x => x.task.Status == CollectionTaskStatus.Succeeded),
-            holes.Count, holes, batch.CreatedAt, batch.ExpansionCompletedAt);
+            holes.Count, holes, batch.CreatedAt, batch.ExpansionCompletedAt, recovery);
     }
 
     public async Task<IReadOnlyList<BackfillBatchSnapshot>> GetBackfillBatchesAsync(
@@ -3906,13 +3954,8 @@ public sealed partial class CollectionPlatformStore
     public async Task<int> ResumeIncompleteBackfillBatchesAsync(DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {
-        await using var db = CreateDbContext();
-        var incomplete = await db.BackfillBatches.AsNoTracking().Where(x => x.ExpansionCompletedAt == null)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-        foreach (var batch in incomplete)
-            await CreateOrResumeBackfillBatchAsync(batch.BatchId, batch.Provider, batch.From, batch.To, now,
-                cancellationToken).ConfigureAwait(false);
-        return incomplete.Count;
+        var result = await RunBackfillRecoveryCycleAsync(now, cancellationToken).ConfigureAwait(false);
+        return result.BatchesVisited;
     }
 
     public async Task<CollectionInitializationReport> InitializeFromDomainDataAsync(
@@ -4286,7 +4329,8 @@ public sealed partial class CollectionPlatformStore
         => stages?.LastOrDefault(x => x.RequestedUrl == url || x.FinalUrl == url)?.Artifact;
 
     private async Task<CollectionDispatchEnvelope?> BuildExecutionEnvelopeAsync(CollectionPlatformDbContext db,
-        Guid envelopeId, CancellationToken cancellationToken)
+        Guid envelopeId, CancellationToken cancellationToken, IReadOnlyCollection<string>? activeHoldIds = null,
+        bool rejectHeldEnvelope = false, bool ignoreRepairHolds = false)
     {
         var rows = await (from outbox in db.DispatchOutbox.AsNoTracking()
                           join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
@@ -4294,8 +4338,13 @@ public sealed partial class CollectionPlatformStore
                           where outbox.EnvelopeId == envelopeId && outbox.DispatchGeneration == task.DispatchGeneration
                           orderby task.Priority descending, task.CreatedAt, task.TaskId
                           select new { outbox, task, resource }).ToListAsync(cancellationToken).ConfigureAwait(false);
-        var heldRaceIds = await ActiveHoldIdsAsync(db, cancellationToken);
-        rows = rows.Where(x => !MatchesHold(x.resource, heldRaceIds)).ToList();
+        if (!ignoreRepairHolds)
+        {
+            var heldRaceIds = activeHoldIds ?? await ActiveHoldIdsAsync(db, cancellationToken);
+            var heldRows = heldRaceIds.Count == 0 ? [] : rows.Where(x => MatchesHold(x.resource, heldRaceIds)).ToList();
+            if (rejectHeldEnvelope && heldRows.Count > 0) return null;
+            if (!rejectHeldEnvelope && heldRows.Count > 0) rows = rows.Except(heldRows).ToList();
+        }
         if (rows.Count == 0) return null;
         var first = rows[0];
         var attributes = DeserializeTaskMetadata(first.task.MetadataJson ?? first.resource.AttributesJson);

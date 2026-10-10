@@ -19,6 +19,10 @@ public sealed record RaceRepairHoldSnapshot(string RaceId, string OperationId, l
 
 public sealed partial class CollectionPlatformStore
 {
+    private const int HeldResourceSnapshotPageSize = 128;
+    private const string HeldResourceSnapshotTableName = "HeldResourceSnapshot";
+    private const string HeldResourceWorklistTableName = "HeldResourceWorklist";
+
     public async Task BackupForRaceRepairAsync(string destinationPath, CancellationToken token)
     {
         await using var db = CreateDbContext();
@@ -63,6 +67,152 @@ public sealed partial class CollectionPlatformStore
 
     private static async Task<string[]> ActiveHoldIdsAsync(CollectionPlatformDbContext db, CancellationToken token)
         => await db.RaceRepairHolds.Where(x => x.ReleasedAt == null).Select(x => x.RaceId).ToArrayAsync(token);
+
+    private static IQueryable<long> HeldResourcePks(CollectionPlatformDbContext db)
+        => db.Database.SqlQueryRaw<long>(
+            "SELECT ResourcePk AS Value FROM temp.HeldResourceSnapshot WHERE IsHeld <> 0");
+
+    private static async Task CreateHeldResourceSnapshotTableAsync(SqliteConnection connection,
+        SqliteTransaction transaction, CancellationToken token)
+    {
+        await using var create = connection.CreateCommand();
+        create.Transaction = transaction;
+        create.CommandText = "CREATE TEMP TABLE HeldResourceSnapshot (ResourcePk INTEGER PRIMARY KEY, IsHeld INTEGER NOT NULL);"
+            + " CREATE TEMP TABLE HeldResourceWorklist (ResourcePk INTEGER PRIMARY KEY);";
+        await create.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+    }
+
+    private async Task PopulateHeldResourceSnapshotAsync(CollectionPlatformDbContext db,
+        SqliteConnection connection, SqliteTransaction transaction, IQueryable<long> relevantResourcePks,
+        IReadOnlyCollection<string> heldRaceIds, CancellationToken token)
+    {
+        await using (var clear = connection.CreateCommand())
+        {
+            clear.Transaction = transaction;
+            clear.CommandText = $"DELETE FROM temp.{HeldResourceWorklistTableName};";
+            await clear.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+        }
+
+        var snapshotResourcePks = db.Database.SqlQueryRaw<long>(
+            "SELECT ResourcePk AS Value FROM temp.HeldResourceSnapshot");
+        var worklistSource = relevantResourcePks
+            .Where(resourcePk => !snapshotResourcePks.Contains(resourcePk))
+            .Distinct();
+        await using (var seed = worklistSource.CreateDbCommand())
+        {
+            seed.Transaction = transaction;
+            seed.CommandText = $"INSERT OR IGNORE INTO temp.{HeldResourceWorklistTableName} (ResourcePk) "
+                + seed.CommandText;
+            await seed.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+        }
+
+        var scannedThrough = 0L;
+        while (true)
+        {
+            token.ThrowIfCancellationRequested();
+            var pageResourcePks = new List<long>(HeldResourceSnapshotPageSize);
+            await using (var pageCommand = connection.CreateCommand())
+            {
+                pageCommand.Transaction = transaction;
+                pageCommand.CommandText = $"SELECT ResourcePk FROM temp.{HeldResourceWorklistTableName} "
+                    + "WHERE ResourcePk > $cursor ORDER BY ResourcePk LIMIT $limit;";
+                pageCommand.Parameters.AddWithValue("$cursor", scannedThrough);
+                pageCommand.Parameters.AddWithValue("$limit", HeldResourceSnapshotPageSize);
+                await using var reader = await pageCommand.ExecuteReaderAsync(token).ConfigureAwait(false);
+                while (await reader.ReadAsync(token).ConfigureAwait(false))
+                    pageResourcePks.Add(reader.GetInt64(0));
+            }
+            if (pageResourcePks.Count == 0) break;
+
+            // Resource rows are fully materialized here, so the reader is closed before identity
+            // resolution can open a domain-context connection.
+            var page = await db.Resources.AsNoTracking()
+                .Where(resource => pageResourcePks.Contains(resource.ResourcePk))
+                .OrderBy(resource => resource.ResourcePk)
+                .ToListAsync(token).ConfigureAwait(false);
+            if (page.Count != pageResourcePks.Count)
+                throw new InvalidOperationException("A held-resource worklist page did not resolve to its complete resource set.");
+
+            scannedThrough = page[^1].ResourcePk;
+            var matches = page.Select(resource => (resource.ResourcePk, IsHeld: MatchesHold(resource, heldRaceIds)))
+                .ToArray();
+            token.ThrowIfCancellationRequested();
+            await using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            var values = new string[matches.Length];
+            for (var index = 0; index < matches.Length; index++)
+            {
+                var resourceName = $"$resource{index}";
+                var heldName = $"$held{index}";
+                values[index] = $"({resourceName}, {heldName})";
+                insert.Parameters.AddWithValue(resourceName, matches[index].ResourcePk);
+                insert.Parameters.AddWithValue(heldName, matches[index].IsHeld ? 1 : 0);
+            }
+            insert.CommandText = $"INSERT INTO temp.{HeldResourceSnapshotTableName} (ResourcePk, IsHeld) VALUES {string.Join(",", values)};";
+            await insert.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+        }
+
+    }
+
+    private async Task<bool> HasRepairHoldForResourcesAsync(CollectionPlatformDbContext db,
+        SqliteConnection connection, SqliteTransaction transaction, IReadOnlyCollection<long> resourcePks,
+        IReadOnlyCollection<string> heldRaceIds, CancellationToken token)
+    {
+        if (resourcePks.Count == 0 || heldRaceIds.Count == 0) return false;
+        Exception? operationException = null;
+        var snapshotCreated = false;
+        try
+        {
+            snapshotCreated = true;
+            await CreateHeldResourceSnapshotTableAsync(connection, transaction, token).ConfigureAwait(false);
+            await PopulateHeldResourceSnapshotAsync(db, connection, transaction,
+                db.Resources.Where(resource => resourcePks.Contains(resource.ResourcePk))
+                    .Select(resource => resource.ResourcePk), heldRaceIds, token).ConfigureAwait(false);
+            return await HeldResourcePks(db).AnyAsync(token).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            operationException = ex;
+            throw;
+        }
+        finally
+        {
+            if (snapshotCreated)
+                await DropHeldResourceSnapshotAsync(connection, operationException, transaction).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task DropHeldResourceSnapshotAsync(SqliteConnection connection,
+        Exception? operationException, SqliteTransaction? transaction = null)
+    {
+        try
+        {
+            await using var drop = connection.CreateCommand();
+            drop.Transaction = transaction;
+            drop.CommandText = $"DROP TABLE IF EXISTS temp.{HeldResourceWorklistTableName};"
+                + $" DROP TABLE IF EXISTS temp.{HeldResourceSnapshotTableName};";
+            await drop.ExecuteNonQueryAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception cleanupException)
+        {
+            try { SqliteConnection.ClearPool(connection); }
+            catch (Exception poolException)
+            {
+                System.Diagnostics.Trace.TraceError("Could not clear a SQLite pool after held-resource TEMP cleanup failed: {0}", poolException);
+            }
+            try { connection.Close(); }
+            catch (Exception closeException)
+            {
+                System.Diagnostics.Trace.TraceError("Could not close a SQLite connection after held-resource TEMP cleanup failed: {0}", closeException);
+            }
+
+            System.Diagnostics.Trace.TraceError("Held-resource TEMP cleanup failed; the SQLite connection was discarded: {0}", cleanupException);
+            if (operationException is null)
+                throw new InvalidOperationException("Could not clean up the held-resource TEMP snapshot; the SQLite connection was discarded.", cleanupException);
+            throw new AggregateException("The operation and held-resource TEMP cleanup both failed; the SQLite connection was discarded.",
+                operationException, cleanupException);
+        }
+    }
 
     private async Task<bool> IsRepairHeldAsync(CollectionPlatformDbContext db, long resourcePk, CancellationToken token)
     {
