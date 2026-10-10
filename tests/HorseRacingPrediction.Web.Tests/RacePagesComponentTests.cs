@@ -113,8 +113,8 @@ public sealed class RacePagesComponentTests
         Assert.IsTrue(cut.Markup.Contains("今日</button>", StringComparison.Ordinal));
 
         await FindPeriodTab(cut, "今週").ClickAsync();
-        Assert.AreEqual("2026-10-05", handler.LastRequestDateFrom);
-        Assert.AreEqual("2026-10-11", handler.LastRequestDateTo);
+        Assert.AreEqual("2026-10-01", handler.LastRequestDateFrom);
+        Assert.AreEqual("2026-10-07", handler.LastRequestDateTo);
 
         await FindPeriodTab(cut, "今月").ClickAsync();
         Assert.AreEqual("2026-10-01", handler.LastRequestDateFrom);

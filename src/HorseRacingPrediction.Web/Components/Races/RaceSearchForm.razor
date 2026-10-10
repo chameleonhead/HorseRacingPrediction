@@ -109,7 +109,9 @@
 
     private (DateOnly Start, DateOnly End) WeekRange()
     {
-        var start = Today.AddDays(-(((int)Today.DayOfWeek + 6) % 7));
+        const int entryListPublicationDay = (int)DayOfWeek.Thursday;
+        var daysSinceThursday = ((int)Today.DayOfWeek - entryListPublicationDay + 7) % 7;
+        var start = Today.AddDays(-daysSinceThursday);
         return (start, start.AddDays(6));
     }
 
