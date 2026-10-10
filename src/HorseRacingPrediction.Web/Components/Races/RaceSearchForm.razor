@@ -1,16 +1,45 @@
-<FluentStack HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
-    <FluentTextInput Placeholder="レース名" Value="@Name" @oninput="OnNameInput" />
-    <FluentDatePicker Placeholder="開始日" Value="@From" @oninput="OnFromChange" />
-    <FluentDatePicker Placeholder="終了日" Value="@To" @oninput="OnToChange" />
-    <FluentButton Appearance="ButtonAppearance.Primary" OnClick="OnSearch">検索</FluentButton>
-    <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="OnClear">条件をクリア</FluentButton>
-</FluentStack>
-<FluentOverflow>
-    <FilterSelection Label="開催場"
-                     Value="@Course"
-                     ValueChanged="OnCourseInput"
-                     Items="@CourseOptions" />
-</FluentOverflow>
+<div class="race-search-form" role="search">
+    <FluentTextInput Class="race-name-filter" Placeholder="レース名" Value="@Name" @oninput="OnNameInput" />
+
+    <div class="race-filter-group">
+        <FilterSelection Label="開催場"
+                         Value="@Course"
+                         ValueChanged="OnCourseInput"
+                         Items="@CourseOptions" />
+
+        <div class="date-range-filter">
+            <FilterSelection Label="開催日"
+                             Value="@(DateRangeEnabled ? DateRangeSelection : null)"
+                             ValueChanged="OnDateRangeSelectionChanged"
+                             Items="@DateRangeOptions" />
+
+            @if (DateRangeEnabled)
+            {
+                <div class="date-range-inputs">
+                    <label>
+                        から
+                        <FluentDatePicker TValue="DateOnly?"
+                                          Placeholder="開始日"
+                                          Value="@From"
+                                          ValueChanged="OnFromChange" />
+                    </label>
+                    <label>
+                        まで
+                        <FluentDatePicker TValue="DateOnly?"
+                                          Placeholder="終了日"
+                                          Value="@To"
+                                          ValueChanged="OnToChange" />
+                    </label>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="search-actions">
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="OnSearch">検索</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="OnClear">条件をクリア</FluentButton>
+    </div>
+</div>
 
 @if (!string.IsNullOrWhiteSpace(ValidationMessage))
 {
@@ -33,6 +62,14 @@
         new("小倉", "小倉競馬場")
     ];
 
+    private const string DateRangeSelection = "range";
+
+    private static readonly FilterSelectionOption[] DateRangeOptions =
+    [
+        new(string.Empty, "すべて"),
+        new(DateRangeSelection, "期間を指定")
+    ];
+
     [Parameter] public string? Name { get; set; }
     [Parameter] public EventCallback<string?> NameChanged { get; set; }
     [Parameter] public string? Course { get; set; }
@@ -41,6 +78,8 @@
     [Parameter] public EventCallback<DateOnly?> FromChanged { get; set; }
     [Parameter] public DateOnly? To { get; set; }
     [Parameter] public EventCallback<DateOnly?> ToChanged { get; set; }
+    [Parameter] public bool DateRangeEnabled { get; set; }
+    [Parameter] public EventCallback<bool> DateRangeEnabledChanged { get; set; }
     [Parameter] public EventCallback OnSearch { get; set; }
     [Parameter] public EventCallback OnClear { get; set; }
     [Parameter] public string? ValidationMessage { get; set; }
@@ -50,11 +89,21 @@
     private Task OnCourseInput(string? args)
         => CourseChanged.InvokeAsync(args);
 
-    private Task OnFromChange(ChangeEventArgs args)
-        => FromChanged.InvokeAsync(
-            DateOnly.TryParse(args.Value?.ToString(), out var value) ? value : null);
+    private async Task OnDateRangeSelectionChanged(string? value)
+    {
+        var enabled = value == DateRangeSelection;
+        await DateRangeEnabledChanged.InvokeAsync(enabled);
 
-    private Task OnToChange(ChangeEventArgs args)
-        => ToChanged.InvokeAsync(
-            DateOnly.TryParse(args.Value?.ToString(), out var value) ? value : null);
+        if (!enabled)
+        {
+            await FromChanged.InvokeAsync(null);
+            await ToChanged.InvokeAsync(null);
+        }
+    }
+
+    private Task OnFromChange(DateOnly? value)
+        => FromChanged.InvokeAsync(value);
+
+    private Task OnToChange(DateOnly? value)
+        => ToChanged.InvokeAsync(value);
 }
