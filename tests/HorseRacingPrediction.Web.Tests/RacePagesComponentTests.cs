@@ -204,6 +204,35 @@ public sealed class RacePagesComponentTests
         Assert.AreEqual("2026-10-07", handler.LastRequestDateTo);
     }
 
+    [TestMethod]
+    public async Task RaceList_CustomDateRange_UpdatesBadgeAndSearchesImmediately()
+    {
+        using var handler = new RaceApiHandler();
+        using var context = CreateContext(handler);
+        var cut = context.Render<Races>();
+        cut.WaitForAssertion(() => Assert.AreEqual(1, handler.SearchCount));
+
+        var trigger = cut.FindAll("button[aria-haspopup='listbox']")
+            .Single(button => button.GetAttribute("aria-label")!.StartsWith("開催日:", StringComparison.Ordinal));
+        await trigger.ClickAsync();
+        var listbox = cut.FindComponents<FluentListbox<FilterSelectionOption, string>>().Last();
+        await cut.InvokeAsync(() => listbox.Instance.ValueChanged.InvokeAsync("custom"));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 1)));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentDatePicker<DateOnly?>>().Last().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 10)));
+        var apply = cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("適用"));
+
+        await cut.InvokeAsync(() => apply.Instance.OnClick.InvokeAsync());
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.AreEqual(2, handler.SearchCount);
+            Assert.AreEqual("2026-10-01", handler.LastRequestDateFrom);
+            Assert.AreEqual("2026-10-10", handler.LastRequestDateTo);
+            StringAssert.Contains(cut.Find("button[aria-haspopup='listbox'][aria-label^='開催日']").TextContent, "2026/10/01 - 2026/10/10");
+            Assert.AreEqual("すべての期間", SelectedPeriodTab(cut));
+        });
+    }
+
     private static AngleSharp.Dom.IElement FindPeriodTab(IRenderedComponent<Races> cut, string text)
         => cut.FindAll("nav[aria-label='開催期間'] button").Single(button => button.TextContent.Trim() == text);
 

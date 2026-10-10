@@ -4,11 +4,6 @@
     gap: 8px;
 }
 
-.date-range-drawer {
-    display: flex;
-    flex-direction: column;
-}
-
 .date-range-drawer-fields {
     display: grid;
     gap: 20px;
@@ -55,8 +50,7 @@
 
 @media (max-width: 640px) {
     .date-range-drawer {
-        width: 100vw !important;
-        height: 100dvh !important;
-        max-height: 100dvh !important;
+        width: 100vw;
+        max-width: 100vw;
     }
 }

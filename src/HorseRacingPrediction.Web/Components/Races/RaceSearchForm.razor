@@ -18,7 +18,7 @@
                                FromChanged="OnDateFromChanged"
                                To="@To"
                                ToChanged="OnDateToChanged"
-                               OnDateFilterChanged="SetPeriodAllAsync"
+                               OnDateFilterChanged="OnDateFilterChangedAsync"
                                Enabled="@DateRangeEnabled"
                                EnabledChanged="DateRangeEnabledChanged" />
     </div>
@@ -83,7 +83,11 @@
         await OnSearch.InvokeAsync();
     }
 
-    private Task SetPeriodAllAsync() => PeriodChanged.InvokeAsync(RacePeriod.All);
+    private async Task OnDateFilterChangedAsync()
+    {
+        await PeriodChanged.InvokeAsync(RacePeriod.All);
+        await OnSearch.InvokeAsync();
+    }
 
     private Task OnDateFromChanged(DateOnly? value) => FromChanged.InvokeAsync(value);
 

@@ -9,9 +9,10 @@
 <FluentDialog @ref="Drawer"
               Modal="true"
               Alignment="DialogAlignment.End"
+              Size="DialogSize.Medium"
               AriaLabelledby="@DrawerTitleId"
               Class="date-range-drawer"
-              Style="width:min(460px,100vw);height:100dvh;max-height:100dvh;margin:0;">
+              Style="height:100dvh;max-height:100dvh;margin:0;">
     @if (IsDrawerOpen)
     {
         <FluentDialogBody>
