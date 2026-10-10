@@ -12,7 +12,7 @@
               Size="DialogSize.Medium"
               AriaLabelledby="@DrawerTitleId"
               Class="date-range-drawer"
-              Style="height:100dvh;max-height:100dvh;margin:0;">
+              Style="inset-inline-start:auto;inset-inline-end:0;height:100dvh;max-height:100dvh;margin:0;">
     @if (IsDrawerOpen)
     {
         <FluentDialogBody>
@@ -153,8 +153,8 @@
         {
             DraftFrom = From;
             DraftTo = To;
-            ValidationMessage = null;
             IsDrawerOpen = true;
+            ValidationMessage = null;
             await Drawer!.ShowAsync();
             return;
         }
@@ -197,6 +197,8 @@
 
     private async Task CancelDrawer()
     {
+        DraftFrom = From;
+        DraftTo = To;
         IsDrawerOpen = false;
         ValidationMessage = null;
         if (Drawer is not null)

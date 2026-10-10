@@ -163,6 +163,41 @@ public sealed class FilterComponentsTests
     }
 
     [TestMethod]
+    public async Task FilterDateRangePicker_CancelRestoresOriginalPresetAndDates()
+    {
+        using var context = CreateContext();
+        var from = new DateOnly(2026, 10, 1);
+        var to = new DateOnly(2026, 10, 7);
+        var fromChangedCount = 0;
+        var toChangedCount = 0;
+        var enabledChangedCount = 0;
+        var cut = context.Render<FilterDateRangePicker>(parameters => parameters
+            .Add(x => x.From, from)
+            .Add(x => x.FromChanged, (DateOnly? value) => { from = value!.Value; fromChangedCount++; })
+            .Add(x => x.To, to)
+            .Add(x => x.ToChanged, (DateOnly? value) => { to = value!.Value; toChangedCount++; })
+            .Add(x => x.Enabled, true)
+            .Add(x => x.EnabledChanged, _ => enabledChangedCount++));
+
+        var originalLabel = cut.Find("button[aria-haspopup='listbox']").TextContent;
+        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        var listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
+        await cut.InvokeAsync(() => listbox.Instance.ValueChanged.InvokeAsync("custom"));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 3)));
+
+        var cancel = cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("キャンセル"));
+        await cut.InvokeAsync(() => cancel.Instance.OnClick.InvokeAsync());
+
+        Assert.AreEqual(new DateOnly(2026, 10, 1), from);
+        Assert.AreEqual(new DateOnly(2026, 10, 7), to);
+        Assert.AreEqual(0, fromChangedCount);
+        Assert.AreEqual(0, toChangedCount);
+        Assert.AreEqual(0, enabledChangedCount);
+        Assert.AreEqual(originalLabel, cut.Find("button[aria-haspopup='listbox']").TextContent);
+        Assert.AreEqual(0, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
+    }
+
+    [TestMethod]
     public async Task FilterDateRangePicker_OptionsCanBeSimplified()
     {
         using var context = CreateContext();
