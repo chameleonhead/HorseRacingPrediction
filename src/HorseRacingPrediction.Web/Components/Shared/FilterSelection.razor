@@ -1,0 +1,78 @@
+<FluentBadge Id="@AnchorId" Padding="12px" @onclick="TogglePopover">
+    <span style="font-weight: normal">@Label:</span>
+    <strong>@SelectionSummary</strong>
+</FluentBadge>
+
+<FluentPopover AnchorId="@AnchorId" @bind-Opened="IsOpened" Padding="0">
+    @if (Multiple)
+    {
+        <FluentListbox TOption="FilterSelectionOption"
+                       TValue="string"
+                       Multiple="true"
+                       Items="@Items"
+                       OptionValue="@(item => item.Value)"
+                       OptionText="@(item => item.Label)"
+                       SelectedItems="@SelectedOptions"
+                       SelectedItemsChanged="OnSelectedItemsChanged"
+                       Appearance="ListAppearance.Transparent" />
+    }
+    else
+    {
+        <FluentListbox TOption="FilterSelectionOption"
+                       TValue="string"
+                       Items="@Items"
+                       OptionValue="@(item => item.Value)"
+                       OptionText="@(item => item.Label)"
+                       Value="@Value"
+                       ValueChanged="OnValueChanged"
+                       Appearance="ListAppearance.Transparent" />
+    }
+</FluentPopover>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = null!;
+    [Parameter] public IEnumerable<FilterSelectionOption> Items { get; set; } = Array.Empty<FilterSelectionOption>();
+    [Parameter] public bool Multiple { get; set; }
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string[] SelectedValues { get; set; } = Array.Empty<string>();
+    [Parameter] public EventCallback<string[]> SelectedValuesChanged { get; set; }
+
+    private readonly string AnchorId = $"filter-selection-{Guid.NewGuid():N}";
+    private bool IsOpened { get; set; }
+
+    private IEnumerable<FilterSelectionOption> SelectedOptions
+        => Items.Where(item => SelectedValues.Contains(item.Value));
+
+    private string SelectionSummary
+    {
+        get
+        {
+            if (Multiple)
+            {
+                var selectedLabels = SelectedOptions.Select(item => item.Label).ToArray();
+                return selectedLabels.Length switch
+                {
+                    0 => "すべて",
+                    1 => selectedLabels[0],
+                    _ => $"{selectedLabels.Length}件選択"
+                };
+            }
+
+            return string.IsNullOrEmpty(Value)
+                ? "すべて"
+                : Items.FirstOrDefault(item => item.Value == Value)?.Label ?? Value;
+        }
+    }
+
+    private void TogglePopover() => IsOpened = !IsOpened;
+
+    private async Task OnValueChanged(string? value)
+    {
+        await ValueChanged.InvokeAsync(value);
+        IsOpened = false;
+    }
+
+    private Task OnSelectedItemsChanged(IEnumerable<FilterSelectionOption>? selectedItems)
+        => SelectedValuesChanged.InvokeAsync(selectedItems?.Select(item => item.Value).ToArray() ?? []);
+}

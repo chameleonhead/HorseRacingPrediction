@@ -6,10 +6,10 @@
     <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="OnClear">条件をクリア</FluentButton>
 </FluentStack>
 <FluentOverflow>
-    <FilterSingleSelection Label="開催場"
-                           Value="@Course"
-                           Items="@CourseOptions"
-                           OnChange="OnCourseInput" />
+    <FilterSelection Label="開催場"
+                     Value="@Course"
+                     ValueChanged="OnCourseInput"
+                     Items="@CourseOptions" />
 </FluentOverflow>
 
 @if (!string.IsNullOrWhiteSpace(ValidationMessage))
