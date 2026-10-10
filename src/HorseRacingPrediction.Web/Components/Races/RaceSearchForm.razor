@@ -6,7 +6,10 @@
     <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="OnClear">条件をクリア</FluentButton>
 </FluentStack>
 <FluentOverflow>
-    <FilterSingleSelection Label="開催場" Value="@Course" Items="@(new[] { Course })" OnChange="OnCourseInput" />
+    <FilterSingleSelection Label="開催場"
+                           Value="@Course"
+                           Items="@CourseOptions"
+                           OnChange="OnCourseInput" />
 </FluentOverflow>
 
 @if (!string.IsNullOrWhiteSpace(ValidationMessage))
@@ -15,6 +18,21 @@
 }
 
 @code {
+    private static readonly FilterSelectionOption[] CourseOptions =
+    [
+        new(string.Empty, "すべて"),
+        new("札幌", "札幌競馬場"),
+        new("函館", "函館競馬場"),
+        new("福島", "福島競馬場"),
+        new("新潟", "新潟競馬場"),
+        new("東京", "東京競馬場"),
+        new("中山", "中山競馬場"),
+        new("中京", "中京競馬場"),
+        new("京都", "京都競馬場"),
+        new("阪神", "阪神競馬場"),
+        new("小倉", "小倉競馬場")
+    ];
+
     [Parameter] public string? Name { get; set; }
     [Parameter] public EventCallback<string?> NameChanged { get; set; }
     [Parameter] public string? Course { get; set; }
