@@ -4,16 +4,16 @@
     gap: 4px;
     min-height: 40px;
     padding: 8px 12px;
-    color: var(--colorNeutralForeground1);
+    color: var(--colorBrandForeground1);
     font: inherit;
-    background: var(--colorNeutralBackground1);
-    border: 1px solid var(--colorNeutralStroke1);
+    background: var(--colorBrandBackground2);
+    border: 1px solid var(--colorBrandStroke1);
     border-radius: 4px;
     cursor: pointer;
 }
 
 .filter-selection-trigger:hover {
-    background: var(--colorNeutralBackground2);
+    background: var(--colorBrandBackground2Hover);
 }
 
 .filter-selection-trigger:focus-visible {

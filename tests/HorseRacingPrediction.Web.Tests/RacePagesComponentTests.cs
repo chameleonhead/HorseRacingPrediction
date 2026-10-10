@@ -178,9 +178,20 @@ public sealed class RacePagesComponentTests
         var cut = context.Render<Races>();
         cut.WaitForAssertion(() => Assert.AreEqual("今週", SelectedPeriodTab(cut)));
 
+        var dateFilterTrigger = cut.FindAll("button[aria-haspopup='listbox']")
+            .Single(button => button.GetAttribute("aria-label")!.StartsWith("開催日:", StringComparison.Ordinal));
+        await dateFilterTrigger.ClickAsync();
+        var dateFilterOptions = cut.FindComponents<FluentListbox<FilterSelectionOption, string>>().Last();
+        await cut.InvokeAsync(() => dateFilterOptions.Instance.ValueChanged.InvokeAsync("custom"));
         var startDate = cut.FindComponents<FluentDatePicker<DateOnly?>>().First();
         await cut.InvokeAsync(() => startDate.Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 2)));
+        Assert.AreEqual(new DateOnly(2026, 10, 2), cut.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.Value);
+        var endDate = cut.FindComponents<FluentDatePicker<DateOnly?>>().Last();
+        await cut.InvokeAsync(() => endDate.Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 7)));
+        var applyDateRange = cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("適用"));
+        await cut.InvokeAsync(() => applyDateRange.Instance.OnClick.InvokeAsync());
 
+        Assert.AreEqual(new DateOnly(2026, 10, 2), cut.FindComponent<RaceSearchForm>().Instance.From);
         Assert.AreEqual("すべての期間", SelectedPeriodTab(cut));
         var search = cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("検索"));
         await cut.InvokeAsync(() => search.Instance.OnClick.InvokeAsync(new MouseEventArgs()));

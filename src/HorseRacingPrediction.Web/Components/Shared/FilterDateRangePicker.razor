@@ -1,67 +1,221 @@
 <div class="date-range-filter">
-    <FilterSelection @key="Enabled"
-                     Label="開催日"
-                     Value="@(Enabled ? DateRangeSelection : null)"
+    <FilterSelection Label="@Label"
+                     Value="@SelectedOption"
                      ValueChanged="OnSelectionChanged"
-                     Items="@DateRangeOptions" />
-
-    @if (Enabled)
-    {
-        <div class="date-range-inputs">
-            <label>
-                から
-                <FluentDatePicker TValue="DateOnly?"
-                                  Autofocus="@FocusStartDate"
-                                  AriaLabel="開始日"
-                                  Placeholder="開始日"
-                                  Value="@From"
-                                  ValueChanged="FromChanged" />
-            </label>
-            <label>
-                まで
-                <FluentDatePicker TValue="DateOnly?"
-                                  AriaLabel="終了日"
-                                  Placeholder="終了日"
-                                  Value="@To"
-                                  ValueChanged="ToChanged" />
-            </label>
-        </div>
-    }
+                     DisplayValue="@DisplayValue"
+                     Items="@Options" />
 </div>
 
-@code {
-    private const string DateRangeSelection = "range";
+<FluentDialog Hidden="@(!IsDrawerOpen)"
+              HiddenChanged="OnDrawerHiddenChanged"
+              Modal="true"
+              Alignment="DialogAlignment.End"
+              AriaLabelledby="@DrawerTitleId"
+              Class="date-range-drawer"
+              Style="width:min(460px,100vw);height:100dvh;max-height:100dvh;margin:0;">
+    @if (IsDrawerOpen)
+    {
+        <FluentDialogBody>
+            <header class="date-range-drawer-header">
+                <h2 id="@DrawerTitleId">@($"{Label}の期間を指定")</h2>
+                <button type="button" aria-label="閉じる" @onclick="CancelDrawer">×</button>
+            </header>
+            <div class="date-range-drawer-fields">
+                <label>
+                    開始日
+                    <FluentDatePicker TValue="DateOnly?"
+                                      Autofocus="true"
+                                      AriaLabel="開始日"
+                                      Placeholder="開始日"
+                                      Value="@DraftFrom"
+                                      ValueChanged="OnDraftFromChanged" />
+                </label>
+                <label>
+                    終了日
+                    <FluentDatePicker TValue="DateOnly?"
+                                      AriaLabel="終了日"
+                                      Placeholder="終了日"
+                                      Value="@DraftTo"
+                                      ValueChanged="OnDraftToChanged" />
+                </label>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(ValidationMessage))
+            {
+                <FluentMessageBar Intent="@MessageBarIntent.Error">@ValidationMessage</FluentMessageBar>
+            }
+        </FluentDialogBody>
+        <div class="date-range-drawer-footer">
+            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="CancelDrawer">キャンセル</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ApplyCustomRangeAsync" Disabled="@(!CanApplyCustomRange)">適用</FluentButton>
+        </div>
+    }
+</FluentDialog>
 
-    private static readonly FilterSelectionOption[] DateRangeOptions =
+@code {
+    private const string AllOption = "all";
+    private const string TodayOption = "today";
+    private const string TenDaysOption = "last-10-days";
+    private const string MonthOption = "last-month";
+    private const string YearOption = "last-year";
+    private const string CustomOption = "custom";
+
+    private static readonly FilterSelectionOption[] DefaultOptions =
     [
-        new(string.Empty, "すべて"),
-        new(DateRangeSelection, "期間を指定")
+        new(AllOption, "すべて"),
+        new(TodayOption, "今日"),
+        new(TenDaysOption, "10日以内"),
+        new(MonthOption, "1か月以内"),
+        new(YearOption, "1年以内"),
+        new(CustomOption, "期間を指定する")
     ];
 
+    [Parameter] public string Label { get; set; } = "開催日";
+    [Parameter] public IReadOnlyList<FilterSelectionOption> Options { get; set; } = DefaultOptions;
     [Parameter] public DateOnly? From { get; set; }
     [Parameter] public EventCallback<DateOnly?> FromChanged { get; set; }
     [Parameter] public DateOnly? To { get; set; }
     [Parameter] public EventCallback<DateOnly?> ToChanged { get; set; }
     [Parameter] public bool Enabled { get; set; }
     [Parameter] public EventCallback<bool> EnabledChanged { get; set; }
+    [Parameter] public EventCallback OnDateFilterChanged { get; set; }
 
-    private bool FocusStartDate { get; set; }
+    [Inject] private TimeProvider TimeProvider { get; set; } = null!;
+
+    private readonly string DrawerTitleId = $"date-range-title-{Guid.NewGuid():N}";
+    private DateOnly? DraftFrom { get; set; }
+    private DateOnly? DraftTo { get; set; }
+    private bool IsDrawerOpen { get; set; }
+    private string? ValidationMessage { get; set; }
+    private DateOnly Today => TimeProvider.TodayInJapan();
+    private bool CanApplyCustomRange => DraftFrom is not null && DraftTo is not null && DraftFrom <= DraftTo;
+
+    private string SelectedOption
+    {
+        get
+        {
+            if (From is null && To is null)
+            {
+                return AllOption;
+            }
+
+            if (From == Today && To == Today)
+            {
+                return TodayOption;
+            }
+
+            if ((From, To) == (Today.AddDays(-9), Today))
+            {
+                return TenDaysOption;
+            }
+
+            if ((From, To) == (Today.AddMonths(-1), Today))
+            {
+                return MonthOption;
+            }
+
+            if ((From, To) == (Today.AddYears(-1), Today))
+            {
+                return YearOption;
+            }
+
+            return CustomOption;
+        }
+    }
+
+    private string DisplayValue
+    {
+        get
+        {
+            var optionLabel = Options.FirstOrDefault(option => option.Value == SelectedOption)?.Label;
+            if (optionLabel is not null)
+            {
+                return SelectedOption == CustomOption && (From is not null || To is not null)
+                    ? FormatDateRange()
+                    : optionLabel;
+            }
+
+            return From is null && To is null ? "すべて" : FormatDateRange();
+        }
+    }
+
+    private string FormatDateRange()
+        => $"{From?.ToString("yyyy/MM/dd") ?? "指定なし"} - {To?.ToString("yyyy/MM/dd") ?? "指定なし"}";
 
     private async Task OnSelectionChanged(string? value)
     {
-        var enabled = value == DateRangeSelection;
-        await EnabledChanged.InvokeAsync(enabled);
-
-        if (enabled)
+        if (string.IsNullOrWhiteSpace(value))
         {
-            FocusStartDate = true;
-            await InvokeAsync(StateHasChanged);
+            return;
         }
 
-        if (!enabled)
+        if (value == CustomOption)
         {
-            await FromChanged.InvokeAsync(null);
-            await ToChanged.InvokeAsync(null);
+            DraftFrom = From;
+            DraftTo = To;
+            ValidationMessage = null;
+            IsDrawerOpen = true;
+            return;
         }
+
+        var (from, to) = ResolveOption(value);
+        await FromChanged.InvokeAsync(from);
+        await ToChanged.InvokeAsync(to);
+        await EnabledChanged.InvokeAsync(value != AllOption);
+        await OnDateFilterChanged.InvokeAsync();
+    }
+
+    private (DateOnly? From, DateOnly? To) ResolveOption(string value) => value switch
+    {
+        AllOption => (null, null),
+        TodayOption => (Today, Today),
+        TenDaysOption => (Today.AddDays(-9), Today),
+        MonthOption => (Today.AddMonths(-1), Today),
+        YearOption => (Today.AddYears(-1), Today),
+        _ => (From, To)
+    };
+
+    private async Task ApplyCustomRangeAsync()
+    {
+        if (!CanApplyCustomRange)
+        {
+            ValidationMessage = DraftFrom > DraftTo
+                ? "終了日は開始日以降の日付を指定してください。"
+                : "開始日と終了日を入力してください。";
+            return;
+        }
+
+        await FromChanged.InvokeAsync(DraftFrom);
+        await ToChanged.InvokeAsync(DraftTo);
+        await EnabledChanged.InvokeAsync(true);
+        await OnDateFilterChanged.InvokeAsync();
+        IsDrawerOpen = false;
+        ValidationMessage = null;
+    }
+
+    private void CancelDrawer()
+    {
+        IsDrawerOpen = false;
+        ValidationMessage = null;
+    }
+
+    private void OnDrawerHiddenChanged(bool hidden) => IsDrawerOpen = !hidden;
+
+    private void OnDraftFromChanged(DateOnly? value)
+    {
+        DraftFrom = value;
+        ValidateDraftRange();
+    }
+
+    private void OnDraftToChanged(DateOnly? value)
+    {
+        DraftTo = value;
+        ValidateDraftRange();
+    }
+
+    private void ValidateDraftRange()
+    {
+        ValidationMessage = DraftFrom is not null && DraftTo is not null && DraftFrom > DraftTo
+            ? "終了日は開始日以降の日付を指定してください。"
+            : null;
     }
 }

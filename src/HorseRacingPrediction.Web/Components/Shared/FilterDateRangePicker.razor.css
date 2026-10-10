@@ -1,37 +1,62 @@
 .date-range-filter {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
 }
 
-.date-range-inputs {
+.date-range-drawer {
     display: flex;
-    flex-wrap: wrap;
-    align-items: end;
-    gap: 8px;
+    flex-direction: column;
 }
 
-.date-range-inputs label {
+.date-range-drawer-fields {
+    display: grid;
+    gap: 20px;
+    padding: 8px 0;
+}
+
+.date-range-drawer-header,
+.date-range-drawer-footer {
     display: flex;
     align-items: center;
-    gap: 6px;
-    white-space: nowrap;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.date-range-drawer-header h2 {
+    margin: 0;
+}
+
+.date-range-drawer-header button {
+    width: 40px;
+    height: 40px;
+    color: var(--colorNeutralForeground1);
+    font-size: 24px;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+}
+
+.date-range-drawer-footer {
+    justify-content: flex-end;
+    padding: 16px;
+    border-top: 1px solid var(--colorNeutralStroke1);
+}
+
+.date-range-drawer-fields label {
+    display: grid;
+    gap: 8px;
+    font-weight: 600;
+}
+
+.date-range-drawer-fields fluent-datepicker {
+    width: 100%;
 }
 
 @media (max-width: 640px) {
-    .date-range-filter,
-    .date-range-inputs {
-        width: 100%;
-        align-items: stretch;
-    }
-
-    .date-range-inputs label {
-        flex: 1 1 100%;
-    }
-
-    .date-range-inputs fluent-datepicker {
-        flex: 1;
-        min-width: 0;
+    .date-range-drawer {
+        width: 100vw !important;
+        height: 100dvh !important;
+        max-height: 100dvh !important;
     }
 }
