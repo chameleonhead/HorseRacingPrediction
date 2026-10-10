@@ -6,6 +6,8 @@ using HorseRacingPrediction.ApiClient.Races;
 using HorseRacingPrediction.Contracts.Common;
 using HorseRacingPrediction.Contracts.Races;
 using HorseRacingPrediction.Web.Components.Pages.Races;
+using HorseRacingPrediction.Web.Components.Races;
+using HorseRacingPrediction.Web.Components.Shared;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.FluentUI.AspNetCore.Components;
@@ -110,23 +112,99 @@ public sealed class RacePagesComponentTests
         await cut.Find("nav[aria-label='開催期間'] button").ClickAsync();
         Assert.AreEqual("2026-10-07", handler.LastRequestDateFrom);
         Assert.AreEqual("2026-10-07", handler.LastRequestDateTo);
-        Assert.IsTrue(cut.Markup.Contains("今日</button>", StringComparison.Ordinal));
+        Assert.AreEqual("today", QueryValue(context, "period"));
+        Assert.AreEqual("2026-10-07", QueryValue(context, "from"));
+        Assert.AreEqual("2026-10-07", QueryValue(context, "to"));
+        Assert.AreEqual("今日", SelectedPeriodTab(cut));
 
         await FindPeriodTab(cut, "今週").ClickAsync();
         Assert.AreEqual("2026-10-01", handler.LastRequestDateFrom);
         Assert.AreEqual("2026-10-07", handler.LastRequestDateTo);
+        Assert.AreEqual("week", QueryValue(context, "period"));
+        Assert.AreEqual("今週", SelectedPeriodTab(cut));
 
-        await FindPeriodTab(cut, "今月").ClickAsync();
-        Assert.AreEqual("2026-10-01", handler.LastRequestDateFrom);
-        Assert.AreEqual("2026-10-31", handler.LastRequestDateTo);
+        await FindPeriodTab(cut, "過去一ヶ月").ClickAsync();
+        Assert.AreEqual("2026-09-07", handler.LastRequestDateFrom);
+        Assert.AreEqual("2026-10-07", handler.LastRequestDateTo);
+        Assert.AreEqual("past-month", QueryValue(context, "period"));
 
         await FindPeriodTab(cut, "すべての期間").ClickAsync();
         Assert.IsNull(handler.LastRequestDateFrom);
         Assert.IsNull(handler.LastRequestDateTo);
+        Assert.AreEqual("all", QueryValue(context, "period"));
+    }
+
+    [TestMethod]
+    public void RaceList_PeriodUrl_RestoresTabAndResolvedDates()
+    {
+        using var handler = new RaceApiHandler();
+        using var context = CreateContext(handler);
+        context.Services.GetRequiredService<NavigationManager>()
+            .NavigateTo("/races?period=week&from=2026-09-24&to=2026-09-30");
+
+        var cut = context.Render<Races>();
+
+        cut.WaitForAssertion(() => Assert.AreEqual("今週", SelectedPeriodTab(cut)));
+        Assert.AreEqual("2026-09-24", handler.LastRequestDateFrom);
+        Assert.AreEqual("2026-09-30", handler.LastRequestDateTo);
+        Assert.AreEqual("week", QueryValue(context, "period"));
+    }
+
+    [TestMethod]
+    public void RaceList_PeriodUrl_ResolvesMissingDatesAndWritesResolvedValues()
+    {
+        using var handler = new RaceApiHandler();
+        using var context = CreateContext(handler);
+        context.Services.GetRequiredService<NavigationManager>()
+            .NavigateTo("/races?period=past-month");
+
+        var cut = context.Render<Races>();
+
+        cut.WaitForAssertion(() => Assert.AreEqual("過去一ヶ月", SelectedPeriodTab(cut)));
+        Assert.AreEqual("2026-09-07", handler.LastRequestDateFrom);
+        Assert.AreEqual("2026-10-07", handler.LastRequestDateTo);
+        Assert.AreEqual("past-month", QueryValue(context, "period"));
+        Assert.AreEqual("2026-09-07", QueryValue(context, "from"));
+        Assert.AreEqual("2026-10-07", QueryValue(context, "to"));
+    }
+
+    [TestMethod]
+    public async Task RaceList_ManualDateChange_MovesTabToAllAndKeepsResolvedFiltersInUrl()
+    {
+        using var handler = new RaceApiHandler();
+        using var context = CreateContext(handler);
+        context.Services.GetRequiredService<NavigationManager>()
+            .NavigateTo("/races?period=week&from=2026-10-01&to=2026-10-07");
+        var cut = context.Render<Races>();
+        cut.WaitForAssertion(() => Assert.AreEqual("今週", SelectedPeriodTab(cut)));
+
+        var startDate = cut.FindComponents<FluentDatePicker<DateOnly?>>().First();
+        await cut.InvokeAsync(() => startDate.Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 2)));
+
+        Assert.AreEqual("すべての期間", SelectedPeriodTab(cut));
+        var search = cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("検索"));
+        await cut.InvokeAsync(() => search.Instance.OnClick.InvokeAsync(new MouseEventArgs()));
+
+        Assert.AreEqual("all", QueryValue(context, "period"));
+        Assert.IsNull(QueryValue(context, "dateRange"));
+        Assert.AreEqual("2026-10-02", QueryValue(context, "from"));
+        Assert.AreEqual("2026-10-07", QueryValue(context, "to"));
+        Assert.AreEqual("2026-10-02", handler.LastRequestDateFrom);
+        Assert.AreEqual("2026-10-07", handler.LastRequestDateTo);
     }
 
     private static AngleSharp.Dom.IElement FindPeriodTab(IRenderedComponent<Races> cut, string text)
         => cut.FindAll("nav[aria-label='開催期間'] button").Single(button => button.TextContent.Trim() == text);
+
+    private static string SelectedPeriodTab(IRenderedComponent<Races> cut)
+        => cut.Find("nav[aria-label='開催期間'] button[aria-pressed='true']").TextContent.Trim();
+
+    private static string? QueryValue(BunitContext context, string key)
+    {
+        var navigation = context.Services.GetRequiredService<NavigationManager>();
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(navigation.ToAbsoluteUri(navigation.Uri).Query);
+        return query.TryGetValue(key, out var value) ? value.ToString() : null;
+    }
 
     private static BunitContext CreateContext(RaceApiHandler handler)
     {

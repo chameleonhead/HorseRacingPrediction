@@ -23,6 +23,7 @@
                 @bind-From="from"
                 @bind-To="to"
                 @bind-DateRangeEnabled="dateRangeEnabled"
+                @bind-Period="period"
                 ValidationMessage="@validationError"
                 OnSearch="SearchAsync"
                 OnClear="ClearFiltersAsync" />
@@ -46,9 +47,14 @@
     private DateOnly? from;
     private DateOnly? to;
     private bool dateRangeEnabled;
+    private RacePeriod period = RacePeriod.All;
     private bool loading;
     private int currentPage = 1;
     private SearchRacesResponse? result;
+
+    [Inject] private TimeProvider TimeProvider { get; set; } = null!;
+
+    private DateOnly Today => TimeProvider.TodayInJapan();
 
     protected override async Task OnInitializedAsync()
     {
@@ -56,8 +62,22 @@
 
         name = Text(query, "name");
         course = Text(query, "course");
-        from = DateOnly.TryParse(Text(query, "from"), out var fromValue) ? fromValue : null;
-        to = DateOnly.TryParse(Text(query, "to"), out var toValue) ? toValue : null;
+        if (!RacePeriodExtensions.TryParse(Text(query, "period"), out period))
+        {
+            period = RacePeriod.All;
+        }
+        DateOnly? queryFrom = DateOnly.TryParse(Text(query, "from"), out var fromValue) ? fromValue : null;
+        DateOnly? queryTo = DateOnly.TryParse(Text(query, "to"), out var toValue) ? toValue : null;
+        if (period != RacePeriod.All && (queryFrom is null || queryTo is null))
+        {
+            (from, to) = period.ResolveDates(Today);
+        }
+        else
+        {
+            from = queryFrom;
+            to = queryTo;
+        }
+
         dateRangeEnabled = from is not null || to is not null || Text(query, "dateRange") == "true";
         currentPage = int.TryParse(Text(query, "page"), out var pageValue) && pageValue > 0
             ? pageValue
@@ -86,6 +106,7 @@
         from = null;
         to = null;
         dateRangeEnabled = false;
+        period = RacePeriod.All;
         validationError = null;
         currentPage = 1;
         UpdateUrl();
@@ -167,9 +188,10 @@
         {
             ["name"] = name,
             ["course"] = course,
+            ["period"] = period.ToQueryValue(),
             ["from"] = from?.ToString("yyyy-MM-dd"),
             ["to"] = to?.ToString("yyyy-MM-dd"),
-            ["dateRange"] = dateRangeEnabled ? "true" : null,
+            ["dateRange"] = dateRangeEnabled && from is null && to is null ? "true" : null,
             ["page"] = currentPage.ToString()
         };
 
