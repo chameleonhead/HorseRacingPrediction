@@ -1,0 +1,19 @@
+<FluentBadge Id="MyButton" Padding="12px" @onclick="@(e => IsOpened = !IsOpened)">
+    <span style="font-weight: normal">@Label:</span>
+    <bold>
+        @(string.IsNullOrEmpty(Value) ? "すべて" : Value)
+    </bold>
+</FluentBadge>
+
+<FluentPopover AnchorId="MyButton" @bind-Opened="@IsOpened" Padding="0">
+    <FluentListbox Items="@Items" @bind-Value="@Value" Appearance="ListAppearance.Transparent" />
+</FluentPopover>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = null!;
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public IEnumerable<string> Items { get; set; } = Array.Empty<string>();
+    [Parameter] public EventCallback<string?> OnChange { get; set; }
+
+    private bool IsOpened { get; set; }
+}

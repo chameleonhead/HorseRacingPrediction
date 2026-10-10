@@ -2,6 +2,7 @@
 @using HorseRacingPrediction.ApiClient.Races
 @using HorseRacingPrediction.Web.Components.Races
 @using Refit
+@using System.Net
 
 @page "/races/{RaceId}/edit"
 @rendermode InteractiveServer
@@ -9,7 +10,9 @@
 @inject NavigationManager Navigation
 
 <PageTitle>レース編集</PageTitle>
-<p><a href="@($"/races/{Uri.EscapeDataString(RaceId)}")">← レース詳細に戻る</a></p>
+<p>
+    <a href="/races">← レース一覧に戻る</a>
+</p>
 @if (loading)
 {
     <p>レース情報を読み込み中…</p>
@@ -50,21 +53,22 @@ else
         try
         {
             var response = await RacesApi.GetRaceAsync(new GetRaceRequest { RaceId = RaceId });
-            race = response.IsSuccessStatusCode ? response.Content?.Race : null;
-            if (race is null)
+            if (response.IsSuccessStatusCode)
             {
-                error = response.StatusCode == System.Net.HttpStatusCode.NotFound
-                    ? "指定されたレースは見つかりませんでした。"
-                    : "レース情報を取得できませんでした。";
+                race = response.Content!.Race;
+            }
+            else if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                error = "指定されたレースは見つかりませんでした。";
+            }
+            else
+            {
+                error = "レース情報を取得できませんでした。";
             }
         }
-        catch (ApiException)
+        catch (Exception ex)
         {
-            error = "レース情報を取得できませんでした。";
-        }
-        catch (HttpRequestException)
-        {
-            error = "APIに接続できませんでした。";
+            error = ex.Message;
         }
         finally
         {

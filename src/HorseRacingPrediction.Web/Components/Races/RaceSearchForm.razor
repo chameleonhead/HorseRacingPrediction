@@ -1,11 +1,13 @@
 <FluentStack HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
     <FluentTextInput Placeholder="レース名" Value="@Name" @oninput="OnNameInput" />
-    <FluentTextInput Placeholder="開催場名" Value="@Course" @oninput="OnCourseInput" />
     <FluentDatePicker Placeholder="開始日" Value="@From" @oninput="OnFromChange" />
     <FluentDatePicker Placeholder="終了日" Value="@To" @oninput="OnToChange" />
     <FluentButton Appearance="ButtonAppearance.Primary" OnClick="OnSearch">検索</FluentButton>
     <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="OnClear">条件をクリア</FluentButton>
 </FluentStack>
+<FluentOverflow>
+    <FilterSingleSelection Label="開催場" Value="@Course" Items="@(new[] { Course })" OnChange="OnCourseInput" />
+</FluentOverflow>
 
 @if (!string.IsNullOrWhiteSpace(ValidationMessage))
 {
@@ -27,8 +29,8 @@
     private Task OnNameInput(ChangeEventArgs args)
         => NameChanged.InvokeAsync(args.Value?.ToString());
 
-    private Task OnCourseInput(ChangeEventArgs args)
-        => CourseChanged.InvokeAsync(args.Value?.ToString());
+    private Task OnCourseInput(string? args)
+        => CourseChanged.InvokeAsync(args);
 
     private Task OnFromChange(ChangeEventArgs args)
         => FromChanged.InvokeAsync(

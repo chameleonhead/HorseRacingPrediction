@@ -49,8 +49,8 @@ internal static class SearchRacesEndpoint
                         if (request.RaceDateTo.HasValue)
                             filtered = filtered.Where(x => x.RaceDate.HasValue && x.RaceDate.Value <= request.RaceDateTo.Value);
 
-                        if (!string.IsNullOrWhiteSpace(request.RacecourseCode))
-                            filtered = filtered.Where(x => string.Equals(x.RacecourseCode, request.RacecourseCode, StringComparison.OrdinalIgnoreCase));
+                        if (!string.IsNullOrWhiteSpace(request.RaceCourseCode))
+                            filtered = filtered.Where(x => string.Equals(x.RacecourseCode, request.RaceCourseCode, StringComparison.OrdinalIgnoreCase));
 
                         if (request.RaceNumber.HasValue)
                             filtered = filtered.Where(x => x.RaceNumber == request.RaceNumber.Value);

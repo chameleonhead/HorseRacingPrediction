@@ -6,7 +6,7 @@ public sealed class SearchRacesRequest
     public string? RaceId { get; init; }
     public DateOnly? RaceDateFrom { get; init; }
     public DateOnly? RaceDateTo { get; init; }
-    public string? RacecourseCode { get; init; }
+    public string? RaceCourseCode { get; init; }
     public int? RaceNumber { get; init; }
     public string? RaceName { get; init; }
     public RaceStatus? Status { get; init; }
