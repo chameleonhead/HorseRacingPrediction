@@ -4,14 +4,99 @@
 @inject NavigationManager Navigation
 @using HorseRacingPrediction.Contracts.Collection
 @using HorseRacingPrediction.Contracts.Common.Time
+@using System.Globalization
 @implements IDisposable
 
 <RaceOpsPageHeader Section="運用 / 収集管理" Title="収集運用" Description="障害への対応、過去データ収集、抽出仕様変更の進捗をまとめて管理します。">
     <Actions>
         <FluentButton Href="/jobs">収集状況へ戻る</FluentButton>
-        <FluentButton OnClick="LoadAsync" Disabled="busy">更新</FluentButton>
+        <FluentButton OnClick="RefreshAsync" Disabled="busy">更新</FluentButton>
     </Actions>
 </RaceOpsPageHeader>
+
+@if (activeTab == "monitoring")
+{
+    <section class="entity-section detail-section collection-runtime-status" aria-labelledby="runtime-status-heading">
+        <h2 id="runtime-status-heading">バックグラウンド処理の稼働状況</h2>
+        <p class="hint">このAPIインスタンスの記録・@RuntimeGeneratedLabel</p>
+        @if (runtimeLoading && runtime is null)
+        {
+            <UiState Kind="loading" Title="稼働状況を読み込んでいます" />
+        }
+        else if (runtimeUnavailable && runtime is null)
+        {
+            <UiState Title="稼働状況はこのAPIでは利用できません" Message="このAPIインスタンスは稼働状況の表示に対応していません。" />
+        }
+        else if (runtimeRefreshFailed && runtime is null)
+        {
+            <UiState Kind="error" Title="稼働状況を取得できません" Message="時間をおいて更新してください。" />
+        }
+        else if (runtime is null)
+        {
+            <UiState Title="起動後まだ未確認" Message="次の更新でこのAPIインスタンスの処理状況を確認します。" />
+        }
+        else
+        {
+            @if (runtimeRefreshFailed || runtimeUnavailable)
+            {
+                <FluentMessageBar Intent="@MessageIntent.Warning" Title="更新できません・表示は以前の情報です" />
+            }
+            <div class="runtime-grid-scroll">
+                <FluentDataGrid Items="@runtime.Actions.AsQueryable()" TGridItem="CollectionRuntimeActionStatusDto" aria-label="バックグラウンド処理の稼働状況">
+                    <TemplateColumn Title="処理">@RuntimeActionLabel(context.Action)</TemplateColumn>
+                    <TemplateColumn Title="状態">@RuntimeStateLabel(context, runtime)</TemplateColumn>
+                    <TemplateColumn Title="最終正常確認">@OptionalRuntimeTime(context.LastSuccessfulCycleAtUtc)</TemplateColumn>
+                    <TemplateColumn Title="最終進行">@OptionalRuntimeProgressTime(context.LastProgressAtUtc)</TemplateColumn>
+                    <TemplateColumn Title="詳細">
+                        <details class="runtime-action-details">
+                            <summary>詳細</summary>
+                            <dl>
+                                <dt>最終開始</dt><dd>@OptionalRuntimeTime(context.LastStartedAtUtc)</dd>
+                                <dt>最終完了</dt><dd>@OptionalRuntimeTime(context.LastCompletedAtUtc)</dd>
+                                <dt>処理時間</dt><dd>@Duration(context.LastDurationMilliseconds)</dd>
+                                <dt>確認</dt><dd>@context.InspectedCount 件</dd>
+                                <dt>作成</dt><dd>@context.CreatedCount 件</dd>
+                                <dt>回収</dt><dd>@context.ReclaimedCount 件</dd>
+                                <dt>送信</dt><dd>@context.SentCount 件</dd>
+                                <dt>完了</dt><dd>@context.CompletedCount 件</dd>
+                                <dt>連続エラー</dt><dd>@context.ConsecutiveErrors 件</dd>
+                                <dt>API起動</dt><dd>@RuntimeTime(runtime.InstanceStartedAtUtc)</dd>
+                            </dl>
+                        </details>
+                    </TemplateColumn>
+                </FluentDataGrid>
+            </div>
+            <div class="runtime-mobile-list" aria-label="バックグラウンド処理の稼働状況">
+                @foreach (var action in runtime.Actions)
+                {
+                    <article class="runtime-action-card" data-runtime-action="@action.Action">
+                        <h3>@RuntimeActionLabel(action.Action)</h3>
+                        <p><span>状態</span><strong>@RuntimeStateLabel(action, runtime)</strong></p>
+                        <dl class="runtime-important-times">
+                            <dt>最終正常確認</dt><dd>@OptionalRuntimeTime(action.LastSuccessfulCycleAtUtc)</dd>
+                            <dt>最終進行</dt><dd>@OptionalRuntimeProgressTime(action.LastProgressAtUtc)</dd>
+                        </dl>
+                        <details class="runtime-action-details">
+                            <summary>詳細</summary>
+                            <dl>
+                                <dt>最終開始</dt><dd>@OptionalRuntimeTime(action.LastStartedAtUtc)</dd>
+                                <dt>最終完了</dt><dd>@OptionalRuntimeTime(action.LastCompletedAtUtc)</dd>
+                                <dt>処理時間</dt><dd>@Duration(action.LastDurationMilliseconds)</dd>
+                                <dt>確認</dt><dd>@action.InspectedCount 件</dd>
+                                <dt>作成</dt><dd>@action.CreatedCount 件</dd>
+                                <dt>回収</dt><dd>@action.ReclaimedCount 件</dd>
+                                <dt>送信</dt><dd>@action.SentCount 件</dd>
+                                <dt>完了</dt><dd>@action.CompletedCount 件</dd>
+                                <dt>連続エラー</dt><dd>@action.ConsecutiveErrors 件</dd>
+                                <dt>API起動</dt><dd>@RuntimeTime(runtime.InstanceStartedAtUtc)</dd>
+                            </dl>
+                        </details>
+                    </article>
+                }
+            </div>
+        }
+    </section>
+}
 
 @if (loading)
 {
@@ -100,6 +185,15 @@ else
                 {
                     <FluentDataGrid Items="@backfills.OrderByDescending(x => x.CreatedAt).AsQueryable()" TGridItem="BackfillBatchSnapshot" aria-label="過去データ収集の進捗">
                         <PropertyColumn Property="@(x => x.BatchId)" Title="対象期間" />
+                        <TemplateColumn Title="処理種別・再開">
+                            <div class="batch-recovery-label">
+                                <strong>@BackfillRecoveryLabel(context)</strong>
+                                @if (SafeBackfillReviewReason(context) is { } reason)
+                                {
+                                    <small>確認理由: @reason</small>
+                                }
+                            </div>
+                        </TemplateColumn>
                         <TemplateColumn Title="探索日">@context.RegisteredDiscoveryDays / @context.ExpectedDiscoveryDays</TemplateColumn>
                         <PropertyColumn Property="@(x => x.Succeeded)" Title="成功" />
                         <PropertyColumn Property="@(x => x.Pending)" Title="待機" />
@@ -153,6 +247,10 @@ else
 @code {
     private bool loading = true, busy;
     private CollectionProgressSnapshot? progress;
+    private CollectionRuntimeStatusDto? runtime;
+    private bool runtimeLoading = true, runtimeUnavailable, runtimeRefreshFailed;
+    private int runtimeRequestInFlight, runtimeRefreshPending;
+    private DateTimeOffset? runtimeUpdatedAt;
     private IReadOnlyList<CollectionFailureGroup> failures = [];
     private IReadOnlyList<BackfillBatchSnapshot> backfills = [];
     private IReadOnlyList<string> loadErrors = [], operationErrors = [];
@@ -165,32 +263,116 @@ else
     [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
     private string activeTab = "monitoring";
     private readonly CancellationTokenSource refreshCancellation = new();
+    private CancellationTokenSource runtimeTabCancellation = new();
 
     private IReadOnlyList<CollectionFailureGroup> FailureGroups => failures.OrderByDescending(x => x.Count).ToList();
 
     protected override async Task OnInitializedAsync()
     {
         activeTab = Tab is "monitoring" or "failures" or "backfills" or "revisions" ? Tab : "monitoring";
-        await LoadAsync();
+        if (activeTab == "monitoring")
+            await Task.WhenAll(LoadAsync(), LoadRuntimeStatusAsync(refreshCancellation.Token));
+        else
+            await LoadAsync();
         _ = RefreshLoopAsync(refreshCancellation.Token);
     }
 
-    private Task OnTabChanged(string tab)
+    private async Task OnTabChanged(string tab)
     {
+        var enteringMonitoring = activeTab != "monitoring" && tab == "monitoring";
+        if (activeTab == "monitoring" && tab != "monitoring")
+            runtimeTabCancellation.Cancel();
+        else if (activeTab != "monitoring" && tab == "monitoring" && runtimeTabCancellation.IsCancellationRequested)
+        {
+            runtimeTabCancellation.Dispose();
+            runtimeTabCancellation = new CancellationTokenSource();
+        }
         activeTab = tab;
         var basePath = Navigation.Uri.Split('?', 2)[0];
         Navigation.NavigateTo($"{basePath}?tab={Uri.EscapeDataString(tab)}", replace: true);
-        return Task.CompletedTask;
+        if (enteringMonitoring)
+        {
+            if (Volatile.Read(ref runtimeRequestInFlight) != 0)
+                Volatile.Write(ref runtimeRefreshPending, 1);
+            else
+                await LoadRuntimeStatusAsync(refreshCancellation.Token);
+        }
     }
+
+    private Task RefreshAsync() => activeTab == "monitoring"
+        ? Task.WhenAll(LoadAsync(), LoadRuntimeStatusAsync(refreshCancellation.Token))
+        : LoadAsync();
 
     private async Task RefreshLoopAsync(CancellationToken token)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
-        try { while (await timer.WaitForNextTickAsync(token)) if (!busy) await InvokeAsync(LoadAsync); }
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                if (!busy)
+                    await InvokeAsync(async () =>
+                    {
+                        await LoadAsync();
+                        if (activeTab == "monitoring")
+                            await LoadRuntimeStatusAsync(token);
+                    });
+            }
+        }
         catch (OperationCanceledException) { }
     }
 
-    public void Dispose() { refreshCancellation.Cancel(); refreshCancellation.Dispose(); }
+    public void Dispose()
+    {
+        refreshCancellation.Cancel();
+        runtimeTabCancellation.Cancel();
+        refreshCancellation.Dispose();
+        runtimeTabCancellation.Dispose();
+    }
+
+    private async Task LoadRuntimeStatusAsync(CancellationToken cancellationToken)
+    {
+        if (Interlocked.CompareExchange(ref runtimeRequestInFlight, 1, 0) != 0)
+            return;
+
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken, runtimeTabCancellation.Token);
+        runtimeLoading = runtime is null;
+        runtimeRefreshFailed = false;
+        try
+        {
+            var response = await Api.GetCollectionRuntimeStatusAsync(linkedCancellation.Token);
+            if (response is null)
+                runtimeUnavailable = true;
+            else
+            {
+                runtime = response.Runtime;
+                runtimeUnavailable = false;
+            }
+            runtimeUpdatedAt = runtime?.GeneratedAtUtc;
+        }
+        catch (OperationCanceledException) when (linkedCancellation.IsCancellationRequested)
+        {
+            // Leaving the monitoring tab or disposing this page is not a runtime-status failure.
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            if (!linkedCancellation.IsCancellationRequested)
+                runtimeRefreshFailed = true;
+        }
+        catch (Exception) when (!linkedCancellation.IsCancellationRequested)
+        {
+            runtimeRefreshFailed = true;
+        }
+        finally
+        {
+            runtimeLoading = false;
+            Volatile.Write(ref runtimeRequestInFlight, 0);
+            var refreshPending = Interlocked.Exchange(ref runtimeRefreshPending, 0) != 0;
+            if (refreshPending && activeTab == "monitoring" && !refreshCancellation.IsCancellationRequested)
+                await LoadRuntimeStatusAsync(refreshCancellation.Token);
+        }
+    }
 
     private async Task LoadAsync()
     {
@@ -312,6 +494,95 @@ else
     private static string LaneLabel(CollectionLane lane) => lane switch { CollectionLane.Realtime => "リアルタイム", CollectionLane.Normal => "通常", _ => "バックグラウンド" };
     private static string PriorityLabel(int value) => value >= 90 ? $"緊急 ({value})" : value >= 70 ? $"高 ({value})" : value <= 20 ? $"低 ({value})" : $"通常 ({value})";
     private static string Time(DateTimeOffset value) => JstTime.Format(value);
+    private string RuntimeGeneratedLabel => runtimeUpdatedAt is { } updatedAt
+        ? $"更新 {RuntimeTime(updatedAt)}"
+        : "起動後まだ未確認";
+    private static string RuntimeTime(DateTimeOffset value) => JstTime.Format(value, "yyyy/MM/dd HH:mm:ss");
+    private static string OptionalRuntimeTime(DateTimeOffset? value) => value is { } time ? RuntimeTime(time) : "—";
+    private static string OptionalRuntimeProgressTime(DateTimeOffset? value) => value is { } time
+        ? RuntimeTime(time) : "—（まだ進行記録なし）";
+    private static string OptionalTime(DateTimeOffset? value) => value is { } time ? JstTime.Format(time) : "—";
+    private static string OptionalProgressTime(DateTimeOffset? value) => value is { } time
+        ? JstTime.Format(time) : "—（まだ進行記録なし）";
+    private static string Duration(long? milliseconds) => milliseconds is { } value ? $"{value:N0} ms" : "—";
+    private static string RuntimeActionLabel(CollectionRuntimeAction action) => action switch
+    {
+        CollectionRuntimeAction.Dispatcher => "ジョブ配送",
+        CollectionRuntimeAction.DiscoveryPlanner => "新規レース探索",
+        CollectionRuntimeAction.RefreshPlanner => "定期再取得",
+        CollectionRuntimeAction.TaskLeaseRecovery => "期限切れ回収",
+        CollectionRuntimeAction.BackfillRecovery => "過去データ再開",
+        CollectionRuntimeAction.DeadLetterReconciliation => "配信失敗の確認",
+        CollectionRuntimeAction.Alerts => "通知送信",
+        CollectionRuntimeAction.MetricDelivery => "メトリクス送信",
+        _ => "その他の処理",
+    };
+    private static string RuntimeStateLabel(CollectionRuntimeActionStatusDto action, CollectionRuntimeStatusDto snapshot)
+    {
+        var state = action.State switch
+        {
+            CollectionRuntimeState.NotObserved => "起動後まだ未確認",
+            CollectionRuntimeState.Running => "処理中",
+            CollectionRuntimeState.Waiting => "待機",
+            CollectionRuntimeState.Error => "エラー",
+            CollectionRuntimeState.Disabled => "設定で無効",
+            _ => "不明",
+        };
+        var reason = action.Reason switch
+        {
+            CollectionRuntimeReason.Paused => "一時停止",
+            CollectionRuntimeReason.NoDueWork => "対象なし",
+            CollectionRuntimeReason.CapacityFull => "実行枠満杯",
+            CollectionRuntimeReason.RepairHeld => "修復保留",
+            CollectionRuntimeReason.BudgetExhausted => "処理上限",
+            CollectionRuntimeReason.Error => "エラー",
+            _ => null,
+        };
+        var description = reason is null || action.State == CollectionRuntimeState.Error
+            ? state : $"{state}・{reason}";
+        return IsRuntimeStale(action, snapshot) ? $"{description}・確認が遅れています" : description;
+    }
+    private static bool IsRuntimeStale(CollectionRuntimeActionStatusDto action, CollectionRuntimeStatusDto snapshot)
+    {
+        if (!action.Enabled || action.EffectiveInterval is not { } interval)
+            return false;
+        var lastObserved = action.LastCompletedAtUtc ?? snapshot.InstanceStartedAtUtc;
+        var allowedAge = interval + interval + interval + TimeSpan.FromSeconds(30);
+        return snapshot.GeneratedAtUtc - lastObserved > allowedAge;
+    }
+    private static string BackfillRecoveryLabel(BackfillBatchSnapshot batch)
+    {
+        if (batch.Recovery is not { } recovery
+            || recovery.RecoveryState == CollectionBatchRecoveryState.Unclassified)
+            return "未分類";
+        if (recovery.RecoveryState == CollectionBatchRecoveryState.NeedsReview
+            || recovery.Kind == CollectionBatchKind.Unknown)
+            return "処理種別を確認してください";
+
+        var kind = recovery.Kind switch
+        {
+            CollectionBatchKind.Backfill => "Backfill",
+            CollectionBatchKind.PeriodRecollection => "期間再収集",
+            _ => "処理種別を確認してください",
+        };
+        return recovery.RecoveryState switch
+        {
+            CollectionBatchRecoveryState.Ready => $"{kind} / 再開待ち / 次回 {recovery.NextDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "未設定"}",
+            CollectionBatchRecoveryState.Completed => $"{kind} / 完了",
+            _ => "未分類",
+        };
+    }
+    private static string? SafeBackfillReviewReason(BackfillBatchSnapshot batch) => batch.Recovery?.ReviewReason switch
+    {
+        null => null,
+        "NoRootEvidence" => "既存の関連情報から処理種別を確認できません。",
+        "MixedOrUnsupportedReasons" => "関連情報の処理種別が一致しません。",
+        "ProviderMismatch" => "関連情報の提供元が一致しません。",
+        "RootShapeMismatch" => "関連情報の対象形式が一致しません。",
+        "ResourceDateMismatch" => "関連情報の対象日が一致しません。",
+        "MetadataDateMismatch" => "関連情報の日付が一致しません。",
+        _ => "分類に必要な情報を安全に確認できません。",
+    };
     private static string FailureGroupHref(CollectionFailureGroup value) => $"/jobs/failures/{Uri.EscapeDataString(value.GroupKey)}?returnUrl={Uri.EscapeDataString("/jobs/operations?tab=failures")}";
     private static CollectionProgressSnapshot EmptyProgress() => new(new Dictionary<CollectionResourceType,int>(), new Dictionary<CollectionStateStatus,int>(), new Dictionary<CollectionLane,int>(), new Dictionary<int,int>(), new Dictionary<string,int>(), 0);
 }
