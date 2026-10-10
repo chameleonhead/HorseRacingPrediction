@@ -6,9 +6,16 @@
         <button type="button" class="@(IsSelected(RacePeriod.All) ? "selected" : null)" aria-pressed="@(IsSelected(RacePeriod.All) ? "true" : "false")" @onclick="() => SelectPeriodAsync(RacePeriod.All)">すべての期間</button>
     </nav>
 
-    <FluentTextInput Class="race-name-filter" Placeholder="レース名" Value="@Name" @oninput="OnNameInput" />
+    <div class="race-search-controls">
+        <FluentTextInput Class="race-name-filter" Placeholder="レース名" Value="@Name" @oninput="OnNameInput" />
 
-    <div class="race-filter-group">
+        <div class="search-actions">
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="OnSearch">検索</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="OnClear">条件をクリア</FluentButton>
+        </div>
+    </div>
+
+    <div class="race-filter-group" aria-label="検索条件">
         <FilterSelection Label="開催場"
                          Value="@Course"
                          ValueChanged="OnCourseInput"
@@ -21,11 +28,6 @@
                                OnDateFilterChanged="OnDateFilterChangedAsync"
                                Enabled="@DateRangeEnabled"
                                EnabledChanged="DateRangeEnabledChanged" />
-    </div>
-
-    <div class="search-actions">
-        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="OnSearch">検索</FluentButton>
-        <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="OnClear">条件をクリア</FluentButton>
     </div>
 </div>
 

@@ -148,6 +148,8 @@ public sealed class FilterComponentsTests
         var apply = cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("適用"));
         await cut.InvokeAsync(() => apply.Instance.OnClick.InvokeAsync());
 
+        Assert.AreEqual(0, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
+
         Assert.AreEqual(new DateOnly(2026, 10, 1), from);
         Assert.AreEqual(new DateOnly(2026, 10, 10), to);
         Assert.IsTrue(enabled);
@@ -195,6 +197,36 @@ public sealed class FilterComponentsTests
         Assert.AreEqual(0, enabledChangedCount);
         Assert.AreEqual(originalLabel, cut.Find("button[aria-haspopup='listbox']").TextContent);
         Assert.AreEqual(0, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
+    }
+
+    [TestMethod]
+    public async Task FilterDateRangePicker_CustomOptionReopensDrawerAndAllowsOneSidedRange()
+    {
+        using var context = CreateContext();
+        DateOnly? from = null;
+        DateOnly? to = null;
+        var cut = context.Render<FilterDateRangePicker>(parameters => parameters
+            .Add(x => x.From, from)
+            .Add(x => x.FromChanged, (DateOnly? value) => from = value)
+            .Add(x => x.To, to)
+            .Add(x => x.ToChanged, (DateOnly? value) => to = value));
+
+        var trigger = cut.Find("button[aria-haspopup='listbox']");
+        await trigger.ClickAsync();
+        await cut.InvokeAsync(() => cut.FindComponent<FluentListbox<FilterSelectionOption, string>>().Instance.ValueChanged.InvokeAsync("custom"));
+        Assert.AreEqual(2, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
+        await cut.InvokeAsync(() => cut.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 1)));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("適用")).Instance.OnClick.InvokeAsync());
+
+        Assert.AreEqual(new DateOnly(2026, 10, 1), from);
+        Assert.IsNull(to);
+        StringAssert.Contains(cut.Find("button[aria-haspopup='listbox']").TextContent, "2026/10/01から");
+
+        trigger = cut.Find("button[aria-haspopup='listbox']");
+        await trigger.ClickAsync();
+        var customOption = cut.FindComponents<FluentListbox<FilterSelectionOption, string>>().Single();
+        await cut.InvokeAsync(() => customOption.Instance.ValueChanged.InvokeAsync("custom"));
+        Assert.AreEqual(2, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
     }
 
     [TestMethod]

@@ -9,10 +9,9 @@
 <FluentDialog @ref="Drawer"
               Modal="true"
               Alignment="DialogAlignment.End"
-              Size="DialogSize.Medium"
               AriaLabelledby="@DrawerTitleId"
               Class="date-range-drawer"
-              Style="inset-inline-start:auto;inset-inline-end:0;height:100dvh;max-height:100dvh;margin:0;">
+              Style="inset-inline-start:auto;inset-inline-end:0;width:min(320px,100vw);height:100dvh;max-height:100dvh;margin:0;">
     @if (IsDrawerOpen)
     {
         <FluentDialogBody>
@@ -85,36 +84,43 @@
     private readonly string DrawerTitleId = $"date-range-title-{Guid.NewGuid():N}";
     private DateOnly? DraftFrom { get; set; }
     private DateOnly? DraftTo { get; set; }
+    private DateOnly? AppliedFrom { get; set; }
+    private DateOnly? AppliedTo { get; set; }
+    private bool HasAppliedRange { get; set; }
     private bool IsDrawerOpen { get; set; }
     private string? ValidationMessage { get; set; }
     private DateOnly Today => TimeProvider.TodayInJapan();
-    private bool CanApplyCustomRange => DraftFrom is not null && DraftTo is not null && DraftFrom <= DraftTo;
+    private bool CanApplyCustomRange
+        => DraftFrom is null || DraftTo is null || DraftFrom <= DraftTo;
+
+    private DateOnly? DisplayFrom => HasAppliedRange ? AppliedFrom : From;
+    private DateOnly? DisplayTo => HasAppliedRange ? AppliedTo : To;
 
     private string SelectedOption
     {
         get
         {
-            if (From is null && To is null)
+            if (DisplayFrom is null && DisplayTo is null)
             {
                 return AllOption;
             }
 
-            if (From == Today && To == Today)
+            if (DisplayFrom == Today && DisplayTo == Today)
             {
                 return TodayOption;
             }
 
-            if ((From, To) == (Today.AddDays(-9), Today))
+            if ((DisplayFrom, DisplayTo) == (Today.AddDays(-9), Today))
             {
                 return TenDaysOption;
             }
 
-            if ((From, To) == (Today.AddMonths(-1), Today))
+            if ((DisplayFrom, DisplayTo) == (Today.AddMonths(-1), Today))
             {
                 return MonthOption;
             }
 
-            if ((From, To) == (Today.AddYears(-1), Today))
+            if ((DisplayFrom, DisplayTo) == (Today.AddYears(-1), Today))
             {
                 return YearOption;
             }
@@ -130,17 +136,23 @@
             var optionLabel = Options.FirstOrDefault(option => option.Value == SelectedOption)?.Label;
             if (optionLabel is not null)
             {
-                return SelectedOption == CustomOption && (From is not null || To is not null)
+                return SelectedOption == CustomOption && (DisplayFrom is not null || DisplayTo is not null)
                     ? FormatDateRange()
                     : optionLabel;
             }
 
-            return From is null && To is null ? "すべて" : FormatDateRange();
+            return DisplayFrom is null && DisplayTo is null ? "すべて" : FormatDateRange();
         }
     }
 
     private string FormatDateRange()
-        => $"{From?.ToString("yyyy/MM/dd") ?? "指定なし"} - {To?.ToString("yyyy/MM/dd") ?? "指定なし"}";
+        => (DisplayFrom, DisplayTo) switch
+        {
+            (not null, not null) => $"{DisplayFrom:yyyy/MM/dd} - {DisplayTo:yyyy/MM/dd}",
+            (not null, null) => $"{DisplayFrom:yyyy/MM/dd}から",
+            (null, not null) => $"{DisplayTo:yyyy/MM/dd}まで",
+            _ => "すべて"
+        };
 
     private async Task OnSelectionChanged(string? value)
     {
@@ -178,27 +190,28 @@
 
     private async Task ApplyCustomRangeAsync()
     {
-        if (!CanApplyCustomRange)
+        if (DraftFrom is not null && DraftTo is not null && DraftFrom > DraftTo)
         {
-            ValidationMessage = DraftFrom > DraftTo
-                ? "終了日は開始日以降の日付を指定してください。"
-                : "開始日と終了日を入力してください。";
+            ValidationMessage = "終了日は開始日以降の日付を指定してください。";
             return;
         }
 
         await FromChanged.InvokeAsync(DraftFrom);
         await ToChanged.InvokeAsync(DraftTo);
         await EnabledChanged.InvokeAsync(true);
-        await OnDateFilterChanged.InvokeAsync();
+        AppliedFrom = DraftFrom;
+        AppliedTo = DraftTo;
+        HasAppliedRange = true;
         IsDrawerOpen = false;
-        await Drawer!.HideAsync();
         ValidationMessage = null;
+        await Drawer!.HideAsync();
+        await OnDateFilterChanged.InvokeAsync();
     }
 
     private async Task CancelDrawer()
     {
-        DraftFrom = From;
-        DraftTo = To;
+        DraftFrom = DisplayFrom;
+        DraftTo = DisplayTo;
         IsDrawerOpen = false;
         ValidationMessage = null;
         if (Drawer is not null)

@@ -1,8 +1,8 @@
 .race-search-form {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
-    gap: 12px;
+    align-items: stretch;
+    gap: 8px 12px;
     margin-bottom: 16px;
 }
 
@@ -41,28 +41,63 @@
     outline-offset: -2px;
 }
 
+.race-search-controls {
+    display: flex;
+    flex: 1 0 100%;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 12px;
+}
+
 .race-name-filter {
     flex: 1 1 240px;
     min-width: min(100%, 220px);
 }
 
-.race-filter-group,
-.search-actions {
+.race-filter-group {
     display: flex;
+    flex: 1 0 100%;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
 }
 
+.search-actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+}
+
 @media (max-width: 640px) {
-    .race-search-form,
-    .race-filter-group,
-    .search-actions {
+    .race-search-form {
         width: 100%;
+    }
+
+    .race-search-controls {
+        flex-wrap: wrap;
+        width: 100%;
+    }
+
+    .race-name-filter,
+    .race-filter-group {
+        width: 100%;
+    }
+
+    .race-name-filter {
+        flex-basis: 100%;
     }
 
     .race-filter-group {
         align-items: stretch;
+    }
+
+    .search-actions {
+        width: 100%;
+    }
+
+    .search-actions fluent-button {
+        flex: 1;
     }
 
     .race-period-tabs button {
