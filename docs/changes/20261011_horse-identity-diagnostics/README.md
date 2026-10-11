@@ -1,6 +1,6 @@
 # 馬IDの読み取り専用診断（全データ移行の前提調査）
 
-- Status: Approved
+- Status: Implemented
 - Change record schema: 2
 - Owner: Lead
 - Created: 2026-10-11
@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | Code | Verified | Backend, adapter/SDK, Page and scoped browser closure accepted; exact source checkpoint follows. |
 | Verification | Verified | Final Release build/whole non-External solution24362/formatter17631 exit0; API507 passed/8 skipped, focused11/11+2/2, fresh graph and actual browser acceptance. Production gate remains AC4/T4. |
-| Deployment/operation | In progress | T4 runnable: canonical main push, matching remote terminal gates, authenticated Tokyo/Kyoto reads and parent reconciliation; preserve collection pause. |
+| Deployment/operation | Verified | Main379c18a2, app-ci38117331016/app-deploy38117330991 success, live two-target fields and pause verified; parent remains Proposed, no horse migration/recovery mutation. |
 
 ## Context and goals
 
@@ -61,7 +61,7 @@ Existing server-side AdminApiClient consumes the named `Diagnostic` response pro
 | AC1 | 指定した馬の初回登録情報、保存済みsource、各ID算出の一致/不一致/証拠不足と確認範囲を、読取時刻付きで確認できる。 | T1,T2 | production-shapedイベント/source fixturesと実HTTP→adapter→UI trace | Verified |
 | AC2 | 同名別馬、欠損/未知JSON、複数source、不正ID、時間/サイズ制限、API認証を安全に扱い、診断によるdomain/collection/schema/queue変更がない。 | T1,T2 | SQLite write rejection・before/after、独立反例、401/400/timeout/limit tests | Verified |
 | AC3 | 管理画面から診断・再取得でき、loading/未存在/証拠不足/通信失敗を区別する。狭幅/keyboardで情報と操作を保持し、secretや生JSONを出さない。 | T2,T3 | bUnit、実adapter/HTTP、desktop/narrow browser | Verified |
-| AC4 | canonical deployment後、collectionの停止状態を変えず、認証済み本番画面でTokyo/Kyotoの根拠を読取り、親T2へ反映する。 | T3,T4 | CI完了、site diagnostic timestamp/fields、pause保持、親台帳更新 | Not started |
+| AC4 | canonical deployment後、collectionの停止状態を変えず、認証済み本番画面でTokyo/Kyotoの根拠を読取り、親T2へ反映する。 | T3,T4 | CI完了、site diagnostic timestamp/fields、pause保持、親台帳更新 | Verified |
 
 ## Task plan
 
@@ -70,7 +70,7 @@ Existing server-side AdminApiClient consumes the named `Diagnostic` response pro
 | T1 | Read-only service/typed contract/GETと反例テスト | diagnostic_backend_fallback — executor/verifier | Luna | Approved design and parent M4 | Exact service/endpoint/Contracts/collection partial/test files in execution plan below | no-write/contract/limit/auth tests and relevant regression | API47144:496 passed/8 skipped/504 total; Collector75363:469/469; focused9/9+1/1; format38620exit0; fresh graph and independent producer/ID/no-write acceptance | Verified | gpt-6-luna/high execution unavailable; accepted gpt-5.6-luna/high fallback dispatch | T1-A1, T1-A2 | unavailable; retries 7; corrections 0; reviews 2 |
 | T2 | Admin adapter・専用Page・Settingsリンクとcomponent/transport tests | hold_impl — UI executor/verifier | Luna | T1 | Exact client/UI/serializer/test files in execution plan below | adapter HTTP fields/status and bUnit; no secret | T2-A2 focused18/18, SDK30/30, Release80346 exit0 (API505+8skip), formatter74968 exit0; independent AC-group acceptance | Verified | Preferred gpt-6-luna/high readiness executed after fallback usage-limit failure; observed model unknown | T2-A1, T2-A2 | unavailable; retries 1; corrections 0; reviews 1 |
 | T3 | Integrated verification and acceptance | Lead — final acceptance; hold_impl — mechanical verifier | Lead/Luna | T1,T2 | Isolated localhost fixtures and exact Page/CSS/component-test closure files below | format/build/regression/CodeGraph sync/local browser | Final Release24362/formatter17631 exit0, actual desktop/390/genuine-key/refresh browser accepted; graph sync/query and diff exit0, owned host absent | Verified | Lead integration/risk decisions; mechanical checks existing executable preferred Luna | T3-A1 | unavailable; retries 2; corrections 0; reviews 1 |
-| T4 | Canonical deployment and target diagnostic read | Lead | Lead | T3 | canonical deploy route and authenticated read only | CI terminal result + bounded live fields + pause preserved | Next main push and matching run; no deployment completion claimed | Runnable | Credentials/production risk and parent reconciliation owned by Lead | none | unavailable; retries 0; corrections 0; reviews 0 |
+| T4 | Canonical deployment and target diagnostic read | Lead | Lead | T3 | canonical deploy route and authenticated read only | CI terminal result + bounded live fields + pause preserved | MatchingCI/deploy success; liveUTC06:27:27/06:27:36 target fields, pause at15:26:55JST and parent hypothesis ledger updated | Verified | Credentials/production risk and parent reconciliation owned by Lead | none | unavailable; retries 0; corrections 0; reviews 1 |
 
 ## Documentation updates
 
@@ -117,6 +117,16 @@ Implementation/browser/deployment/production-data tests have not run. Proposal v
 ## Verification record
 
 ### Current continuation / verification frontier
+
+Final review (Lead, AC1-AC4): all approved child tasks/ACs Verified. Matching379c18a2 Linux app-ci38117331016 and app-deploy38117330991 completed success; verify/APIimage/Lambda/deploy/existing owner-migration jobs success. Pause-and-drain, deployment health and Restore collection pipeline state steps explicitly success. Authenticated `/jobs` reload15:26:55JST shows paused, reason now deployment version transition (the existing deployment reasserts pause), all running0 and waiting710/4309/1189 unchanged. Original incident notification/attempt evidence is preserved in the parent; do not equate changed pause reason with incident recovery.
+
+Authenticated live diagnostics: Tokyo horse-d198b3e2-771f-5dcb-94dc-a739e98b6119 UTC06:27:27 and Kyoto horse-ba9e991c-56e3-5ecd-a392-69d125afed42 UTC06:27:36 returned visible Supported current/initial registrations. Both initial RegisteredName==NormalizedName==current name, birth absent, profile/sourceURL Missing, no collection-origin evidence row in this scope. Both old/current name rules Differs; exact names/candidateIDs and falsified hypothesis are recorded in the parent. This bounded diagnostic result is not full-data coverage or migration eligibility. Parent T1 reopened for source/history reconciliation; parent remains Proposed. No horse migration/reset/retry/manual resume performed. Settings displays the implemented read-only diagnostic link; direct known diagnostic URLs succeeded. No credential was entered/copied in production; existing signed-in cookie and server-side adapter were used.
+
+Final self-audit: attributable source/typed transport/actual producer/UTC/no-write/concurrency/cancellation/optional-repeat fields, local keyboard/390/loading/error evidence, exact formatter/build/full regression, fresh graph and matching remote gates reconcile with the existing AC groups. Delegated audits retain requested versus unobserved model, unavailable usage/review effort, measured retry/review counts and no efficiency claim. Local caught test/layout defects were fixed within approved scope; optional task-seed500 remains explicitly excluded without a success claim. No reusable missing skill rule was established by those local errors, so no extra policy edits. User routing/policy dirties and unrelated host preserved. Approved diagnostic delivery is complete, not the parent migration or collection incident.
+
+Canonical deployment dispatched: verified source checkpoint379c18a275306adda0ffec924286d1b05a64d531 pushed to main, matching [app-deploy38117330991](https://github.com/chameleonhead/HorseRacingPrediction/actions/runs/38117330991) observed In progress. Push is dispatch only, not deployment or recovery proof. CI runner owns configured GitHub/GHCR/AWS/SSH credentials; local AWS absence is not a blocker. No workflow/source changes after checkpoint, user dirties remain unstaged. Next terminal verify/build/deploy/health/pause gate, authenticated target evidence and parent reconciliation; no manual recovery mutation.
+
+Matching Linux evidence: [app-ci38117331016](https://github.com/chameleonhead/HorseRacingPrediction/actions/runs/38117331016) completed success on the exact source SHA; app-deploy's verify job also completed success, then build-and-push started. These are remote mechanical gates, not complete deployment or production diagnostics. Next wait for matching deployment terminal result and inspect health/pause restoration evidence before target reads.
 
 T3 checkpoint review (Lead, AC1-AC3 group): accepts final attributable Page/CSS/test diff against frozen contract and independent browser/producer/transport/no-write evidence. Executor reports final graph sync/query exit0, diffcheck exit0, host202068 absent and loopback5178 without listener; disposable files retained and unrelated Sep27 host preserved. Other-project final console totals unavailable, but the exact solution command terminal exit0 is observed; do not derive aggregate count. Audit completion reconciles two mechanical repeats, detailed browser/test-setup drilldown and one AC-group acceptance, without model/cost inference. AC1-AC3 Verified; child remains Approved because AC4/T4 deployment/target reads are incomplete. Next selective three-file/child-doc checkpoint, canonical main push, match SHA/run and terminal Linux gates, then read two production diagnostics and reconcile parent. No migration/reset/retry/resume.
 
