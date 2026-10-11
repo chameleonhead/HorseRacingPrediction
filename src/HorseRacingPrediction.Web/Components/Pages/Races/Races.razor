@@ -7,6 +7,7 @@
 
 @page "/races"
 @rendermode InteractiveServer
+@implements IDisposable
 @inject IRacesApi RacesApi
 @inject NavigationManager Navigation
 
@@ -18,12 +19,12 @@
     </Actions>
 </PageHeader>
 
-<RaceSearchForm @bind-Name="name"
-                @bind-Course="course"
-                @bind-From="from"
-                @bind-To="to"
-                @bind-DateRangeEnabled="dateRangeEnabled"
-                @bind-Period="period"
+<RaceSearchForm @bind-Name="NameFilter"
+                @bind-Course="CourseFilter"
+                @bind-From="FromFilter"
+                @bind-To="ToFilter"
+                @bind-DateRangeEnabled="DateRangeEnabledFilter"
+                @bind-Period="PeriodFilter"
                 ValidationMessage="@validationError"
                 OnSearch="SearchAsync"
                 OnClear="ClearFiltersAsync" />
@@ -31,90 +32,129 @@
 <RaceList Result="@result"
           Loading="@loading"
           Error="@error"
-          Page="@currentPage"
+          Page="@filters.Page"
           PageSize="@PageSize"
-          OnRetry="LoadAsync"
+          OnRetry="ReloadAsync"
           OnClear="ClearFiltersAsync"
           OnPreviousPage="PreviousPageAsync"
           OnNextPage="NextPageAsync" />
 
 @code {
     private const int PageSize = 50;
-    private string? name;
-    private string? course;
     private string? error;
     private string? validationError;
-    private DateOnly? from;
-    private DateOnly? to;
-    private bool dateRangeEnabled;
-    private RacePeriod period = RacePeriod.All;
     private bool loading;
-    private int currentPage = 1;
     private SearchRacesResponse? result;
+    private SearchFilters filters = new(null, null, null, null, false, RacePeriod.All, 1);
+    private long requestVersion;
 
     [Inject] private TimeProvider TimeProvider { get; set; } = null!;
 
     private DateOnly Today => TimeProvider.TodayInJapan();
 
-    protected override async Task OnInitializedAsync()
+    private string? NameFilter
     {
-        var query = QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query);
-
-        name = Text(query, "name");
-        course = Text(query, "course");
-        if (!RacePeriodExtensions.TryParse(Text(query, "period"), out period))
-        {
-            period = RacePeriod.All;
-        }
-        DateOnly? queryFrom = DateOnly.TryParse(Text(query, "from"), out var fromValue) ? fromValue : null;
-        DateOnly? queryTo = DateOnly.TryParse(Text(query, "to"), out var toValue) ? toValue : null;
-        if (period != RacePeriod.All && (queryFrom is null || queryTo is null))
-        {
-            (from, to) = period.ResolveDates(Today);
-        }
-        else
-        {
-            from = queryFrom;
-            to = queryTo;
-        }
-
-        dateRangeEnabled = from is not null || to is not null || Text(query, "dateRange") == "true";
-        currentPage = int.TryParse(Text(query, "page"), out var pageValue) && pageValue > 0
-            ? pageValue
-            : 1;
-
-        await LoadAsync();
+        get => filters.Name;
+        set => filters = filters with { Name = value };
     }
 
-    private async Task SearchAsync()
+    private string? CourseFilter
     {
-        validationError = ValidateFilters();
-        if (validationError is not null)
+        get => filters.Course;
+        set => filters = filters with { Course = value };
+    }
+
+    private DateOnly? FromFilter
+    {
+        get => filters.From;
+        set => filters = filters with { From = value };
+    }
+
+    private DateOnly? ToFilter
+    {
+        get => filters.To;
+        set => filters = filters with { To = value };
+    }
+
+    private bool DateRangeEnabledFilter
+    {
+        get => filters.DateRangeEnabled;
+        set => filters = filters with { DateRangeEnabled = value };
+    }
+
+    private RacePeriod PeriodFilter
+    {
+        get => filters.Period;
+        set => filters = filters with { Period = value };
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        filters = ReadFiltersFromUrl();
+        NavigateToFilters(filters);
+        validationError = ValidateFilters(filters);
+        if (validationError is null)
+        {
+            await LoadAsync(filters);
+        }
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs args)
+        => _ = InvokeAsync(async () =>
+        {
+            await ApplyLocationAsync();
+            StateHasChanged();
+        });
+
+    private async Task ApplyLocationAsync()
+    {
+        var urlFilters = ReadFiltersFromUrl();
+        NavigateToFilters(urlFilters);
+        if (urlFilters == filters)
         {
             return;
         }
 
-        currentPage = 1;
-        UpdateUrl();
-        await LoadAsync();
+        filters = urlFilters;
+        validationError = ValidateFilters(urlFilters);
+        StateHasChanged();
+        if (validationError is null)
+        {
+            await LoadAsync(urlFilters);
+        }
+        else
+        {
+            InvalidateCurrentRequest();
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        validationError = ValidateFilters(filters);
+        if (validationError is not null)
+        {
+            InvalidateCurrentRequest();
+            return;
+        }
+
+        validationError = null;
+        filters = filters with { Page = 1 };
+        NavigateToFilters(filters);
+        await LoadAsync(filters);
     }
 
     private async Task ClearFiltersAsync()
     {
-        name = null;
-        course = null;
-        from = null;
-        to = null;
-        dateRangeEnabled = false;
-        period = RacePeriod.All;
+        filters = new(null, null, null, null, false, RacePeriod.All, 1);
         validationError = null;
-        currentPage = 1;
-        UpdateUrl();
-        await LoadAsync();
+        NavigateToFilters(filters);
+        await LoadAsync(filters);
     }
 
-    private async Task LoadAsync()
+    private async Task LoadAsync(SearchFilters requestFilters)
     {
+        var version = Interlocked.Increment(ref requestVersion);
         loading = true;
         error = null;
 
@@ -122,20 +162,24 @@
         {
             var response = await RacesApi.SearchRacesAsync(new SearchRacesRequest
             {
-                RaceName = name,
-                RaceCourseCode = course,
-                RaceDateFrom = from,
-                RaceDateTo = to,
-                Page = currentPage,
+                RaceName = requestFilters.Name,
+                RaceCourseCode = requestFilters.Course,
+                RaceDateFrom = requestFilters.From,
+                RaceDateTo = requestFilters.To,
+                Page = requestFilters.Page,
                 PageSize = PageSize,
                 SortBy = "raceDate",
                 SortDescending = true
             });
 
+            if (version != Volatile.Read(ref requestVersion))
+            {
+                return;
+            }
+
             if (response.IsSuccessStatusCode)
             {
                 result = response.Content;
-                UpdateUrl();
             }
             else
             {
@@ -144,17 +188,23 @@
         }
         catch (Exception ex)
         {
-            error = ex.Message;
+            if (version == Volatile.Read(ref requestVersion))
+            {
+                error = ex.Message;
+            }
         }
         finally
         {
-            loading = false;
+            if (version == Volatile.Read(ref requestVersion))
+            {
+                loading = false;
+            }
         }
     }
 
-    private string? ValidateFilters()
+    private static string? ValidateFilters(SearchFilters current)
     {
-        if (from is not null && to is not null && from > to)
+        if (current.From is not null && current.To is not null && current.From > current.To)
         {
             return "終了日は開始日以降の日付を指定してください。";
         }
@@ -164,35 +214,63 @@
 
     private async Task PreviousPageAsync()
     {
-        if (currentPage > 1)
+        if (filters.Page > 1)
         {
-            currentPage--;
-            UpdateUrl();
-            await LoadAsync();
+            filters = filters with { Page = filters.Page - 1 };
+            NavigateToFilters(filters);
+            await LoadAsync(filters);
         }
     }
 
     private async Task NextPageAsync()
     {
-        if (result is not null && currentPage < result.Pagination.TotalPages)
+        if (result is not null && filters.Page < result.Pagination.TotalPages)
         {
-            currentPage++;
-            UpdateUrl();
-            await LoadAsync();
+            filters = filters with { Page = filters.Page + 1 };
+            NavigateToFilters(filters);
+            await LoadAsync(filters);
         }
     }
 
-    private void UpdateUrl()
+    private Task ReloadAsync() => LoadAsync(filters);
+
+    private void InvalidateCurrentRequest()
+    {
+        Interlocked.Increment(ref requestVersion);
+        loading = false;
+    }
+
+    private SearchFilters ReadFiltersFromUrl()
+    {
+        var query = QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query);
+        if (!RacePeriodExtensions.TryParse(Text(query, "period"), out var parsedPeriod))
+        {
+            parsedPeriod = RacePeriod.All;
+        }
+
+        DateOnly? parsedFrom = DateOnly.TryParse(Text(query, "from"), out var fromValue) ? fromValue : null;
+        DateOnly? parsedTo = DateOnly.TryParse(Text(query, "to"), out var toValue) ? toValue : null;
+        if (parsedPeriod != RacePeriod.All && (parsedFrom is null || parsedTo is null))
+        {
+            (parsedFrom, parsedTo) = parsedPeriod.ResolveDates(Today);
+        }
+
+        var enabled = parsedFrom is not null || parsedTo is not null || Text(query, "dateRange") == "true";
+        var page = int.TryParse(Text(query, "page"), out var pageValue) && pageValue > 0 ? pageValue : 1;
+        return new SearchFilters(Text(query, "name"), Text(query, "course"), parsedFrom, parsedTo, enabled, parsedPeriod, page);
+    }
+
+    private void NavigateToFilters(SearchFilters current)
     {
         var values = new Dictionary<string, string?>
         {
-            ["name"] = name,
-            ["course"] = course,
-            ["period"] = period.ToQueryValue(),
-            ["from"] = from?.ToString("yyyy-MM-dd"),
-            ["to"] = to?.ToString("yyyy-MM-dd"),
-            ["dateRange"] = dateRangeEnabled && from is null && to is null ? "true" : null,
-            ["page"] = currentPage.ToString()
+            ["name"] = current.Name,
+            ["course"] = current.Course,
+            ["period"] = current.Period.ToQueryValue(),
+            ["from"] = current.From?.ToString("yyyy-MM-dd"),
+            ["to"] = current.To?.ToString("yyyy-MM-dd"),
+            ["dateRange"] = current.DateRangeEnabled && current.From is null && current.To is null ? "true" : null,
+            ["page"] = current.Page.ToString()
         };
 
         var uri = QueryHelpers.AddQueryString(
@@ -204,6 +282,17 @@
             Navigation.NavigateTo(uri, replace: true);
         }
     }
+
+    private sealed record SearchFilters(
+        string? Name,
+        string? Course,
+        DateOnly? From,
+        DateOnly? To,
+        bool DateRangeEnabled,
+        RacePeriod Period,
+        int Page);
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
 
     private static string? Text(IDictionary<string, StringValues> query, string key) => query.TryGetValue(key, out var value) ? value.ToString() : null;
 }

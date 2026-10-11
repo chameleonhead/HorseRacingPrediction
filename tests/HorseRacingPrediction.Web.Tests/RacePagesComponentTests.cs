@@ -102,6 +102,118 @@ public sealed class RacePagesComponentTests
     }
 
     [TestMethod]
+    public async Task RaceList_NameInput_SearchesAfterShortPause()
+    {
+        using var handler = new RaceApiHandler();
+        using var context = CreateContext(handler);
+        var cut = context.Render<Races>();
+        cut.WaitForAssertion(() => Assert.AreEqual(1, handler.SearchCount));
+
+        await cut.Find("fluent-text-input[placeholder='レース名']").InputAsync("有馬記念");
+        Assert.AreEqual(1, handler.SearchCount);
+
+        await Task.Delay(450);
+        cut.WaitForAssertion(() =>
+        {
+            Assert.AreEqual(2, handler.SearchCount);
+            Assert.AreEqual("有馬記念", handler.LastRequestRaceName);
+            Assert.AreEqual("有馬記念", QueryValue(context, "name"));
+        });
+    }
+
+    [TestMethod]
+    public async Task RaceList_CourseSelection_UpdatesUrlAndSearchesImmediately()
+    {
+        using var handler = new RaceApiHandler();
+        using var context = CreateContext(handler);
+        var cut = context.Render<Races>();
+        cut.WaitForAssertion(() => Assert.AreEqual(1, handler.SearchCount));
+
+        var courseFilter = cut.FindAll("button[aria-haspopup='listbox']")
+            .Single(button => button.GetAttribute("aria-label")!.StartsWith("開催場:", StringComparison.Ordinal));
+        await courseFilter.ClickAsync();
+        var courseList = cut.FindComponents<FluentListbox<FilterSelectionOption, string>>().First();
+        await cut.InvokeAsync(() => courseList.Instance.ValueChanged.InvokeAsync("東京"));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.AreEqual(2, handler.SearchCount);
+            Assert.AreEqual("東京", handler.LastRequestCourseCode);
+            Assert.AreEqual("東京", QueryValue(context, "course"));
+        });
+    }
+
+    [TestMethod]
+    public async Task RaceList_BrowserHistoryChange_RestoresFiltersAndSearches()
+    {
+        using var handler = new RaceApiHandler();
+        using var context = CreateContext(handler);
+        context.Services.GetRequiredService<NavigationManager>().NavigateTo("/races?course=東京&from=2026-10-01");
+        var cut = context.Render<Races>();
+        cut.WaitForAssertion(() => Assert.AreEqual("東京", cut.FindComponent<RaceSearchForm>().Instance.Course));
+
+        context.Services.GetRequiredService<NavigationManager>().NavigateTo("/races?course=中山&to=2026-10-05");
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.AreEqual("中山", cut.FindComponent<RaceSearchForm>().Instance.Course);
+            Assert.IsNull(cut.FindComponent<RaceSearchForm>().Instance.From);
+            Assert.AreEqual(new DateOnly(2026, 10, 5), cut.FindComponent<RaceSearchForm>().Instance.To);
+            Assert.AreEqual("中山", handler.LastRequestCourseCode);
+            Assert.AreEqual("2026-10-05", handler.LastRequestDateTo);
+        });
+    }
+
+    [TestMethod]
+    public async Task RaceList_LateOldResponse_DoesNotReplaceLatestSearchResults()
+    {
+        using var handler = new RaceApiHandler();
+        using var context = CreateContext(handler);
+        var cut = context.Render<Races>();
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "テストレース"));
+
+        var oldRequestStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseOldRequest = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        handler.SearchRequestHandler = async (request, _) =>
+        {
+            var name = RaceApiHandler.GetQuery(request, "raceName");
+            if (name == "先行検索")
+            {
+                oldRequestStarted.SetResult();
+                await releaseOldRequest.Task;
+                return SearchResponse("古い検索結果");
+            }
+
+            return SearchResponse("最新の検索結果");
+        };
+
+        var nameInput = cut.Find("fluent-text-input[placeholder='レース名']");
+        await nameInput.InputAsync("先行検索");
+        var search = cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("検索"));
+        var oldSearchTask = cut.InvokeAsync(() => search.Instance.OnClick.InvokeAsync(new MouseEventArgs()));
+        await oldRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+
+        await cut.Find("fluent-text-input[placeholder='レース名']").InputAsync("最新検索");
+        search = cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("検索"));
+        await cut.InvokeAsync(() => search.Instance.OnClick.InvokeAsync(new MouseEventArgs()));
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "最新の検索結果"));
+
+        releaseOldRequest.SetResult();
+        await oldSearchTask;
+        await Task.Delay(50);
+        StringAssert.Contains(cut.Markup, "最新の検索結果");
+        Assert.IsFalse(cut.Markup.Contains("古い検索結果", StringComparison.Ordinal));
+    }
+
+    private static HttpResponseMessage SearchResponse(string raceName)
+        => new(HttpStatusCode.OK)
+        {
+            Content = JsonContent.Create(new SearchRacesResponse(
+                [new("R002", new DateOnly(2026, 10, 3), "中山", 11, raceName, RaceStatus.ResultDeclared, 1, "テストホース", DateTimeOffset.UtcNow)],
+                new PaginationDto(1, 1, 1, 1)))
+        };
+
+    [TestMethod]
     public async Task RaceList_PeriodTabs_ApplyTodayWeekMonthAndAllPeriods()
     {
         using var handler = new RaceApiHandler();
@@ -276,10 +388,12 @@ public sealed class RacePagesComponentTests
         public string? LastRequestPath { get; private set; }
         public int LastRequestPage { get; private set; }
         public string? LastRequestRaceName { get; private set; }
+        public string? LastRequestCourseCode { get; private set; }
         public string? LastRequestDateFrom { get; private set; }
         public string? LastRequestDateTo { get; private set; }
+        public Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>>? SearchRequestHandler { get; set; }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             LastRequestPath = request.RequestUri?.PathAndQuery;
             if (request.RequestUri?.AbsolutePath == "/api/races" && request.Method == HttpMethod.Get)
@@ -287,27 +401,33 @@ public sealed class RacePagesComponentTests
                 SearchCount++;
                 LastRequestPage = int.TryParse(GetQuery(request, "page"), out var page) ? page : 1;
                 LastRequestRaceName = GetQuery(request, "raceName");
+                LastRequestCourseCode = GetQuery(request, "racecourseCode");
                 LastRequestDateFrom = GetQuery(request, "raceDateFrom");
                 LastRequestDateTo = GetQuery(request, "raceDateTo");
+                if (SearchRequestHandler is not null)
+                {
+                    return await SearchRequestHandler(request, cancellationToken);
+                }
+
                 var response = Search ?? new SearchRacesResponse(
                     [new("R001", new DateOnly(2026, 10, 3), "中山", 11, "テストレース", RaceStatus.ResultDeclared, 1, "テストホース", DateTimeOffset.UtcNow)],
                     new PaginationDto(LastRequestPage, 1, 2, 2));
-                return Task.FromResult(CreateResponse(response));
+                return CreateResponse(response);
             }
             if (request.RequestUri?.AbsolutePath == "/api/races/R001" && request.Method == HttpMethod.Get)
             {
-                return Task.FromResult(CreateResponse(new GetRaceResponse(Detail ?? CreateRace())));
+                return CreateResponse(new GetRaceResponse(Detail ?? CreateRace()));
             }
-            return Task.FromResult(new HttpResponseMessage(StatusCode == HttpStatusCode.OK ? HttpStatusCode.NotFound : StatusCode)
+            return new HttpResponseMessage(StatusCode == HttpStatusCode.OK ? HttpStatusCode.NotFound : StatusCode)
             {
                 RequestMessage = request
-            });
+            };
         }
 
         private HttpResponseMessage CreateResponse<T>(T value)
             => new(StatusCode) { Content = JsonContent.Create(value), RequestMessage = new HttpRequestMessage() };
 
-        private static string? GetQuery(HttpRequestMessage request, string key)
+        public static string? GetQuery(HttpRequestMessage request, string key)
         {
             var query = request.RequestUri?.Query.TrimStart('?') ?? string.Empty;
             return query.Split('&', StringSplitOptions.RemoveEmptyEntries)

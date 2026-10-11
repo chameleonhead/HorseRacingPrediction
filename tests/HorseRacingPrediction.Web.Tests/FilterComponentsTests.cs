@@ -220,6 +220,12 @@ public sealed class FilterComponentsTests
 
         Assert.AreEqual(new DateOnly(2026, 10, 1), from);
         Assert.IsNull(to);
+
+        cut.Render(parameters => parameters
+            .Add(x => x.From, from)
+            .Add(x => x.FromChanged, (DateOnly? value) => from = value)
+            .Add(x => x.To, to)
+            .Add(x => x.ToChanged, (DateOnly? value) => to = value));
         StringAssert.Contains(cut.Find("button[aria-haspopup='listbox']").TextContent, "2026/10/01から");
 
         trigger = cut.Find("button[aria-haspopup='listbox']");

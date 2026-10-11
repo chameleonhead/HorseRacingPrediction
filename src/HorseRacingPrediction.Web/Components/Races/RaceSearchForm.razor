@@ -1,3 +1,5 @@
+@implements IAsyncDisposable
+
 <div class="race-search-form" role="search">
     <nav class="race-period-tabs" aria-label="開催期間">
         <button type="button" class="@(IsSelected(RacePeriod.Today) ? "selected" : null)" aria-pressed="@(IsSelected(RacePeriod.Today) ? "true" : "false")" @onclick="() => SelectPeriodAsync(RacePeriod.Today)">今日</button>
@@ -10,8 +12,8 @@
         <FluentTextInput Class="race-name-filter" Placeholder="レース名" Value="@Name" @oninput="OnNameInput" />
 
         <div class="search-actions">
-            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="OnSearch">検索</FluentButton>
-            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="OnClear">条件をクリア</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SearchImmediatelyAsync">検索</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="ClearFiltersImmediatelyAsync">条件をクリア</FluentButton>
         </div>
     </div>
 
@@ -82,23 +84,69 @@
         await ToChanged.InvokeAsync(end);
         await PeriodChanged.InvokeAsync(period);
         await DateRangeEnabledChanged.InvokeAsync(period != RacePeriod.All);
-        await OnSearch.InvokeAsync();
+        await SearchImmediatelyAsync();
     }
 
     private async Task OnDateFilterChangedAsync()
     {
         await PeriodChanged.InvokeAsync(RacePeriod.All);
-        await OnSearch.InvokeAsync();
+        await SearchImmediatelyAsync();
     }
 
     private Task OnDateFromChanged(DateOnly? value) => FromChanged.InvokeAsync(value);
 
     private Task OnDateToChanged(DateOnly? value) => ToChanged.InvokeAsync(value);
 
-    private Task OnNameInput(ChangeEventArgs args)
-        => NameChanged.InvokeAsync(args.Value?.ToString());
+    private CancellationTokenSource? nameSearchDebounce;
 
-    private Task OnCourseInput(string? args)
-        => CourseChanged.InvokeAsync(args);
+    private async Task SearchImmediatelyAsync()
+    {
+        nameSearchDebounce?.Cancel();
+        nameSearchDebounce?.Dispose();
+        nameSearchDebounce = null;
+        await OnSearch.InvokeAsync();
+    }
+
+    private async Task ClearFiltersImmediatelyAsync()
+    {
+        nameSearchDebounce?.Cancel();
+        nameSearchDebounce?.Dispose();
+        nameSearchDebounce = null;
+        await OnClear.InvokeAsync();
+    }
+
+    private async Task OnNameInput(ChangeEventArgs args)
+    {
+        await NameChanged.InvokeAsync(args.Value?.ToString());
+        nameSearchDebounce?.Cancel();
+        nameSearchDebounce?.Dispose();
+        nameSearchDebounce = new CancellationTokenSource();
+        _ = SearchNameAfterPauseAsync(nameSearchDebounce.Token);
+    }
+
+    private async Task SearchNameAfterPauseAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(350), token);
+            await SearchImmediatelyAsync();
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task OnCourseInput(string? value)
+    {
+        await CourseChanged.InvokeAsync(value);
+        await SearchImmediatelyAsync();
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        nameSearchDebounce?.Cancel();
+        nameSearchDebounce?.Dispose();
+        return ValueTask.CompletedTask;
+    }
 
 }
