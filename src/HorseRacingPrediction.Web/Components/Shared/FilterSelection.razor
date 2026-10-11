@@ -25,7 +25,8 @@
     }
     else
     {
-        <FluentListbox TOption="FilterSelectionOption"
+        <FluentListbox @key="SelectionResetVersion"
+                       TOption="FilterSelectionOption"
                        TValue="string"
                        Value="@ListboxValue"
                        ValueChanged="OnValueChanged"
@@ -35,6 +36,7 @@
                 <FluentOption TOption="FilterSelectionOption"
                               Value="@option.Value"
                               Text="@option.Label"
+                              Selected="@(ListboxValue == option.Value)"
                               @onclick="() => SelectOptionAsync(option)">
                     @option.Label
                 </FluentOption>
