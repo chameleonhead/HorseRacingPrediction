@@ -29,6 +29,7 @@
                        Items="@Items"
                        OptionValue="@(item => item.Value)"
                        OptionText="@(item => item.Label)"
+                       OptionTemplate="@RenderOption"
                        Value="@ListboxValue"
                        ValueChanged="OnValueChanged"
                        Appearance="ListAppearance.Transparent" />
@@ -54,6 +55,19 @@
     private IEnumerable<FilterSelectionOption> SelectedOptions
         => Items.Where(item => SelectedValues.Contains(item.Value));
     private string? ListboxValue => Value == ActionValue ? null : Value;
+
+    private RenderFragment<FilterSelectionOption> RenderOption => option => builder =>
+    {
+        builder.OpenElement(0, "button");
+        builder.AddAttribute(1, "type", "button");
+        builder.AddAttribute(2, "class", "filter-selection-option-button");
+        builder.AddAttribute(3, "data-filter-option", option.Value);
+        builder.AddAttribute(4, "onclick", EventCallback.Factory.Create(this, () => SelectOptionAsync(option)));
+        builder.AddAttribute(5, "onclick:stopPropagation", true);
+        builder.AddContent(6, option.Label);
+        builder.CloseElement();
+    };
+
     private string SelectionSummary
     {
         get
@@ -80,26 +94,42 @@
         }
     }
 
-    private void TogglePopover() => IsOpened = !IsOpened;
-
-    private async Task OnValueChanged(string? value)
+    private void TogglePopover()
     {
-        if (value == ActionValue)
+        IsOpened = !IsOpened;
+        if (IsOpened)
         {
-            await OnActionSelected();
+            PendingOptionValue = null;
+        }
+    }
+
+    private Task OnValueChanged(string? value)
+    {
+        var option = Items.FirstOrDefault(item => item.Value == value);
+        return option is null ? Task.CompletedTask : SelectOptionAsync(option);
+    }
+
+    private async Task SelectOptionAsync(FilterSelectionOption option)
+    {
+        if (PendingOptionValue == option.Value)
+        {
             return;
         }
 
-        await ValueChanged.InvokeAsync(value);
-        IsOpened = false;
-    }
+        PendingOptionValue = option.Value;
+        if (option.Value == ActionValue)
+        {
+            await ActionValueSelected.InvokeAsync(ActionValue);
+            IsOpened = false;
+            return;
+        }
 
-    private async Task OnActionSelected()
-    {
-        await ActionValueSelected.InvokeAsync(ActionValue);
+        await ValueChanged.InvokeAsync(option.Value);
         IsOpened = false;
     }
 
     private Task OnSelectedItemsChanged(IEnumerable<FilterSelectionOption>? selectedItems)
         => SelectedValuesChanged.InvokeAsync(selectedItems?.Select(item => item.Value).ToArray() ?? []);
+
+    private string? PendingOptionValue { get; set; }
 }

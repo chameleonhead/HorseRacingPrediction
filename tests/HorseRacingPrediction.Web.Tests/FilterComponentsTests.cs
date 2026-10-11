@@ -38,8 +38,7 @@ public sealed class FilterComponentsTests
             .Add(x => x.ValueChanged, value => selectedValue = value));
 
         await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
-        var listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
-        await cut.InvokeAsync(() => listbox.Instance.ValueChanged.InvokeAsync("東京"));
+        await cut.Find("button[data-filter-option='東京']").ClickAsync();
 
         Assert.AreEqual("東京", selectedValue);
         Assert.AreEqual("false", cut.Find("button[aria-haspopup='listbox']").GetAttribute("aria-expanded"));
@@ -96,8 +95,7 @@ public sealed class FilterComponentsTests
             .Add(x => x.EnabledChanged, value => enabled = value));
 
         await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
-        var listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
-        await cut.InvokeAsync(() => listbox.Instance.ValueChanged.InvokeAsync(option));
+        await cut.Find($"button[data-filter-option='{option}']").ClickAsync();
 
         Assert.AreEqual(expectedEnabled, enabled);
         cut.Render(parameters => parameters
@@ -128,8 +126,7 @@ public sealed class FilterComponentsTests
             .Add(x => x.EnabledChanged, (bool value) => enabled = value));
 
         await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
-        var listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
-        await cut.InvokeAsync(() => listbox.Instance.ValueChanged.InvokeAsync("custom"));
+        await cut.Find("button[data-filter-option='custom']").ClickAsync();
 
         var dialog = cut.FindComponent<FluentDialog>().Instance;
         Assert.AreEqual(DialogAlignment.End, dialog.Alignment);
@@ -183,7 +180,7 @@ public sealed class FilterComponentsTests
 
         var originalLabel = cut.Find("button[aria-haspopup='listbox']").TextContent;
         await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
-        await cut.InvokeAsync(() => cut.FindComponent<FluentListbox<FilterSelectionOption, string>>().Instance.ValueChanged.InvokeAsync("custom"));
+        await cut.Find("button[data-filter-option='custom']").ClickAsync();
         await cut.InvokeAsync(() => cut.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 3)));
 
         var cancel = cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("キャンセル"));
@@ -199,7 +196,7 @@ public sealed class FilterComponentsTests
     }
 
     [TestMethod]
-    public async Task FilterDateRangePicker_CustomOptionReopensDrawerAndAllowsOneSidedRange()
+    public async Task FilterDateRangePicker_CustomOptionCanBeSelectedAgainAfterCancel()
     {
         using var context = CreateContext();
         DateOnly? from = null;
@@ -212,30 +209,53 @@ public sealed class FilterComponentsTests
 
         var trigger = cut.Find("button[aria-haspopup='listbox']");
         await trigger.ClickAsync();
-        var listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
-        await cut.InvokeAsync(() => listbox.Instance.ValueChanged.InvokeAsync("custom"));
+        await cut.Find("button[data-filter-option='today']").ClickAsync();
+        cut.Render(parameters => parameters
+            .Add(x => x.From, from)
+            .Add(x => x.FromChanged, (DateOnly? value) => from = value)
+            .Add(x => x.To, to)
+            .Add(x => x.ToChanged, (DateOnly? value) => to = value));
+        trigger = cut.Find("button[aria-haspopup='listbox']");
+        await trigger.ClickAsync();
+        await cut.Find("button[data-filter-option='custom']").ClickAsync();
         Assert.AreEqual(2, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
         Assert.AreEqual(1, context.JSInterop.Invocations.Count(invocation => invocation.Identifier == "Microsoft.FluentUI.Blazor.Components.Dialog.Show"));
+        var cancel = cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("キャンセル"));
+        await cut.InvokeAsync(() => cancel.Instance.OnClick.InvokeAsync());
+        Assert.AreEqual(0, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
+
+        trigger = cut.Find("button[aria-haspopup='listbox']");
+        await trigger.ClickAsync();
+        await cut.Find("button[data-filter-option='custom']").ClickAsync();
+        Assert.AreEqual(2, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
+        Assert.AreEqual(2, context.JSInterop.Invocations.Count(invocation => invocation.Identifier == "Microsoft.FluentUI.Blazor.Components.Dialog.Show"));
+    }
+
+    [TestMethod]
+    public async Task FilterDateRangePicker_CustomRangeAllowsOneSidedRange()
+    {
+        using var context = CreateContext();
+        DateOnly? from = null;
+        DateOnly? to = null;
+        var cut = context.Render<FilterDateRangePicker>(parameters => parameters
+            .Add(x => x.From, from)
+            .Add(x => x.FromChanged, (DateOnly? value) => from = value)
+            .Add(x => x.To, to)
+            .Add(x => x.ToChanged, (DateOnly? value) => to = value));
+
+        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        await cut.Find("button[data-filter-option='custom']").ClickAsync();
         await cut.InvokeAsync(() => cut.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 1)));
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("適用")).Instance.OnClick.InvokeAsync());
 
         Assert.AreEqual(new DateOnly(2026, 10, 1), from);
         Assert.IsNull(to);
-
         cut.Render(parameters => parameters
             .Add(x => x.From, from)
             .Add(x => x.FromChanged, (DateOnly? value) => from = value)
             .Add(x => x.To, to)
             .Add(x => x.ToChanged, (DateOnly? value) => to = value));
         StringAssert.Contains(cut.Find("button[aria-haspopup='listbox']").TextContent, "2026/10/01から");
-
-        trigger = cut.Find("button[aria-haspopup='listbox']");
-        await trigger.ClickAsync();
-        listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
-        Assert.IsNull(listbox.Instance.Value);
-        await cut.InvokeAsync(() => listbox.Instance.ValueChanged.InvokeAsync("custom"));
-        Assert.AreEqual(2, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
-        Assert.AreEqual(2, context.JSInterop.Invocations.Count(invocation => invocation.Identifier == "Microsoft.FluentUI.Blazor.Components.Dialog.Show"));
     }
 
     [TestMethod]

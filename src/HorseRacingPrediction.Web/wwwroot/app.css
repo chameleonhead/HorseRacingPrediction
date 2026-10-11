@@ -1,0 +1,22 @@
+.filter-selection-option-button {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 36px;
+    padding: 8px 12px;
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    text-align: start;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+}
+
+.filter-selection-option-button:hover {
+    background: var(--colorNeutralBackground1Hover);
+}
+
+.filter-selection-option-button:focus-visible {
+    outline: 2px solid var(--colorBrandBackground);
+    outline-offset: -2px;
+}
