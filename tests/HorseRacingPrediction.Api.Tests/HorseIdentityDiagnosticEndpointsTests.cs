@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Contracts.Common;
 using HorseRacingPrediction.Contracts.Collection;
 using HorseRacingPrediction.Contracts.Horses;
@@ -9,6 +11,8 @@ using HorseRacingPrediction.Contracts.Subjects;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Hosting.Server;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -54,6 +58,12 @@ public sealed class HorseIdentityDiagnosticEndpointsTests
             {
                 response.EnsureSuccessStatusCode();
                 var result = (await response.Content.ReadFromJsonAsync<GetHorseIdentityDiagnosticResponse>())!;
+                Assert.AreEqual(TimeSpan.Zero, result.Diagnostic.EventStoreObservedFromUtc.Offset);
+                Assert.AreEqual(TimeSpan.Zero, result.Diagnostic.EventStoreObservedToUtc.Offset);
+                Assert.AreEqual(TimeSpan.Zero, result.Diagnostic.CollectionStoreObservedFromUtc.Offset);
+                Assert.AreEqual(TimeSpan.Zero, result.Diagnostic.CollectionStoreObservedToUtc.Offset);
+                Assert.IsTrue(result.Diagnostic.EventStoreObservedToUtc >= result.Diagnostic.EventStoreObservedFromUtc);
+                Assert.IsTrue(result.Diagnostic.CollectionStoreObservedToUtc >= result.Diagnostic.CollectionStoreObservedFromUtc);
                 var profileSource = result.Diagnostic.Sources.Single(x => x.Origin == "ProfileReadModel");
                 Assert.AreEqual("Supported", profileSource.Status);
                 Assert.AreEqual("jra-horse:2024123456", profileSource.NormalizedSourceIdentity);
@@ -65,8 +75,21 @@ public sealed class HorseIdentityDiagnosticEndpointsTests
                     new[] { expected, expected },
                     result.Diagnostic.Comparisons
                         .Where(x => x.Rule is "Source:ProfileReadModel" or "SourceUrl:ProfileReadModel")
-                        .Select(x => x.CandidateHorseId).ToArray());
+                    .Select(x => x.CandidateHorseId).ToArray());
             }
+
+            var adminClient = new AdminApiClient(client,
+                new AdminApiBaseAddressResolver(app.Services.GetRequiredService<IServer>()),
+                Options.Create(new ApiKeyOptions { Key = TestApplicationFactory.TestApiKey }));
+            var adapted = await adminClient.GetHorseIdentityDiagnosticAsync(horseId);
+            Assert.IsNotNull(adapted);
+            Assert.AreEqual(TimeSpan.Zero, adapted.EventStoreObservedFromUtc.Offset);
+            Assert.AreEqual(TimeSpan.Zero, adapted.EventStoreObservedToUtc.Offset);
+            Assert.AreEqual(TimeSpan.Zero, adapted.CollectionStoreObservedFromUtc.Offset);
+            Assert.AreEqual(TimeSpan.Zero, adapted.CollectionStoreObservedToUtc.Offset);
+            Assert.IsTrue(adapted.EventStoreObservedToUtc >= adapted.EventStoreObservedFromUtc);
+            Assert.IsTrue(adapted.CollectionStoreObservedToUtc >= adapted.CollectionStoreObservedFromUtc);
+            Assert.AreEqual("Supported", adapted.CurrentRecordStatus);
 
             var credentialName = $"資格情報混入馬{Guid.NewGuid():N}";
             const string credentialUrl = "https://secret-canary@www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024654321/FC";

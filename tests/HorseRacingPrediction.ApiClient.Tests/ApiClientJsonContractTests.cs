@@ -2,6 +2,7 @@ using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.ApiClient.Collection;
 using HorseRacingPrediction.ApiClient.Horses;
 using HorseRacingPrediction.ApiClient.Identity;
+using HorseRacingPrediction.Contracts.Identity;
 using HorseRacingPrediction.ApiClient.Jockeys;
 using HorseRacingPrediction.ApiClient.MachineLearning;
 using HorseRacingPrediction.ApiClient.Memos;
@@ -30,7 +31,7 @@ public sealed class ApiClientJsonContractTests
     ];
 
     [TestMethod]
-    public void PublicSurface_Has136OperationMethodsWithTypedRequestAndResponseShapes()
+    public void PublicSurface_Has137OperationMethodsWithTypedRequestAndResponseShapes()
     {
         var expected = new Dictionary<Type, (int Operations, int Requests, int Responses)>
         {
@@ -44,7 +45,7 @@ public sealed class ApiClientJsonContractTests
             [typeof(IMachineLearningApi)] = (2, 1, 2),
             [typeof(IPredictionSchedulingApi)] = (3, 3, 1),
             [typeof(IRepairsApi)] = (7, 5, 7),
-            [typeof(IIdentityApi)] = (2, 2, 2),
+            [typeof(IIdentityApi)] = (3, 3, 3),
             [typeof(ISubjectsApi)] = (2, 2, 1),
             [typeof(ICollectionApi)] = (45, 30, 41)
         };
@@ -59,7 +60,7 @@ public sealed class ApiClientJsonContractTests
         }
 
         var methods = ApiInterfaces.SelectMany(api => api.GetMethods()).ToArray();
-        Assert.HasCount(136, methods);
+        Assert.HasCount(137, methods);
 
         var dataOperations = 0;
         var noDataOperations = 0;
@@ -94,12 +95,12 @@ public sealed class ApiClientJsonContractTests
             responses.Add(responseType);
         }
 
-        Assert.AreEqual(95, dataOperations);
+        Assert.AreEqual(96, dataOperations);
         Assert.AreEqual(41, noDataOperations);
-        Assert.AreEqual(117, methods.Sum(method => method.GetParameters().Count(parameter =>
+        Assert.AreEqual(118, methods.Sum(method => method.GetParameters().Count(parameter =>
             parameter.ParameterType != typeof(CancellationToken))));
-        Assert.AreEqual(117, requests.Count);
-        Assert.AreEqual(95, responses.Count);
+        Assert.AreEqual(118, requests.Count);
+        Assert.AreEqual(96, responses.Count);
     }
 
     [TestMethod]
@@ -170,7 +171,10 @@ public sealed class ApiClientJsonContractTests
                 type.Name == api.GetProperty("name").GetString()
                 && type.Namespace == api.GetProperty("namespace").GetString());
             var methods = api.GetProperty("operations").EnumerateArray().ToArray();
-            Assert.AreEqual(methods.Length, apiType.GetMethods().Length, apiType.Name);
+            if (apiType == typeof(IIdentityApi))
+                Assert.AreEqual(methods.Length + 1, apiType.GetMethods().Length, apiType.Name);
+            else
+                Assert.AreEqual(methods.Length, apiType.GetMethods().Length, apiType.Name);
 
             foreach (var operation in methods)
             {
@@ -204,6 +208,12 @@ public sealed class ApiClientJsonContractTests
         }
 
         Assert.AreEqual(136, expectedCount);
+        var diagnosticMethod = typeof(IIdentityApi).GetMethod(nameof(IIdentityApi.GetHorseIdentityDiagnosticAsync));
+        Assert.IsNotNull(diagnosticMethod);
+        Assert.AreEqual(2, diagnosticMethod.GetParameters().Length);
+        Assert.AreEqual(typeof(GetHorseIdentityDiagnosticRequest), diagnosticMethod.GetParameters()[0].ParameterType);
+        Assert.AreEqual(typeof(CancellationToken), diagnosticMethod.GetParameters()[1].ParameterType);
+        Assert.AreEqual(typeof(ApiResponse<GetHorseIdentityDiagnosticResponse>), diagnosticMethod.ReturnType.GenericTypeArguments[0]);
     }
 
     private static void EnqueueWireTypes(Type type, Queue<Type> queue)

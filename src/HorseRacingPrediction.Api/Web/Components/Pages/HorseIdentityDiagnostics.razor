@@ -1,0 +1,264 @@
+@page "/settings/identity-diagnostics"
+@page "/settings/identity-diagnostics/horses/{HorseId}"
+@attribute [Authorize]
+@using System.Net
+@using System.Globalization
+@using HorseRacingPrediction.Contracts.Identity
+@inject AdminApiClient Api
+@inject NavigationManager Navigation
+
+<RaceOpsPageHeader Section="設定" Title="馬IDの診断"
+                   Description="保存済みの読み取り専用証拠を確認します。診断はIDの変更や移行を行いません。" />
+
+<section class="entity-section identity-diagnostic-section" aria-labelledby="identity-diagnostic-input-heading">
+    <h2 id="identity-diagnostic-input-heading">診断対象</h2>
+    <div class="identity-diagnostic-form">
+        <FluentTextField Label="HorseId" SupportingText="horse-で始まる小文字のGUIDを入力してください。"
+                         @bind-Value="horseIdInput" @bind-Value:after="ClearValidation" />
+        <FluentButton Appearance="@Appearance.Accent" OnClick="DiagnoseAsync" Disabled="@loading">診断</FluentButton>
+    </div>
+    @if (validationMessage is not null)
+    {
+        <p class="field-error" role="alert">@validationMessage</p>
+    }
+</section>
+
+@if (loading && diagnostic is not null)
+{
+    <p class="refresh-status" role="status" aria-live="polite">再取得中です。前回の診断結果を表示しています。</p>
+}
+
+@if (errorMessage is not null)
+{
+    <RaceOpsAlert Title="診断を表示できません" Message="@errorMessage">
+        <FluentButton Appearance="@Appearance.Outline" OnClick="RetryAsync" Disabled="@loading">再取得</FluentButton>
+    </RaceOpsAlert>
+}
+@if (diagnostic is null)
+{
+    if (notFound)
+    {
+        <UiState Kind="error" Title="指定した馬が見つかりません" Message="HorseIdを確認して、もう一度診断してください。" />
+    }
+    else if (loading)
+    {
+        <UiState Kind="loading" Title="診断を読み込んでいます" />
+    }
+    else if (errorMessage is null)
+    {
+        <UiState Title="HorseIdを入力してください" Message="保存済みの読み取り専用証拠を確認できます。" />
+    }
+}
+else
+{
+    <section class="entity-section diagnostic-result" aria-labelledby="diagnostic-result-heading">
+        <div class="diagnostic-result-heading">
+            <div>
+                <p class="eyebrow">診断結果</p>
+                <h2 id="diagnostic-result-heading">@diagnostic.HorseId</h2>
+                <p class="section-description">現在の登録情報と、保存された独立した証拠を比較しています。これは移行やIDの正しさを確定する操作ではありません。</p>
+            </div>
+            <FluentButton Appearance="@Appearance.Outline" OnClick="RetryAsync" Disabled="@loading">再取得</FluentButton>
+        </div>
+
+        <dl class="diagnostic-metadata">
+            <dt>現在の登録名</dt><dd>@Display(diagnostic.CurrentRegisteredName)</dd>
+            <dt>正規化名</dt><dd>@Display(diagnostic.CurrentNormalizedName)</dd>
+            <dt>生年月日</dt><dd>@Display(diagnostic.CurrentBirthDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))</dd>
+            <dt>現在の状態</dt><dd><RaceOpsStatusBadge Label="@diagnostic.CurrentRecordStatus" Tone="@StatusTone(diagnostic.CurrentRecordStatus)" /></dd>
+            <dt>登録証拠</dt><dd><RaceOpsStatusBadge Label="@diagnostic.RegistrationStatus" Tone="@StatusTone(diagnostic.RegistrationStatus)" /></dd>
+            <dt>初回登録名</dt><dd>@DisplayEvidence(diagnostic.InitialRegisteredName)</dd>
+            <dt>初回登録時の正規化名</dt><dd>@DisplayEvidence(diagnostic.InitialNormalizedName)</dd>
+            <dt>初回登録時の生年月日</dt><dd>@Display(diagnostic.InitialBirthDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))</dd>
+            <dt>イベント保存先の読取開始 (UTC)</dt><dd>@FormatUtc(diagnostic.EventStoreObservedFromUtc)</dd>
+            <dt>イベント保存先の読取終了 (UTC)</dt><dd>@FormatUtc(diagnostic.EventStoreObservedToUtc)</dd>
+            <dt>収集保存先の読取開始 (UTC)</dt><dd>@FormatUtc(diagnostic.CollectionStoreObservedFromUtc)</dd>
+            <dt>収集保存先の読取終了 (UTC)</dt><dd>@FormatUtc(diagnostic.CollectionStoreObservedToUtc)</dd>
+            <dt>適用範囲</dt><dd>@diagnostic.Coverage</dd>
+        </dl>
+        <p class="diagnostic-consistency-note">保存先ごとの読取時点は異なります。この結果は同時点のスナップショットではありません。</p>
+
+        <section class="diagnostic-subsection" aria-labelledby="diagnostic-sources-heading">
+            <h3 id="diagnostic-sources-heading">保存された証拠</h3>
+            @if (diagnostic.Sources.Count == 0)
+            {
+                <UiState Title="保存された証拠はありません" />
+            }
+            else
+            {
+                <FluentDataGrid Items="@SourceRows.AsQueryable()" TGridItem="SourceRow" aria-label="保存された馬ID証拠">
+                    <TemplateColumn Title="取得元">@context.Evidence.Origin</TemplateColumn>
+                    <TemplateColumn Title="状態"><RaceOpsStatusBadge Label="@context.Evidence.Status" Tone="@StatusTone(context.Evidence.Status)" /></TemplateColumn>
+                    <TemplateColumn Title="source URLの状態"><RaceOpsStatusBadge Label="@context.Evidence.SourceUrlStatus" Tone="@StatusTone(context.Evidence.SourceUrlStatus)" /></TemplateColumn>
+                    <TemplateColumn Title="source identity">@Display(context.Evidence.NormalizedSourceIdentity ?? context.Evidence.SourceIdentity)</TemplateColumn>
+                    <TemplateColumn Title="source URL由来ID">@Display(context.Evidence.SourceUrlHorseIdentity)</TemplateColumn>
+                </FluentDataGrid>
+                <div class="diagnostic-cards" aria-label="保存された馬ID証拠">
+                    @foreach (var source in SourceRows)
+                    {
+                        <article class="diagnostic-card">
+                            <dl>
+                                <dt>取得元</dt><dd>@source.Evidence.Origin</dd>
+                                <dt>状態</dt><dd><RaceOpsStatusBadge Label="@source.Evidence.Status" Tone="@StatusTone(source.Evidence.Status)" /></dd>
+                                <dt>source URLの状態</dt><dd><RaceOpsStatusBadge Label="@source.Evidence.SourceUrlStatus" Tone="@StatusTone(source.Evidence.SourceUrlStatus)" /></dd>
+                                <dt>source identity</dt><dd>@Display(source.Evidence.NormalizedSourceIdentity ?? source.Evidence.SourceIdentity)</dd>
+                                <dt>source URL由来ID</dt><dd>@Display(source.Evidence.SourceUrlHorseIdentity)</dd>
+                            </dl>
+                        </article>
+                    }
+                </div>
+            }
+            @if (diagnostic.SourcesTruncated)
+            {
+                <RaceOpsAlert Tone="warning" Title="証拠は上限で切り詰められています" Message="表示できる範囲だけを確認しています。" />
+            }
+        </section>
+
+        <section class="diagnostic-subsection" aria-labelledby="diagnostic-comparisons-heading">
+            <h3 id="diagnostic-comparisons-heading">比較結果</h3>
+            @if (diagnostic.Comparisons.Count == 0)
+            {
+                <UiState Title="比較できる証拠がありません" />
+            }
+            else
+            {
+                <FluentDataGrid Items="@ComparisonRows.AsQueryable()" TGridItem="ComparisonRow" aria-label="馬ID比較結果">
+                    <TemplateColumn Title="規則">@context.Comparison.Rule</TemplateColumn>
+                    <TemplateColumn Title="入力項目">@context.Comparison.InputField</TemplateColumn>
+                    <TemplateColumn Title="証拠状態"><RaceOpsStatusBadge Label="@context.Comparison.EvidenceStatus" Tone="@StatusTone(context.Comparison.EvidenceStatus)" /></TemplateColumn>
+                    <TemplateColumn Title="候補ID">@Display(context.Comparison.CandidateHorseId)</TemplateColumn>
+                    <TemplateColumn Title="一致判定"><RaceOpsStatusBadge Label="@context.Comparison.MatchStatus" Tone="@StatusTone(context.Comparison.MatchStatus)" /></TemplateColumn>
+                </FluentDataGrid>
+                <div class="diagnostic-cards" aria-label="馬ID比較結果">
+                    @foreach (var comparison in ComparisonRows)
+                    {
+                        <article class="diagnostic-card">
+                            <dl>
+                                <dt>規則</dt><dd>@comparison.Comparison.Rule</dd>
+                                <dt>入力項目</dt><dd>@comparison.Comparison.InputField</dd>
+                                <dt>証拠状態</dt><dd><RaceOpsStatusBadge Label="@comparison.Comparison.EvidenceStatus" Tone="@StatusTone(comparison.Comparison.EvidenceStatus)" /></dd>
+                                <dt>候補ID</dt><dd>@Display(comparison.Comparison.CandidateHorseId)</dd>
+                                <dt>一致判定</dt><dd><RaceOpsStatusBadge Label="@comparison.Comparison.MatchStatus" Tone="@StatusTone(comparison.Comparison.MatchStatus)" /></dd>
+                            </dl>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+
+        @if (diagnostic.EvidenceBlockers.Count > 0)
+        {
+            <RaceOpsAlert Tone="warning" Title="確認を妨げる理由" Messages="@diagnostic.EvidenceBlockers" />
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public string? HorseId { get; set; }
+
+    private string horseIdInput = string.Empty;
+    private string? validationMessage;
+    private string? errorMessage;
+    private bool notFound;
+    private bool loading;
+    private HorseIdentityDiagnosticDto? diagnostic;
+
+    private IReadOnlyList<SourceRow> SourceRows => diagnostic?.Sources
+        .Select((evidence, index) => new SourceRow(index, evidence)).ToArray() ?? [];
+
+    private IReadOnlyList<ComparisonRow> ComparisonRows => diagnostic?.Comparisons
+        .Select((comparison, index) => new ComparisonRow(index, comparison)).ToArray() ?? [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (HorseId is null)
+            return;
+
+        horseIdInput = HorseId;
+        await LoadDiagnosticAsync(HorseId);
+    }
+
+    private async Task DiagnoseAsync()
+    {
+        validationMessage = null;
+        errorMessage = null;
+        notFound = false;
+        var candidate = horseIdInput.Trim();
+        if (!IsCanonicalHorseId(candidate))
+        {
+            validationMessage = "HorseIdはhorse-で始まる小文字のGUIDで指定してください。";
+            return;
+        }
+
+        var route = $"settings/identity-diagnostics/horses/{candidate}";
+        if (!string.Equals(Navigation.ToBaseRelativePath(Navigation.Uri).TrimEnd('/'), route, StringComparison.Ordinal))
+        {
+            Navigation.NavigateTo($"/settings/identity-diagnostics/horses/{candidate}");
+            return;
+        }
+
+        await LoadDiagnosticAsync(candidate);
+    }
+
+    private Task RetryAsync() => LoadDiagnosticAsync(horseIdInput);
+
+    private async Task LoadDiagnosticAsync(string horseId)
+    {
+        loading = true;
+        errorMessage = null;
+        notFound = false;
+        try
+        {
+            var result = await Api.GetHorseIdentityDiagnosticAsync(horseId);
+            diagnostic = result;
+            notFound = result is null;
+        }
+        catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.TooManyRequests)
+        {
+            errorMessage = "診断が混み合っています。入力内容を保持したまま、時間をおいて再取得してください。";
+        }
+        catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.BadRequest)
+        {
+            validationMessage = "HorseIdを確認して、もう一度診断してください。";
+        }
+        catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.ServiceUnavailable)
+        {
+            errorMessage = "診断用の保存先を利用できません。入力内容を保持したまま再取得してください。";
+        }
+        catch (HttpRequestException)
+        {
+            errorMessage = "診断を取得できませんでした。入力内容を保持したまま再取得してください。";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void ClearValidation() => validationMessage = null;
+
+    private static bool IsCanonicalHorseId(string? value)
+    {
+        if (value is null || value.Length != 42 || !value.StartsWith("horse-", StringComparison.Ordinal))
+            return false;
+        return Guid.TryParseExact(value.AsSpan(6), "D", out var id)
+            && string.Equals(id.ToString("D"), value[6..], StringComparison.Ordinal);
+    }
+
+    private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
+
+    private static string DisplayEvidence(string? value) => value is null ? "（欠落）" : value.Length == 0 ? "（空文字）" : value;
+
+    private static string FormatUtc(DateTimeOffset value)
+        => value.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);
+
+    private static string StatusTone(string value) => value switch
+    {
+        "Supported" or "Matched" or "Present" => "success",
+        "Conflicting" or "Invalid" or "Unsupported" or "Truncated" => "warning",
+        _ => "neutral"
+    };
+
+    private sealed record SourceRow(int Index, HorseSourceEvidenceDto Evidence);
+    private sealed record ComparisonRow(int Index, HorseIdentityComparisonDto Comparison);
+}
