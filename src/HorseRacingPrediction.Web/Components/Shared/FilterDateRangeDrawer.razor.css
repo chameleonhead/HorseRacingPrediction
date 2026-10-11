@@ -1,0 +1,23 @@
+.date-range-drawer-fields {
+    display: grid;
+    gap: 20px;
+    padding: 8px 0;
+}
+
+.date-range-drawer-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px;
+    border-top: 1px solid var(--colorNeutralStroke1);
+}
+
+.date-range-drawer-fields label {
+    display: grid;
+    gap: 8px;
+    font-weight: 600;
+}
+
+.date-range-drawer-fields fluent-datepicker {
+    width: 100%;
+}

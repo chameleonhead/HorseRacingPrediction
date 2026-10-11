@@ -234,6 +234,7 @@ public sealed class RacePagesComponentTests
     {
         using var handler = new RaceApiHandler();
         using var context = CreateContext(handler);
+        var drawerHost = context.Render<FluentDialogProvider>();
         var cut = context.Render<Races>();
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "テストレース"));
 
@@ -253,7 +254,7 @@ public sealed class RacePagesComponentTests
         Assert.IsNull(QueryValue(context, "to"));
         Assert.AreEqual("今週", SelectedPeriodTab(cut));
         Assert.AreEqual(0, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
-        Assert.AreEqual(0, context.JSInterop.Invocations.Count(invocation => invocation.Identifier == "Microsoft.FluentUI.AspNetCore.Components.Dialog.Show"));
+        Assert.AreEqual(0, drawerHost.FindAll("fluent-drawer").Count);
 
         await SelectPeriodTabAsync(cut, "過去一ヶ月");
         Assert.AreEqual("2026-09-07", handler.LastRequestDateFrom);
@@ -305,6 +306,7 @@ public sealed class RacePagesComponentTests
     {
         using var handler = new RaceApiHandler();
         using var context = CreateContext(handler);
+        var drawerHost = context.Render<FluentDialogProvider>();
         context.Services.GetRequiredService<NavigationManager>()
             .NavigateTo("/races?period=week&from=2026-10-01&to=2026-10-07");
         var cut = context.Render<Races>();
@@ -314,14 +316,16 @@ public sealed class RacePagesComponentTests
             .Single(button => button.GetAttribute("aria-label")!.StartsWith("開催日:", StringComparison.Ordinal));
         await dateFilterTrigger.ClickAsync();
         var dateFilterOptions = cut.FindComponents<FluentListbox<FilterSelectionOption, string>>().Last();
-        await cut.InvokeAsync(() => dateFilterOptions.Instance.ValueChanged.InvokeAsync("custom"));
-        var startDate = cut.FindComponents<FluentDatePicker<DateOnly?>>().First();
-        await cut.InvokeAsync(() => startDate.Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 2)));
-        Assert.AreEqual(new DateOnly(2026, 10, 2), cut.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.Value);
-        var endDate = cut.FindComponents<FluentDatePicker<DateOnly?>>().Last();
-        await cut.InvokeAsync(() => endDate.Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 7)));
-        var applyDateRange = cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("適用"));
-        await cut.InvokeAsync(() => applyDateRange.Instance.OnClick.InvokeAsync());
+        var openingDrawer = cut.InvokeAsync(() => dateFilterOptions.Instance.ValueChanged.InvokeAsync("custom"));
+        drawerHost.WaitForAssertion(() => Assert.AreEqual(2, drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().Count));
+        var startDate = drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().First();
+        await drawerHost.InvokeAsync(() => startDate.Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 2)));
+        Assert.AreEqual(new DateOnly(2026, 10, 2), drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.Value);
+        var endDate = drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().Last();
+        await drawerHost.InvokeAsync(() => endDate.Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 7)));
+        var applyDateRange = drawerHost.FindComponents<FluentButton>().Single(button => button.Markup.Contains("適用"));
+        await drawerHost.InvokeAsync(() => applyDateRange.Instance.OnClick.InvokeAsync());
+        await openingDrawer;
 
         Assert.AreEqual(new DateOnly(2026, 10, 2), cut.FindComponent<RaceSearchForm>().Instance.From);
         Assert.AreEqual("すべての期間", SelectedPeriodTab(cut));
@@ -341,6 +345,7 @@ public sealed class RacePagesComponentTests
     {
         using var handler = new RaceApiHandler();
         using var context = CreateContext(handler);
+        var drawerHost = context.Render<FluentDialogProvider>();
         var cut = context.Render<Races>();
         cut.WaitForAssertion(() => Assert.AreEqual(1, handler.SearchCount));
 
@@ -348,12 +353,14 @@ public sealed class RacePagesComponentTests
             .Single(button => button.GetAttribute("aria-label")!.StartsWith("開催日:", StringComparison.Ordinal));
         await trigger.ClickAsync();
         var listbox = cut.FindComponents<FluentListbox<FilterSelectionOption, string>>().Last();
-        await cut.InvokeAsync(() => listbox.Instance.ValueChanged.InvokeAsync("custom"));
-        await cut.InvokeAsync(() => cut.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 1)));
-        await cut.InvokeAsync(() => cut.FindComponents<FluentDatePicker<DateOnly?>>().Last().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 10)));
-        var apply = cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("適用"));
+        var openingDrawer = cut.InvokeAsync(() => listbox.Instance.ValueChanged.InvokeAsync("custom"));
+        drawerHost.WaitForAssertion(() => Assert.AreEqual(2, drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().Count));
+        await drawerHost.InvokeAsync(() => drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 1)));
+        await drawerHost.InvokeAsync(() => drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().Last().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 10)));
+        var apply = drawerHost.FindComponents<FluentButton>().Single(button => button.Markup.Contains("適用"));
 
-        await cut.InvokeAsync(() => apply.Instance.OnClick.InvokeAsync());
+        await drawerHost.InvokeAsync(() => apply.Instance.OnClick.InvokeAsync());
+        await openingDrawer;
 
         cut.WaitForAssertion(() =>
         {

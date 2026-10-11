@@ -10,55 +10,6 @@
                      SelectionResetVersion="@SelectionResetVersion" />
 </div>
 
-<FluentDialog @ref="Drawer"
-              Modal="true"
-              Alignment="DialogAlignment.End"
-              AriaLabelledby="@DrawerTitleId"
-              Class="date-range-drawer"
-              Style="width:min(320px,100vw);">
-    @if (IsDrawerOpen)
-    {
-        <FluentDialogBody FixedHeaderFooter="true">
-            <TitleTemplate>
-                <header class="date-range-drawer-header">
-                    <h2 id="@DrawerTitleId">@($"{Label}の期間を指定")</h2>
-                </header>
-            </TitleTemplate>
-            <ChildContent>
-                <div class="date-range-drawer-fields">
-                    <label>
-                        開始日
-                        <FluentDatePicker TValue="DateOnly?"
-                                          Autofocus="true"
-                                          AriaLabel="開始日"
-                                          Placeholder="開始日"
-                                          Value="@DraftFrom"
-                                          ValueChanged="OnDraftFromChanged" />
-                    </label>
-                    <label>
-                        終了日
-                        <FluentDatePicker TValue="DateOnly?"
-                                          AriaLabel="終了日"
-                                          Placeholder="終了日"
-                                          Value="@DraftTo"
-                                          ValueChanged="OnDraftToChanged" />
-                    </label>
-                </div>
-                @if (!string.IsNullOrWhiteSpace(ValidationMessage))
-                {
-                    <FluentMessageBar Intent="@MessageBarIntent.Error">@ValidationMessage</FluentMessageBar>
-                }
-            </ChildContent>
-            <ActionTemplate>
-                <div class="date-range-drawer-footer">
-                    <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ApplyCustomRangeAsync" Disabled="@(!CanApplyCustomRange)">適用</FluentButton>
-                    <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="CancelDrawer">キャンセル</FluentButton>
-                </div>
-            </ActionTemplate>
-        </FluentDialogBody>
-    }
-</FluentDialog>
-
 @code {
     private const string AllOption = "all";
     private const string TodayOption = "today";
@@ -87,32 +38,14 @@
     [Parameter] public EventCallback<bool> EnabledChanged { get; set; }
     [Parameter] public EventCallback OnDateFilterChanged { get; set; }
 
+    [Inject] private IDialogService DialogService { get; set; } = null!;
     [Inject] private TimeProvider TimeProvider { get; set; } = null!;
 
-    private FluentDialog? Drawer { get; set; }
-    private readonly string DrawerTitleId = $"date-range-title-{Guid.NewGuid():N}";
-    private DateOnly? DraftFrom { get; set; }
-    private DateOnly? DraftTo { get; set; }
-    private bool IsDrawerOpen { get; set; }
-    private bool ShouldShowDrawer { get; set; }
-    private string? ValidationMessage { get; set; }
     private int SelectionResetVersion { get; set; }
     private DateOnly Today => TimeProvider.TodayInJapan();
-    private bool CanApplyCustomRange
-        => (DraftFrom is not null || DraftTo is not null)
-           && (DraftFrom is null || DraftTo is null || DraftFrom <= DraftTo);
 
     private DateOnly? DisplayFrom => From;
     private DateOnly? DisplayTo => To;
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (ShouldShowDrawer && Drawer is not null)
-        {
-            ShouldShowDrawer = false;
-            await Drawer.ShowAsync();
-        }
-    }
 
     private string SelectedOption
     {
@@ -181,11 +114,7 @@
 
         if (value == CustomOption)
         {
-            DraftFrom = From;
-            DraftTo = To;
-            IsDrawerOpen = true;
-            ShouldShowDrawer = true;
-            ValidationMessage = null;
+            await OpenCustomRangeDrawerAsync();
             return;
         }
 
@@ -193,6 +122,29 @@
         await FromChanged.InvokeAsync(from);
         await ToChanged.InvokeAsync(to);
         await EnabledChanged.InvokeAsync(value != AllOption);
+        await OnDateFilterChanged.InvokeAsync();
+    }
+
+    private async Task OpenCustomRangeDrawerAsync()
+    {
+        var result = await DialogService.ShowDrawerAsync<FilterDateRangeDrawer>(options =>
+        {
+            options.Size = DialogSize.Small;
+            options.Parameters.Add(nameof(FilterDateRangeDrawer.Label), Label);
+            options.Parameters.Add(nameof(FilterDateRangeDrawer.From), From);
+            options.Parameters.Add(nameof(FilterDateRangeDrawer.To), To);
+        });
+
+        SelectionResetVersion++;
+
+        if (result.Cancelled || result.Value is not DateRangeSelection selection)
+        {
+            return;
+        }
+
+        await FromChanged.InvokeAsync(selection.From);
+        await ToChanged.InvokeAsync(selection.To);
+        await EnabledChanged.InvokeAsync(true);
         await OnDateFilterChanged.InvokeAsync();
     }
 
@@ -206,53 +158,4 @@
         _ => (From, To)
     };
 
-    private async Task ApplyCustomRangeAsync()
-    {
-        if (DraftFrom is not null && DraftTo is not null && DraftFrom > DraftTo)
-        {
-            ValidationMessage = "終了日は開始日以降の日付を指定してください。";
-            return;
-        }
-
-        await FromChanged.InvokeAsync(DraftFrom);
-        await ToChanged.InvokeAsync(DraftTo);
-        await EnabledChanged.InvokeAsync(true);
-        IsDrawerOpen = false;
-        ValidationMessage = null;
-        SelectionResetVersion++;
-        await Drawer!.HideAsync();
-        await OnDateFilterChanged.InvokeAsync();
-    }
-
-    private async Task CancelDrawer()
-    {
-        DraftFrom = DisplayFrom;
-        DraftTo = DisplayTo;
-        IsDrawerOpen = false;
-        ValidationMessage = null;
-        SelectionResetVersion++;
-        if (Drawer is not null)
-        {
-            await Drawer.HideAsync();
-        }
-    }
-
-    private void OnDraftFromChanged(DateOnly? value)
-    {
-        DraftFrom = value;
-        ValidateDraftRange();
-    }
-
-    private void OnDraftToChanged(DateOnly? value)
-    {
-        DraftTo = value;
-        ValidateDraftRange();
-    }
-
-    private void ValidateDraftRange()
-    {
-        ValidationMessage = DraftFrom is not null && DraftTo is not null && DraftFrom > DraftTo
-            ? "終了日は開始日以降の日付を指定してください。"
-            : null;
-    }
 }

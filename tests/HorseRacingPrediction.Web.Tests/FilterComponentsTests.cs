@@ -137,6 +137,7 @@ public sealed class FilterComponentsTests
     public async Task FilterDateRangePicker_CustomRangeUsesDrawerAndFormatsBadge()
     {
         using var context = CreateContext();
+        var drawerHost = context.Render<FluentDialogProvider>();
         DateOnly? from = null;
         DateOnly? to = null;
         var enabled = false;
@@ -149,32 +150,34 @@ public sealed class FilterComponentsTests
             .Add(x => x.EnabledChanged, (bool value) => enabled = value));
 
         await cut.Find("fluent-button[aria-haspopup='listbox']").ClickAsync();
-        await cut.Find("fluent-option[value='custom']").ClickAsync();
+        var openingDrawer = cut.Find("fluent-option[value='custom']").ClickAsync();
 
-        var dialog = cut.FindComponent<FluentDialog>().Instance;
-        Assert.AreEqual(DialogAlignment.End, dialog.Alignment);
-        var datePickers = cut.FindComponents<FluentDatePicker<DateOnly?>>();
+        drawerHost.WaitForAssertion(() => Assert.IsNotNull(drawerHost.Find("fluent-drawer[position='end'][size='small']")));
+        Assert.IsNotNull(drawerHost.Find("fluent-drawer-body"));
+        Assert.IsNotNull(drawerHost.Find("fluent-drawer-body [slot='footer']"));
+        var datePickers = drawerHost.FindComponents<FluentDatePicker<DateOnly?>>();
         Assert.AreEqual(2, datePickers.Count);
         Assert.AreEqual("開始日", datePickers[0].Instance.AriaLabel);
         Assert.IsTrue(datePickers[0].Instance.Autofocus);
         Assert.AreEqual("終了日", datePickers[1].Instance.AriaLabel);
         CollectionAssert.AreEqual(
             new[] { "適用", "キャンセル" },
-            cut.FindComponents<FluentButton>()
+            drawerHost.FindComponents<FluentButton>()
                 .Where(button => button.Markup.Contains("適用") || button.Markup.Contains("キャンセル"))
                 .Select(button => button.Markup.Contains("適用") ? "適用" : "キャンセル")
                 .ToArray());
 
-        await cut.InvokeAsync(() => datePickers[0].Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 11)));
-        await cut.InvokeAsync(() => cut.FindComponents<FluentDatePicker<DateOnly?>>().Last().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 10)));
-        StringAssert.Contains(cut.Markup, "終了日は開始日以降の日付を指定してください。");
-        Assert.IsTrue(cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("適用")).Instance.Disabled);
+        await drawerHost.InvokeAsync(() => datePickers[0].Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 11)));
+        await drawerHost.InvokeAsync(() => drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().Last().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 10)));
+        StringAssert.Contains(drawerHost.Markup, "終了日は開始日以降の日付を指定してください。");
+        Assert.IsTrue(drawerHost.FindComponents<FluentButton>().Single(button => button.Markup.Contains("適用")).Instance.Disabled);
 
-        await cut.InvokeAsync(() => cut.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 1)));
-        var apply = cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("適用"));
-        await cut.InvokeAsync(() => apply.Instance.OnClick.InvokeAsync());
+        await drawerHost.InvokeAsync(() => drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 1)));
+        var apply = drawerHost.FindComponents<FluentButton>().Single(button => button.Markup.Contains("適用"));
+        await drawerHost.InvokeAsync(() => apply.Instance.OnClick.InvokeAsync());
+        await openingDrawer;
 
-        Assert.AreEqual(0, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
+        Assert.AreEqual(0, drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().Count);
 
         Assert.AreEqual(new DateOnly(2026, 10, 1), from);
         Assert.AreEqual(new DateOnly(2026, 10, 10), to);
@@ -197,6 +200,7 @@ public sealed class FilterComponentsTests
     public async Task FilterDateRangePicker_CancelRestoresOriginalPresetAndDates()
     {
         using var context = CreateContext();
+        var drawerHost = context.Render<FluentDialogProvider>();
         var from = new DateOnly(2026, 10, 1);
         var to = new DateOnly(2026, 10, 7);
         var fromChangedCount = 0;
@@ -212,11 +216,13 @@ public sealed class FilterComponentsTests
 
         var originalLabel = cut.Find("fluent-button[aria-haspopup='listbox']").TextContent;
         await cut.Find("fluent-button[aria-haspopup='listbox']").ClickAsync();
-        await cut.Find("fluent-option[value='custom']").ClickAsync();
-        await cut.InvokeAsync(() => cut.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 3)));
+        var openingDrawer = cut.Find("fluent-option[value='custom']").ClickAsync();
+        drawerHost.WaitForAssertion(() => Assert.AreEqual(2, drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().Count));
+        await drawerHost.InvokeAsync(() => drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 3)));
 
-        var cancel = cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("キャンセル"));
-        await cut.InvokeAsync(() => cancel.Instance.OnClick.InvokeAsync());
+        var cancel = drawerHost.FindComponents<FluentButton>().Single(button => button.Markup.Contains("キャンセル"));
+        await drawerHost.InvokeAsync(() => cancel.Instance.OnClick.InvokeAsync());
+        await openingDrawer;
 
         Assert.AreEqual(new DateOnly(2026, 10, 1), from);
         Assert.AreEqual(new DateOnly(2026, 10, 7), to);
@@ -224,7 +230,7 @@ public sealed class FilterComponentsTests
         Assert.AreEqual(0, toChangedCount);
         Assert.AreEqual(0, enabledChangedCount);
         Assert.AreEqual(originalLabel, cut.Find("fluent-button[aria-haspopup='listbox']").TextContent);
-        Assert.AreEqual(0, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
+        Assert.AreEqual(0, drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().Count);
 
         await cut.Find("fluent-button[aria-haspopup='listbox']").ClickAsync();
         var listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
@@ -235,6 +241,7 @@ public sealed class FilterComponentsTests
     public async Task FilterDateRangePicker_CustomOptionCanBeSelectedAgainAfterCancel()
     {
         using var context = CreateContext();
+        var drawerHost = context.Render<FluentDialogProvider>();
         DateOnly? from = null;
         DateOnly? to = null;
         var cut = context.Render<FilterDateRangePicker>(parameters => parameters
@@ -253,24 +260,28 @@ public sealed class FilterComponentsTests
             .Add(x => x.ToChanged, (DateOnly? value) => to = value));
         trigger = cut.Find("fluent-button[aria-haspopup='listbox']");
         await trigger.ClickAsync();
-        await cut.Find("fluent-option[value='custom']").ClickAsync();
-        Assert.AreEqual(2, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
-        Assert.AreEqual(1, context.JSInterop.Invocations.Count(invocation => invocation.Identifier == "Microsoft.FluentUI.Blazor.Components.Dialog.Show"));
-        var cancel = cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("キャンセル"));
-        await cut.InvokeAsync(() => cancel.Instance.OnClick.InvokeAsync());
-        Assert.AreEqual(0, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
+        var openingDrawer = OpenCustomDrawerAsync(cut);
+        drawerHost.WaitForAssertion(() => Assert.AreEqual(2, drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().Count));
+        Assert.IsNotNull(drawerHost.Find("fluent-drawer[position='end']"));
+        var cancel = drawerHost.FindComponents<FluentButton>().Single(button => button.Markup.Contains("キャンセル"));
+        await drawerHost.InvokeAsync(() => cancel.Instance.OnClick.InvokeAsync());
+        await openingDrawer;
+        Assert.AreEqual(0, drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().Count);
 
         trigger = cut.Find("fluent-button[aria-haspopup='listbox']");
         await trigger.ClickAsync();
-        await cut.Find("fluent-option[value='custom']").ClickAsync();
-        Assert.AreEqual(2, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
-        Assert.AreEqual(2, context.JSInterop.Invocations.Count(invocation => invocation.Identifier == "Microsoft.FluentUI.Blazor.Components.Dialog.Show"));
+        openingDrawer = OpenCustomDrawerAsync(cut);
+        drawerHost.WaitForAssertion(() => Assert.AreEqual(2, drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().Count));
+        var secondCancel = drawerHost.FindComponents<FluentButton>().Single(button => button.Markup.Contains("キャンセル"));
+        await drawerHost.InvokeAsync(() => secondCancel.Instance.OnClick.InvokeAsync());
+        await openingDrawer;
     }
 
     [TestMethod]
     public async Task FilterDateRangePicker_CancelKeepsOriginalPresetSelection()
     {
         using var context = CreateContext();
+        var drawerHost = context.Render<FluentDialogProvider>();
         DateOnly? from = new(2026, 10, 7);
         DateOnly? to = new(2026, 10, 7);
         var cut = context.Render<FilterDateRangePicker>(parameters => parameters
@@ -280,9 +291,11 @@ public sealed class FilterComponentsTests
             .Add(x => x.ToChanged, (DateOnly? value) => to = value));
 
         await cut.Find("fluent-button[aria-haspopup='listbox']").ClickAsync();
-        await cut.Find("fluent-option[value='custom']").ClickAsync();
-        await cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("キャンセル"))
-            .InvokeAsync(() => cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("キャンセル")).Instance.OnClick.InvokeAsync());
+        var openingDrawer = OpenCustomDrawerAsync(cut);
+        drawerHost.WaitForAssertion(() => Assert.AreEqual(2, drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().Count));
+        var cancel = drawerHost.FindComponents<FluentButton>().Single(button => button.Markup.Contains("キャンセル"));
+        await drawerHost.InvokeAsync(() => cancel.Instance.OnClick.InvokeAsync());
+        await openingDrawer;
 
         await cut.Find("fluent-button[aria-haspopup='listbox']").ClickAsync();
         var listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
@@ -295,6 +308,7 @@ public sealed class FilterComponentsTests
     public async Task FilterDateRangePicker_CustomRangeAllowsOneSidedRange()
     {
         using var context = CreateContext();
+        var drawerHost = context.Render<FluentDialogProvider>();
         DateOnly? from = null;
         DateOnly? to = null;
         var cut = context.Render<FilterDateRangePicker>(parameters => parameters
@@ -304,9 +318,11 @@ public sealed class FilterComponentsTests
             .Add(x => x.ToChanged, (DateOnly? value) => to = value));
 
         await cut.Find("fluent-button[aria-haspopup='listbox']").ClickAsync();
-        await cut.Find("fluent-option[value='custom']").ClickAsync();
-        await cut.InvokeAsync(() => cut.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 1)));
-        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("適用")).Instance.OnClick.InvokeAsync());
+        var openingDrawer = OpenCustomDrawerAsync(cut);
+        drawerHost.WaitForAssertion(() => Assert.AreEqual(2, drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().Count));
+        await drawerHost.InvokeAsync(() => drawerHost.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 1)));
+        await drawerHost.InvokeAsync(() => drawerHost.FindComponents<FluentButton>().Single(button => button.Markup.Contains("適用")).Instance.OnClick.InvokeAsync());
+        await openingDrawer;
 
         Assert.AreEqual(new DateOnly(2026, 10, 1), from);
         Assert.IsNull(to);
@@ -339,6 +355,12 @@ public sealed class FilterComponentsTests
         context.Services.AddFluentUIComponents();
         context.Services.AddSingleton<TimeProvider>(new FrozenTimeProvider(new DateTimeOffset(2026, 10, 7, 2, 0, 0, TimeSpan.Zero)));
         return context;
+    }
+
+    private static Task OpenCustomDrawerAsync(IRenderedComponent<FilterDateRangePicker> cut)
+    {
+        var listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
+        return cut.InvokeAsync(() => listbox.Instance.ValueChanged.InvokeAsync("custom"));
     }
 
     private sealed class FrozenTimeProvider(DateTimeOffset utcNow) : TimeProvider

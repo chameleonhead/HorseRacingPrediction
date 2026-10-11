@@ -1,0 +1,85 @@
+@inherits FluentDialogInstance
+
+<FluentDialogBody FixedHeaderFooter="true">
+    <TitleTemplate>
+        @($"{Label}の期間を指定")
+    </TitleTemplate>
+    <ChildContent>
+        <div class="date-range-drawer-fields">
+            <label>
+                開始日
+                <FluentDatePicker TValue="DateOnly?"
+                                  Autofocus="true"
+                                  AriaLabel="開始日"
+                                  Placeholder="開始日"
+                                  Value="@DraftFrom"
+                                  ValueChanged="OnDraftFromChanged" />
+            </label>
+            <label>
+                終了日
+                <FluentDatePicker TValue="DateOnly?"
+                                  AriaLabel="終了日"
+                                  Placeholder="終了日"
+                                  Value="@DraftTo"
+                                  ValueChanged="OnDraftToChanged" />
+            </label>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(ValidationMessage))
+        {
+            <FluentMessageBar Intent="@MessageBarIntent.Error">@ValidationMessage</FluentMessageBar>
+        }
+    </ChildContent>
+    <ActionTemplate>
+        <div class="date-range-drawer-footer">
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ApplyAsync" Disabled="@(!CanApply)">適用</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="CancelAsync">キャンセル</FluentButton>
+        </div>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter] public string Label { get; set; } = "開催日";
+    [Parameter] public DateOnly? From { get; set; }
+    [Parameter] public DateOnly? To { get; set; }
+
+    private DateOnly? DraftFrom { get; set; }
+    private DateOnly? DraftTo { get; set; }
+    private string? ValidationMessage { get; set; }
+    private bool CanApply
+        => (DraftFrom is not null || DraftTo is not null)
+           && (DraftFrom is null || DraftTo is null || DraftFrom <= DraftTo);
+
+    protected override void OnParametersSet()
+    {
+        DraftFrom = From;
+        DraftTo = To;
+    }
+
+    private void OnDraftFromChanged(DateOnly? value)
+    {
+        DraftFrom = value;
+        ValidateDraftRange();
+    }
+
+    private void OnDraftToChanged(DateOnly? value)
+    {
+        DraftTo = value;
+        ValidateDraftRange();
+    }
+
+    private void ValidateDraftRange()
+    {
+        ValidationMessage = DraftFrom is not null && DraftTo is not null && DraftFrom > DraftTo
+            ? "終了日は開始日以降の日付を指定してください。"
+            : null;
+    }
+
+    private Task ApplyAsync()
+        => DialogInstance.CloseAsync(DialogResult.Ok(new DateRangeSelection(DraftFrom, DraftTo)));
+
+    private Task CancelAsync()
+        => DialogInstance.CancelAsync();
+
+    protected override Task OnActionClickedAsync(bool primary)
+        => primary ? ApplyAsync() : CancelAsync();
+}
