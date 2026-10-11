@@ -146,6 +146,7 @@ builder.Services.AddSingleton<CollectionDispatchTelemetry>();
 builder.Services.AddSingleton<ICollectionDispatchTelemetry>(services =>
     services.GetRequiredService<CollectionDispatchTelemetry>());
 builder.Services.AddSingleton<CollectionPlatformStore>();
+builder.Services.AddSingleton<HorseIdentityDiagnosticService>();
 builder.Services.Configure<CollectionMonitoringOptions>(
     builder.Configuration.GetSection(CollectionMonitoringOptions.SectionName));
 builder.Services.AddSingleton<CollectionMonitoringService>();

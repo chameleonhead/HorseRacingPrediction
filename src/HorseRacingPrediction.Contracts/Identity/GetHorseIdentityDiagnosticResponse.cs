@@ -1,0 +1,3 @@
+namespace HorseRacingPrediction.Contracts.Identity;
+
+public sealed record GetHorseIdentityDiagnosticResponse(HorseIdentityDiagnosticDto Diagnostic);

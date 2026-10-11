@@ -71,6 +71,8 @@ public static class EndpointExtensions
     {
         global::HorseRacingPrediction.Api.Endpoints.Health.GetHealthEndpoint.Map(app);
         var readGroup = app.MapGroup("/api");
+        var adminReadGroup = app.MapGroup("/api")
+            .AddEndpointFilter<global::HorseRacingPrediction.Api.Security.ApiKeyEndpointFilter>();
         var writeGroup = app.MapGroup("/api")
             .AddEndpointFilter<global::HorseRacingPrediction.Api.Security.ApiKeyEndpointFilter>()
             .AddEndpointFilter<global::HorseRacingPrediction.Api.Security.RaceWriteEndpointFilter>()
@@ -150,6 +152,7 @@ public static class EndpointExtensions
         global::HorseRacingPrediction.Api.Endpoints.Owners.ExecuteOwnerIdentityRecoveryEndpoint.Map(writeGroup);
         global::HorseRacingPrediction.Api.Endpoints.Identity.ResolveHorseIdentityEndpoint.Map(writeGroup);
         global::HorseRacingPrediction.Api.Endpoints.Identity.ResolveRaceIdentityEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Identity.GetHorseIdentityDiagnosticEndpoint.Map(adminReadGroup);
         global::HorseRacingPrediction.Api.Endpoints.MachineLearning.TrainMlModelEndpoint.Map(app);
         return app;
     }

@@ -65,6 +65,7 @@ internal static class TestApplicationFactory
         builder.Services.AddSingleton<IRaceResourceIdentityResolver, DomainRaceResourceIdentityResolver>();
         builder.Services.AddSingleton<ICollectionDispatchTelemetry>(dispatchTelemetry ?? new NullCollectionDispatchTelemetry());
         builder.Services.AddSingleton<CollectionPlatformStore>();
+        builder.Services.AddSingleton<HorseIdentityDiagnosticService>();
         builder.Services.Configure<CollectionMonitoringOptions>(_ => { });
         builder.Services.AddSingleton<CollectionMonitoringService>();
         builder.Services.AddSingleton<RaceActiveCollectionEndpointFilter>();
