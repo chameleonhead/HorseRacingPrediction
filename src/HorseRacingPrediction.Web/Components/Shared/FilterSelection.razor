@@ -1,14 +1,16 @@
-<FluentButton id="@AnchorId"
-              Class="filter-selection-trigger"
-              Appearance="ButtonAppearance.Outline"
-              BackgroundColor="@SystemColors.Brand.BackgroundInvertedSelected"
-              aria-haspopup="listbox"
-              aria-expanded="@(IsOpened ? "true" : "false")"
-              aria-label="@TriggerLabel"
-              OnClick="TogglePopover">
-    <span style="font-weight: normal">@Label:</span>
-    <strong>@SelectionSummary</strong>
-</FluentButton>
+<div class="filter-selection-control">
+    <FluentButton id="@AnchorId"
+                  Class="filter-selection-trigger"
+                  Appearance="ButtonAppearance.Outline"
+                  BackgroundColor="@SystemColors.Brand.BackgroundInvertedSelected"
+                  aria-haspopup="listbox"
+                  aria-expanded="@(IsOpened ? "true" : "false")"
+                  aria-label="@TriggerLabel"
+                  OnClick="TogglePopover">
+        <span style="font-weight: normal">@Label:</span>
+        <strong>@SelectionSummary</strong>
+    </FluentButton>
+</div>
 
 <FluentPopover AnchorId="@AnchorId" @bind-Opened="IsOpened" Padding="0">
     @if (Multiple)

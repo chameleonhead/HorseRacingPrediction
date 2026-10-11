@@ -1,22 +1,16 @@
-.filter-selection-trigger {
+.filter-selection-control {
     display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    min-height: 40px;
-    padding: 8px 12px;
-    color: var(--colorBrandForeground1);
-    font: inherit;
-    background: var(--colorBrandBackground2);
-    border: 1px solid var(--colorBrandStroke1);
-    border-radius: 4px;
-    cursor: pointer;
+    min-width: 0;
 }
 
-.filter-selection-trigger:hover {
-    background: var(--colorBrandBackground2Hover);
-}
+@media (max-width: 640px) {
+    .filter-selection-control {
+        width: 100%;
+    }
 
-.filter-selection-trigger:focus-visible {
-    outline: 2px solid var(--colorBrandBackground);
-    outline-offset: 2px;
+    .filter-selection-control ::deep .filter-selection-trigger {
+        display: flex;
+        width: 100%;
+        justify-content: space-between;
+    }
 }
