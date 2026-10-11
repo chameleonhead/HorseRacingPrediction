@@ -15,42 +15,48 @@
               Alignment="DialogAlignment.End"
               AriaLabelledby="@DrawerTitleId"
               Class="date-range-drawer"
-              Style="inset-inline-start:auto;inset-inline-end:0;width:min(320px,100vw);height:100dvh;max-height:100dvh;margin:0;">
+              Style="width:min(320px,100vw);">
     @if (IsDrawerOpen)
     {
-        <FluentDialogBody>
-            <header class="date-range-drawer-header">
-                <h2 id="@DrawerTitleId">@($"{Label}の期間を指定")</h2>
-                <FluentButton Appearance="ButtonAppearance.Subtle" aria-label="閉じる" OnClick="CancelDrawer">×</FluentButton>
-            </header>
-            <div class="date-range-drawer-fields">
-                <label>
-                    開始日
-                    <FluentDatePicker TValue="DateOnly?"
-                                      Autofocus="true"
-                                      AriaLabel="開始日"
-                                      Placeholder="開始日"
-                                      Value="@DraftFrom"
-                                      ValueChanged="OnDraftFromChanged" />
-                </label>
-                <label>
-                    終了日
-                    <FluentDatePicker TValue="DateOnly?"
-                                      AriaLabel="終了日"
-                                      Placeholder="終了日"
-                                      Value="@DraftTo"
-                                      ValueChanged="OnDraftToChanged" />
-                </label>
-            </div>
-            @if (!string.IsNullOrWhiteSpace(ValidationMessage))
-            {
-                <FluentMessageBar Intent="@MessageBarIntent.Error">@ValidationMessage</FluentMessageBar>
-            }
+        <FluentDialogBody FixedHeaderFooter="true">
+            <TitleTemplate>
+                <header class="date-range-drawer-header">
+                    <h2 id="@DrawerTitleId">@($"{Label}の期間を指定")</h2>
+                    <FluentButton Appearance="ButtonAppearance.Subtle" aria-label="閉じる" OnClick="CancelDrawer">×</FluentButton>
+                </header>
+            </TitleTemplate>
+            <ChildContent>
+                <div class="date-range-drawer-fields">
+                    <label>
+                        開始日
+                        <FluentDatePicker TValue="DateOnly?"
+                                          Autofocus="true"
+                                          AriaLabel="開始日"
+                                          Placeholder="開始日"
+                                          Value="@DraftFrom"
+                                          ValueChanged="OnDraftFromChanged" />
+                    </label>
+                    <label>
+                        終了日
+                        <FluentDatePicker TValue="DateOnly?"
+                                          AriaLabel="終了日"
+                                          Placeholder="終了日"
+                                          Value="@DraftTo"
+                                          ValueChanged="OnDraftToChanged" />
+                    </label>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(ValidationMessage))
+                {
+                    <FluentMessageBar Intent="@MessageBarIntent.Error">@ValidationMessage</FluentMessageBar>
+                }
+            </ChildContent>
+            <ActionTemplate>
+                <div class="date-range-drawer-footer">
+                    <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="CancelDrawer">キャンセル</FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ApplyCustomRangeAsync" Disabled="@(!CanApplyCustomRange)">適用</FluentButton>
+                </div>
+            </ActionTemplate>
         </FluentDialogBody>
-        <div class="date-range-drawer-footer">
-            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="CancelDrawer">キャンセル</FluentButton>
-            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ApplyCustomRangeAsync" Disabled="@(!CanApplyCustomRange)">適用</FluentButton>
-        </div>
     }
 </FluentDialog>
 
