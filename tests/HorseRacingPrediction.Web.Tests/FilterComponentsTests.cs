@@ -159,6 +159,9 @@ public sealed class FilterComponentsTests
             .Add(x => x.Enabled, enabled)
             .Add(x => x.EnabledChanged, (bool value) => enabled = value));
         StringAssert.Contains(cut.Find("button[aria-haspopup='listbox']").TextContent, "2026/10/01 - 2026/10/10");
+        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        var listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
+        Assert.AreEqual("custom", listbox.Instance.Value);
     }
 
     [TestMethod]
@@ -196,7 +199,7 @@ public sealed class FilterComponentsTests
 
         await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
         var listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
-        Assert.IsNull(listbox.Instance.Value);
+        Assert.AreEqual("custom", listbox.Instance.Value);
     }
 
     [TestMethod]

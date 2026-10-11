@@ -64,7 +64,7 @@
 
     private IEnumerable<FilterSelectionOption> SelectedOptions
         => Items.Where(item => SelectedValues.Contains(item.Value));
-    private string? ListboxValue => Value == ActionValue ? null : Value;
+    private string? ListboxValue => Value;
 
     private string SelectionSummary
     {
