@@ -193,6 +193,10 @@ public sealed class FilterComponentsTests
         Assert.AreEqual(0, enabledChangedCount);
         Assert.AreEqual(originalLabel, cut.Find("button[aria-haspopup='listbox']").TextContent);
         Assert.AreEqual(0, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
+
+        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        var listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
+        Assert.IsNull(listbox.Instance.Value);
     }
 
     [TestMethod]
@@ -229,6 +233,30 @@ public sealed class FilterComponentsTests
         await cut.Find("fluent-option[value='custom']").ClickAsync();
         Assert.AreEqual(2, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
         Assert.AreEqual(2, context.JSInterop.Invocations.Count(invocation => invocation.Identifier == "Microsoft.FluentUI.Blazor.Components.Dialog.Show"));
+    }
+
+    [TestMethod]
+    public async Task FilterDateRangePicker_CancelKeepsOriginalPresetSelection()
+    {
+        using var context = CreateContext();
+        DateOnly? from = new(2026, 10, 7);
+        DateOnly? to = new(2026, 10, 7);
+        var cut = context.Render<FilterDateRangePicker>(parameters => parameters
+            .Add(x => x.From, from)
+            .Add(x => x.FromChanged, (DateOnly? value) => from = value)
+            .Add(x => x.To, to)
+            .Add(x => x.ToChanged, (DateOnly? value) => to = value));
+
+        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        await cut.Find("fluent-option[value='custom']").ClickAsync();
+        await cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("キャンセル"))
+            .InvokeAsync(() => cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("キャンセル")).Instance.OnClick.InvokeAsync());
+
+        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        var listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
+        Assert.AreEqual("today", listbox.Instance.Value);
+        Assert.AreEqual(new DateOnly(2026, 10, 7), from);
+        Assert.AreEqual(new DateOnly(2026, 10, 7), to);
     }
 
     [TestMethod]

@@ -12,7 +12,8 @@
 <FluentPopover AnchorId="@AnchorId" @bind-Opened="IsOpened" Padding="0">
     @if (Multiple)
     {
-        <FluentListbox TOption="FilterSelectionOption"
+        <FluentListbox @key="SelectionResetVersion"
+                       TOption="FilterSelectionOption"
                        TValue="string"
                        Multiple="true"
                        Items="@Items"
@@ -53,6 +54,7 @@
     [Parameter] public EventCallback<string?> ActionValueSelected { get; set; }
     [Parameter] public string[] SelectedValues { get; set; } = Array.Empty<string>();
     [Parameter] public EventCallback<string[]> SelectedValuesChanged { get; set; }
+    [Parameter] public int SelectionResetVersion { get; set; }
 
     private readonly string AnchorId = $"filter-selection-{Guid.NewGuid():N}";
     private bool IsOpened { get; set; }

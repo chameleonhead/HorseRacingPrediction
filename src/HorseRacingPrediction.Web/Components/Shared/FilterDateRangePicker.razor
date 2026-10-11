@@ -5,7 +5,8 @@
                      ActionValue="@CustomOption"
                      ActionValueSelected="OnSelectionChanged"
                      DisplayValue="@DisplayValue"
-                     Items="@Options" />
+                     Items="@Options"
+                     SelectionResetVersion="@SelectionResetVersion" />
 </div>
 
 <FluentDialog @ref="Drawer"
@@ -89,6 +90,7 @@
     private bool IsDrawerOpen { get; set; }
     private bool ShouldShowDrawer { get; set; }
     private string? ValidationMessage { get; set; }
+    private int SelectionResetVersion { get; set; }
     private DateOnly Today => TimeProvider.TodayInJapan();
     private bool CanApplyCustomRange
         => (DraftFrom is not null || DraftTo is not null)
@@ -211,6 +213,7 @@
         await EnabledChanged.InvokeAsync(true);
         IsDrawerOpen = false;
         ValidationMessage = null;
+        SelectionResetVersion++;
         await Drawer!.HideAsync();
         await OnDateFilterChanged.InvokeAsync();
     }
@@ -221,6 +224,7 @@
         DraftTo = DisplayTo;
         IsDrawerOpen = false;
         ValidationMessage = null;
+        SelectionResetVersion++;
         if (Drawer is not null)
         {
             await Drawer.HideAsync();
