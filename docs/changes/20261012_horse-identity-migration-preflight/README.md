@@ -1,6 +1,6 @@
 # Saved-data migration preflight
 
-- Status: Proposed
+- Status: Approved
 - Change record schema: 2
 - Owner: Lead
 - Created: 2026-10-12
@@ -8,9 +8,11 @@
 
 ## Completion summary
 
+Approval: after the explicit AC1–AC5/C1–C6 scope summary and approval request, the user replied 「引き続きお願いします」 on2026-10-12. This approves this bounded read-only child, implementation/tests, ordinary deployment and live acceptance only; parent migration/apply/reset/resume/cutover decisions remain unapproved. C1–C6 user dispositions are accepted as summarized, not authority to resolve the parent exclusions by mutation.
+
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Not started | This record proposes bounded read-only acquisition only. No implementation or migration is authorized here. |
+| Code | Connected | Approved bounded read-only acquisition; P1 contract/policy implementation is active. Readers, API and UI remain unfinished. No migration authorized. |
 | Verification | Not started | Proposal validators are required; implementation tests and target evidence belong to later approved work. |
 | Deployment/operation | Not started | No production read has been performed for this proposal. After separate approval, acceptance includes the normal CI/CD path and a bounded read-only production check; migration, resume, and reset remain excluded. |
 
@@ -110,7 +112,7 @@ Each configured SQLite file is opened through a dedicated read-only connection w
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | The page distinguishes source-defined mappings from actual observed schema on the four configured SQLite surfaces, row-inspects only the fixed allowlist, records per-store observation times, and never equates all pages scanned with target-wide completeness or a fixed manifest. | P1, P2, P4 | Source/target unknown-surface fixtures; schema-only versus row-inspected assertions; separate-store timestamp and between-page change tests; manual review against M2 inventory. | Not started |
+| AC1 | The page distinguishes source-defined mappings from actual observed schema on the four configured SQLite surfaces, row-inspects only the fixed allowlist, records per-store observation times, and never equates all pages scanned with target-wide completeness or a fixed manifest. | P0, P1, P2, P4 | Source/target unknown-surface fixtures; schema-only versus row-inspected assertions; separate-store timestamp and between-page change tests; manual review against M2 inventory. | Not started |
 | AC2 | Bounded batched evidence reports observation-only `Observed`/`Unverifiable`/`Conflict`/`UnknownShape`/`Truncated`/`Unavailable`/`NotInspected` states; same-name/different-source and missing-source evidence never auto-merge or establish migration eligibility. No calculated candidate ID is returned. | P1, P2 | Pure classification tests plus real SQLite event/profile/reference fixtures and actual reader path. | Not started |
 | AC3 | The six allowlisted tables are read in pages of at most 128 root identities with batched queries, count reconciliation, explicit truncation, and no N+1 or full-memory load; remaining known tables are not row-counted. Unknown/malformed Horse event shapes count as `UnknownShape`, not an absent registration. | P2 | Query-count/row-cap/continuation-boundary tests, duplicate/missing page counterexamples, and measured query plans on seeded SQLite. | Not started |
 | AC4 | Every read uses dedicated read-only/query-only access with bounded cancellation and immediate single-slot admission; API-key protection, cursor validation, and response allowlisting hold through the actual HTTP adapter. | P2, P3 | Before/after rows/schema/control snapshots; attempted write rejection; lock/timeout/cancel/admission tests; HTTP 401/400/429/503 tests; raw payload/URL/exception redaction tests. | Not started |
@@ -122,16 +124,31 @@ Each configured SQLite file is opened through a dedicated read-only connection w
 - docs/20-admin-ui-design.md receives only a clearly Proposed navigation/design supplement; it does not alter current runtime behavior. The parent whole-data-migration.md and admin-migration-command.md remain canonical for eventual all-data migration and execution boundaries.
 - Existing M2 persistence inventory, M3 command analysis, and T1 diagnostic record are linked above rather than copied. No source/test or operational document is changed.
 
-## Tasks and verification
+## Task plan
 
-The task plan is in [execution-plan.md](execution-plan.md); the desktop/mobile hierarchy and states are in [the preflight mock](mocks/preflight.md). All implementation tasks remain Dependent until the parent Lead reviews this proposal and separately freezes the public/data/security decisions. User approval of this child cannot approve parent apply, reset, resume, external delivery, runner privileges, or cutover.
+| ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State | Routing | Audit | Result metrics |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| P0 | Source-informed exact backend/test readiness plan | hold_impl — Cheap Planner worker | Luna | Approval | docs/changes/20261012_horse-identity-migration-preflight/execution-plan.md | CodeGraph source patterns, exact files/SQL/commands and security boundary review | Exact plan accepted; orphan IDs and constructor hazards included; proposal validators passed | Verified | Existing gpt-6-luna/high requested; bounded planning | P0-A1 | unavailable; retries 2; corrections 1; reviews 1 |
+| P1 | Fixed typed contract, page policy and protected cursor | hold_impl — worker | Luna | P0 | Four exact files listed in P1 readiness note below | Pure policy/limits/tamper/expiry tests | Focused8/8, diagnostic20/20, API Release0 warnings/errors; formatter/graph/diff exit0 | Verified | Luna executor under frozen public contract | P1-A1 | unavailable; retries 4; corrections 0; reviews 1 |
+| P2 | Batched read-only six-table readers/four-store schema ledger | hold_impl — planned worker | Luna | P1 | Exact API/readers/test files assigned after readiness | SQLite no-write/bounds/query-count/unknown/cancel tests | Not started; awaits P1 | Dependent | Luna executor; persistence decisions retained by Lead | none | unavailable; retries 0; corrections 0; reviews 0 |
+| P3 | Typed GET route and server-side AdminApiClient | hold_impl — planned worker | Luna | P1,P2 | Exact endpoint/client/test files assigned after readiness | Real HTTP authorization/wrapper/status/redaction transport | Not started; awaits backend | Dependent | Luna executor under frozen API/security boundary | none | unavailable; retries 0; corrections 0; reviews 0 |
+| P4 | Authorized responsive page and Settings entry | hold_impl — planned worker | Luna | P3 | Exact UI/component test files assigned after backend | Component and desktop/390px browser states/keyboard | Not started; awaits HTTP adapter | Dependent | Luna executor under approved mock | none | unavailable; retries 0; corrections 0; reviews 0 |
+| P5 | Deploy, bounded live acceptance and canonical documentation | Lead | Lead | P1,P2,P3,P4 | Approved documentation and read-only operational verification | CI/CD terminal success, live safe page/status, validators | Not started; awaits integrated verification | Dependent | Integration/security/final acceptance retained by Lead; mechanical gates delegated to Luna | none | unavailable; retries 0; corrections 0; reviews 0 |
+
+Pre-implementation planning gate (2026-10-12, Lead): orchestration and DDD skills read this turn. P0 is the sole active file owner, dispatched to the existing requested gpt-6-luna/high agent. Observed model/usage unavailable, not inferred. All source/test tasks remain Dependent until exact readiness plan and audit pass; approved contract does not waive this gate. User-owned dirty skill/test/AGENTS/fallback-record files remain excluded. Router chooses serialized Luna planning/execution; Lead owns public/security/data decisions and final acceptance. Canonical audit is required before first source edit.
+
+The canonical task table above governs [execution-plan.md](execution-plan.md); the desktop/mobile hierarchy and states are in [the preflight mock](mocks/preflight.md). The user has approved the bounded child and its public/data/security decisions. Exact per-slice source ownership and audit gates still apply before edits. This approval does not approve parent apply, reset, resume, external delivery, runner privileges, or cutover.
 
 ## Review gates
+
+P1 checkpoint (2026-10-12, Lead): four attributable files accepted for the pure contract/policy slice, not the feature. Focused8/8 and existing diagnostic20/20, API Release build0 warnings/errors, exact solution formatter, graph sync and diff check passed. Lead inspected wire allowlist and pure/protected validation; real SQLite/HTTP/UI remain owned P2–P5. Three failed focused gates (namespace, fake-clock expiry, MSTest assertion API) and one warning-cleanup rerun are closed by final clean8/8; no escalation or user-owned file edits. Next P2 readers, P3 HTTP, P4 UI, P5 deploy/live acceptance. No horse/data/schema/recovery mutation.
+
+P1 first-write readiness (2026-10-12, Lead): P0 source plan accepted and existing Luna route selected. Exact exclusive files: `src/HorseRacingPrediction.Contracts/Identity/IdentityMigrationPreflightPage.cs`, `src/HorseRacingPrediction.Api/Identity/IdentityMigrationPreflightPolicy.cs`, `src/HorseRacingPrediction.Api/Identity/IdentityMigrationPreflightCursorProtector.cs`, `tests/HorseRacingPrediction.Api.Tests/IdentityMigrationPreflightPolicyTests.cs`. Use six independent source phases (no UNION framework), source/page observations and explicit missing roots; no raw values or migration decision. Pure core and bounded protected cursor use existing Data Protection and injectable time. Smallest tests: Release API.Tests filter `FullyQualifiedName~IdentityMigrationPreflightPolicy`, then existing `FullyQualifiedName~HorseIdentityDiagnostic`; Release API build and exact solution formatter before handoff. All must exit0; DTO transport wiring/tests follow in P3, not falsely closed by P1. P2/P3/P4 stay Dependent. No source edit until current audit passes. Two Lead-only audit failures (heading and placeholder evidence) were corrected with original gate exit0; not worker retries.
 
 - Design and task-split review (2026-10-12, Lead): the integrated proposal, six-table/four-store ledger, one-route contract, field allowlist, AC1–AC5 and serialized P1–P5 were reviewed. Bounded observation is useful evidence, not a full census or migration-ready manifest. Public/security/data boundaries are fixed; exact files and tests are assigned at the post-approval readiness gate. Implementation/test execution remains Luna-owned; Lead retains risk and final operational acceptance.
 - Concern and agreement review (2026-10-12, Lead): C1–C5 are resolved by explicit observation/coverage/no-write/cursor boundaries. C6 remains parent-owned and excluded only from this child; parent recovery criteria are unchanged. No child Open decision remains. User disposition awaits explicit approval of this child and its summarized ACs/concern dispositions.
 - Checkpoint review (2026-10-12, Lead): reviewed the four attributable proposal files against source-grounded parent inventory and the counterexample that six row-readable tables cannot prove all 47 source mappings or external storage complete. Corrected initial ambiguous Keep/candidate output, deployment boundary, supported-surface freeze and table count. Source/test/runtime files unchanged. One erroneous validator path was corrected and the original gate rerun successfully.
-- Pre-implementation and final implementation review: pending approval, source changes, executable tests, deployment and live acceptance; no implementation completion claimed.
+- Pre-implementation review: approval and P0/P1 source ownership/audit gates recorded above. P1 is the sole source executor; P2–P5 remain dependent. Final implementation review awaits all source, tests, deployment and live acceptance; no implementation completion claimed.
 
 ## Verification record
 
@@ -149,4 +166,4 @@ Future implementation evidence must include:
 
 ## Deviations and follow-up
 
-No implementation or target-data claim is made. The next action is Lead review of this Proposed child and its parent dependencies. If approved, implementation scope and source tests must be frozen before source edits. Any unknown schema, unsupported source, unavailable configured store, or unrecoverable provenance remains visible and blocks claiming full migration readiness.
+No implementation completion or target-data claim is made. The next action is serialized approved P1→P2→P3→P4 implementation/testing, followed by deployment and live acceptance P5. Any unknown schema, unsupported source, unavailable configured store, or unrecoverable provenance remains visible and blocks claiming full migration readiness. Parent migration/recovery remains Proposed and unresolved.
