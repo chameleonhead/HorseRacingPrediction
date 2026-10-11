@@ -2,6 +2,7 @@ using Bunit;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Api.Web.Components.Pages;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -74,6 +75,47 @@ public sealed class HorseIdentityDiagnosticComponentTests
 
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "小文字のGUID"));
         Assert.IsEmpty(handler.Requests);
+    }
+
+    [TestMethod]
+    public async Task DiagnosticPage_ImmediateFieldChangeIsUsedByDiagnoseAction()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var handler = new DiagnosticHandler();
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = context.Render<HorseIdentityDiagnostics>();
+
+        var input = cut.FindComponents<FluentTextField>().Single();
+        Assert.IsTrue(input.Instance.Immediate);
+        StringAssert.Contains(cut.Markup, "horse-で始まる小文字のGUIDを入力してください。");
+        await cut.InvokeAsync(() => input.Instance.ValueChanged.InvokeAsync(HorseId));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Single(x => x.Markup.Contains(">診断<", StringComparison.Ordinal)).Instance.OnClick.InvokeAsync());
+
+        var navigation = context.Services.GetRequiredService<NavigationManager>();
+        Assert.AreEqual($"settings/identity-diagnostics/horses/{HorseId}",
+            navigation.ToBaseRelativePath(navigation.Uri));
+        Assert.IsEmpty(cut.FindAll(".field-error"));
+        Assert.IsEmpty(handler.Requests);
+    }
+
+    [TestMethod]
+    public async Task DiagnosticPage_WrapsDesktopGridsAndRetainsMobileEvidenceCards()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        using var http = new HttpClient(new DiagnosticHandler()) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = context.Render<HorseIdentityDiagnostics>(parameters => parameters.Add(x => x.HorseId, HorseId));
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "診断結果"));
+        Assert.AreEqual(2, cut.FindAll(".diagnostic-grid").Count);
+        Assert.AreEqual(2, cut.FindAll(".diagnostic-cards").Count);
+        Assert.AreEqual(4, cut.FindAll(".diagnostic-card").Count);
     }
 
     [TestMethod]

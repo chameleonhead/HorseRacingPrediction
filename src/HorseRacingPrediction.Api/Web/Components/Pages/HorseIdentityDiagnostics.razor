@@ -13,8 +13,11 @@
 <section class="entity-section identity-diagnostic-section" aria-labelledby="identity-diagnostic-input-heading">
     <h2 id="identity-diagnostic-input-heading">診断対象</h2>
     <div class="identity-diagnostic-form">
-        <FluentTextField Label="HorseId" SupportingText="horse-で始まる小文字のGUIDを入力してください。"
-                         @bind-Value="horseIdInput" @bind-Value:after="ClearValidation" />
+        <div class="identity-diagnostic-input">
+            <FluentTextField Label="HorseId" Immediate="true" Style="width:100%;" aria-describedby="identity-diagnostic-input-help"
+                             @bind-Value="horseIdInput" @bind-Value:after="ClearValidation" />
+            <p id="identity-diagnostic-input-help" class="identity-diagnostic-help">horse-で始まる小文字のGUIDを入力してください。</p>
+        </div>
         <FluentButton Appearance="@Appearance.Accent" OnClick="DiagnoseAsync" Disabled="@loading">診断</FluentButton>
     </div>
     @if (validationMessage is not null)
@@ -86,13 +89,15 @@ else
             }
             else
             {
-                <FluentDataGrid Items="@SourceRows.AsQueryable()" TGridItem="SourceRow" aria-label="保存された馬ID証拠">
-                    <TemplateColumn Title="取得元">@context.Evidence.Origin</TemplateColumn>
-                    <TemplateColumn Title="状態"><RaceOpsStatusBadge Label="@context.Evidence.Status" Tone="@StatusTone(context.Evidence.Status)" /></TemplateColumn>
-                    <TemplateColumn Title="source URLの状態"><RaceOpsStatusBadge Label="@context.Evidence.SourceUrlStatus" Tone="@StatusTone(context.Evidence.SourceUrlStatus)" /></TemplateColumn>
-                    <TemplateColumn Title="source identity">@Display(context.Evidence.NormalizedSourceIdentity ?? context.Evidence.SourceIdentity)</TemplateColumn>
-                    <TemplateColumn Title="source URL由来ID">@Display(context.Evidence.SourceUrlHorseIdentity)</TemplateColumn>
-                </FluentDataGrid>
+                <div class="diagnostic-grid">
+                    <FluentDataGrid Items="@SourceRows.AsQueryable()" TGridItem="SourceRow" aria-label="保存された馬ID証拠">
+                        <TemplateColumn Title="取得元">@context.Evidence.Origin</TemplateColumn>
+                        <TemplateColumn Title="状態"><RaceOpsStatusBadge Label="@context.Evidence.Status" Tone="@StatusTone(context.Evidence.Status)" /></TemplateColumn>
+                        <TemplateColumn Title="source URLの状態"><RaceOpsStatusBadge Label="@context.Evidence.SourceUrlStatus" Tone="@StatusTone(context.Evidence.SourceUrlStatus)" /></TemplateColumn>
+                        <TemplateColumn Title="source identity">@Display(context.Evidence.NormalizedSourceIdentity ?? context.Evidence.SourceIdentity)</TemplateColumn>
+                        <TemplateColumn Title="source URL由来ID">@Display(context.Evidence.SourceUrlHorseIdentity)</TemplateColumn>
+                    </FluentDataGrid>
+                </div>
                 <div class="diagnostic-cards" aria-label="保存された馬ID証拠">
                     @foreach (var source in SourceRows)
                     {
@@ -122,13 +127,15 @@ else
             }
             else
             {
-                <FluentDataGrid Items="@ComparisonRows.AsQueryable()" TGridItem="ComparisonRow" aria-label="馬ID比較結果">
-                    <TemplateColumn Title="規則">@context.Comparison.Rule</TemplateColumn>
-                    <TemplateColumn Title="入力項目">@context.Comparison.InputField</TemplateColumn>
-                    <TemplateColumn Title="証拠状態"><RaceOpsStatusBadge Label="@context.Comparison.EvidenceStatus" Tone="@StatusTone(context.Comparison.EvidenceStatus)" /></TemplateColumn>
-                    <TemplateColumn Title="候補ID">@Display(context.Comparison.CandidateHorseId)</TemplateColumn>
-                    <TemplateColumn Title="一致判定"><RaceOpsStatusBadge Label="@context.Comparison.MatchStatus" Tone="@StatusTone(context.Comparison.MatchStatus)" /></TemplateColumn>
-                </FluentDataGrid>
+                <div class="diagnostic-grid">
+                    <FluentDataGrid Items="@ComparisonRows.AsQueryable()" TGridItem="ComparisonRow" aria-label="馬ID比較結果">
+                        <TemplateColumn Title="規則">@context.Comparison.Rule</TemplateColumn>
+                        <TemplateColumn Title="入力項目">@context.Comparison.InputField</TemplateColumn>
+                        <TemplateColumn Title="証拠状態"><RaceOpsStatusBadge Label="@context.Comparison.EvidenceStatus" Tone="@StatusTone(context.Comparison.EvidenceStatus)" /></TemplateColumn>
+                        <TemplateColumn Title="候補ID">@Display(context.Comparison.CandidateHorseId)</TemplateColumn>
+                        <TemplateColumn Title="一致判定"><RaceOpsStatusBadge Label="@context.Comparison.MatchStatus" Tone="@StatusTone(context.Comparison.MatchStatus)" /></TemplateColumn>
+                    </FluentDataGrid>
+                </div>
                 <div class="diagnostic-cards" aria-label="馬ID比較結果">
                     @foreach (var comparison in ComparisonRows)
                     {
