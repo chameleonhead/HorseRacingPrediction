@@ -15,7 +15,7 @@
 
 <PageHeader Title="レース" Description="レース情報を検索・確認します。">
     <Actions>
-        <a href="/races/new">レースを新規作成</a>
+        <FluentLink Href="/races/new" Appearance="LinkAppearance.Default">レースを新規作成</FluentLink>
     </Actions>
 </PageHeader>
 
@@ -25,19 +25,17 @@
                 @bind-To="ToFilter"
                 @bind-DateRangeEnabled="DateRangeEnabledFilter"
                 @bind-Period="PeriodFilter"
+                Result="@result"
+                Loading="@loading"
+                Error="@error"
+                Page="@filters.Page"
+                PageSize="@PageSize"
+                OnRetry="ReloadAsync"
+                OnPreviousPage="PreviousPageAsync"
+                OnNextPage="NextPageAsync"
+                OnClear="ClearFiltersAsync"
                 ValidationMessage="@validationError"
-                OnSearch="SearchAsync"
-                OnClear="ClearFiltersAsync" />
-
-<RaceList Result="@result"
-          Loading="@loading"
-          Error="@error"
-          Page="@filters.Page"
-          PageSize="@PageSize"
-          OnRetry="ReloadAsync"
-          OnClear="ClearFiltersAsync"
-          OnPreviousPage="PreviousPageAsync"
-          OnNextPage="NextPageAsync" />
+                OnSearch="SearchAsync" />
 
 @code {
     private const int PageSize = 50;

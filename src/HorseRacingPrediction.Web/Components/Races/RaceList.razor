@@ -23,7 +23,7 @@ else
         <TemplateColumn Title="開催日">@context.RaceDate?.ToString("yyyy/MM/dd")</TemplateColumn>
         <PropertyColumn Property="@(x => x.RacecourseCode)" Title="競馬場" />
         <TemplateColumn Title="R">@(context.RaceNumber?.ToString() ?? "—")</TemplateColumn>
-        <TemplateColumn Title="レース名"><a href="@($"/races/{Uri.EscapeDataString(context.RaceId)}")">@(context.RaceName ?? context.RaceId)</a></TemplateColumn>
+        <TemplateColumn Title="レース名"><FluentLink Href="@($"/races/{Uri.EscapeDataString(context.RaceId)}")">@(context.RaceName ?? context.RaceId)</FluentLink></TemplateColumn>
         <PropertyColumn Property="@(x => x.EntryCount)" Title="頭数" />
         <TemplateColumn Title="状態"><StatusBadge Label="@StatusLabel(context.Status)" /></TemplateColumn>
         <PropertyColumn Property="@(x => x.WinningHorseName)" Title="勝ち馬" />

@@ -9,7 +9,7 @@
 <PageTitle>レース新規作成</PageTitle>
 
 <p>
-    <a href="/races">← レース一覧に戻る</a>
+    <FluentLink Href="/races">← レース一覧に戻る</FluentLink>
 </p>
 
 <PageHeader Title="レース新規作成" Description="レースの基本情報を登録します。" />
@@ -66,7 +66,7 @@
         <FluentButton Appearance="ButtonAppearance.Primary" OnClick="CreateAsync" Disabled="@saving">
             @(saving ? "作成中…" : "レースを作成")
         </FluentButton>
-        <a href="/races">キャンセル</a>
+        <FluentLink Href="/races">キャンセル</FluentLink>
     </div>
 </section>
 

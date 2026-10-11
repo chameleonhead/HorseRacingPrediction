@@ -4,9 +4,9 @@
 }
 else
 {
-    <a href="@($"/{Segment}/{Uri.EscapeDataString(Id)}")">
+    <FluentLink Href="@($"/{Segment}/{Uri.EscapeDataString(Id)}")">
         @(string.IsNullOrWhiteSpace(Label) ? Id : Label)
-    </a>
+    </FluentLink>
 }
 
 @code {

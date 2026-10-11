@@ -17,13 +17,13 @@ public sealed class FilterComponentsTests
             .Add(x => x.Label, "開催場")
             .Add(x => x.Items, [new FilterSelectionOption("", "すべて"), new FilterSelectionOption("東京", "東京競馬場")]));
 
-        var trigger = cut.Find("button[aria-haspopup='listbox']");
+        var trigger = cut.Find("fluent-button[aria-haspopup='listbox']");
         Assert.AreEqual("false", trigger.GetAttribute("aria-expanded"));
         Assert.AreEqual("開催場: すべて", trigger.GetAttribute("aria-label"));
 
         await trigger.ClickAsync();
 
-        Assert.AreEqual("true", cut.Find("button[aria-haspopup='listbox']").GetAttribute("aria-expanded"));
+        Assert.AreEqual("true", cut.Find("fluent-button[aria-haspopup='listbox']").GetAttribute("aria-expanded"));
         Assert.IsTrue(cut.FindComponents<FluentPopover>().Single().Instance.Opened);
     }
 
@@ -37,11 +37,11 @@ public sealed class FilterComponentsTests
             .Add(x => x.Items, [new FilterSelectionOption("", "すべて"), new FilterSelectionOption("東京", "東京競馬場")])
             .Add(x => x.ValueChanged, value => selectedValue = value));
 
-        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        await cut.Find("fluent-button[aria-haspopup='listbox']").ClickAsync();
         await cut.Find("fluent-option[value='東京']").ClickAsync();
 
         Assert.AreEqual("東京", selectedValue);
-        Assert.AreEqual("false", cut.Find("button[aria-haspopup='listbox']").GetAttribute("aria-expanded"));
+        Assert.AreEqual("false", cut.Find("fluent-button[aria-haspopup='listbox']").GetAttribute("aria-expanded"));
     }
 
     [TestMethod]
@@ -60,11 +60,11 @@ public sealed class FilterComponentsTests
         await cut.InvokeAsync(() => listbox.Instance.ValueChanged.InvokeAsync("custom"));
         Assert.AreEqual(0, actionSelectedCount);
 
-        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        await cut.Find("fluent-button[aria-haspopup='listbox']").ClickAsync();
         listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
         await cut.InvokeAsync(() => listbox.Instance.ValueChanged.InvokeAsync("custom"));
         Assert.AreEqual(1, actionSelectedCount);
-        Assert.AreEqual("false", cut.Find("button[aria-haspopup='listbox']").GetAttribute("aria-expanded"));
+        Assert.AreEqual("false", cut.Find("fluent-button[aria-haspopup='listbox']").GetAttribute("aria-expanded"));
     }
 
     [TestMethod]
@@ -78,7 +78,7 @@ public sealed class FilterComponentsTests
             .Add(x => x.Items, [new FilterSelectionOption("東京", "東京競馬場"), new FilterSelectionOption("中山", "中山競馬場")])
             .Add(x => x.SelectedValuesChanged, values => selectedValues = values));
 
-        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        await cut.Find("fluent-button[aria-haspopup='listbox']").ClickAsync();
         var listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
         await cut.InvokeAsync(() => listbox.Instance.SelectedItemsChanged.InvokeAsync(
             [new FilterSelectionOption("東京", "東京競馬場"), new FilterSelectionOption("中山", "中山競馬場")]));
@@ -89,7 +89,7 @@ public sealed class FilterComponentsTests
             .Add(x => x.Multiple, true)
             .Add(x => x.Items, [new FilterSelectionOption("東京", "東京競馬場"), new FilterSelectionOption("中山", "中山競馬場")])
             .Add(x => x.SelectedValues, selectedValues));
-        StringAssert.Contains(cut.Find("button[aria-haspopup='listbox']").TextContent, "2件選択");
+        StringAssert.Contains(cut.Find("fluent-button[aria-haspopup='listbox']").TextContent, "2件選択");
     }
 
     [TestMethod]
@@ -117,7 +117,7 @@ public sealed class FilterComponentsTests
             .Add(x => x.Enabled, enabled)
             .Add(x => x.EnabledChanged, value => enabled = value));
 
-        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        await cut.Find("fluent-button[aria-haspopup='listbox']").ClickAsync();
         await cut.Find($"fluent-option[value='{option}']").ClickAsync();
 
         Assert.AreEqual(expectedEnabled, enabled);
@@ -130,7 +130,7 @@ public sealed class FilterComponentsTests
             .Add(x => x.EnabledChanged, (bool value) => enabled = value));
         Assert.AreEqual(expectedFrom is null ? null : DateOnly.Parse(expectedFrom), from);
         Assert.AreEqual(expectedTo is null ? null : DateOnly.Parse(expectedTo), to);
-        StringAssert.Contains(cut.Find("button[aria-haspopup='listbox']").TextContent, expectedSummary);
+        StringAssert.Contains(cut.Find("fluent-button[aria-haspopup='listbox']").TextContent, expectedSummary);
     }
 
     [TestMethod]
@@ -148,7 +148,7 @@ public sealed class FilterComponentsTests
             .Add(x => x.Enabled, enabled)
             .Add(x => x.EnabledChanged, (bool value) => enabled = value));
 
-        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        await cut.Find("fluent-button[aria-haspopup='listbox']").ClickAsync();
         await cut.Find("fluent-option[value='custom']").ClickAsync();
 
         var dialog = cut.FindComponent<FluentDialog>().Instance;
@@ -181,8 +181,8 @@ public sealed class FilterComponentsTests
             .Add(x => x.ToChanged, (DateOnly? value) => to = value)
             .Add(x => x.Enabled, enabled)
             .Add(x => x.EnabledChanged, (bool value) => enabled = value));
-        StringAssert.Contains(cut.Find("button[aria-haspopup='listbox']").TextContent, "2026/10/01 - 2026/10/10");
-        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        StringAssert.Contains(cut.Find("fluent-button[aria-haspopup='listbox']").TextContent, "2026/10/01 - 2026/10/10");
+        await cut.Find("fluent-button[aria-haspopup='listbox']").ClickAsync();
         var listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
         Assert.IsNull(listbox.Instance.Value);
     }
@@ -204,8 +204,8 @@ public sealed class FilterComponentsTests
             .Add(x => x.Enabled, true)
             .Add(x => x.EnabledChanged, _ => enabledChangedCount++));
 
-        var originalLabel = cut.Find("button[aria-haspopup='listbox']").TextContent;
-        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        var originalLabel = cut.Find("fluent-button[aria-haspopup='listbox']").TextContent;
+        await cut.Find("fluent-button[aria-haspopup='listbox']").ClickAsync();
         await cut.Find("fluent-option[value='custom']").ClickAsync();
         await cut.InvokeAsync(() => cut.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 3)));
 
@@ -217,10 +217,10 @@ public sealed class FilterComponentsTests
         Assert.AreEqual(0, fromChangedCount);
         Assert.AreEqual(0, toChangedCount);
         Assert.AreEqual(0, enabledChangedCount);
-        Assert.AreEqual(originalLabel, cut.Find("button[aria-haspopup='listbox']").TextContent);
+        Assert.AreEqual(originalLabel, cut.Find("fluent-button[aria-haspopup='listbox']").TextContent);
         Assert.AreEqual(0, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
 
-        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        await cut.Find("fluent-button[aria-haspopup='listbox']").ClickAsync();
         var listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
         Assert.IsNull(listbox.Instance.Value);
     }
@@ -237,7 +237,7 @@ public sealed class FilterComponentsTests
             .Add(x => x.To, to)
             .Add(x => x.ToChanged, (DateOnly? value) => to = value));
 
-        var trigger = cut.Find("button[aria-haspopup='listbox']");
+        var trigger = cut.Find("fluent-button[aria-haspopup='listbox']");
         await trigger.ClickAsync();
         await cut.Find("fluent-option[value='today']").ClickAsync();
         cut.Render(parameters => parameters
@@ -245,7 +245,7 @@ public sealed class FilterComponentsTests
             .Add(x => x.FromChanged, (DateOnly? value) => from = value)
             .Add(x => x.To, to)
             .Add(x => x.ToChanged, (DateOnly? value) => to = value));
-        trigger = cut.Find("button[aria-haspopup='listbox']");
+        trigger = cut.Find("fluent-button[aria-haspopup='listbox']");
         await trigger.ClickAsync();
         await cut.Find("fluent-option[value='custom']").ClickAsync();
         Assert.AreEqual(2, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
@@ -254,7 +254,7 @@ public sealed class FilterComponentsTests
         await cut.InvokeAsync(() => cancel.Instance.OnClick.InvokeAsync());
         Assert.AreEqual(0, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
 
-        trigger = cut.Find("button[aria-haspopup='listbox']");
+        trigger = cut.Find("fluent-button[aria-haspopup='listbox']");
         await trigger.ClickAsync();
         await cut.Find("fluent-option[value='custom']").ClickAsync();
         Assert.AreEqual(2, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
@@ -273,12 +273,12 @@ public sealed class FilterComponentsTests
             .Add(x => x.To, to)
             .Add(x => x.ToChanged, (DateOnly? value) => to = value));
 
-        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        await cut.Find("fluent-button[aria-haspopup='listbox']").ClickAsync();
         await cut.Find("fluent-option[value='custom']").ClickAsync();
         await cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("キャンセル"))
             .InvokeAsync(() => cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("キャンセル")).Instance.OnClick.InvokeAsync());
 
-        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        await cut.Find("fluent-button[aria-haspopup='listbox']").ClickAsync();
         var listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
         Assert.AreEqual("today", listbox.Instance.Value);
         Assert.AreEqual(new DateOnly(2026, 10, 7), from);
@@ -297,7 +297,7 @@ public sealed class FilterComponentsTests
             .Add(x => x.To, to)
             .Add(x => x.ToChanged, (DateOnly? value) => to = value));
 
-        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        await cut.Find("fluent-button[aria-haspopup='listbox']").ClickAsync();
         await cut.Find("fluent-option[value='custom']").ClickAsync();
         await cut.InvokeAsync(() => cut.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 1)));
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("適用")).Instance.OnClick.InvokeAsync());
@@ -309,7 +309,7 @@ public sealed class FilterComponentsTests
             .Add(x => x.FromChanged, (DateOnly? value) => from = value)
             .Add(x => x.To, to)
             .Add(x => x.ToChanged, (DateOnly? value) => to = value));
-        StringAssert.Contains(cut.Find("button[aria-haspopup='listbox']").TextContent, "2026/10/01から");
+        StringAssert.Contains(cut.Find("fluent-button[aria-haspopup='listbox']").TextContent, "2026/10/01から");
     }
 
     [TestMethod]
@@ -320,7 +320,7 @@ public sealed class FilterComponentsTests
         var cut = context.Render<FilterDateRangePicker>(parameters => parameters
             .Add(x => x.Options, options));
 
-        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        await cut.Find("fluent-button[aria-haspopup='listbox']").ClickAsync();
 
         var optionsInList = cut.FindAll("fluent-option");
         Assert.AreEqual(2, optionsInList.Count);

@@ -22,7 +22,7 @@
     margin: 0;
 }
 
-.date-range-drawer-header button {
+.date-range-drawer-header fluent-button {
     width: 40px;
     height: 40px;
     color: var(--colorNeutralForeground1);

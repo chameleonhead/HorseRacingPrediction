@@ -30,7 +30,7 @@ public sealed class RacePagesComponentTests
         {
             StringAssert.Contains(cut.Markup, "テストレース");
             StringAssert.Contains(cut.Markup, "1 / 2 ページ");
-            Assert.AreEqual("/races/R001", cut.Find("a[href='/races/R001']").GetAttribute("href"));
+            Assert.AreEqual("/races/R001", cut.Find("fluent-link[href='/races/R001']").GetAttribute("href"));
         });
         Assert.AreEqual(1, handler.SearchCount);
     }
@@ -64,8 +64,8 @@ public sealed class RacePagesComponentTests
         cut.WaitForAssertion(() =>
         {
             StringAssert.Contains(cut.Markup, "テストホース");
-            Assert.AreEqual("/horses/H001", cut.Find("a[href='/horses/H001']").GetAttribute("href"));
-            Assert.AreEqual("/jockeys/J001", cut.Find("a[href='/jockeys/J001']").GetAttribute("href"));
+            Assert.AreEqual("/horses/H001", cut.Find("fluent-link[href='/horses/H001']").GetAttribute("href"));
+            Assert.AreEqual("/jockeys/J001", cut.Find("fluent-link[href='/jockeys/J001']").GetAttribute("href"));
             StringAssert.Contains(cut.Markup, "1着");
         });
         Assert.AreEqual("/api/races/R001", handler.LastRequestPath);
@@ -129,7 +129,7 @@ public sealed class RacePagesComponentTests
         var cut = context.Render<Races>();
         cut.WaitForAssertion(() => Assert.AreEqual(1, handler.SearchCount));
 
-        var courseFilter = cut.FindAll("button[aria-haspopup='listbox']")
+        var courseFilter = cut.FindAll("fluent-button[aria-haspopup='listbox']")
             .Single(button => button.GetAttribute("aria-label")!.StartsWith("開催場:", StringComparison.Ordinal));
         await courseFilter.ClickAsync();
         var courseList = cut.FindComponents<FluentListbox<FilterSelectionOption, string>>().First();
@@ -237,7 +237,7 @@ public sealed class RacePagesComponentTests
         var cut = context.Render<Races>();
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "テストレース"));
 
-        await cut.Find("nav[aria-label='開催期間'] button").ClickAsync();
+        Assert.AreEqual("今日", SelectedPeriodTab(cut));
         Assert.AreEqual("2026-10-07", handler.LastRequestDateFrom);
         Assert.AreEqual("2026-10-07", handler.LastRequestDateTo);
         Assert.AreEqual("today", QueryValue(context, "period"));
@@ -245,7 +245,7 @@ public sealed class RacePagesComponentTests
         Assert.IsNull(QueryValue(context, "to"));
         Assert.AreEqual("今日", SelectedPeriodTab(cut));
 
-        await FindPeriodTab(cut, "今週").ClickAsync();
+        await SelectPeriodTabAsync(cut, "今週");
         Assert.AreEqual("2026-10-01", handler.LastRequestDateFrom);
         Assert.AreEqual("2026-10-07", handler.LastRequestDateTo);
         Assert.AreEqual("week", QueryValue(context, "period"));
@@ -255,12 +255,12 @@ public sealed class RacePagesComponentTests
         Assert.AreEqual(0, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
         Assert.AreEqual(0, context.JSInterop.Invocations.Count(invocation => invocation.Identifier == "Microsoft.FluentUI.AspNetCore.Components.Dialog.Show"));
 
-        await FindPeriodTab(cut, "過去一ヶ月").ClickAsync();
+        await SelectPeriodTabAsync(cut, "過去一ヶ月");
         Assert.AreEqual("2026-09-07", handler.LastRequestDateFrom);
         Assert.AreEqual("2026-10-07", handler.LastRequestDateTo);
         Assert.AreEqual("past-month", QueryValue(context, "period"));
 
-        await FindPeriodTab(cut, "すべての期間").ClickAsync();
+        await SelectPeriodTabAsync(cut, "すべての期間");
         Assert.IsNull(handler.LastRequestDateFrom);
         Assert.IsNull(handler.LastRequestDateTo);
         Assert.AreEqual("all", QueryValue(context, "period"));
@@ -310,7 +310,7 @@ public sealed class RacePagesComponentTests
         var cut = context.Render<Races>();
         cut.WaitForAssertion(() => Assert.AreEqual("今週", SelectedPeriodTab(cut)));
 
-        var dateFilterTrigger = cut.FindAll("button[aria-haspopup='listbox']")
+        var dateFilterTrigger = cut.FindAll("fluent-button[aria-haspopup='listbox']")
             .Single(button => button.GetAttribute("aria-label")!.StartsWith("開催日:", StringComparison.Ordinal));
         await dateFilterTrigger.ClickAsync();
         var dateFilterOptions = cut.FindComponents<FluentListbox<FilterSelectionOption, string>>().Last();
@@ -344,7 +344,7 @@ public sealed class RacePagesComponentTests
         var cut = context.Render<Races>();
         cut.WaitForAssertion(() => Assert.AreEqual(1, handler.SearchCount));
 
-        var trigger = cut.FindAll("button[aria-haspopup='listbox']")
+        var trigger = cut.FindAll("fluent-button[aria-haspopup='listbox']")
             .Single(button => button.GetAttribute("aria-label")!.StartsWith("開催日:", StringComparison.Ordinal));
         await trigger.ClickAsync();
         var listbox = cut.FindComponents<FluentListbox<FilterSelectionOption, string>>().Last();
@@ -360,16 +360,35 @@ public sealed class RacePagesComponentTests
             Assert.AreEqual(2, handler.SearchCount);
             Assert.AreEqual("2026-10-01", handler.LastRequestDateFrom);
             Assert.AreEqual("2026-10-10", handler.LastRequestDateTo);
-            StringAssert.Contains(cut.Find("button[aria-haspopup='listbox'][aria-label^='開催日']").TextContent, "2026/10/01 - 2026/10/10");
+            StringAssert.Contains(cut.Find("fluent-button[aria-haspopup='listbox'][aria-label^='開催日']").TextContent, "2026/10/01 - 2026/10/10");
             Assert.AreEqual("すべての期間", SelectedPeriodTab(cut));
         });
     }
 
-    private static AngleSharp.Dom.IElement FindPeriodTab(IRenderedComponent<Races> cut, string text)
-        => cut.FindAll("nav[aria-label='開催期間'] button").Single(button => button.TextContent.Trim() == text);
-
     private static string SelectedPeriodTab(IRenderedComponent<Races> cut)
-        => cut.Find("nav[aria-label='開催期間'] button[aria-pressed='true']").TextContent.Trim();
+        => cut.FindComponent<FluentTabs>().Instance.ActiveTabId switch
+        {
+            "today" => "今日",
+            "week" => "今週",
+            "past-month" => "過去一ヶ月",
+            "all" => "すべての期間",
+            _ => throw new AssertFailedException("選択中の期間タブが不明です。")
+        };
+
+    private static Task SelectPeriodTabAsync(IRenderedComponent<Races> cut, string text)
+    {
+        var tabId = text switch
+        {
+            "今日" => "today",
+            "今週" => "week",
+            "過去一ヶ月" => "past-month",
+            "すべての期間" => "all",
+            _ => throw new ArgumentOutOfRangeException(nameof(text), text, "未知の期間タブです。")
+        };
+
+        var tabs = cut.FindComponent<FluentTabs>().Instance;
+        return cut.InvokeAsync(() => tabs.ActiveTabIdChanged.InvokeAsync(tabId));
+    }
 
     private static string? QueryValue(BunitContext context, string key)
     {

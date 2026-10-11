@@ -21,7 +21,7 @@
         <FluentDialogBody>
             <header class="date-range-drawer-header">
                 <h2 id="@DrawerTitleId">@($"{Label}の期間を指定")</h2>
-                <button type="button" aria-label="閉じる" @onclick="CancelDrawer">×</button>
+                <FluentButton Appearance="ButtonAppearance.Subtle" aria-label="閉じる" OnClick="CancelDrawer">×</FluentButton>
             </header>
             <div class="date-range-drawer-fields">
                 <label>

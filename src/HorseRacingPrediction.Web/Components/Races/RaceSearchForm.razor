@@ -1,13 +1,7 @@
 @implements IAsyncDisposable
+@using HorseRacingPrediction.Contracts.Races
 
 <div class="race-search-form" role="search">
-    <nav class="race-period-tabs" aria-label="開催期間">
-        <button type="button" class="@(IsSelected(RacePeriod.Today) ? "selected" : null)" aria-pressed="@(IsSelected(RacePeriod.Today) ? "true" : "false")" @onclick="() => SelectPeriodAsync(RacePeriod.Today)">今日</button>
-        <button type="button" class="@(IsSelected(RacePeriod.ThisWeek) ? "selected" : null)" aria-pressed="@(IsSelected(RacePeriod.ThisWeek) ? "true" : "false")" @onclick="() => SelectPeriodAsync(RacePeriod.ThisWeek)">今週</button>
-        <button type="button" class="@(IsSelected(RacePeriod.PastMonth) ? "selected" : null)" aria-pressed="@(IsSelected(RacePeriod.PastMonth) ? "true" : "false")" @onclick="() => SelectPeriodAsync(RacePeriod.PastMonth)">過去一ヶ月</button>
-        <button type="button" class="@(IsSelected(RacePeriod.All) ? "selected" : null)" aria-pressed="@(IsSelected(RacePeriod.All) ? "true" : "false")" @onclick="() => SelectPeriodAsync(RacePeriod.All)">すべての期間</button>
-    </nav>
-
     <div class="race-search-controls">
         <FluentTextInput Class="race-name-filter" Placeholder="レース名" Value="@Name" @oninput="OnNameInput" />
 
@@ -32,6 +26,29 @@
                                EnabledChanged="DateRangeEnabledChanged" />
     </div>
 </div>
+
+<FluentTabs Class="race-period-tabs"
+            ActiveTabId="@Period.ToQueryValue()"
+            ActiveTabIdChanged="OnPeriodTabChangedAsync"
+            Appearance="TabsAppearance.Subtle"
+            Size="TabsSize.Small">
+    <FluentTab Id="today" Header="今日" DeferredLoading="true">
+        <RaceList Result="@Result" Loading="@Loading" Error="@Error" Page="@Page" PageSize="@PageSize"
+                  OnRetry="OnRetry" OnClear="OnClear" OnPreviousPage="OnPreviousPage" OnNextPage="OnNextPage" />
+    </FluentTab>
+    <FluentTab Id="week" Header="今週" DeferredLoading="true">
+        <RaceList Result="@Result" Loading="@Loading" Error="@Error" Page="@Page" PageSize="@PageSize"
+                  OnRetry="OnRetry" OnClear="OnClear" OnPreviousPage="OnPreviousPage" OnNextPage="OnNextPage" />
+    </FluentTab>
+    <FluentTab Id="past-month" Header="過去一ヶ月" DeferredLoading="true">
+        <RaceList Result="@Result" Loading="@Loading" Error="@Error" Page="@Page" PageSize="@PageSize"
+                  OnRetry="OnRetry" OnClear="OnClear" OnPreviousPage="OnPreviousPage" OnNextPage="OnNextPage" />
+    </FluentTab>
+    <FluentTab Id="all" Header="すべての期間" DeferredLoading="true">
+        <RaceList Result="@Result" Loading="@Loading" Error="@Error" Page="@Page" PageSize="@PageSize"
+                  OnRetry="OnRetry" OnClear="OnClear" OnPreviousPage="OnPreviousPage" OnNextPage="OnNextPage" />
+    </FluentTab>
+</FluentTabs>
 
 @if (!string.IsNullOrWhiteSpace(ValidationMessage))
 {
@@ -66,6 +83,14 @@
     [Parameter] public EventCallback<bool> DateRangeEnabledChanged { get; set; }
     [Parameter] public RacePeriod Period { get; set; }
     [Parameter] public EventCallback<RacePeriod> PeriodChanged { get; set; }
+    [Parameter] public SearchRacesResponse? Result { get; set; }
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public int Page { get; set; } = 1;
+    [Parameter] public int PageSize { get; set; } = 50;
+    [Parameter] public EventCallback OnRetry { get; set; }
+    [Parameter] public EventCallback OnPreviousPage { get; set; }
+    [Parameter] public EventCallback OnNextPage { get; set; }
     [Parameter] public EventCallback OnSearch { get; set; }
     [Parameter] public EventCallback OnClear { get; set; }
     [Parameter] public string? ValidationMessage { get; set; }
@@ -74,10 +99,13 @@
 
     private DateOnly Today => TimeProvider.TodayInJapan();
 
-    private bool IsSelected(RacePeriod period) => Period == period;
-
-    private async Task SelectPeriodAsync(RacePeriod period)
+    private async Task OnPeriodTabChangedAsync(string? tabId)
     {
+        if (!RacePeriodExtensions.TryParse(tabId, out var period) || period == Period)
+        {
+            return;
+        }
+
         var (start, end) = period.ResolveDates(Today);
 
         await FromChanged.InvokeAsync(start);

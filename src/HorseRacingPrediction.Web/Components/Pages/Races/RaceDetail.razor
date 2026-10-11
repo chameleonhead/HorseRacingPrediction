@@ -11,7 +11,7 @@
 
 <PageTitle>レース詳細</PageTitle>
 <p>
-    <a href="/races">← レース一覧に戻る</a>
+    <FluentLink Href="/races">← レース一覧に戻る</FluentLink>
 </p>
 @if (loading)
 {
@@ -34,7 +34,7 @@ else
             <h1>@(race.RaceName ?? race.RaceId)</h1>
             <p>@race.RaceDate?.ToString("yyyy/MM/dd")　@race.RacecourseCode　@(race.RaceNumber)R　状態: <StatusBadge Label="@StatusLabel(race.Status)" /></p>
         </div>
-        <a href="@($"/races/{Uri.EscapeDataString(race.RaceId)}/edit")">レースを編集</a>
+        <FluentLink Href="@($"/races/{Uri.EscapeDataString(race.RaceId)}/edit")">レースを編集</FluentLink>
     </div>
     <FluentTabs ShowActiveIndicator="true" aria-label="レース詳細">
         <FluentTab Label="概要" Id="overview">
