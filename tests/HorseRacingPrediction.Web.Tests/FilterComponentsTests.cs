@@ -215,6 +215,7 @@ public sealed class FilterComponentsTests
         var listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
         await cut.InvokeAsync(() => listbox.Instance.ValueChanged.InvokeAsync("custom"));
         Assert.AreEqual(2, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
+        Assert.AreEqual(1, context.JSInterop.Invocations.Count(invocation => invocation.Identifier == "Microsoft.FluentUI.Blazor.Components.Dialog.Show"));
         await cut.InvokeAsync(() => cut.FindComponents<FluentDatePicker<DateOnly?>>().First().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 1)));
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("適用")).Instance.OnClick.InvokeAsync());
 
@@ -234,6 +235,7 @@ public sealed class FilterComponentsTests
         Assert.IsNull(listbox.Instance.Value);
         await cut.InvokeAsync(() => listbox.Instance.ValueChanged.InvokeAsync("custom"));
         Assert.AreEqual(2, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
+        Assert.AreEqual(2, context.JSInterop.Invocations.Count(invocation => invocation.Identifier == "Microsoft.FluentUI.Blazor.Components.Dialog.Show"));
     }
 
     [TestMethod]

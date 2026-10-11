@@ -87,6 +87,7 @@
     private DateOnly? DraftFrom { get; set; }
     private DateOnly? DraftTo { get; set; }
     private bool IsDrawerOpen { get; set; }
+    private bool ShouldShowDrawer { get; set; }
     private string? ValidationMessage { get; set; }
     private DateOnly Today => TimeProvider.TodayInJapan();
     private bool CanApplyCustomRange
@@ -95,6 +96,15 @@
 
     private DateOnly? DisplayFrom => From;
     private DateOnly? DisplayTo => To;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (ShouldShowDrawer && Drawer is not null)
+        {
+            ShouldShowDrawer = false;
+            await Drawer.ShowAsync();
+        }
+    }
 
     private string SelectedOption
     {
@@ -166,8 +176,8 @@
             DraftFrom = From;
             DraftTo = To;
             IsDrawerOpen = true;
+            ShouldShowDrawer = true;
             ValidationMessage = null;
-            await Drawer!.ShowAsync();
             return;
         }
 
