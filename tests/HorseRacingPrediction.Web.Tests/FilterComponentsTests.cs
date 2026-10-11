@@ -45,6 +45,29 @@ public sealed class FilterComponentsTests
     }
 
     [TestMethod]
+    public async Task FilterSelection_IgnoresDelayedValueChangeAfterPopoverClosed()
+    {
+        using var context = CreateContext();
+        var actionSelectedCount = 0;
+        var cut = context.Render<FilterSelection>(parameters => parameters
+            .Add(x => x.Label, "開催日")
+            .Add(x => x.Value, "today")
+            .Add(x => x.ActionValue, "custom")
+            .Add(x => x.ActionValueSelected, _ => actionSelectedCount++)
+            .Add(x => x.Items, [new FilterSelectionOption("today", "今日"), new FilterSelectionOption("custom", "期間を指定する")]));
+
+        var listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
+        await cut.InvokeAsync(() => listbox.Instance.ValueChanged.InvokeAsync("custom"));
+        Assert.AreEqual(0, actionSelectedCount);
+
+        await cut.Find("button[aria-haspopup='listbox']").ClickAsync();
+        listbox = cut.FindComponent<FluentListbox<FilterSelectionOption, string>>();
+        await cut.InvokeAsync(() => listbox.Instance.ValueChanged.InvokeAsync("custom"));
+        Assert.AreEqual(1, actionSelectedCount);
+        Assert.AreEqual("false", cut.Find("button[aria-haspopup='listbox']").GetAttribute("aria-expanded"));
+    }
+
+    [TestMethod]
     public async Task FilterSelection_MultipleSelectionNotifiesParentAndUpdatesSummary()
     {
         using var context = CreateContext();

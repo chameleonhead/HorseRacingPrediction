@@ -104,6 +104,11 @@
 
     private Task OnValueChanged(string? value)
     {
+        if (!IsOpened)
+        {
+            return Task.CompletedTask;
+        }
+
         var option = Items.FirstOrDefault(item => item.Value == value);
         return option is null ? Task.CompletedTask : SelectOptionAsync(option);
     }
@@ -116,15 +121,14 @@
         }
 
         PendingOptionValue = option.Value;
+        IsOpened = false;
         if (option.Value == ActionValue)
         {
             await ActionValueSelected.InvokeAsync(ActionValue);
-            IsOpened = false;
             return;
         }
 
         await ValueChanged.InvokeAsync(option.Value);
-        IsOpened = false;
     }
 
     private Task OnSelectedItemsChanged(IEnumerable<FilterSelectionOption>? selectedItems)
