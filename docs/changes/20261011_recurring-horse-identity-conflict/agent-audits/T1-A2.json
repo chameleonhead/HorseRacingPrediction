@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261011_recurring-horse-identity-conflict",
+  "taskId": "T1",
+  "attemptId": "T1-A2",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC1"],
+  "route": {"tier": "worker", "requestedModel": "gpt-6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "Existing requested high route; runtime telemetry unavailable"},
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "Not exposed"},
+  "scope": ["Read-only repository/isolated probes"],
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "Not exposed"},
+  "overhead": {"availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "Not measured"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "Active effort unavailable"},
+  "startRevision": "3c91af76afb84c7fbfaf96a9b502324fd669c6b1",
+  "endRevisionOrPatch": "read-only; no source patch",
+  "outcome": {"verificationPassed": true, "qualityPassed": true, "scopePassed": true, "independentChallenge": "Lead inspected f2f0988c historical writer diff and current loader. Current race-card null normalizedName and missing Tokyo original event explicitly prevent attributing production cause to synthetic proof.", "retries": 0, "leadCorrections": 0, "reviewPasses": 1, "promoted": false, "escapedDefects": 0, "escalations": 0, "reviewMode": "ac-group", "detailReviewReason": null, "decision": "accept"}
+}
