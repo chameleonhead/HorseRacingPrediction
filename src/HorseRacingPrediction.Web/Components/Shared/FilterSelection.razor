@@ -15,7 +15,7 @@
         <FluentListbox TOption="FilterSelectionOption"
                        TValue="string"
                        Multiple="true"
-                       Items="@Items"
+                       Items="@SelectableItems"
                        OptionValue="@(item => item.Value)"
                        OptionText="@(item => item.Label)"
                        SelectedItems="@SelectedOptions"
@@ -26,12 +26,22 @@
     {
         <FluentListbox TOption="FilterSelectionOption"
                        TValue="string"
-                       Items="@Items"
+                       Items="@SelectableItems"
                        OptionValue="@(item => item.Value)"
                        OptionText="@(item => item.Label)"
                        Value="@Value"
                        ValueChanged="OnValueChanged"
                        Appearance="ListAppearance.Transparent" />
+    }
+    @if (ActionValue is not null)
+    {
+        var action = Items.FirstOrDefault(item => item.Value == ActionValue);
+        if (action is not null)
+        {
+            <button type="button" class="filter-selection-action" @onclick="OnActionSelected">
+                @action.Label
+            </button>
+        }
     }
 </FluentPopover>
 
@@ -42,6 +52,8 @@
     [Parameter] public bool Multiple { get; set; }
     [Parameter] public string? Value { get; set; }
     [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string? ActionValue { get; set; }
+    [Parameter] public EventCallback<string?> ActionValueSelected { get; set; }
     [Parameter] public string[] SelectedValues { get; set; } = Array.Empty<string>();
     [Parameter] public EventCallback<string[]> SelectedValuesChanged { get; set; }
 
@@ -51,6 +63,8 @@
 
     private IEnumerable<FilterSelectionOption> SelectedOptions
         => Items.Where(item => SelectedValues.Contains(item.Value));
+    private IEnumerable<FilterSelectionOption> SelectableItems
+        => ActionValue is null ? Items : Items.Where(item => item.Value != ActionValue);
 
     private string SelectionSummary
     {
@@ -83,6 +97,12 @@
     private async Task OnValueChanged(string? value)
     {
         await ValueChanged.InvokeAsync(value);
+        IsOpened = false;
+    }
+
+    private async Task OnActionSelected()
+    {
+        await ActionValueSelected.InvokeAsync(ActionValue);
         IsOpened = false;
     }
 

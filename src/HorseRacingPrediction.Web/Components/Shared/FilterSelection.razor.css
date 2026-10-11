@@ -20,3 +20,26 @@
     outline: 2px solid var(--colorBrandBackground);
     outline-offset: 2px;
 }
+
+.filter-selection-action {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 12px;
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+}
+
+.filter-selection-action:hover {
+    background: var(--colorNeutralBackground1Hover);
+}
+
+.filter-selection-action:focus-visible {
+    outline: 2px solid var(--colorBrandBackground);
+    outline-offset: -2px;
+}
