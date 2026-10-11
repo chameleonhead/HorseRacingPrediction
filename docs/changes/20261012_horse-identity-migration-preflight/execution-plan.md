@@ -1,6 +1,6 @@
 # M5 preflight execution plan
 
-This is a Proposed child plan. No implementation, target read, deployment, migration, resume, or reset has been performed. After separate approval, P5 includes the ordinary CI/CD gate and a bounded read-only production acceptance request; data-changing operations remain excluded.
+This is the approved child's internal readiness plan; the README is authoritative for approval, task state and exact per-slice ownership. P1/P2 are mechanically verified; P3 HTTP/client and P4 UI remain unfinished. See verification-p2.md for evidence and partial retry-history limits. No target read, deployment, migration, resume or reset has been performed for this child. P5 includes normal CI/CD and bounded read-only production acceptance; data-changing operations remain excluded.
 
 ## Repository-informed findings
 
@@ -77,7 +77,7 @@ The UI page is dedicated and authorized, linked from Settings. It starts a scan,
 
 ## Files proposed for a later approved implementation
 
-The exact source scope is not yet authorized. Candidate files only:
+P1/P2 exact source scopes are authorized by the README readiness/audit gates. The remaining P3/P4 source slices below still require their exact ownership/readiness gates:
 
 - A dedicated typed preflight contract under src/HorseRacingPrediction.Contracts/Identity/.
 - A dedicated API read service and GET endpoint under src/HorseRacingPrediction.Api/Endpoints/Identity/, with route registration through existing API extension wiring.
@@ -108,4 +108,4 @@ Expected focused tests after implementation:
 
 ## Next action
 
-Lead reviews this proposal and the parent-linked concerns. If the child is approved, freeze the final surface/route/wire contract before source edits, run the documented audit/readiness gate, and dispatch serialized Luna implementation. This plan itself does not approve code, target access, deployment, or data mutation.
+Continue serialized Luna P2 readers, then P3 API/client and P4 UI with per-slice audit/readiness gates; run integrated regressions and P5 deployment/live read acceptance. This internal plan does not broaden the approved wire/store boundaries or authorize parent migration/reset/resume. Final full migration census, provenance and corrective execution remain unresolved parent work.

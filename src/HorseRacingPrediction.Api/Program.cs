@@ -7,6 +7,7 @@ using EventFlow.EntityFramework.Extensions;
 using EventFlow.Extensions;
 using HorseRacingPrediction.Api;
 using HorseRacingPrediction.Api.CollectionController;
+using HorseRacingPrediction.Api.Identity;
 using HorseRacingPrediction.Api.Notifications;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Api.Web;
@@ -147,6 +148,22 @@ builder.Services.AddSingleton<ICollectionDispatchTelemetry>(services =>
     services.GetRequiredService<CollectionDispatchTelemetry>());
 builder.Services.AddSingleton<CollectionPlatformStore>();
 builder.Services.AddSingleton<HorseIdentityDiagnosticService>();
+builder.Services.AddSingleton<IdentityMigrationPreflightEventStoreReader>(services =>
+    new(services.GetRequiredService<EventFlow.EntityFramework.IDbContextProvider<EventStoreDbContext>>()));
+builder.Services.AddSingleton<IdentityMigrationPreflightConfiguredSurfaceReader>(services => new(
+    services.GetRequiredService<IOptions<CollectionPlatformOptions>>(),
+    services.GetRequiredService<IOptions<PredictionScheduleOptions>>(),
+    services.GetRequiredService<IOptions<CollectionQueueOptions>>(),
+    services.GetRequiredService<IWebHostEnvironment>()));
+builder.Services.AddSingleton<IdentityMigrationPreflightCursorProtector>(services => new(
+    services.GetRequiredService<IDataProtectionProvider>(),
+    services.GetRequiredService<TimeProvider>()));
+builder.Services.AddSingleton<IdentityMigrationPreflightService>(services => new(
+    services.GetRequiredService<IdentityMigrationPreflightEventStoreReader>(),
+    services.GetRequiredService<IdentityMigrationPreflightConfiguredSurfaceReader>(),
+    services.GetRequiredService<IdentityMigrationPreflightCursorProtector>(),
+    services.GetRequiredService<TimeProvider>()));
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.Configure<CollectionMonitoringOptions>(
     builder.Configuration.GetSection(CollectionMonitoringOptions.SectionName));
 builder.Services.AddSingleton<CollectionMonitoringService>();
