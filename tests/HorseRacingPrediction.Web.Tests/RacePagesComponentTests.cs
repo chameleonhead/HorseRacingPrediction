@@ -214,6 +214,22 @@ public sealed class RacePagesComponentTests
         };
 
     [TestMethod]
+    public void RaceList_DefaultsToTodayAndKeepsPeriodRelativeInUrl()
+    {
+        using var handler = new RaceApiHandler();
+        using var context = CreateContext(handler);
+
+        var cut = context.Render<Races>();
+
+        cut.WaitForAssertion(() => Assert.AreEqual("今日", SelectedPeriodTab(cut)));
+        Assert.AreEqual("today", QueryValue(context, "period"));
+        Assert.IsNull(QueryValue(context, "from"));
+        Assert.IsNull(QueryValue(context, "to"));
+        Assert.AreEqual("2026-10-07", handler.LastRequestDateFrom);
+        Assert.AreEqual("2026-10-07", handler.LastRequestDateTo);
+    }
+
+    [TestMethod]
     public async Task RaceList_PeriodTabs_ApplyTodayWeekMonthAndAllPeriods()
     {
         using var handler = new RaceApiHandler();
@@ -225,14 +241,16 @@ public sealed class RacePagesComponentTests
         Assert.AreEqual("2026-10-07", handler.LastRequestDateFrom);
         Assert.AreEqual("2026-10-07", handler.LastRequestDateTo);
         Assert.AreEqual("today", QueryValue(context, "period"));
-        Assert.AreEqual("2026-10-07", QueryValue(context, "from"));
-        Assert.AreEqual("2026-10-07", QueryValue(context, "to"));
+        Assert.IsNull(QueryValue(context, "from"));
+        Assert.IsNull(QueryValue(context, "to"));
         Assert.AreEqual("今日", SelectedPeriodTab(cut));
 
         await FindPeriodTab(cut, "今週").ClickAsync();
         Assert.AreEqual("2026-10-01", handler.LastRequestDateFrom);
         Assert.AreEqual("2026-10-07", handler.LastRequestDateTo);
         Assert.AreEqual("week", QueryValue(context, "period"));
+        Assert.IsNull(QueryValue(context, "from"));
+        Assert.IsNull(QueryValue(context, "to"));
         Assert.AreEqual("今週", SelectedPeriodTab(cut));
         Assert.AreEqual(0, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
         Assert.AreEqual(0, context.JSInterop.Invocations.Count(invocation => invocation.Identifier == "Microsoft.FluentUI.AspNetCore.Components.Dialog.Show"));
@@ -265,7 +283,7 @@ public sealed class RacePagesComponentTests
     }
 
     [TestMethod]
-    public void RaceList_PeriodUrl_ResolvesMissingDatesAndWritesResolvedValues()
+    public void RaceList_PeriodUrl_ResolvesMissingDatesAndKeepsPeriodRelative()
     {
         using var handler = new RaceApiHandler();
         using var context = CreateContext(handler);
@@ -278,8 +296,8 @@ public sealed class RacePagesComponentTests
         Assert.AreEqual("2026-09-07", handler.LastRequestDateFrom);
         Assert.AreEqual("2026-10-07", handler.LastRequestDateTo);
         Assert.AreEqual("past-month", QueryValue(context, "period"));
-        Assert.AreEqual("2026-09-07", QueryValue(context, "from"));
-        Assert.AreEqual("2026-10-07", QueryValue(context, "to"));
+        Assert.IsNull(QueryValue(context, "from"));
+        Assert.IsNull(QueryValue(context, "to"));
     }
 
     [TestMethod]

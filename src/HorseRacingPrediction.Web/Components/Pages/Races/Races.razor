@@ -45,7 +45,7 @@
     private string? validationError;
     private bool loading;
     private SearchRacesResponse? result;
-    private SearchFilters filters = new(null, null, null, null, false, RacePeriod.All, 1);
+    private SearchFilters filters = new(null, null, null, null, false, RacePeriod.Today, 1);
     private long requestVersion;
 
     [Inject] private TimeProvider TimeProvider { get; set; } = null!;
@@ -243,13 +243,15 @@
     private SearchFilters ReadFiltersFromUrl()
     {
         var query = QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query);
-        if (!RacePeriodExtensions.TryParse(Text(query, "period"), out var parsedPeriod))
-        {
-            parsedPeriod = RacePeriod.All;
-        }
-
         DateOnly? parsedFrom = DateOnly.TryParse(Text(query, "from"), out var fromValue) ? fromValue : null;
         DateOnly? parsedTo = DateOnly.TryParse(Text(query, "to"), out var toValue) ? toValue : null;
+        if (!RacePeriodExtensions.TryParse(Text(query, "period"), out var parsedPeriod))
+        {
+            parsedPeriod = parsedFrom is null && parsedTo is null && Text(query, "dateRange") != "true"
+                ? RacePeriod.Today
+                : RacePeriod.All;
+        }
+
         if (parsedPeriod != RacePeriod.All && (parsedFrom is null || parsedTo is null))
         {
             (parsedFrom, parsedTo) = parsedPeriod.ResolveDates(Today);
@@ -262,13 +264,17 @@
 
     private void NavigateToFilters(SearchFilters current)
     {
+        var relativeDates = current.Period.ResolveDates(Today);
+        var useRelativeDates = current.Period != RacePeriod.All
+                               && current.From == relativeDates.From
+                               && current.To == relativeDates.To;
         var values = new Dictionary<string, string?>
         {
             ["name"] = current.Name,
             ["course"] = current.Course,
             ["period"] = current.Period.ToQueryValue(),
-            ["from"] = current.From?.ToString("yyyy-MM-dd"),
-            ["to"] = current.To?.ToString("yyyy-MM-dd"),
+            ["from"] = useRelativeDates ? null : current.From?.ToString("yyyy-MM-dd"),
+            ["to"] = useRelativeDates ? null : current.To?.ToString("yyyy-MM-dd"),
             ["dateRange"] = current.DateRangeEnabled && current.From is null && current.To is null ? "true" : null,
             ["page"] = current.Page.ToString()
         };
