@@ -11,20 +11,20 @@
         </div>
     </div>
 
-    <div class="race-filter-group" aria-label="検索条件">
+    <FluentStack Class="race-filter-group" Orientation="Orientation.Horizontal" HorizontalGap="4">
         <FilterSelection Label="開催場"
-                         Value="@Course"
-                         ValueChanged="OnCourseInput"
-                         Items="@CourseOptions" />
+                            Value="@Course"
+                            ValueChanged="OnCourseInput"
+                            Items="@CourseOptions" />
 
         <FilterDateRangePicker From="@From"
-                               FromChanged="OnDateFromChanged"
-                               To="@To"
-                               ToChanged="OnDateToChanged"
-                               OnDateFilterChanged="OnDateFilterChangedAsync"
-                               Enabled="@DateRangeEnabled"
-                               EnabledChanged="DateRangeEnabledChanged" />
-    </div>
+                                FromChanged="OnDateFromChanged"
+                                To="@To"
+                                ToChanged="OnDateToChanged"
+                                OnDateFilterChanged="OnDateFilterChangedAsync"
+                                Enabled="@DateRangeEnabled"
+                                EnabledChanged="DateRangeEnabledChanged" />
+    </FluentStack>
 </div>
 
 <FluentTabs Class="race-period-tabs"

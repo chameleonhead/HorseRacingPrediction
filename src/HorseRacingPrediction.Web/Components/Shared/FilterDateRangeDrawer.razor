@@ -5,35 +5,27 @@
         @($"{Label}の期間を指定")
     </TitleTemplate>
     <ChildContent>
-        <div class="date-range-drawer-fields">
-            <label>
-                開始日
-                <FluentDatePicker TValue="DateOnly?"
-                                  Autofocus="true"
-                                  AriaLabel="開始日"
-                                  Placeholder="開始日"
-                                  Value="@DraftFrom"
-                                  ValueChanged="OnDraftFromChanged" />
-            </label>
-            <label>
-                終了日
-                <FluentDatePicker TValue="DateOnly?"
-                                  AriaLabel="終了日"
-                                  Placeholder="終了日"
-                                  Value="@DraftTo"
-                                  ValueChanged="OnDraftToChanged" />
-            </label>
-        </div>
+        <FluentStack Orientation="Orientation.Vertical">
+            <FluentDatePicker TValue="DateOnly?"
+                              Autofocus="true"
+                              Label="開始日"
+                              Value="@DraftFrom"
+                              ValueChanged="OnDraftFromChanged"
+                              Style="width: 100%" />
+            <FluentDatePicker TValue="DateOnly?"
+                              Label="終了日"
+                              Value="@DraftTo"
+                              ValueChanged="OnDraftToChanged"
+                              Style="width: 100%" />
+        </FluentStack>
         @if (!string.IsNullOrWhiteSpace(ValidationMessage))
         {
             <FluentMessageBar Intent="@MessageBarIntent.Error">@ValidationMessage</FluentMessageBar>
         }
     </ChildContent>
     <ActionTemplate>
-        <div class="date-range-drawer-footer">
-            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ApplyAsync" Disabled="@(!CanApply)">適用</FluentButton>
-            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="CancelAsync">キャンセル</FluentButton>
-        </div>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ApplyAsync" Disabled="@(!CanApply)">適用</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Outline" OnClick="CancelAsync">キャンセル</FluentButton>
     </ActionTemplate>
 </FluentDialogBody>
 
