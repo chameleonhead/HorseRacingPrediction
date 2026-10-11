@@ -26,13 +26,19 @@
     {
         <FluentListbox TOption="FilterSelectionOption"
                        TValue="string"
-                       Items="@Items"
-                       OptionValue="@(item => item.Value)"
-                       OptionText="@(item => item.Label)"
-                       OptionTemplate="@RenderOption"
                        Value="@ListboxValue"
                        ValueChanged="OnValueChanged"
-                       Appearance="ListAppearance.Transparent" />
+                       Appearance="ListAppearance.Transparent">
+            @foreach (var option in Items)
+            {
+                <FluentOption TOption="FilterSelectionOption"
+                              Value="@option.Value"
+                              Text="@option.Label"
+                              @onclick="() => SelectOptionAsync(option)">
+                    @option.Label
+                </FluentOption>
+            }
+        </FluentListbox>
     }
 </FluentPopover>
 
@@ -55,18 +61,6 @@
     private IEnumerable<FilterSelectionOption> SelectedOptions
         => Items.Where(item => SelectedValues.Contains(item.Value));
     private string? ListboxValue => Value == ActionValue ? null : Value;
-
-    private RenderFragment<FilterSelectionOption> RenderOption => option => builder =>
-    {
-        builder.OpenElement(0, "button");
-        builder.AddAttribute(1, "type", "button");
-        builder.AddAttribute(2, "class", "filter-selection-option-button");
-        builder.AddAttribute(3, "data-filter-option", option.Value);
-        builder.AddAttribute(4, "onclick", EventCallback.Factory.Create(this, () => SelectOptionAsync(option)));
-        builder.AddAttribute(5, "onclick:stopPropagation", true);
-        builder.AddContent(6, option.Label);
-        builder.CloseElement();
-    };
 
     private string SelectionSummary
     {
