@@ -15,7 +15,7 @@
         <FluentListbox TOption="FilterSelectionOption"
                        TValue="string"
                        Multiple="true"
-                       Items="@SelectableItems"
+                       Items="@Items"
                        OptionValue="@(item => item.Value)"
                        OptionText="@(item => item.Label)"
                        SelectedItems="@SelectedOptions"
@@ -26,22 +26,12 @@
     {
         <FluentListbox TOption="FilterSelectionOption"
                        TValue="string"
-                       Items="@SelectableItems"
+                       Items="@Items"
                        OptionValue="@(item => item.Value)"
                        OptionText="@(item => item.Label)"
-                       Value="@Value"
+                       Value="@ListboxValue"
                        ValueChanged="OnValueChanged"
                        Appearance="ListAppearance.Transparent" />
-    }
-    @if (ActionValue is not null)
-    {
-        var action = Items.FirstOrDefault(item => item.Value == ActionValue);
-        if (action is not null)
-        {
-            <button type="button" class="filter-selection-action" @onclick="OnActionSelected">
-                @action.Label
-            </button>
-        }
     }
 </FluentPopover>
 
@@ -63,9 +53,7 @@
 
     private IEnumerable<FilterSelectionOption> SelectedOptions
         => Items.Where(item => SelectedValues.Contains(item.Value));
-    private IEnumerable<FilterSelectionOption> SelectableItems
-        => ActionValue is null ? Items : Items.Where(item => item.Value != ActionValue);
-
+    private string? ListboxValue => Value == ActionValue ? null : Value;
     private string SelectionSummary
     {
         get
@@ -96,6 +84,12 @@
 
     private async Task OnValueChanged(string? value)
     {
+        if (value == ActionValue)
+        {
+            await OnActionSelected();
+            return;
+        }
+
         await ValueChanged.InvokeAsync(value);
         IsOpened = false;
     }
