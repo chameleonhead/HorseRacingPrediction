@@ -36,7 +36,7 @@
                 <FluentOption TOption="FilterSelectionOption"
                               Value="@option.Value"
                               Text="@option.Label"
-                              Selected="@(ListboxValue == option.Value)"
+                              Selected="@((SelectionValue ?? Value) == option.Value)"
                               @onclick="() => SelectOptionAsync(option)">
                     @option.Label
                 </FluentOption>
@@ -57,6 +57,7 @@
     [Parameter] public string[] SelectedValues { get; set; } = Array.Empty<string>();
     [Parameter] public EventCallback<string[]> SelectedValuesChanged { get; set; }
     [Parameter] public int SelectionResetVersion { get; set; }
+    [Parameter] public string? SelectionValue { get; set; }
 
     private readonly string AnchorId = $"filter-selection-{Guid.NewGuid():N}";
     private bool IsOpened { get; set; }
@@ -64,7 +65,7 @@
 
     private IEnumerable<FilterSelectionOption> SelectedOptions
         => Items.Where(item => SelectedValues.Contains(item.Value));
-    private string? ListboxValue => Value;
+    private string? ListboxValue => Value == ActionValue ? null : Value;
 
     private string SelectionSummary
     {

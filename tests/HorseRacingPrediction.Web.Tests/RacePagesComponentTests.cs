@@ -234,6 +234,8 @@ public sealed class RacePagesComponentTests
         Assert.AreEqual("2026-10-07", handler.LastRequestDateTo);
         Assert.AreEqual("week", QueryValue(context, "period"));
         Assert.AreEqual("今週", SelectedPeriodTab(cut));
+        Assert.AreEqual(0, cut.FindComponents<FluentDatePicker<DateOnly?>>().Count);
+        Assert.AreEqual(0, context.JSInterop.Invocations.Count(invocation => invocation.Identifier == "Microsoft.FluentUI.AspNetCore.Components.Dialog.Show"));
 
         await FindPeriodTab(cut, "過去一ヶ月").ClickAsync();
         Assert.AreEqual("2026-09-07", handler.LastRequestDateFrom);
