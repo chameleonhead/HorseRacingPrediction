@@ -22,16 +22,6 @@
     margin: 0;
 }
 
-.date-range-drawer-header fluent-button {
-    width: 40px;
-    height: 40px;
-    color: var(--colorNeutralForeground1);
-    font-size: 24px;
-    background: transparent;
-    border: 0;
-    cursor: pointer;
-}
-
 .date-range-drawer-footer {
     justify-content: flex-end;
     padding: 16px;

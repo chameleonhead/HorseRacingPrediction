@@ -158,6 +158,12 @@ public sealed class FilterComponentsTests
         Assert.AreEqual("開始日", datePickers[0].Instance.AriaLabel);
         Assert.IsTrue(datePickers[0].Instance.Autofocus);
         Assert.AreEqual("終了日", datePickers[1].Instance.AriaLabel);
+        CollectionAssert.AreEqual(
+            new[] { "適用", "キャンセル" },
+            cut.FindComponents<FluentButton>()
+                .Where(button => button.Markup.Contains("適用") || button.Markup.Contains("キャンセル"))
+                .Select(button => button.Markup.Contains("適用") ? "適用" : "キャンセル")
+                .ToArray());
 
         await cut.InvokeAsync(() => datePickers[0].Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 11)));
         await cut.InvokeAsync(() => cut.FindComponents<FluentDatePicker<DateOnly?>>().Last().Instance.ValueChanged.InvokeAsync(new DateOnly(2026, 10, 10)));

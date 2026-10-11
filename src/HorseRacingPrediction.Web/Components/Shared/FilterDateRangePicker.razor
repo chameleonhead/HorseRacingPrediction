@@ -22,7 +22,6 @@
             <TitleTemplate>
                 <header class="date-range-drawer-header">
                     <h2 id="@DrawerTitleId">@($"{Label}の期間を指定")</h2>
-                    <FluentButton Appearance="ButtonAppearance.Subtle" aria-label="閉じる" OnClick="CancelDrawer">×</FluentButton>
                 </header>
             </TitleTemplate>
             <ChildContent>
@@ -52,8 +51,8 @@
             </ChildContent>
             <ActionTemplate>
                 <div class="date-range-drawer-footer">
-                    <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="CancelDrawer">キャンセル</FluentButton>
                     <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ApplyCustomRangeAsync" Disabled="@(!CanApplyCustomRange)">適用</FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="CancelDrawer">キャンセル</FluentButton>
                 </div>
             </ActionTemplate>
         </FluentDialogBody>
