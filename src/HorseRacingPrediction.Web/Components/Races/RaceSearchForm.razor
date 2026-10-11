@@ -11,7 +11,7 @@
         </div>
     </div>
 
-    <FluentStack Class="race-filter-group" Orientation="Orientation.Horizontal" HorizontalGap="4">
+    <ResponsiveStack Class="race-filter-group">
         <FilterSelection Label="開催場"
                             Value="@Course"
                             ValueChanged="OnCourseInput"
@@ -24,7 +24,7 @@
                                 OnDateFilterChanged="OnDateFilterChangedAsync"
                                 Enabled="@DateRangeEnabled"
                                 EnabledChanged="DateRangeEnabledChanged" />
-    </FluentStack>
+    </ResponsiveStack>
 </div>
 
 <FluentTabs Class="race-period-tabs"

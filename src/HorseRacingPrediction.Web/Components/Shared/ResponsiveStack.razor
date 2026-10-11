@@ -1,0 +1,51 @@
+<div class="responsive-stack @Class"
+     style="@ComputedStyle"
+     @attributes="AdditionalAttributes">
+    @ChildContent
+</div>
+
+@code {
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public bool DesktopHorizontal { get; set; } = true;
+
+    [Parameter]
+    public bool MobileHorizontal { get; set; } = false;
+
+    [Parameter]
+    public string DesktopGap { get; set; } = "8px";
+
+    [Parameter]
+    public string? MobileGap { get; set; } = "4px";
+
+    [Parameter]
+    public string AlignItems { get; set; } = "stretch";
+
+    [Parameter]
+    public string JustifyContent { get; set; } = "flex-start";
+
+    [Parameter]
+    public bool Wrap { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    [Parameter]
+    public string? Style { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string ComputedStyle => $"""
+        --rs-desktop-direction: {(DesktopHorizontal ? "row" : "column")};
+        --rs-mobile-direction: {(MobileHorizontal ? "row" : "column")};
+        --rs-desktop-gap: {DesktopGap};
+        --rs-mobile-gap: {MobileGap ?? DesktopGap};
+        --rs-align: {AlignItems};
+        --rs-justify: {JustifyContent};
+        --rs-wrap: {(Wrap ? "wrap" : "nowrap")};
+        {Style}
+        """;
+}

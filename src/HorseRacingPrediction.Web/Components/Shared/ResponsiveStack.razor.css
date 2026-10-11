@@ -1,0 +1,21 @@
+﻿.responsive-stack {
+    display: flex;
+    flex-direction: var(--rs-desktop-direction);
+    gap: var(--rs-desktop-gap);
+    align-items: var(--rs-align);
+    justify-content: var(--rs-justify);
+    flex-wrap: var(--rs-wrap);
+    min-width: 0;
+}
+
+@media (max-width: 640px) {
+    .responsive-stack {
+        flex-direction: var(--rs-mobile-direction);
+        gap: var(--rs-mobile-gap);
+    }
+
+        .responsive-stack > * {
+            width: 100%;
+            box-sizing: border-box;
+        }
+}

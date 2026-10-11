@@ -1,14 +1,12 @@
-<div class="date-range-filter">
-    <FilterSelection Label="@Label"
-                     Value="@SelectedOption"
-                     ValueChanged="OnSelectionChanged"
-                     ActionValue="@CustomOption"
-                     ActionValueSelected="OnSelectionChanged"
-                     DisplayValue="@DisplayValue"
-                     Items="@Options"
-                     SelectionValue="@SelectedOption"
-                     SelectionResetVersion="@SelectionResetVersion" />
-</div>
+<FilterSelection Label="@Label"
+                 Value="@SelectedOption"
+                 ValueChanged="OnSelectionChanged"
+                 ActionValue="@CustomOption"
+                 ActionValueSelected="OnSelectionChanged"
+                 DisplayValue="@DisplayValue"
+                 Items="@Options"
+                 SelectionValue="@SelectedOption"
+                 SelectionResetVersion="@SelectionResetVersion" />
 
 @code {
     private const string AllOption = "all";

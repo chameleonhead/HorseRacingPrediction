@@ -41,6 +41,11 @@
         => (DraftFrom is not null || DraftTo is not null)
            && (DraftFrom is null || DraftTo is null || DraftFrom <= DraftTo);
 
+    protected override void OnInitializeDialog(DialogOptionsHeader header, DialogOptionsFooter footer)
+    {
+        header.CloseAction.Visible = true;
+    }
+
     protected override void OnParametersSet()
     {
         DraftFrom = From;
