@@ -62,7 +62,7 @@ builder.Services.AddFluentUIComponents();
 builder.Services.AddScoped<IDialogService, DialogService>();
 builder.Services.AddScoped<IToastService, ToastService>();
 builder.Services.AddSingleton<AdminApiBaseAddressResolver>();
-builder.Services.AddHttpClient<AdminApiClient>();
+builder.Services.AddHttpClient<AdminApiClient>().RemoveAllLoggers();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;

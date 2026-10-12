@@ -153,6 +153,7 @@ public static class EndpointExtensions
         global::HorseRacingPrediction.Api.Endpoints.Identity.ResolveHorseIdentityEndpoint.Map(writeGroup);
         global::HorseRacingPrediction.Api.Endpoints.Identity.ResolveRaceIdentityEndpoint.Map(writeGroup);
         global::HorseRacingPrediction.Api.Endpoints.Identity.GetHorseIdentityDiagnosticEndpoint.Map(adminReadGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Identity.GetIdentityMigrationPreflightEndpoint.Map(adminReadGroup);
         global::HorseRacingPrediction.Api.Endpoints.MachineLearning.TrainMlModelEndpoint.Map(app);
         return app;
     }
