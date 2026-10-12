@@ -2,6 +2,8 @@
 
 Status: planning-only. This note is the P4R source-informed readiness gate for AC5. It does not implement the page, client method, endpoint, or tests, and it does not authorize a migration, apply, resume, reset, job retry, production read, or browser run.
 
+2026-10-13 reconciliation: the body below preserves the original P4R investigation before P3. P3/P3L are now verified and committed in c7fb93ed. The authoritative current [README P4 readiness/source gate](README.md#review-gates) freezes the client method, typed Page wrapper, null/status behavior, route and Japanese recovery labels, and authorizes exactly five UI/test files. The client entry in the historical six-entry list is a frozen read dependency, never a P4 write scope. P4 owner is now hold_impl through its existing selected Luna route after the originally planned UI worker's usage-limit interruption. Actual Program/browser/log evidence still must be produced; no runtime completion is claimed by this reconciliation.
+
 ## Purpose and frozen UI contract
 
 The authenticated administrator gets a dedicated read-only page linked from Settings. The page starts one bounded GET and advances with one explicit continuation GET at a time. It keeps only the current page (at most 128 evidence items) in browser component state; it must not concatenate all pages or expose a browser-held API key. A successful page replaces the current page. A failed continuation keeps the previous page visible and labels it stale. A bad, expired, or restart-invalid cursor discards continuation and requires a fresh scan.

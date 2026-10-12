@@ -1,0 +1,25 @@
+# P3U continuation availability closure
+
+AC4/AC5; owner hold_impl, requested existing gpt-6-luna/high route, observed model/usage unavailable. Scope is the four files in canonical README. P4 writes are frozen while this slice runs. No production writes, migration, resume or retry.
+
+## Hypothesis and executable evidence
+
+H-U1 was initially an ordering inference, now reproduced in isolated same-path SQLite fixture: valid protected continuation plus exclusive required EventStore lock raises InvalidCursor instead of Unavailable. The protected schema includes transient observation status and is checked before required availability. Releasing the lock allows the identical cursor to advance to HorseEvents; database snapshot remains unchanged. No configured path substitution or database rename/removal was used.
+
+Expected red command: `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --configuration Release --no-restore --filter FullyQualifiedName~ValidCursorWithTemporarilyLockedRequiredStoreReturnsUnavailableAndRetriesSameCursor --logger "console;verbosity=minimal"`. Worker reports terminal exit1, 1 test/0 pass; observed `IdentityMigrationPreflightInvalidCursorException` rather than required `IdentityMigrationPreflightUnavailableException`. This is deliberate pre-fix defect evidence, not a green gate or fixture retry.
+
+Disposition: conditional four-file correction authorized in README. Shared authenticated fixed-claim validation precedes required-store availability; exact schema binding must still pass before any row read. Preserve tamper/expiry/incompatible400 during unavailable observations, readable schema drift400, optional initial partial200 and unchanged wire/policy/TTL. Actual AdminApiClient→endpoint→reader503/recovery counterpart remains required.
+
+## Remaining gates
+
+Selective backend checkpoint readiness: stage only four P3U source/test files; P4 UI files and Lead records/audits intentionally remain unstaged for their own checkpoint. Backend regression tests do not consume the new UI component/browser source, so no acceptance-critical P3U test fix is omitted. Final current combined67/67+Collector2/2/API build and exact formatter14806/graph/diff also reconfirm this backend slice. Staged diffcheck passes and contains no user-owned/secret/generated file. Full-suite and manual/live verification still pending; commit does not stop work.
+
+Local closure accepted by Lead:67/67 API,2/2 Collector; API Release0 warnings/errors; exact formatter31448exit0; CodeGraph sync and endpoint→service→authenticated-protector trace exit0; diffcheckexit0. Four-file scope independently reviewed. Original red passes; compile failure closed. One corrective retry, no Lead source edits/promotion/escaped deployed defect; requested6-luna/high, actual model/usage not exposed. Audit P3U-A1 completed. No full-suite/deployment/live acceptance inferred; P4/P5 remain open.
+
+Final test additions frozen: API related filter `IdentityMigrationPreflight|AdminApiClientLoggingTests|HorseIdentityDiagnostic` session87363 exits0,67/67 (47s), including real-client optional initial partial success without missing-store creation, readable schema drift400/restored retry, required503/same-cursor recovery and tampered400 under lock. Collector preflight/diagnostic2/2 passed before these test-only additions. Lead inspected schema mutation only in disposable fixture and finally restoration. Final clean build/exact formatter/graph/diff and completed audit are still pending; P3U not yet Verified.
+
+Post-fix failure ledger: first combined new service/endpoint focused invocation failed compilation at EndpointsTests.cs255 (CS1061: HttpClient has no DisposeAsync). Classified local cleanup API mismatch; worker changes owned fixture to synchronous Dispose and reruns original filter. Closure pending terminal result; no public-contract change or tier promotion.
+
+Intermediate closure: corrected original new-case filter2/2; full service/endpoint filter24/24, session37912. Real AdminApiClient/TestServer confirms tampered400 while locked, authenticated valid503, identical-cursor success after unlocking and unchanged DB/schema/event snapshot. Lead inspected four-file diff independently: shared fixed-claim decoder preserves existing fully bound overload; service authenticates before schema access, required availability precedes equality, equality precedes all row reads. Actual-client readable drift control still to be added/rerun; existing policy expiry/incompatibility and optional initial partial controls must be identified in broader passing evidence. Compiler cleanup issue is closed by successful original focused filter; final post-edit gates remain open.
+
+Original red test must pass after correction, then real HTTP/client counterpart, preflight/logging/horse-diagnostic regressions, Collector read regressions, clean API Release, exact solution formatter, CodeGraph sync/query and diff/status. P3U remains In progress until independent AC-group acceptance. P4 caption/actual refresh, full integrated CI/CD and live acceptance remain unfinished. No completion claim.

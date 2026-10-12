@@ -4,13 +4,15 @@
 - Change record schema: 2
 - Owner: Lead
 - Created: 2026-10-11
-- Updated: 2026-10-12
+- Updated: 2026-10-13
 
 ## Completion summary
 
+Latest child milestone (2026-10-13): local source checkpoints a116cec9 (transient-continuation fix) and a41a4187 (admin preflight page), UI9/9/API67/67/Collector2/2 and source gates pass. P5V full verification runs on existing Luna route. P5B independent local browser host launch rejected before shell; no config/temp/process effects, user environment requested, no bypass. Production login expired and re-login requested. Neither child deployment nor parent all-data migration/recovery is complete; original identity provenance still unknown and no parent write/reset/resume authorized.
+
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Not started | Determine the Tokyo 3R rejection and its identity provenance before selecting a correction. |
+| Code | Not started | Migration/correction runtime remains unimplemented. Separately approved bounded preflight backend/API/logging/UI local slices verified through a41a4187, unpushed; full integrated/manual/live acceptance unfinished. Determine identity provenance before selecting a mapping. |
 | Verification | Not started | Production-shaped falsifier and endpoint regression coverage are required. |
 | Deployment/operation | Not started | Diagnostic child deployed and Tokyo/Kyoto reads verified at379c18a2; original ID provenance and full-data migration remain unresolved. No horse migration or recovery mutation performed. |
 
@@ -70,6 +72,8 @@ Restore eligible collection work after a verified correction without corrupting 
 | T5 | Deploy, perform bounded recovery, independently verify outcome. | Lead — deployment/recovery acceptance; CI — mechanical gates | Lead/CI | T4,U1 | Canonical deployment and approved migration/recovery route frozen in T3; no edits yet | Successful replacement, command/UI operation outcome and continuing progress | Next: after verified code and production eligibility, execute bounded recovery | Dependent | Lead retains credentials, production risk and final integration; workflow gates supply independent checks | none | unavailable; retries 0; corrections 0; reviews 0 |
 
 ## Review gates and next action
+
+2026-10-13 acquisition continuation (Lead): the user explicitly approved bounded preflight child AC1–AC5/C1–C6 after the summarized scope and asked to continue. Child source P1/P2/P3/P3L is verified and checkpointed locally atc7fb93ed (not pushed/deployed); P4 UI is now executing on the existing selected Luna route after the originally planned UI worker hit a usage limit. Actual Program/browser/full-solution/normal deployment/bounded production reads remain unfinished. This is an acquisition milestone, not a full target census, migration command, identity-provenance explanation or recovery. Parent AC1 remains Connected and AC2–AC5 Not started, C2/C5–C10 Open, T3/T4/U1/T5 incomplete. Unknown original caller/input and all-data/reference/external/collision/cutover decisions retain Lead ownership. Next finish approved child UI/integrated/live acceptance, then use actual bounded observations to settle concrete parent migration design; no mapping, apply/reset/resume or blind retry authorized by this continuation.
 
 M5 proposal checkpoint (2026-10-12, Lead): integrated child AC1–AC5/concerns reviewed and accepted for explicit approval request, not implementation. Four configured SQLite schemas and six row-readable tables are bounded observation only; full target census, provenance, migration runner/apply/cutover and recovery remain unfinished parent work. Lead independently reran `python scripts/audit_agent_execution.py docs/changes/20261011_recurring-horse-identity-conflict`, canonical DDD validator for parent/diagnostic/preflight children, and `git diff --check`: all exit0, DDD issues0. One worker validator-path retry and three review correction rounds are recorded; usage/model/active-effort telemetry unavailable. No source/test edits, no new production operation. Next action: obtain explicit preflight child approval, then assign exact source/test scope and readiness gate to Luna before implementation; do not migrate/reset/resume meanwhile.
 
