@@ -32,6 +32,11 @@ internal sealed class IdentityMigrationPreflightService(
         deadline.CancelAfter(IdentityMigrationPreflightPolicy.RequestDeadline);
         try
         {
+            IdentityMigrationPreflightCursor? unprotected = null;
+            if (cursor is not null
+                && (!cursorProtector.TryUnprotectAuthenticated(cursor, out unprotected) || unprotected is null))
+                throw new IdentityMigrationPreflightInvalidCursorException();
+
             var eventStoreSchema = await eventStoreReader.InspectSchemaAsync(deadline.Token).ConfigureAwait(false);
             var configuredSchemas = await configuredSurfaceReader.InspectAsync(deadline.Token).ConfigureAwait(false);
             var schemas = new[] { eventStoreSchema }.Concat(configuredSchemas).ToArray();
@@ -40,35 +45,22 @@ internal sealed class IdentityMigrationPreflightService(
             if (schemaAssumptions.Length > IdentityMigrationPreflightPolicy.MaximumSchemaAssumptionsCharacters)
                 return IncompleteSchemaPage(schemas);
 
-            IdentityMigrationPreflightPhase phase;
-            string? afterKey;
-            if (cursor is null)
-            {
-                phase = IdentityMigrationPreflightPolicy.GetPhases()[0];
-                afterKey = null;
-            }
-            else if (cursor.Length > IdentityMigrationPreflightPolicy.MaximumCursorCharacters
-                || !cursorProtector.TryUnprotect(cursor, schemaAssumptions, out var unprotected)
-                || unprotected is null)
-            {
-                throw new IdentityMigrationPreflightInvalidCursorException();
-            }
-            else
-            {
-                phase = unprotected.Phase;
-                afterKey = unprotected.Key;
-            }
+            var phase = unprotected?.Phase ?? IdentityMigrationPreflightPolicy.GetPhases()[0];
+            var afterKey = unprotected?.Key;
 
             var requiredSurface = phase == IdentityMigrationPreflightPhase.CollectionResources
                 ? IdentityMigrationPreflightSurface.CollectionPlatform
                 : IdentityMigrationPreflightSurface.EventStore;
             var requiredObservation = schemas.SingleOrDefault(item => item.Surface == requiredSurface);
+            if (requiredObservation?.Status == IdentityMigrationPreflightObservationStatus.Unavailable)
+                throw new IdentityMigrationPreflightUnavailableException();
+            if (unprotected is not null
+                && !string.Equals(unprotected.SchemaAssumptions, schemaAssumptions, StringComparison.Ordinal))
+                throw new IdentityMigrationPreflightInvalidCursorException();
             if (requiredObservation is null || requiredObservation.Status is
                 IdentityMigrationPreflightObservationStatus.Unsupported or
                 IdentityMigrationPreflightObservationStatus.Truncated)
                 return IncompleteStorePage(phase, schemas);
-            if (requiredObservation.Status == IdentityMigrationPreflightObservationStatus.Unavailable)
-                throw new IdentityMigrationPreflightUnavailableException();
 
             var rows = phase == IdentityMigrationPreflightPhase.CollectionResources
                 ? await ReadCollectionPageAsync(afterKey, deadline.Token).ConfigureAwait(false)

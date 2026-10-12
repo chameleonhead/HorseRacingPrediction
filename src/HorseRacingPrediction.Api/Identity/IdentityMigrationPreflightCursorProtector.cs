@@ -54,10 +54,24 @@ internal sealed class IdentityMigrationPreflightCursorProtector
         out IdentityMigrationPreflightCursor? cursor)
     {
         cursor = null;
-        if (string.IsNullOrWhiteSpace(token)
-            || token.Length > IdentityMigrationPreflightPolicy.MaximumCursorCharacters
-            || string.IsNullOrWhiteSpace(expectedSchemaAssumptions)
+        if (string.IsNullOrWhiteSpace(expectedSchemaAssumptions)
             || expectedSchemaAssumptions.Length > IdentityMigrationPreflightPolicy.MaximumSchemaAssumptionsCharacters)
+            return false;
+
+        if (!TryUnprotectAuthenticated(token, out var authenticated)
+            || authenticated is null
+            || !string.Equals(authenticated.SchemaAssumptions, expectedSchemaAssumptions, StringComparison.Ordinal))
+            return false;
+
+        cursor = authenticated;
+        return true;
+    }
+
+    internal bool TryUnprotectAuthenticated(string? token, out IdentityMigrationPreflightCursor? cursor)
+    {
+        cursor = null;
+        if (string.IsNullOrWhiteSpace(token)
+            || token.Length > IdentityMigrationPreflightPolicy.MaximumCursorCharacters)
             return false;
 
         try
@@ -67,7 +81,7 @@ internal sealed class IdentityMigrationPreflightCursorProtector
                 return false;
 
             var value = JsonSerializer.Deserialize<IdentityMigrationPreflightCursor>(json, JsonOptions);
-            if (value is null || !IsValid(value, expectedSchemaAssumptions, protectorExpiration))
+            if (value is null || !IsValidAuthenticatedClaims(value, protectorExpiration))
                 return false;
 
             cursor = value;
@@ -79,7 +93,7 @@ internal sealed class IdentityMigrationPreflightCursorProtector
         }
     }
 
-    private bool IsValid(IdentityMigrationPreflightCursor cursor, string expectedSchemaAssumptions,
+    private bool IsValidAuthenticatedClaims(IdentityMigrationPreflightCursor cursor,
         DateTimeOffset protectorExpiration)
     {
         var now = _timeProvider.GetUtcNow();
@@ -87,7 +101,6 @@ internal sealed class IdentityMigrationPreflightCursorProtector
             && string.Equals(cursor.StoreSelection, IdentityMigrationPreflightPolicy.StoreSelection, StringComparison.Ordinal)
             && string.Equals(cursor.SchemaAssumptionVersion,
                 IdentityMigrationPreflightPolicy.SchemaAssumptionVersion, StringComparison.Ordinal)
-            && string.Equals(cursor.SchemaAssumptions, expectedSchemaAssumptions, StringComparison.Ordinal)
             && Enum.IsDefined(cursor.Phase)
             && cursor.Key is not null
             && cursor.Key.Length <= IdentityMigrationPreflightPolicy.MaximumKeyCharacters

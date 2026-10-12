@@ -177,6 +177,173 @@ public sealed class IdentityMigrationPreflightEndpointsTests
     }
 
     [TestMethod]
+    public async Task AdminClient_ValidCursorReportsLockedStore503AndRetriesAfterSameStoreReopens()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "identity-migration-preflight-client-locked-read",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var eventPath = Path.Combine(root, "events.db");
+        var (fixtureApp, fixtureClient) = await TestApplicationFactory.CreateAsync($"Data Source={eventPath};Pooling=False");
+        try
+        {
+            fixtureClient.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+            var horseId = $"horse-{Guid.NewGuid():D}";
+            using (var registration = await fixtureClient.PostAsJsonAsync("/api/horses",
+                new RegisterHorseRequest(new($"Preflight lock {Guid.NewGuid():N}", "preflight-lock", "牡",
+                    new DateOnly(2020, 4, 5), horseId))))
+                Assert.AreEqual(HttpStatusCode.Created, registration.StatusCode);
+
+            _ = new CollectionPlatformStore(fixtureApp.Services.GetRequiredService<IOptions<CollectionPlatformOptions>>());
+            using var services = CreateServiceProvider(fixtureApp);
+            var service = services.GetRequiredService<IdentityMigrationPreflightService>();
+            var api = await StartApiAsync(service);
+            try
+            {
+                using var transport = api.GetTestClient();
+                var adminClient = new AdminApiClient(transport,
+                    new AdminApiBaseAddressResolver(api.Services.GetRequiredService<IServer>()),
+                    Options.Create(new ApiKeyOptions
+                    {
+                        HeaderName = "X-Api-Key",
+                        Key = TestApplicationFactory.TestApiKey,
+                    }));
+
+                var first = await adminClient.GetIdentityMigrationPreflightAsync(null);
+                Assert.IsNotNull(first?.NextCursor);
+                var cursor = first.NextCursor;
+                var before = await SnapshotAsync(eventPath);
+
+                await using (var blocker = new SqliteConnection($"Data Source={eventPath};Pooling=False"))
+                {
+                    await blocker.OpenAsync();
+                    await using (var lockCommand = blocker.CreateCommand())
+                    {
+                        lockCommand.CommandText = "PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE;";
+                        await lockCommand.ExecuteNonQueryAsync();
+                    }
+
+                    try
+                    {
+                        var invalid = await Assert.ThrowsAsync<HttpRequestException>(
+                            () => adminClient.GetIdentityMigrationPreflightAsync(cursor + "x"));
+                        Assert.AreEqual(HttpStatusCode.BadRequest, invalid.StatusCode);
+
+                        var unavailable = await Assert.ThrowsAsync<HttpRequestException>(
+                            () => adminClient.GetIdentityMigrationPreflightAsync(cursor));
+                        Assert.AreEqual(HttpStatusCode.ServiceUnavailable, unavailable.StatusCode);
+                    }
+                    finally
+                    {
+                        await using var unlock = blocker.CreateCommand();
+                        unlock.CommandText = "ROLLBACK; PRAGMA locking_mode=NORMAL;";
+                        await unlock.ExecuteNonQueryAsync();
+                    }
+                }
+
+                var retry = await adminClient.GetIdentityMigrationPreflightAsync(cursor);
+                Assert.IsNotNull(retry);
+                Assert.AreEqual(IdentityMigrationPreflightPhase.HorseEvents, retry.Phase);
+
+                await using (var schemaConnection = new SqliteConnection($"Data Source={eventPath};Pooling=False"))
+                {
+                    await schemaConnection.OpenAsync();
+                    await using (var addUnknown = schemaConnection.CreateCommand())
+                    {
+                        addUnknown.CommandText = "CREATE TABLE AddedAfterCursor (Value TEXT NOT NULL);";
+                        await addUnknown.ExecuteNonQueryAsync();
+                    }
+
+                    try
+                    {
+                        var drift = await Assert.ThrowsAsync<HttpRequestException>(
+                            () => adminClient.GetIdentityMigrationPreflightAsync(cursor));
+                        Assert.AreEqual(HttpStatusCode.BadRequest, drift.StatusCode);
+                    }
+                    finally
+                    {
+                        await using var dropUnknown = schemaConnection.CreateCommand();
+                        dropUnknown.CommandText = "DROP TABLE AddedAfterCursor;";
+                        await dropUnknown.ExecuteNonQueryAsync();
+                    }
+                }
+
+                var recovered = await adminClient.GetIdentityMigrationPreflightAsync(cursor);
+                Assert.IsNotNull(recovered);
+                Assert.AreEqual(IdentityMigrationPreflightPhase.HorseEvents, recovered.Phase);
+                CollectionAssert.AreEqual(before, await SnapshotAsync(eventPath));
+            }
+            finally
+            {
+                await api.DisposeAsync();
+            }
+        }
+        finally
+        {
+            fixtureClient.Dispose();
+            await fixtureApp.DisposeAsync();
+            await DeleteDirectoryEventuallyAsync(root);
+        }
+    }
+
+    [TestMethod]
+    public async Task AdminClient_OptionalInitialUnavailableSurfaceReturnsPartialSuccess()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "identity-migration-preflight-client-optional-unavailable",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var eventPath = Path.Combine(root, "events.db");
+        var scheduleDirectory = Path.Combine(root, "schedule");
+        var schedulePath = Path.Combine(scheduleDirectory, "prediction-executions.db");
+        var (fixtureApp, fixtureClient) = await TestApplicationFactory.CreateAsync($"Data Source={eventPath};Pooling=False");
+        try
+        {
+            var collectionOptions = fixtureApp.Services.GetRequiredService<IOptions<CollectionPlatformOptions>>();
+            _ = new CollectionPlatformStore(collectionOptions);
+            Directory.CreateDirectory(scheduleDirectory);
+            var eventReader = new IdentityMigrationPreflightEventStoreReader(
+                fixtureApp.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>());
+            var configuredReader = new IdentityMigrationPreflightConfiguredSurfaceReader(
+                collectionOptions,
+                Options.Create(new PredictionScheduleOptions { StateDirectory = scheduleDirectory }),
+                Options.Create(new CollectionQueueOptions { Provider = "Sqs" }),
+                fixtureApp.Services.GetRequiredService<IWebHostEnvironment>());
+            var protector = new IdentityMigrationPreflightCursorProtector(
+                fixtureApp.Services.GetRequiredService<IDataProtectionProvider>(), TimeProvider.System);
+            var service = new IdentityMigrationPreflightService(eventReader, configuredReader, protector, TimeProvider.System);
+            var api = await StartApiAsync(service);
+            try
+            {
+                using var transport = api.GetTestClient();
+                var adminClient = new AdminApiClient(transport,
+                    new AdminApiBaseAddressResolver(api.Services.GetRequiredService<IServer>()),
+                    Options.Create(new ApiKeyOptions
+                    {
+                        HeaderName = "X-Api-Key",
+                        Key = TestApplicationFactory.TestApiKey,
+                    }));
+
+                var page = await adminClient.GetIdentityMigrationPreflightAsync(null);
+                Assert.IsNotNull(page);
+                Assert.AreEqual(IdentityMigrationPreflightPageState.Incomplete, page.State);
+                Assert.AreEqual(IdentityMigrationPreflightObservationStatus.Unavailable,
+                    page.Surfaces.Single(item => item.Surface == IdentityMigrationPreflightSurface.PredictionSchedule).Status);
+                Assert.IsNotNull(page.NextCursor);
+                Assert.IsFalse(File.Exists(schedulePath), "The partial response must not create the optional store.");
+            }
+            finally
+            {
+                await api.DisposeAsync();
+            }
+        }
+        finally
+        {
+            fixtureClient.Dispose();
+            await fixtureApp.DisposeAsync();
+            await DeleteDirectoryEventuallyAsync(root);
+        }
+    }
+
+    [TestMethod]
     public async Task Get_MapsInvalidCursorBusyAndUnavailableToSanitizedStatuses()
     {
         var root = Path.Combine(Path.GetTempPath(), "identity-migration-preflight-endpoint-errors", Guid.NewGuid().ToString("N"));

@@ -70,6 +70,56 @@ public sealed class IdentityMigrationPreflightServiceTests
     }
 
     [TestMethod]
+    public async Task OptionalConfiguredSurfaceUnavailableLeavesInitialPageAsPartialSuccess()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "identity-migration-preflight-optional-unavailable",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var eventStorePath = Path.Combine(root, "events.db");
+        var collectionDirectory = Path.Combine(root, "collection");
+        var scheduleDirectory = Path.Combine(root, "schedule");
+        var schedulePath = Path.Combine(scheduleDirectory, "prediction-executions.db");
+        try
+        {
+            var (app, client) = await TestApplicationFactory.CreateAsync($"Data Source={eventStorePath};Pooling=False");
+            await using var application = app;
+            using var http = client;
+            var collectionOptions = Options.Create(new CollectionPlatformOptions
+            {
+                StateDirectory = collectionDirectory,
+            });
+            _ = new CollectionPlatformStore(collectionOptions);
+            Directory.CreateDirectory(scheduleDirectory);
+
+            var reader = new IdentityMigrationPreflightEventStoreReader(
+                app.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>());
+            var configured = new IdentityMigrationPreflightConfiguredSurfaceReader(
+                collectionOptions,
+                Options.Create(new PredictionScheduleOptions { StateDirectory = scheduleDirectory }),
+                Options.Create(new CollectionQueueOptions { Provider = "Sqs" }),
+                app.Services.GetRequiredService<IWebHostEnvironment>());
+            var protector = new IdentityMigrationPreflightCursorProtector(
+                app.Services.GetRequiredService<IDataProtectionProvider>(), TimeProvider.System);
+            var service = new IdentityMigrationPreflightService(reader, configured, protector, TimeProvider.System);
+            var collectionPath = Path.Combine(collectionDirectory, "collection-platform.db");
+            var before = await SnapshotAsync([eventStorePath, collectionPath]);
+
+            var page = await service.GetPageAsync(null, CancellationToken.None);
+
+            Assert.AreEqual(IdentityMigrationPreflightPageState.Incomplete, page.State);
+            Assert.IsNotNull(page.NextCursor);
+            Assert.AreEqual(IdentityMigrationPreflightObservationStatus.Unavailable,
+                page.Surfaces.Single(item => item.Surface == IdentityMigrationPreflightSurface.PredictionSchedule).Status);
+            Assert.IsFalse(File.Exists(schedulePath), "Inspection must not create an unavailable optional store.");
+            CollectionAssert.AreEqual(before, await SnapshotAsync([eventStorePath, collectionPath]));
+        }
+        finally
+        {
+            await DeleteDirectoryEventuallyAsync(root);
+        }
+    }
+
+    [TestMethod]
     public async Task FirstPage_ActivatesThroughDefaultDiAndReadsWithoutChangingDatabaseRowsOrSchema()
     {
         var root = Path.Combine(Path.GetTempPath(), "identity-migration-preflight", Guid.NewGuid().ToString("N"));
@@ -568,6 +618,69 @@ public sealed class IdentityMigrationPreflightServiceTests
             await blocker.DisposeAsync();
             var retry = await service.GetPageAsync(null, CancellationToken.None);
             Assert.AreEqual(IdentityMigrationPreflightPhase.HorseRoots, retry.Phase);
+        }
+        finally
+        {
+            await DeleteDirectoryEventuallyAsync(root);
+        }
+    }
+
+    [TestMethod]
+    public async Task ValidCursorWithTemporarilyLockedRequiredStoreReturnsUnavailableAndRetriesSameCursor()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "identity-migration-preflight-cursor-locked-read",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var eventStorePath = Path.Combine(root, "events.db");
+        try
+        {
+            var (app, client) = await TestApplicationFactory.CreateAsync($"Data Source={eventStorePath};Pooling=False");
+            await using var application = app;
+            using var http = client;
+            http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+            _ = await RegisterFixtureHorseAsync(http);
+            _ = new CollectionPlatformStore(app.Services.GetRequiredService<IOptions<CollectionPlatformOptions>>());
+            using var serviceProvider = CreatePreflightServiceProvider(app);
+            var service = serviceProvider.GetRequiredService<IdentityMigrationPreflightService>();
+            var initial = await service.GetPageAsync(null, CancellationToken.None);
+            Assert.IsNotNull(initial.NextCursor);
+            var cursor = initial.NextCursor;
+            var before = await SnapshotAsync([eventStorePath]);
+
+            Exception? observed = null;
+            await using (var blocker = new SqliteConnection($"Data Source={eventStorePath};Pooling=False"))
+            {
+                await blocker.OpenAsync();
+                await using (var lockCommand = blocker.CreateCommand())
+                {
+                    lockCommand.CommandText = "PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE;";
+                    await lockCommand.ExecuteNonQueryAsync();
+                }
+
+                try
+                {
+                    try
+                    {
+                        _ = await service.GetPageAsync(cursor, CancellationToken.None);
+                    }
+                    catch (Exception exception)
+                    {
+                        observed = exception;
+                    }
+                }
+                finally
+                {
+                    await using var unlock = blocker.CreateCommand();
+                    unlock.CommandText = "ROLLBACK; PRAGMA locking_mode=NORMAL;";
+                    await unlock.ExecuteNonQueryAsync();
+                }
+            }
+
+            var retry = await service.GetPageAsync(cursor, CancellationToken.None);
+            Assert.AreEqual(IdentityMigrationPreflightPhase.HorseEvents, retry.Phase);
+            CollectionAssert.AreEqual(before, await SnapshotAsync([eventStorePath]));
+            Assert.IsInstanceOfType<IdentityMigrationPreflightUnavailableException>(observed,
+                $"A valid continuation must report required-store unavailability, not {observed?.GetType().Name ?? "success"}.");
         }
         finally
         {
