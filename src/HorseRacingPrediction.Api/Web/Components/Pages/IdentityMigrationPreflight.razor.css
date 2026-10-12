@@ -1,0 +1,28 @@
+.preflight-intro, .preflight-result, .preflight-subsection, .preflight-grid-scroll, .preflight-cards, .preflight-card { max-width: 100%; min-width: 0; }
+.preflight-intro, .preflight-result, .preflight-subsection { display: grid; gap: 14px; }
+.preflight-intro h2, .preflight-result h2, .preflight-subsection h3, .preflight-card h4 { margin: 0; }
+.preflight-intro p, .preflight-subsection p { margin: 0; }
+.preflight-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.preflight-live-status { margin: 0; }
+.preflight-stale-result { border-inline-start: 3px solid var(--neutral-stroke-rest); margin: 0; padding-inline-start: 12px; }
+.preflight-result-heading { align-items: start; display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; min-width: 0; }
+.preflight-result-heading > div { min-width: 0; }
+.preflight-consistency-note, .preflight-disclaimer { border-inline-start: 3px solid var(--neutral-stroke-rest); margin: 0; padding-inline-start: 12px; }
+.preflight-grid-scroll { overflow-x: auto; }
+.preflight-cards { display: none; }
+.preflight-card { border-block-start: 1px solid var(--neutral-stroke-rest); padding-block-start: 12px; }
+.preflight-card dl, .preflight-counts { display: grid; gap: 8px 14px; grid-template-columns: minmax(130px, 220px) minmax(0, 1fr); margin: 0; }
+.preflight-card dt, .preflight-counts dt { color: var(--neutral-foreground-hint); }
+.preflight-card dd, .preflight-counts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.preflight-evidence-details { display: grid; gap: 4px 10px; grid-template-columns: minmax(95px, 140px) minmax(0, 1fr); margin: 0; }
+.preflight-evidence-details dt { color: var(--neutral-foreground-hint); }
+.preflight-evidence-details dd, .preflight-reference-list { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.preflight-reference-list { padding-inline-start: 18px; }
+.evidence-card h4 { overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+    .preflight-actions { align-items: stretch; flex-direction: column; }
+    .preflight-result-heading { flex-direction: column; }
+    .preflight-grid-scroll { display: none; }
+    .preflight-cards { display: grid; gap: 12px; }
+    .preflight-card dl, .preflight-counts { grid-template-columns: minmax(104px, 36%) minmax(0, 1fr); }
+}

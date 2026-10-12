@@ -1,0 +1,348 @@
+@page "/settings/identity-migration-preflight"
+@attribute [Authorize]
+@implements IDisposable
+@using System.Globalization
+@using System.Net
+@using HorseRacingPrediction.Contracts.Identity
+@inject AdminApiClient Api
+
+<RaceOpsPageHeader Section="設定" Title="保存データの移行前調査"
+                   Description="設定された保存先から、上限付きの保存証拠を読み取ります。変更や移行は行いません。" />
+
+<section class="entity-section preflight-intro" aria-labelledby="preflight-heading">
+    <h2 id="preflight-heading">読み取り専用の調査</h2>
+    <p>保存先ごとに別の時点で読み取るため、同時点のスナップショットではありません。全データの完全性や移行可能性を確定するものではありません。</p>
+    @if (errorMessage is null && !invalidCursor)
+    {
+      <div class="preflight-actions">
+        @if (page?.NextCursor is not null)
+        {
+            <FluentButton Appearance="@Appearance.Accent" OnClick="ReadNextAsync" Disabled="@(!interactiveReady || loading)">次のページを読む</FluentButton>
+        }
+        else
+        {
+            <FluentButton Appearance="@Appearance.Accent" OnClick="StartAsync" Disabled="@(!interactiveReady || loading)">新しい調査を開始</FluentButton>
+        }
+        @if (page?.NextCursor is not null)
+        {
+            <FluentButton Appearance="@Appearance.Outline" OnClick="StartAsync" Disabled="@(!interactiveReady || loading)">調査を最初から開始</FluentButton>
+        }
+      </div>
+    }
+    @if (loading)
+    {
+        <p class="preflight-live-status" role="status" aria-live="polite">1ページを読み取っています。表示中の結果は前回の観測です。</p>
+    }
+    @if (page is not null && errorMessage is not null)
+    {
+        <p class="preflight-stale-result" role="status">表示中の結果は前回の観測です。新しいページの読み取りは完了していません。</p>
+    }
+    @if (errorMessage is not null)
+    {
+        <RaceOpsAlert Tone="warning" Title="このページを読み取れませんでした" Message="@errorMessage" />
+        <div class="preflight-actions error-actions">
+            <FluentButton Appearance="@Appearance.Outline" OnClick="RetryCurrentPageAsync" Disabled="@(!interactiveReady || loading)">現在のページを再読込</FluentButton>
+            <FluentButton Appearance="@Appearance.Outline" OnClick="StartAsync" Disabled="@(!interactiveReady || loading)">新しい調査を開始</FluentButton>
+        </div>
+    }
+    @if (invalidCursor)
+    {
+        <RaceOpsAlert Tone="warning" Title="続きの読み取りを続けられません" Message="続きの情報が無効、期限切れ、または再起動後のため、前の結果は破棄しました。新しい調査を開始してください。" />
+        <div class="preflight-actions">
+            <FluentButton Appearance="@Appearance.Accent" OnClick="StartAsync" Disabled="@(!interactiveReady || loading)">新しい調査を開始</FluentButton>
+        </div>
+    }
+</section>
+
+@if (page is null)
+{
+    if (loading)
+    {
+        <UiState Kind="loading" Title="調査ページを読み取っています" />
+    }
+    else if (errorMessage is null && !invalidCursor)
+    {
+        <UiState Title="調査はまだ開始されていません" Message="開始ボタンを押したときだけ、読み取り専用の調査を行います。" />
+    }
+}
+else
+{
+    <section class="entity-section preflight-result" aria-labelledby="preflight-result-heading">
+        <div class="preflight-result-heading">
+            <div>
+                <p class="eyebrow">現在のページ</p>
+                <h2 id="preflight-result-heading">@PhaseLabel(page.Phase)</h2>
+                <p class="section-description">@StateLabel(page.State) · 上限付きの馬IDソース観測 @(page.RowsInspected) 件 · @FormatUtc(page.ObservedAtUtc)</p>
+            </div>
+            <RaceOpsStatusBadge Label="@(page.IsNonAtomic ? "非同時点の観測" : "同時点の観測")" Tone="warning" />
+        </div>
+
+        <p class="preflight-consistency-note">ページをまたぐ間にも保存内容が変わる可能性があります。これは全データの確定的な一覧、移行計画、または変更操作ではありません。</p>
+
+        <section class="preflight-subsection" aria-labelledby="preflight-surfaces-heading">
+            <h3 id="preflight-surfaces-heading">保存先とスキーマの観測</h3>
+            <div class="preflight-grid-scroll">
+                <FluentDataGrid Items="@SurfaceRows.AsQueryable()" TGridItem="SurfaceRow" aria-label="保存先とスキーマの観測">
+                    <TemplateColumn Title="保存先">@SurfaceLabel(context.Surface.Surface)</TemplateColumn>
+                    <TemplateColumn Title="状態"><span>@StatusLabel(context.Surface.Status)</span></TemplateColumn>
+                    <TemplateColumn Title="読取時刻 (UTC)">@FormatUtc(context.Surface.ObservedAtUtc)</TemplateColumn>
+                    <TemplateColumn Title="既知オブジェクト数">@context.Surface.KnownObjectCount</TemplateColumn>
+                    <TemplateColumn Title="未知オブジェクト数">@context.Surface.UnknownObjectCount</TemplateColumn>
+                </FluentDataGrid>
+            </div>
+            <p>既知オブジェクト数にはテーブルとインデックスを含みます。テーブル数や保存行数の全件調査ではありません。</p>
+            <p>馬の行観測は、登録情報・馬イベント・JRAプロフィール・馬レース履歴・馬体重履歴・収集リソースに限ります。予測スケジュールとローカル収集キューは行を調べず、外部キューや外部ファイルも対象外です。</p>
+            <div class="preflight-cards" aria-label="保存先とスキーマの観測">
+                @foreach (var row in SurfaceRows)
+                {
+                    <article class="preflight-card">
+                        <h4>@SurfaceLabel(row.Surface.Surface)</h4>
+                        <dl>
+                            <dt>状態</dt><dd>@StatusLabel(row.Surface.Status)</dd>
+                            <dt>読取時刻 (UTC)</dt><dd>@FormatUtc(row.Surface.ObservedAtUtc)</dd>
+                            <dt>既知オブジェクト</dt><dd>@row.Surface.KnownObjectCount</dd>
+                            <dt>未知オブジェクト</dt><dd>@row.Surface.UnknownObjectCount</dd>
+                        </dl>
+                    </article>
+                }
+            </div>
+        </section>
+
+        <section class="preflight-subsection" aria-labelledby="preflight-counts-heading">
+            <h3 id="preflight-counts-heading">このページの観測数</h3>
+            <dl class="preflight-counts">
+                @foreach (var item in CountRows)
+                {
+                    <dt>@StatusLabel(item.Status)</dt><dd>@item.Count</dd>
+                }
+            </dl>
+            <p>ここに表示する数は、この調査ページ内の観測状態の件数です。保存データ全体の行数ではありません。</p>
+        </section>
+
+        <section class="preflight-subsection" aria-labelledby="preflight-evidence-heading">
+            <h3 id="preflight-evidence-heading">馬IDの保存証拠</h3>
+            @if (page.Evidence.Count == 0)
+            {
+                <UiState Title="このページに表示できる馬の証拠はありません" Message="空の結果は、未調査の保存先や外部データが存在しないことを示しません。" />
+            }
+            else
+            {
+                <div class="preflight-grid-scroll">
+                    <FluentDataGrid Items="@(page.Evidence.AsQueryable())" TGridItem="IdentityMigrationPreflightHorseEvidence" aria-label="馬IDの保存証拠">
+                        <TemplateColumn Title="馬ID">@context.HorseId</TemplateColumn>
+                        <TemplateColumn Title="観測フェーズ">@PhaseLabel(context.Phase)</TemplateColumn>
+                        <TemplateColumn Title="状態">@StatusLabel(context.Status)</TemplateColumn>
+                        <TemplateColumn Title="初回・現在の登録情報">
+                            <dl class="preflight-evidence-details">
+                                <dt>初回登録名</dt><dd>@DisplayEvidence(context.InitialRegisteredName)</dd>
+                                <dt>初回正規化名</dt><dd>@DisplayEvidence(context.InitialNormalizedName)</dd>
+                                <dt>初回生年月日</dt><dd>@FormatDate(context.InitialBirthDate)</dd>
+                                <dt>現在登録名</dt><dd>@DisplayEvidence(context.CurrentRegisteredName)</dd>
+                                <dt>現在正規化名</dt><dd>@DisplayEvidence(context.CurrentNormalizedName)</dd>
+                                <dt>現在生年月日</dt><dd>@FormatDate(context.CurrentBirthDate)</dd>
+                            </dl>
+                        </TemplateColumn>
+                        <TemplateColumn Title="JRA source identity">@(context.CanonicalJraIdentity ?? "（記録なし）") · @StatusLabel(context.JraIdentityStatus)</TemplateColumn>
+                        <TemplateColumn Title="関連レース">@RaceSummary(context)
+                            <ul class="preflight-reference-list">
+                                @foreach (var reference in context.RelatedRaces)
+                                {
+                                    <li>@reference.RaceId #@reference.HorseNumber</li>
+                                }
+                            </ul>
+                        </TemplateColumn>
+                    </FluentDataGrid>
+                </div>
+                <div class="preflight-cards" aria-label="馬IDの保存証拠">
+                    @foreach (var evidence in page.Evidence)
+                    {
+                        <article class="preflight-card evidence-card">
+                            <h4>@evidence.HorseId</h4>
+                            <dl>
+                                <dt>観測フェーズ</dt><dd>@PhaseLabel(evidence.Phase)</dd>
+                                <dt>状態</dt><dd>@StatusLabel(evidence.Status)</dd>
+                                <dt>初回登録名</dt><dd>@DisplayEvidence(evidence.InitialRegisteredName)</dd>
+                                <dt>初回正規化名</dt><dd>@DisplayEvidence(evidence.InitialNormalizedName)</dd>
+                                <dt>初回生年月日</dt><dd>@FormatDate(evidence.InitialBirthDate)</dd>
+                                <dt>現在登録名</dt><dd>@DisplayEvidence(evidence.CurrentRegisteredName)</dd>
+                                <dt>現在正規化名</dt><dd>@DisplayEvidence(evidence.CurrentNormalizedName)</dd>
+                                <dt>現在生年月日</dt><dd>@FormatDate(evidence.CurrentBirthDate)</dd>
+                                <dt>JRA source identity</dt><dd>@(evidence.CanonicalJraIdentity ?? "（記録なし）")</dd>
+                                <dt>JRA identity状態</dt><dd>@StatusLabel(evidence.JraIdentityStatus)</dd>
+                                <dt>関連レース</dt><dd>@RaceSummary(evidence)</dd>
+                                <dt>確認できた参照</dt><dd>@RaceReferenceSummary(evidence)</dd>
+                            </dl>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+
+        <p class="preflight-disclaimer">この結果は限定された保存証拠の読み取りです。名前だけで同一性を決めたり、候補IDを作成したり、データを統合・変更する機能はありません。</p>
+    </section>
+}
+
+@code {
+    private IdentityMigrationPreflightPage? page;
+    private string? failedCursor;
+    private string? errorMessage;
+    private bool loading;
+    private bool interactiveReady;
+    private bool invalidCursor;
+    private bool requestInProgress;
+    private CancellationTokenSource? activeRequest;
+    private IReadOnlyList<SurfaceRow> SurfaceRows => page?.Surfaces.Select((surface, index) => new SurfaceRow(index, surface)).ToArray() ?? [];
+    private IReadOnlyList<CountRow> CountRows => page is null ? [] :
+    [
+        new(IdentityMigrationPreflightObservationStatus.Observed, page.Counts.Observed),
+        new(IdentityMigrationPreflightObservationStatus.SchemaOnly, page.Counts.SchemaOnly),
+        new(IdentityMigrationPreflightObservationStatus.Unsupported, page.Counts.Unsupported),
+        new(IdentityMigrationPreflightObservationStatus.UnknownShape, page.Counts.UnknownShape),
+        new(IdentityMigrationPreflightObservationStatus.Truncated, page.Counts.Truncated),
+        new(IdentityMigrationPreflightObservationStatus.Unavailable, page.Counts.Unavailable),
+        new(IdentityMigrationPreflightObservationStatus.NotConfigured, page.Counts.NotConfigured),
+        new(IdentityMigrationPreflightObservationStatus.NotInspected, page.Counts.NotInspected),
+        new(IdentityMigrationPreflightObservationStatus.Unverifiable, page.Counts.Unverifiable),
+        new(IdentityMigrationPreflightObservationStatus.Conflict, page.Counts.Conflict),
+    ];
+
+    private Task StartAsync() => RequestPageAsync(null, clearBeforeRequest: true);
+    private Task ReadNextAsync() => page?.NextCursor is { } cursor
+        ? RequestPageAsync(cursor, clearBeforeRequest: false)
+        : Task.CompletedTask;
+    private Task RetryCurrentPageAsync() => RequestPageAsync(failedCursor, clearBeforeRequest: false);
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactiveReady = true;
+        StateHasChanged();
+    }
+
+    private async Task RequestPageAsync(string? cursor, bool clearBeforeRequest)
+    {
+        if (!interactiveReady || requestInProgress) return;
+        requestInProgress = true;
+        activeRequest?.Dispose();
+        activeRequest = new CancellationTokenSource();
+        loading = true;
+        errorMessage = null;
+        invalidCursor = false;
+        failedCursor = cursor;
+        if (clearBeforeRequest)
+        {
+            page = null;
+        }
+        try
+        {
+            var response = await Api.GetIdentityMigrationPreflightAsync(cursor, activeRequest.Token);
+            if (response is null)
+            {
+                if (cursor is null)
+                {
+                    page = null;
+                    errorMessage = "調査結果が返されませんでした。必要なら新しい調査を開始してください。";
+                    failedCursor = null;
+                }
+                else
+                {
+                    errorMessage = "続きの結果が返されませんでした。表示中の結果は前回の観測です。現在のページを再読込するか、新しい調査を開始してください。";
+                }
+                return;
+            }
+            page = response;
+            failedCursor = null;
+        }
+        catch (HttpRequestException exception) when (exception.StatusCode == HttpStatusCode.BadRequest)
+        {
+            page = null;
+            failedCursor = null;
+            invalidCursor = true;
+        }
+        catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
+        {
+            errorMessage = exception.StatusCode == HttpStatusCode.TooManyRequests
+                ? "調査が混み合っています。表示中の結果を確認し、現在のページを再読込するか、新しい調査を開始してください。"
+                : "設定された保存先を読み取れませんでした。表示中の結果は前回の観測です。現在のページを再読込するか、新しい調査を開始してください。";
+        }
+        catch (OperationCanceledException) when (activeRequest.IsCancellationRequested)
+        {
+            errorMessage = "読み取りを中断しました。表示中の結果は前回の観測です。必要なら現在のページを再読込してください。";
+        }
+        catch (HttpRequestException)
+        {
+            errorMessage = "調査ページを読み取れませんでした。表示中の結果は前回の観測です。現在のページを再読込するか、新しい調査を開始してください。";
+        }
+        finally
+        {
+            loading = false;
+            requestInProgress = false;
+            activeRequest?.Dispose();
+            activeRequest = null;
+        }
+    }
+
+    private static string PhaseLabel(IdentityMigrationPreflightPhase phase) => phase switch
+    {
+        IdentityMigrationPreflightPhase.HorseRoots => "馬IDの登録情報",
+        IdentityMigrationPreflightPhase.HorseEvents => "馬イベント",
+        IdentityMigrationPreflightPhase.JraProfiles => "JRAプロフィール",
+        IdentityMigrationPreflightPhase.HorseRaceHistories => "馬のレース履歴",
+        IdentityMigrationPreflightPhase.HorseWeightHistories => "馬体重履歴",
+        IdentityMigrationPreflightPhase.CollectionResources => "収集リソース",
+        _ => "未対応のフェーズ",
+    };
+
+    private static string SurfaceLabel(IdentityMigrationPreflightSurface surface) => surface switch
+    {
+        IdentityMigrationPreflightSurface.EventStore => "イベント保存先",
+        IdentityMigrationPreflightSurface.CollectionPlatform => "収集保存先",
+        IdentityMigrationPreflightSurface.PredictionSchedule => "予測スケジュール",
+        IdentityMigrationPreflightSurface.LocalCollectionQueue => "ローカル収集キュー",
+        _ => "未対応の保存先",
+    };
+
+    private static string StatusLabel(IdentityMigrationPreflightObservationStatus status) => status switch
+    {
+        IdentityMigrationPreflightObservationStatus.Observed => "観測済み",
+        IdentityMigrationPreflightObservationStatus.SchemaOnly => "スキーマのみ確認（行は未調査）",
+        IdentityMigrationPreflightObservationStatus.Unsupported => "未対応",
+        IdentityMigrationPreflightObservationStatus.UnknownShape => "形式不明",
+        IdentityMigrationPreflightObservationStatus.Truncated => "上限により一部のみ",
+        IdentityMigrationPreflightObservationStatus.Unavailable => "利用不可",
+        IdentityMigrationPreflightObservationStatus.NotConfigured => "未設定",
+        IdentityMigrationPreflightObservationStatus.NotInspected => "行は未調査",
+        IdentityMigrationPreflightObservationStatus.Unverifiable => "確認不能",
+        IdentityMigrationPreflightObservationStatus.Conflict => "矛盾あり",
+        _ => "未対応の状態",
+    };
+
+    private static string StateLabel(IdentityMigrationPreflightPageState state) => state switch
+    {
+        IdentityMigrationPreflightPageState.InProgress => "続きのページがあります",
+        IdentityMigrationPreflightPageState.Complete => "対応範囲のページを読み終えました（全データの完全性は示しません）",
+        IdentityMigrationPreflightPageState.Incomplete => "一部の証拠を確認できませんでした",
+        _ => "未対応の状態",
+    };
+
+    private static string RaceSummary(IdentityMigrationPreflightHorseEvidence evidence) =>
+        evidence.RelatedRacesTruncated
+            ? $"{evidence.RelatedRaceCount} 件以上（表示分 {evidence.RelatedRaces.Count} 件）"
+            : $"{evidence.RelatedRaceCount} 件（表示分 {evidence.RelatedRaces.Count} 件）";
+    private static string RaceReferenceSummary(IdentityMigrationPreflightHorseEvidence evidence) =>
+        evidence.RelatedRaces.Count == 0
+            ? "確認できた参照はありません（未調査・確認不能を含む場合があります）"
+            : string.Join("、", evidence.RelatedRaces.Select(item => $"{item.RaceId} #{item.HorseNumber}"));
+    private static string DisplayEvidence(string? value) => value is null ? "（記録なし）" : value.Length == 0 ? "（空文字）" : value;
+    private static string FormatDate(DateOnly? value) => value?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "（記録なし）";
+    private static string FormatUtc(DateTimeOffset? value) => value?.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture) ?? "未観測";
+
+    public void Dispose()
+    {
+        activeRequest?.Cancel();
+        activeRequest?.Dispose();
+    }
+
+    private sealed record SurfaceRow(int Index, IdentityMigrationPreflightSurfaceObservation Surface);
+    private sealed record CountRow(IdentityMigrationPreflightObservationStatus Status, int Count);
+}
