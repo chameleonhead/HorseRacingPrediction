@@ -887,6 +887,10 @@ API 内の共通 UI コンポーネントは表示と UI 状態だけを担当�
 
 [全ローカル保存先の調査案](changes/20261013_full-data-migration-preview/README.md)は未承認の設計であり、現在の稼働機能ではない。Settingsから調査を明示的に開始し、保存済みの進捗・時刻・限定された証拠を専用URLで再訪する。画面を閉じても調査の寿命を画面に依存させず、再訪は記録の読み取りだけとする。4つのSQLite保存先の47ソース定義テーブルを対象とし、未知・未対応・上限到達・外部未調査を明示する。業務DBは読み取り専用、結果は既存保存領域の別ジャーナルに有限期間保存する。Apply、Resume、Reset、自動pollingは置かない。本番の全データ移行・復旧の完了や実行承認を意味しない。有限API契約、上限、重複・中断・再訪・390px設計と受け入れ基準は同案を正とする。
 
+## Proposed — 仮説対応表による馬ID移行依頼
+
+[具体的な馬ID移行案](changes/20261014_horse-id-hypothesis-migration/README.md)は未承認・未実装である。専用画面で旧HorseIdとJRA識別子の対応、未証明の仮説、衝突・未知参照、非復旧リスクを確認し、固定コマンドの依頼を保存する。保存直後は「Actions実行待ち」であり、移行完了や実行中とは表示しない。GitHub Actionsの別操作で同じ依頼IDを指定し、API停止中に固定CLIを実行する案であり、管理画面から自動でActionsを起動する機能は含まない。この操作境界は利用者による確認待ちである。画面の再訪は永続化された状態を読み取るだけとし、自動polling、DBリセット、任意SQLやシェル実行は設けない。
+
 ## 15. 調査資料
 
 - [ASP.NET Core Blazor tooling / templates (.NET 10)](https://learn.microsoft.com/en-us/aspnet/core/blazor/tooling?view=aspnetcore-10.0)
