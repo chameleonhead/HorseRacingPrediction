@@ -883,6 +883,10 @@ API 内の共通 UI コンポーネントは表示と UI 状態だけを担当�
 
 2026-10-12承認、2026-10-13に80a364a4を配備し、認証済み本番画面で2ページの取得、desktop/390px、keyboard、再読込を確認した。詳細な完了証拠は[preflight child](changes/20261012_horse-identity-migration-preflight/README.md)を正とする。Settingsから専用の「保存データ移行前調査」ページへ移動し、API-key保護されたserver-side AdminApiClient経由で、設定済みSQLite保存先の限定された証拠を1ページずつ読み取る。現在の1ページだけを保持し、保存先ごとの観測時刻、未知/未調査/unsupported/truncated状態、別保存先間の非原子性を示す。移行準備完了とは表示せず、Apply、Resume、Resetや自動pollingは置かない。有限route、response allowlist、cursor、failure/loading/390px設計は同childとそのmockを正とする。親の全データ移行、runner、cutover、実行承認は未確定であり、この読み取り画面の承認に含まれない。
 
+## Proposed — 全保存データの移行前調査コマンド
+
+[全ローカル保存先の調査案](changes/20261013_full-data-migration-preview/README.md)は未承認の設計であり、現在の稼働機能ではない。Settingsから調査を明示的に開始し、保存済みの進捗・時刻・限定された証拠を専用URLで再訪する。画面を閉じても調査の寿命を画面に依存させず、再訪は記録の読み取りだけとする。4つのSQLite保存先の47ソース定義テーブルを対象とし、未知・未対応・上限到達・外部未調査を明示する。業務DBは読み取り専用、結果は既存保存領域の別ジャーナルに有限期間保存する。Apply、Resume、Reset、自動pollingは置かない。本番の全データ移行・復旧の完了や実行承認を意味しない。有限API契約、上限、重複・中断・再訪・390px設計と受け入れ基準は同案を正とする。
+
 ## 15. 調査資料
 
 - [ASP.NET Core Blazor tooling / templates (.NET 10)](https://learn.microsoft.com/en-us/aspnet/core/blazor/tooling?view=aspnetcore-10.0)
