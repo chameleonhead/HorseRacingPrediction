@@ -879,9 +879,9 @@ API 内の共通 UI コンポーネントは表示と UI 状態だけを担当�
 - 馬・騎手・調教師・馬主の各詳細で、主関係と補助関係の順序が起点に応じて切り替わる。
 - 全角 30 文字のレース名、全角 40 文字の法人名、60 文字の外部 ID が 320 px 幅でコンテンツ領域をはみ出さない。
 
-## Approved design — 保存データ移行前の読み取り調査
+## Implemented — 保存データ移行前の読み取り調査
 
-2026-10-12承認の設計であり、実装・配備の完了状況は[preflight child](changes/20261012_horse-identity-migration-preflight/README.md)を正とする。Settingsから専用の「保存データ移行前調査」ページへ移動し、API-key保護されたserver-side AdminApiClient経由で、設定済みSQLite保存先の限定された証拠を1ページずつ読み取る。現在の1ページだけを保持し、保存先ごとの観測時刻、未知/未調査/unsupported/truncated状態、別保存先間の非原子性を示す。移行準備完了とは表示せず、Apply、Resume、Resetや自動pollingは置かない。有限route、response allowlist、cursor、failure/loading/390px設計は同childとそのmockを正とする。親の全データ移行、runner、cutover、実行承認は未確定であり、この読み取り画面の承認に含まれない。
+2026-10-12承認、2026-10-13に80a364a4を配備し、認証済み本番画面で2ページの取得、desktop/390px、keyboard、再読込を確認した。詳細な完了証拠は[preflight child](changes/20261012_horse-identity-migration-preflight/README.md)を正とする。Settingsから専用の「保存データ移行前調査」ページへ移動し、API-key保護されたserver-side AdminApiClient経由で、設定済みSQLite保存先の限定された証拠を1ページずつ読み取る。現在の1ページだけを保持し、保存先ごとの観測時刻、未知/未調査/unsupported/truncated状態、別保存先間の非原子性を示す。移行準備完了とは表示せず、Apply、Resume、Resetや自動pollingは置かない。有限route、response allowlist、cursor、failure/loading/390px設計は同childとそのmockを正とする。親の全データ移行、runner、cutover、実行承認は未確定であり、この読み取り画面の承認に含まれない。
 
 ## 15. 調査資料
 
