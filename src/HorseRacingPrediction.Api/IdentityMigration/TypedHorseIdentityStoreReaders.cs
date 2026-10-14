@@ -117,6 +117,10 @@ internal sealed class TypedHorseIdentityStoreReaders(
         new(BuildExpectedEventStoreModel);
     private static readonly Lazy<IReadOnlyDictionary<string, ExpectedTable>> CollectionPlatformModel =
         new(BuildExpectedCollectionPlatformModel);
+    private static readonly Lazy<IReadOnlyDictionary<string, ExpectedTable>> CollectionPlatformCurrentUpgradeModel =
+        new(BuildExpectedCollectionPlatformCurrentUpgradeModel);
+    private static readonly Lazy<IReadOnlyDictionary<string, ExpectedTable>> CollectionPlatformV6UpgradeModel =
+        new(BuildExpectedCollectionPlatformV6UpgradeModel);
     private static readonly Lazy<IReadOnlyList<string>> EventStoreMigrationIds = new(
         static () =>
         {
@@ -252,6 +256,62 @@ internal sealed class TypedHorseIdentityStoreReaders(
         return model;
     }
 
+    private static IReadOnlyDictionary<string, ExpectedTable> BuildExpectedCollectionPlatformCurrentUpgradeModel()
+    {
+        var model = new Dictionary<string, ExpectedTable>(CollectionPlatformModel.Value,
+            StringComparer.OrdinalIgnoreCase);
+
+        static void SetDefault(Dictionary<string, ExpectedTable> tables, string table, string column,
+            string expression)
+        {
+            var shape = tables[table];
+            var columns = new Dictionary<string, ExpectedColumn>(shape.Columns, StringComparer.OrdinalIgnoreCase)
+            {
+                [column] = shape.Columns[column] with { DefaultExpression = expression },
+            };
+            tables[table] = shape with { Columns = columns };
+        }
+
+        SetDefault(model, "collection_dispatcher_fairness_state", "ConsecutiveRealtime", "0");
+        SetDefault(model, "collection_dispatcher_fairness_state", "ReservationSequence", "0");
+        SetDefault(model, "collection_subject_identification_selections", "CreatedTask", "1");
+        SetDefault(model, "collection_subject_identification_selections", "ReusedTask", "0");
+
+        var failure = model["collection_failure_notifications"];
+        model["collection_failure_notifications"] = failure with
+        {
+            Columns = new Dictionary<string, ExpectedColumn>(failure.Columns, StringComparer.OrdinalIgnoreCase)
+            {
+                ["CanonicalResourceType"] = failure.Columns["CanonicalResourceType"] with { Type = "TEXT" },
+                ["ResolutionStatus"] = failure.Columns["ResolutionStatus"] with { DefaultExpression = null },
+            },
+        };
+        return model;
+    }
+
+    private static IReadOnlyDictionary<string, ExpectedTable> BuildExpectedCollectionPlatformV6UpgradeModel()
+    {
+        var model = new Dictionary<string, ExpectedTable>(CollectionPlatformCurrentUpgradeModel.Value,
+            StringComparer.OrdinalIgnoreCase);
+
+        static void SetDefault(Dictionary<string, ExpectedTable> tables, string table, string column,
+            string expression)
+        {
+            var shape = tables[table];
+            var columns = new Dictionary<string, ExpectedColumn>(shape.Columns, StringComparer.OrdinalIgnoreCase)
+            {
+                [column] = shape.Columns[column] with { DefaultExpression = expression },
+            };
+            tables[table] = shape with { Columns = columns };
+        }
+
+        SetDefault(model, "collection_requests", "Lane", "'Normal'");
+        SetDefault(model, "collection_requests", "Priority", "50");
+        SetDefault(model, "collection_requests", "MetadataJson", "'{}'");
+        SetDefault(model, "collection_tasks", "RaceHoldGeneration", "0");
+        return model;
+    }
+
     private static IReadOnlyDictionary<string, ExpectedTable> BuildExpectedEventStoreModel()
     {
         var model = new Dictionary<string, ExpectedTable>(
@@ -371,13 +431,49 @@ internal sealed class TypedHorseIdentityStoreReaders(
             if (schemaScan.Truncated)
                 return new(store.Surface, MigrationStoreReadStatus.Truncated, 0, 0, null);
 
-            var expectedShapes = GetExpectedTables(store.Surface);
-            var expectedTables = expectedShapes.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
             var acceptedMetadataTables = MetadataTableShapes(store.Surface);
             var tableObjects = objects.Where(item => item.Type == "table")
                 .ToDictionary(item => item.Name, StringComparer.OrdinalIgnoreCase);
             var tables = tableObjects.Keys
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var collectionHistoryLayout = CollectionSchemaHistoryLayout.Unknown;
+            var expectedShapes = GetExpectedTables(store.Surface);
+            IReadOnlyList<IReadOnlyDictionary<string, ExpectedTable>> shapeCandidates = [expectedShapes];
+            var malformedSchema = false;
+            if (store.Surface == MigrationStoreSurface.CollectionPlatform
+                && tables.Contains("collection_schema_history", StringComparer.OrdinalIgnoreCase))
+            {
+                collectionHistoryLayout = await ReadCollectionSchemaHistoryLayoutAsync(
+                    connection, transaction, cancellationToken).ConfigureAwait(false);
+                if (collectionHistoryLayout == CollectionSchemaHistoryLayout.Unknown)
+                    malformedSchema = true;
+                if (collectionHistoryLayout == CollectionSchemaHistoryLayout.Upgrade)
+                {
+                    expectedShapes = CollectionPlatformCurrentUpgradeModel.Value;
+                    shapeCandidates = [
+                        CollectionPlatformCurrentUpgradeModel.Value,
+                        CollectionPlatformModel.Value,
+                    ];
+                }
+                else if (collectionHistoryLayout == CollectionSchemaHistoryLayout.UpgradeV6)
+                {
+                    expectedShapes = CollectionPlatformV6UpgradeModel.Value;
+                    shapeCandidates = [
+                        CollectionPlatformV6UpgradeModel.Value,
+                        CollectionPlatformCurrentUpgradeModel.Value,
+                        CollectionPlatformModel.Value,
+                    ];
+                }
+                else if (collectionHistoryLayout == CollectionSchemaHistoryLayout.UpgradeV18)
+                {
+                    expectedShapes = CollectionPlatformCurrentUpgradeModel.Value;
+                    shapeCandidates = [
+                        CollectionPlatformCurrentUpgradeModel.Value,
+                        CollectionPlatformModel.Value,
+                    ];
+                }
+            }
+            var expectedTables = expectedShapes.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
             var missingTables = !expectedTables.SetEquals(store.ExpectedTables)
                 || expectedTables.Any(table => !tables.Contains(table));
             var expectedIndexes = expectedShapes.Values.SelectMany(table => table.Indexes.Keys)
@@ -388,35 +484,36 @@ internal sealed class TypedHorseIdentityStoreReaders(
                 "index" => !expectedIndexes.Contains(item.Name),
                 _ => true,         // Views/triggers are not part of the source schema contract.
             });
-            var malformedSchema = unknownObjects > 0
+            malformedSchema |= unknownObjects > 0
                 || store.MetadataTables.Any(table => !tables.Contains(table));
-            var collectionHistoryLayout = CollectionSchemaHistoryLayout.Unknown;
-            if (store.Surface == MigrationStoreSurface.CollectionPlatform
-                && tables.Contains("collection_schema_history", StringComparer.OrdinalIgnoreCase))
+            var matchedShape = false;
+            foreach (var candidate in shapeCandidates)
             {
-                collectionHistoryLayout = await ReadCollectionSchemaHistoryLayoutAsync(
-                    connection, transaction, cancellationToken).ConfigureAwait(false);
-                if (collectionHistoryLayout == CollectionSchemaHistoryLayout.Unknown)
-                    malformedSchema = true;
-            }
-
-            foreach (var tableName in tables)
-            {
-                var expected = expectedShapes.TryGetValue(tableName, out var modelShape)
-                    ? modelShape
-                    : acceptedMetadataTables.GetValueOrDefault(tableName);
-                if (expected is null || !await MatchesTableShapeAsync(connection, transaction,
-                        tableName, expected, tableObjects[tableName].Sql, cancellationToken).ConfigureAwait(false))
+                var candidateMatches = true;
+                var requireCanonicalFairnessCheck = ReferenceEquals(candidate,
+                    CollectionPlatformCurrentUpgradeModel.Value)
+                    || ReferenceEquals(candidate, CollectionPlatformV6UpgradeModel.Value);
+                foreach (var tableName in tables)
                 {
-                    malformedSchema = true;
+                    var expected = candidate.TryGetValue(tableName, out var modelShape)
+                        ? modelShape
+                        : acceptedMetadataTables.GetValueOrDefault(tableName);
+                    if (expected is null || !await MatchesTableShapeAsync(connection, transaction,
+                            tableName, expected, tableObjects[tableName].Sql,
+                            requireCanonicalFairnessCheck,
+                            cancellationToken).ConfigureAwait(false))
+                    {
+                        candidateMatches = false;
+                        break;
+                    }
+                }
+                if (candidateMatches)
+                {
+                    matchedShape = true;
+                    break;
                 }
             }
-            if (store.Surface == MigrationStoreSurface.CollectionPlatform
-                && collectionHistoryLayout != CollectionSchemaHistoryLayout.Unknown
-                && !MatchesCollectionSchemaLayout(tableObjects, collectionHistoryLayout))
-            {
-                malformedSchema = true;
-            }
+            malformedSchema |= !matchedShape;
             if (store.Surface == MigrationStoreSurface.EventStore
                 && tables.Contains("__EFMigrationsHistory", StringComparer.OrdinalIgnoreCase)
                 && !await MatchesEventStoreMigrationHistoryAsync(connection, transaction, cancellationToken)
@@ -548,9 +645,10 @@ internal sealed class TypedHorseIdentityStoreReaders(
         string tableName,
         ExpectedTable expected,
         string? tableSql,
+        bool allowCanonicalFairnessCheck,
         CancellationToken cancellationToken)
     {
-        if (!MatchesSupportedTableSyntax(tableName, tableSql))
+        if (!MatchesSupportedTableSyntax(tableName, tableSql, allowCanonicalFairnessCheck))
             return false;
 
         var actualColumns = new Dictionary<string, ActualColumn>(StringComparer.OrdinalIgnoreCase);
@@ -757,7 +855,8 @@ internal sealed class TypedHorseIdentityStoreReaders(
         IReadOnlyList<string> primaryKeyColumns) => primaryKeyColumns.Count == 1
             && string.Equals(columns[primaryKeyColumns[0]].Type, "INTEGER", StringComparison.OrdinalIgnoreCase);
 
-    private static bool MatchesSupportedTableSyntax(string tableName, string? tableSql)
+    private static bool MatchesSupportedTableSyntax(string tableName, string? tableSql,
+        bool allowCanonicalFairnessCheck)
     {
         if (string.IsNullOrWhiteSpace(tableSql))
             return false;
@@ -771,7 +870,10 @@ internal sealed class TypedHorseIdentityStoreReaders(
         var checks = ExtractCheckExpressions(tableSql);
         if (string.Equals(tableName, "collection_dispatcher_fairness_state",
                 StringComparison.OrdinalIgnoreCase))
-            return checks.Count == 0;
+            return allowCanonicalFairnessCheck
+                ? checks.Count == 1
+                    && string.Equals(checks[0], "StateId=1", StringComparison.Ordinal)
+                : checks.Count == 0;
 
         return checks.Count == 0;
     }
@@ -996,22 +1098,11 @@ internal sealed class TypedHorseIdentityStoreReaders(
             return CollectionSchemaHistoryLayout.FreshEf;
         if (versions.Count == 0 || versions[^1] != CurrentCollectionPlatformSchemaVersion)
             return CollectionSchemaHistoryLayout.Unknown;
-        return CollectionSchemaHistoryLayout.Upgrade;
-    }
-
-    private static bool MatchesCollectionSchemaLayout(
-        IReadOnlyDictionary<string, SchemaObject> tableObjects, CollectionSchemaHistoryLayout historyLayout)
-    {
-        if (!tableObjects.TryGetValue("collection_dispatcher_fairness_state", out var fairness))
-            return false;
-        var checks = ExtractCheckExpressions(fairness.Sql ?? string.Empty);
-        return historyLayout switch
+        return versions[0] switch
         {
-            // The recognized upgrade fixture is the fresh-EF layout carried through a
-            // bounded migration suffix. Manual v19+ layouts add a CHECK and also carry
-            // DDL defaults not yet represented by this reader, so they remain fail-closed.
-            CollectionSchemaHistoryLayout.FreshEf or CollectionSchemaHistoryLayout.Upgrade => checks.Count == 0,
-            _ => false,
+            6 => CollectionSchemaHistoryLayout.UpgradeV6,
+            18 => CollectionSchemaHistoryLayout.UpgradeV18,
+            _ => CollectionSchemaHistoryLayout.Upgrade,
         };
     }
 
@@ -1260,5 +1351,7 @@ internal sealed class TypedHorseIdentityStoreReaders(
         Unknown,
         FreshEf,
         Upgrade,
+        UpgradeV6,
+        UpgradeV18,
     }
 }

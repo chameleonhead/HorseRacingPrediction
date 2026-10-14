@@ -11,6 +11,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
+using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Text.Json;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -849,6 +852,170 @@ public sealed class HorseIdentityMigrationStoreEngineTests
         Assert.IsTrue(result.ManifestErrorCount > 0);
         Assert.AreEqual(0, result.Stores.Count);
         Assert.IsFalse(File.Exists(fixture.EventStorePath));
+    }
+
+    [TestMethod]
+    public async Task HistoricalV6FixtureProvesSourceUpgradeAndRemainsFailClosed()
+        => await AssertHistoricalFixtureAsync("v6-e170c4b3", expectedStartVersion: 6,
+            expectsRaceRepairHold: false);
+
+    [TestMethod]
+    public async Task HistoricalV18FixtureProvesSourceUpgradeAndRemainsFailClosed()
+        => await AssertHistoricalFixtureAsync("v18-8bbee4b0", expectedStartVersion: 18,
+            expectsRaceRepairHold: true);
+
+    [TestMethod]
+    public async Task HistoricalV18FixtureWithoutManualCheckStopsBeforeRootReads()
+        => await AssertHistoricalFixtureAsync("v18-8bbee4b0", expectedStartVersion: 18,
+            expectsRaceRepairHold: true, expectSchemaRejection: true, mutationSql: """
+            PRAGMA writable_schema = ON;
+            UPDATE sqlite_master
+            SET sql = replace(sql, ' CHECK (StateId = 1)', '')
+            WHERE type = 'table' AND name = 'collection_dispatcher_fairness_state';
+            PRAGMA writable_schema = OFF;
+            """);
+
+    [TestMethod]
+    public async Task HistoricalV18FixtureWithoutManualCheckCannotBypassWithGenericHistory()
+        => await AssertHistoricalFixtureAsync("v18-8bbee4b0", expectedStartVersion: 18,
+            expectsRaceRepairHold: true, expectSchemaRejection: true, mutationSql: """
+            DELETE FROM collection_schema_history;
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (17, 'v17-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (18, 'v18-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (19, 'v19-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (20, 'v20-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (21, 'v21-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (22, 'v22-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (23, 'v23-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (24, 'v24-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (25, 'v25-fixture');
+            PRAGMA writable_schema = ON;
+            UPDATE sqlite_master
+            SET sql = replace(sql, ' CHECK (StateId = 1)', '')
+            WHERE type = 'table' AND name = 'collection_dispatcher_fairness_state';
+            PRAGMA writable_schema = OFF;
+            """);
+
+    [TestMethod]
+    public async Task HistoricalV6FixtureWithChangedManualDefaultStopsBeforeRootReads()
+        => await AssertHistoricalFixtureAsync("v6-e170c4b3", expectedStartVersion: 6,
+            expectsRaceRepairHold: false, expectSchemaRejection: true, mutationSql: """
+            PRAGMA writable_schema = ON;
+            UPDATE sqlite_master
+            SET sql = replace(sql, 'DEFAULT 0', 'DEFAULT 9')
+            WHERE type = 'table' AND name = 'collection_dispatcher_fairness_state';
+            PRAGMA writable_schema = OFF;
+            """);
+
+    [TestMethod]
+    public async Task HistoricalV18FixtureWithIncoherentOneColumnMixStopsBeforeRootReads()
+        => await AssertHistoricalFixtureAsync("v18-8bbee4b0", expectedStartVersion: 18,
+            expectsRaceRepairHold: true, expectSchemaRejection: true, mutationSql: """
+            PRAGMA writable_schema = ON;
+            UPDATE sqlite_master
+            SET sql = replace(sql, '"Lane" TEXT NOT NULL', '"Lane" TEXT NOT NULL DEFAULT ''Normal''')
+            WHERE type = 'table' AND name = 'collection_requests';
+            PRAGMA writable_schema = OFF;
+            """);
+
+    private static async Task AssertHistoricalFixtureAsync(string fixtureName, int expectedStartVersion,
+        bool expectsRaceRepairHold, bool expectSchemaRejection = false, string? mutationSql = null)
+    {
+        var fixtureRoot = Path.Combine(AppContext.BaseDirectory, "TestFixtures", "CollectionHistoricalSchema");
+        var assetPath = Path.Combine(fixtureRoot, fixtureName + ".sqlite.gz");
+        var provenancePath = Path.Combine(fixtureRoot, fixtureName + ".provenance.json");
+        Assert.IsTrue(File.Exists(assetPath), $"Missing generated fixture: {fixtureName}");
+        Assert.IsTrue(File.Exists(provenancePath), $"Missing fixture provenance: {fixtureName}");
+
+        using var provenance = JsonDocument.Parse(await File.ReadAllTextAsync(provenancePath));
+        var root = provenance.RootElement;
+        Assert.AreEqual(expectedStartVersion, root.GetProperty("historicalVersion").GetInt32());
+        Assert.AreEqual(25, root.GetProperty("currentVersion").GetInt32());
+        Assert.IsFalse(root.GetProperty("preUpgrade").GetProperty("fairnessTablePresent").GetBoolean());
+        Assert.IsTrue(root.GetProperty("postUpgrade").GetProperty("fairnessTablePresent").GetBoolean());
+        Assert.IsTrue(root.GetProperty("sourceBytesUnchanged").GetBoolean());
+        Assert.IsTrue(root.GetProperty("sentinelCreatedAtPreserved").GetBoolean());
+        Assert.IsTrue(root.GetProperty("raceRepairHoldPreserved").GetBoolean());
+        Assert.AreEqual(expectsRaceRepairHold,
+            root.GetProperty("raceRepairHoldPresent").GetBoolean());
+
+        var temporaryRoot = Path.Combine(Path.GetTempPath(), "hrp-t14-api-test", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temporaryRoot);
+        try
+        {
+            var extracted = Path.Combine(temporaryRoot, "collection-platform.db");
+            await using (var input = File.OpenRead(assetPath))
+            await using (var gzip = new GZipStream(input, CompressionMode.Decompress))
+            await using (var output = File.Create(extracted))
+                await gzip.CopyToAsync(output);
+
+            Assert.AreEqual(root.GetProperty("postUpgrade").GetProperty("databaseSha256").GetString(),
+                await Sha256Async(extracted));
+            await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource = extracted,
+                Mode = SqliteOpenMode.ReadOnly,
+                Pooling = false,
+            }.ConnectionString);
+            await connection.OpenAsync();
+            var history = new List<int>();
+            await using (var historyCommand = connection.CreateCommand())
+            {
+                historyCommand.CommandText = "SELECT version FROM collection_schema_history ORDER BY version;";
+                await using var reader = await historyCommand.ExecuteReaderAsync();
+                while (await reader.ReadAsync()) history.Add(reader.GetInt32(0));
+            }
+            CollectionAssert.AreEqual(Enumerable.Range(expectedStartVersion, 26 - expectedStartVersion).ToArray(),
+                history.ToArray());
+
+            await using (var fairnessCommand = connection.CreateCommand())
+            {
+                fairnessCommand.CommandText = "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'collection_dispatcher_fairness_state';";
+                var fairnessSql = Convert.ToString(await fairnessCommand.ExecuteScalarAsync());
+                StringAssert.Contains(fairnessSql ?? string.Empty, "CHECK (StateId = 1)");
+                StringAssert.Contains(fairnessSql ?? string.Empty, "DEFAULT 0");
+            }
+            if (expectsRaceRepairHold)
+            {
+                await using var holdCommand = connection.CreateCommand();
+                holdCommand.CommandText = "SELECT COUNT(*) FROM race_repair_holds WHERE RaceId = 't14-race' AND Generation = 1;";
+                Assert.AreEqual(1L, Convert.ToInt64(await holdCommand.ExecuteScalarAsync()));
+            }
+
+            await using var fixture = await StoreFixture.CreateAsync();
+            await fixture.SeedHorseAsync(OldHorseId);
+            File.Copy(extracted, fixture.CollectionPath, overwrite: true);
+            if (mutationSql is not null)
+                await fixture.ExecuteAsync(fixture.CollectionPath, mutationSql);
+            var before = await Sha256Async(fixture.CollectionPath);
+            var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+            Assert.AreEqual(HorseIdentityStorePlanStatus.Incomplete, result.Status);
+            if (expectSchemaRejection)
+            {
+                Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, result.Reason);
+                Assert.AreEqual(MigrationStoreReadStatus.UnknownShape,
+                    result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
+                Assert.IsEmpty(result.Roots);
+            }
+            else
+            {
+                Assert.AreEqual(HorseIdentityStorePlanReason.TypedReferenceClosurePending, result.Reason);
+                Assert.AreEqual(MigrationStoreReadStatus.Observed,
+                    result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
+            }
+            Assert.IsFalse(result.CanWrite);
+            Assert.AreEqual(before, await Sha256Async(fixture.CollectionPath));
+        }
+        finally
+        {
+            try { Directory.Delete(temporaryRoot, recursive: true); } catch { }
+        }
+    }
+
+    private static async Task<string> Sha256Async(string path)
+    {
+        await using var stream = File.OpenRead(path);
+        return Convert.ToHexString(await SHA256.HashDataAsync(stream));
     }
 
     private static HorseIdentityMigrationManifest Manifest() => new(

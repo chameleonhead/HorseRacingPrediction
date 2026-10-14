@@ -37,4 +37,11 @@
     <ProjectReference Include="..\..\src\HorseRacingPrediction.Scraping\HorseRacingPrediction.Scraping.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="TestFixtures\CollectionHistoricalSchema\*.sqlite.gz"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Update="TestFixtures\CollectionHistoricalSchema\*.provenance.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

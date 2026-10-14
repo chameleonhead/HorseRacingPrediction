@@ -1,0 +1,47 @@
+{
+  "fixture": "v18-8bbee4b0.sqlite.gz",
+  "sourceCommit": "8bbee4b06a54717c4c67744e5af8bb38c1203c61",
+  "sourcePaths": [
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformSchemaMigrator.cs",
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformDbContext.cs",
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionEntities.cs"
+  ],
+  "sourceHashes": {
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformSchemaMigrator.cs": "11F91232E0C98D4E3B9692FE6D54D5F4BCB03F881D91482A8C1D82DB128AA104",
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformDbContext.cs": "66A45C5FC113F6EC8F1986E55ADE0F8799DB29BE1E1DE952B96F452EFAE66DF6",
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionEntities.cs": "5F3AC0BEED565967BDDD4738629C152AF08FD0B50CF308337BA4AA14826B1FD2"
+  },
+  "historicalVersion": 18,
+  "currentVersion": 25,
+  "sqliteVersion": "3.53.3",
+  "preUpgrade": {
+    "schemaSha256": "8DB92B8F2124ACDA49C15FD013172D94C3308D3A7364A1E376897A55BFC2CF26",
+    "history": [
+      18
+    ],
+    "fairnessTablePresent": false,
+    "databaseSha256": "25818258E8A34E82CF7B9722BE8B3F2E1BF1F0E065679EA4E9753433596B36E2"
+  },
+  "postUpgrade": {
+    "schemaSha256": "7D8BF7BD043C4C027324E2DA802EE2CB47EA946CCBAFD23F57AFB32B3BCEE3E7",
+    "history": [
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25
+    ],
+    "fairnessTablePresent": true,
+    "databaseSha256": "8A8C611D16032BAE5F995104152F769A8DBD97105C4AAE41D1DBF191E8F19B7A"
+  },
+  "sourceBytesUnchanged": true,
+  "sentinelCreatedAtPreserved": true,
+  "raceRepairHoldPreserved": true,
+  "raceRepairHoldPresent": true,
+  "fixtureSha256": "CD15984873C3858EB3E7E1E7283939BE5029CA4DAF8BA23FE040AB0F00318F78",
+  "generatedBy": "CollectionHistoricalSchemaFixtures",
+  "deterministicNote": "SQLite file bytes may vary by SQLite/.NET runtime; schema and sentinel digests are the contract."
+}
