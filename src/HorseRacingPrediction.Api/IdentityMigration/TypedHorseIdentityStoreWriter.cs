@@ -248,7 +248,7 @@ internal sealed class TypedHorseIdentityStoreWriter(
         catch (Exception) { }
     }
 
-    private static HorseIdentityMigrationJournalReason? FindPreflightBlocker(MigrationStoreReadSnapshot snapshot)
+    internal static HorseIdentityMigrationJournalReason? FindPreflightBlocker(MigrationStoreReadSnapshot snapshot)
     {
         if (snapshot.Schemas.Any(schema => schema.Status == MigrationStoreReadStatus.Unavailable))
             return HorseIdentityMigrationJournalReason.OperationInterrupted;
