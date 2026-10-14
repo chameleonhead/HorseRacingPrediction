@@ -72,6 +72,23 @@ internal sealed record HorseIdentityMigrationJournalOutcome(
     internal bool Succeeded => Reason == HorseIdentityMigrationJournalReason.None && Operation is not null;
 }
 
+internal enum HorseIdentityMigrationStartupState
+{
+    Ready,
+    OwnerActive,
+    Interrupted,
+    PartialUnverified,
+    Corrupt,
+}
+
+internal sealed record HorseIdentityMigrationStartupGuard(
+    HorseIdentityMigrationStartupState State,
+    Guid? OperationId = null);
+
+internal sealed record HorseIdentityMigrationStagedRequest(
+    Guid OperationId,
+    HorseIdentityMigrationManifest Manifest);
+
 /// <summary>
 /// Bounded, separate operational journal for the future offline migration runner.
 /// This type has no source-store writer and is not registered in the application host.
@@ -89,10 +106,13 @@ internal sealed class HorseIdentityMigrationJournal
     private const int RollbackJournalHeaderBytes = 24;
     private const string JournalFileName = "horse-identity-migration-journal.db";
     private const string LockFileName = "horse-identity-migration-operation.lock";
+    private const string InitializationMarkerFileName = "horse-identity-migration-initialized.marker";
+    private const string InitializationMarkerContent = "horse-identity-migration-journal-v1";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly string _directory;
     private readonly string _databasePath;
     private readonly string _lockPath;
+    private readonly string _initializationMarkerPath;
     private readonly HashSet<string> _protectedPaths;
     private readonly long _maximumBytes;
     private readonly long _failureReserveBytes;
@@ -111,6 +131,7 @@ internal sealed class HorseIdentityMigrationJournal
         _directory = Path.GetFullPath(stateDirectory);
         _databasePath = Path.Combine(_directory, JournalFileName);
         _lockPath = Path.Combine(_directory, LockFileName);
+        _initializationMarkerPath = Path.Combine(_directory, InitializationMarkerFileName);
         _protectedPaths = configuredStorePaths
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(Path.GetFullPath)
@@ -118,12 +139,227 @@ internal sealed class HorseIdentityMigrationJournal
         _maximumBytes = maximumBytes;
         _failureReserveBytes = failureReserveBytes;
 
-        if (_protectedPaths.Contains(_databasePath) || _protectedPaths.Contains(_lockPath))
+        if (_protectedPaths.Contains(_databasePath) || _protectedPaths.Contains(_lockPath)
+            || _protectedPaths.Contains(_initializationMarkerPath))
             throw new InvalidOperationException("Journal path conflicts with a configured store.");
     }
 
     internal string DatabasePath => _databasePath;
     internal string LockPath => _lockPath;
+    internal string InitializationMarkerPath => _initializationMarkerPath;
+
+    internal async Task<HorseIdentityMigrationStartupGuard> InspectStartupGuardAsync(
+        DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+            or InvalidDataException or SqliteException or ArgumentException or InvalidOperationException)
+        {
+            return new(HorseIdentityMigrationStartupState.Corrupt);
+        }
+
+        FileStream lockHandle;
+        try
+        {
+            lockHandle = new FileStream(_lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None,
+                1, FileOptions.WriteThrough);
+        }
+        catch (IOException)
+        {
+            return new(HorseIdentityMigrationStartupState.OwnerActive);
+        }
+
+        await using (lockHandle.ConfigureAwait(false))
+        {
+            try
+            {
+                await using var connection = await OpenExistingAsync(cancellationToken).ConfigureAwait(false);
+                await using var transaction = connection.BeginTransaction();
+                await using (var invalid = connection.CreateCommand())
+                {
+                    invalid.Transaction = transaction;
+                    invalid.CommandText = """
+                        SELECT 1 FROM migration_operations
+                        WHERE status NOT BETWEEN $minStatus AND $maxStatus
+                            OR reason NOT BETWEEN $minReason AND $maxReason
+                            OR (status IN ($staged, $running, $succeeded) AND reason <> $none)
+                            OR (status IN ($interrupted, $partial) AND reason <> $interruptedReason)
+                            OR ((status IN ($staged, $running, $interrupted, $partial) AND terminal_utc IS NOT NULL)
+                                OR (status IN ($succeeded, $rejected, $failed) AND terminal_utc IS NULL))
+                        LIMIT 1;
+                        """;
+                    invalid.Parameters.AddWithValue("$minStatus", (int)HorseIdentityMigrationOperationStatus.Staged);
+                    invalid.Parameters.AddWithValue("$maxStatus", (int)HorseIdentityMigrationOperationStatus.PartialUnverified);
+                    invalid.Parameters.AddWithValue("$minReason", (int)HorseIdentityMigrationJournalReason.None);
+                    invalid.Parameters.AddWithValue("$maxReason", (int)HorseIdentityMigrationJournalReason.OperationInterrupted);
+                    invalid.Parameters.AddWithValue("$succeeded", (int)HorseIdentityMigrationOperationStatus.Succeeded);
+                    invalid.Parameters.AddWithValue("$none", (int)HorseIdentityMigrationJournalReason.None);
+                    invalid.Parameters.AddWithValue("$staged", (int)HorseIdentityMigrationOperationStatus.Staged);
+                    invalid.Parameters.AddWithValue("$running", (int)HorseIdentityMigrationOperationStatus.Running);
+                    invalid.Parameters.AddWithValue("$interrupted", (int)HorseIdentityMigrationOperationStatus.Interrupted);
+                    invalid.Parameters.AddWithValue("$partial", (int)HorseIdentityMigrationOperationStatus.PartialUnverified);
+                    invalid.Parameters.AddWithValue("$interruptedReason", (int)HorseIdentityMigrationJournalReason.OperationInterrupted);
+                    invalid.Parameters.AddWithValue("$rejected", (int)HorseIdentityMigrationOperationStatus.Rejected);
+                    invalid.Parameters.AddWithValue("$failed", (int)HorseIdentityMigrationOperationStatus.Failed);
+                    if (await invalid.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null)
+                        throw new InvalidDataException("Migration journal contains an invalid operation state.");
+                }
+
+                await using (var incompleteSuccess = connection.CreateCommand())
+                {
+                    incompleteSuccess.Transaction = transaction;
+                    incompleteSuccess.CommandText = """
+                        SELECT 1 FROM migration_operations o
+                        WHERE o.status = $succeeded AND (
+                            NOT EXISTS (SELECT 1 FROM migration_required_pages r WHERE r.operation_id = o.operation_id)
+                            OR (SELECT COUNT(*) FROM migration_pages p WHERE p.operation_id = o.operation_id)
+                                <> (SELECT COUNT(*) FROM migration_required_pages r WHERE r.operation_id = o.operation_id)
+                            OR EXISTS (
+                                SELECT 1 FROM migration_required_pages r
+                                LEFT JOIN migration_pages p ON p.operation_id = r.operation_id AND p.page_identity = r.page_identity
+                                WHERE r.operation_id = o.operation_id AND (p.page_identity IS NULL OR p.surface <> r.surface
+                                    OR p.table_name <> r.table_name OR p.row_count <> r.row_count
+                                    OR p.membership_hash <> r.membership_hash OR p.before_hash <> r.before_hash
+                                    OR p.expected_after_hash <> r.expected_after_hash OR p.state <> $verified)
+                            )
+                        ) LIMIT 1;
+                        """;
+                    incompleteSuccess.Parameters.AddWithValue("$succeeded", (int)HorseIdentityMigrationOperationStatus.Succeeded);
+                    incompleteSuccess.Parameters.AddWithValue("$verified", (int)HorseIdentityMigrationPageState.Verified);
+                    if (await incompleteSuccess.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null)
+                        throw new InvalidDataException("Succeeded operation has incomplete page evidence.");
+                }
+
+                Guid? runningOperation = null;
+                await using (var running = connection.CreateCommand())
+                {
+                    running.Transaction = transaction;
+                    running.CommandText = "SELECT operation_id FROM migration_operations WHERE status = $running ORDER BY operation_id LIMIT 2;";
+                    running.Parameters.AddWithValue("$running", (int)HorseIdentityMigrationOperationStatus.Running);
+                    await using var reader = await running.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                    if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                    {
+                        if (!Guid.TryParseExact(reader.GetString(0), "D", out var parsed) || parsed == Guid.Empty)
+                            throw new InvalidDataException("Migration journal contains an invalid operation ID.");
+                        runningOperation = parsed;
+                        if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                            throw new InvalidDataException("Migration journal contains multiple running operations.");
+                    }
+                }
+
+                if (runningOperation is { } stale)
+                {
+                    await SetStatusAsync(connection, transaction, stale,
+                        HorseIdentityMigrationOperationStatus.Interrupted,
+                        HorseIdentityMigrationJournalReason.OperationInterrupted, now, cancellationToken)
+                        .ConfigureAwait(false);
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return new(HorseIdentityMigrationStartupState.Interrupted, stale);
+                }
+
+                await using (var blocked = connection.CreateCommand())
+                {
+                    blocked.Transaction = transaction;
+                    blocked.CommandText = "SELECT operation_id, status FROM migration_operations WHERE status IN ($interrupted, $partial) ORDER BY operation_id LIMIT 1;";
+                    blocked.Parameters.AddWithValue("$interrupted", (int)HorseIdentityMigrationOperationStatus.Interrupted);
+                    blocked.Parameters.AddWithValue("$partial", (int)HorseIdentityMigrationOperationStatus.PartialUnverified);
+                    await using var reader = await blocked.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                    if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                    {
+                        if (!Guid.TryParseExact(reader.GetString(0), "D", out var parsed) || parsed == Guid.Empty)
+                            throw new InvalidDataException("Migration journal contains an invalid operation ID.");
+                        var status = ReadDefinedEnum<HorseIdentityMigrationOperationStatus>(reader.GetInt32(1), "operation status");
+                        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                        return new(status == HorseIdentityMigrationOperationStatus.Interrupted
+                            ? HorseIdentityMigrationStartupState.Interrupted
+                            : HorseIdentityMigrationStartupState.PartialUnverified, parsed);
+                    }
+                }
+
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return new(HorseIdentityMigrationStartupState.Ready);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+                or InvalidDataException or SqliteException or FormatException or ArgumentException or InvalidOperationException)
+            {
+                return new(HorseIdentityMigrationStartupState.Corrupt);
+            }
+        }
+    }
+
+    internal async Task<HorseIdentityMigrationStagedRequest?> GetClaimedStagedRequestAsync(
+        Guid operationId, CancellationToken cancellationToken = default)
+    {
+        if (operationId == Guid.Empty || !File.Exists(_databasePath)) return null;
+        await using var connection = await OpenReadOnlyAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: true);
+        HorseIdentityMigrationOperationStatus status;
+        var claimed = false;
+        var requestIsBoundedText = false;
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = """
+                SELECT status, workflow_claimed,
+                    CASE WHEN typeof(request_hash) = 'text' AND length(CAST(request_hash AS BLOB)) = 64
+                        AND request_hash NOT GLOB '*[^0-9A-F]'
+                        AND typeof(request_json) = 'text'
+                        AND length(CAST(request_json AS BLOB)) <= $maximumRequestBytes THEN 1 ELSE 0 END
+                FROM migration_operations WHERE operation_id = $id;
+                """;
+            command.Parameters.AddWithValue("$maximumRequestBytes", MaximumRequestBytes);
+            command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return null;
+            }
+            status = ReadDefinedEnum<HorseIdentityMigrationOperationStatus>(reader.GetInt32(0), "operation status");
+            claimed = reader.GetInt32(1) == 1;
+            requestIsBoundedText = reader.GetInt32(2) == 1;
+        }
+
+        if (status != HorseIdentityMigrationOperationStatus.Staged || !claimed)
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+        if (!requestIsBoundedText)
+            throw new InvalidDataException("Migration journal staged request exceeds its stored bounds.");
+
+        string requestHash;
+        string requestJson;
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "SELECT request_hash, request_json FROM migration_operations WHERE operation_id = $id;";
+            command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                throw new InvalidDataException("Migration journal staged request disappeared.");
+            requestHash = reader.GetString(0);
+            requestJson = reader.GetString(1);
+        }
+        if (!string.Equals(requestHash,
+                Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(requestJson))), StringComparison.Ordinal))
+            throw new InvalidDataException("Migration journal staged request hash is corrupt.");
+        var mappings = JsonSerializer.Deserialize<HorseIdentityMigrationMapping[]>(requestJson, JsonOptions)
+            ?? throw new InvalidDataException("Migration journal staged request is corrupt.");
+        var manifest = new HorseIdentityMigrationManifest(mappings.Select(mapping =>
+            (HorseIdentityMigrationManifestEntry?)new(mapping.OldHorseId, mapping.JraIdentity, true)).ToArray());
+        var validation = HorseIdentityMigrationManifestPolicy.Validate(manifest);
+        if (!validation.IsValid
+            || !string.Equals(JsonSerializer.Serialize(validation.Mappings, JsonOptions), requestJson, StringComparison.Ordinal))
+            throw new InvalidDataException("Migration journal staged request is not canonical.");
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new(operationId, manifest);
+    }
 
     internal async Task<HorseIdentityMigrationJournalOperation?> GetStatusAsync(
         Guid operationId,
@@ -142,6 +378,10 @@ internal sealed class HorseIdentityMigrationJournal
         await using var transaction = connection.BeginTransaction(deferred: true);
         var operation = await ReadOperationAsync(connection, transaction, operationId, cancellationToken)
             .ConfigureAwait(false);
+        if (operation?.Status == HorseIdentityMigrationOperationStatus.Succeeded
+            && !await HasCompleteVerifiedEvidenceAsync(connection, transaction, operationId, cancellationToken)
+                .ConfigureAwait(false))
+            throw new InvalidDataException("Succeeded operation has incomplete page evidence.");
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return operation;
     }
@@ -504,14 +744,25 @@ internal sealed class HorseIdentityMigrationJournal
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = connection.BeginTransaction();
-        var verifiedCount = await CountVerifiedPagesAsync(connection, transaction, operationId, cancellationToken)
-            .ConfigureAwait(false);
-        var pageCount = await CountRequiredPagesAsync(connection, transaction, operationId, cancellationToken)
-            .ConfigureAwait(false);
-        var checkpointCount = await CountPagesAsync(connection, transaction, operationId, cancellationToken)
-            .ConfigureAwait(false);
-        if (pageCount == 0 || verifiedCount != pageCount || checkpointCount != pageCount)
+        if (!await HasCompleteVerifiedEvidenceAsync(connection, transaction, operationId, cancellationToken)
+                .ConfigureAwait(false))
             throw new InvalidOperationException("All typed migration pages must be independently verified before success.");
+        await SetStatusAsync(connection, transaction, operationId, HorseIdentityMigrationOperationStatus.Succeeded,
+            HorseIdentityMigrationJournalReason.None, now, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<bool> HasCompleteVerifiedEvidenceAsync(SqliteConnection connection,
+        SqliteTransaction transaction, Guid operationId, CancellationToken cancellationToken)
+    {
+        var requiredCount = await CountRequiredPagesAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        if (requiredCount == 0
+            || await CountVerifiedPagesAsync(connection, transaction, operationId, cancellationToken).ConfigureAwait(false)
+                != requiredCount
+            || await CountPagesAsync(connection, transaction, operationId, cancellationToken).ConfigureAwait(false)
+                != requiredCount)
+            return false;
 
         await using (var mismatch = connection.CreateCommand())
         {
@@ -527,11 +778,18 @@ internal sealed class HorseIdentityMigrationJournal
             mismatch.Parameters.AddWithValue("$id", operationId.ToString("D"));
             mismatch.Parameters.AddWithValue("$verified", (int)HorseIdentityMigrationPageState.Verified);
             if (Convert.ToInt32(await mismatch.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)) != 0)
-                throw new InvalidOperationException("Required migration page evidence is missing or unverified.");
+                return false;
         }
-        await SetStatusAsync(connection, transaction, operationId, HorseIdentityMigrationOperationStatus.Succeeded,
-            HorseIdentityMigrationJournalReason.None, now, cancellationToken).ConfigureAwait(false);
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var extra = connection.CreateCommand();
+        extra.Transaction = transaction;
+        extra.CommandText = """
+            SELECT COUNT(*) FROM migration_pages p
+            LEFT JOIN migration_required_pages r ON r.operation_id = p.operation_id AND r.page_identity = p.page_identity
+            WHERE p.operation_id = $id AND r.page_identity IS NULL;
+            """;
+        extra.Parameters.AddWithValue("$id", operationId.ToString("D"));
+        return Convert.ToInt32(await extra.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)) == 0;
     }
 
     private async Task MarkPartialAsync(Guid operationId, DateTimeOffset now, CancellationToken cancellationToken)
@@ -635,7 +893,7 @@ internal sealed class HorseIdentityMigrationJournal
     {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = "SELECT operation_id, request_hash, status, reason, created_utc, updated_utc, results_json FROM migration_operations WHERE operation_id = $id;";
+        command.CommandText = "SELECT operation_id, request_hash, status, reason, created_utc, updated_utc, results_json, terminal_utc FROM migration_operations WHERE operation_id = $id;";
         command.Parameters.AddWithValue("$id", operationId.ToString("D"));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) return null;
@@ -645,9 +903,16 @@ internal sealed class HorseIdentityMigrationJournal
                 ?? [];
             var status = ReadDefinedEnum<HorseIdentityMigrationOperationStatus>(reader.GetInt32(2), "operation status");
             var reason = ReadDefinedEnum<HorseIdentityMigrationJournalReason>(reader.GetInt32(3), "operation reason");
-            if (status == HorseIdentityMigrationOperationStatus.Succeeded
-                && reason != HorseIdentityMigrationJournalReason.None)
-                throw new InvalidDataException("A succeeded migration journal operation has a failure reason.");
+            var reasonPairIsValid = status switch
+            {
+                HorseIdentityMigrationOperationStatus.Staged or HorseIdentityMigrationOperationStatus.Running
+                    or HorseIdentityMigrationOperationStatus.Succeeded => reason == HorseIdentityMigrationJournalReason.None,
+                HorseIdentityMigrationOperationStatus.Interrupted or HorseIdentityMigrationOperationStatus.PartialUnverified
+                    => reason == HorseIdentityMigrationJournalReason.OperationInterrupted,
+                _ => true,
+            };
+            if (!reasonPairIsValid || IsTerminal(status) != !reader.IsDBNull(7))
+                throw new InvalidDataException("Migration journal operation status and reason are inconsistent.");
             if (results.Any(result => !Enum.IsDefined(result.Code)
                 || result.Surface is { } surface && !Enum.IsDefined(surface)))
                 throw new InvalidDataException("Migration journal result contains an unknown enum value.");
@@ -851,6 +1116,7 @@ internal sealed class HorseIdentityMigrationJournal
     private async Task<SqliteConnection> OpenAsync(CancellationToken cancellationToken)
     {
         await PrepareDirectoryAsync(cancellationToken).ConfigureAwait(false);
+        await EnsureInitializationMarkerForWriteAsync(cancellationToken).ConfigureAwait(false);
         var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = _databasePath,
@@ -918,6 +1184,122 @@ internal sealed class HorseIdentityMigrationJournal
         }
     }
 
+    private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
+    {
+        await PrepareDirectoryAsync(cancellationToken).ConfigureAwait(false);
+        var markerExists = File.Exists(_initializationMarkerPath);
+        var databaseExists = File.Exists(_databasePath);
+        if (!markerExists && !databaseExists)
+        {
+            await using var initialized = await OpenAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (!markerExists || !databaseExists)
+            throw new InvalidDataException("Migration journal initialization state is incomplete.");
+
+        await ValidateInitializationMarkerAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await OpenExistingAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task EnsureInitializationMarkerForWriteAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var markerExists = File.Exists(_initializationMarkerPath);
+        var databaseExists = File.Exists(_databasePath);
+        if (markerExists)
+        {
+            if (!databaseExists)
+                throw new InvalidDataException("Initialized migration journal is missing.");
+            await ValidateInitializationMarkerAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (databaseExists)
+            throw new InvalidDataException("Migration journal initialization marker is missing.");
+
+        ThrowIfFileReparsePoint(_initializationMarkerPath);
+        await using var marker = new FileStream(_initializationMarkerPath, FileMode.CreateNew,
+            FileAccess.Write, FileShare.None, 256, FileOptions.WriteThrough);
+        var content = Encoding.ASCII.GetBytes(InitializationMarkerContent);
+        await marker.WriteAsync(content, cancellationToken).ConfigureAwait(false);
+        marker.Flush(flushToDisk: true);
+    }
+
+    private async Task ValidateInitializationMarkerAsync(CancellationToken cancellationToken)
+    {
+        ThrowIfFileReparsePoint(_initializationMarkerPath);
+        var info = new FileInfo(_initializationMarkerPath);
+        if (!info.Exists || info.Length != Encoding.ASCII.GetByteCount(InitializationMarkerContent))
+            throw new InvalidDataException("Migration journal initialization marker is corrupt.");
+        var content = await File.ReadAllTextAsync(_initializationMarkerPath, Encoding.ASCII, cancellationToken)
+            .ConfigureAwait(false);
+        if (!string.Equals(content, InitializationMarkerContent, StringComparison.Ordinal))
+            throw new InvalidDataException("Migration journal initialization marker is corrupt.");
+    }
+
+    private async Task<SqliteConnection> OpenExistingAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await PrepareReadOnlyDirectoryAsync(cancellationToken).ConfigureAwait(false);
+        if (!File.Exists(_databasePath))
+            throw new InvalidDataException("Initialized migration journal is missing.");
+        var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = _databasePath,
+            Mode = SqliteOpenMode.ReadWrite,
+            Pooling = false,
+            DefaultTimeout = 1,
+            ForeignKeys = true,
+        }.ToString());
+        try
+        {
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var query in new[]
+            {
+                "SELECT operation_id, request_hash, request_json, status, reason, created_utc, updated_utc, terminal_utc, results_json, workflow_claimed FROM migration_operations LIMIT 0;",
+                "SELECT operation_id, page_identity, surface, table_name, row_count, membership_hash, before_hash, expected_after_hash, state, updated_utc FROM migration_pages LIMIT 0;",
+                "SELECT operation_id, page_identity, surface, table_name, row_count, membership_hash, before_hash, expected_after_hash, evidence_bytes FROM migration_required_pages LIMIT 0;",
+            })
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = query;
+                await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await ValidateInitializationMarkerAsync(cancellationToken).ConfigureAwait(false);
+            return connection;
+        }
+        catch
+        {
+            await connection.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private async Task<SqliteConnection> OpenReadOnlyAsync(CancellationToken cancellationToken)
+    {
+        await PrepareReadOnlyDirectoryAsync(cancellationToken).ConfigureAwait(false);
+        await ValidateInitializationMarkerAsync(cancellationToken).ConfigureAwait(false);
+        var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = _databasePath,
+            Mode = SqliteOpenMode.ReadOnly,
+            Pooling = false,
+            DefaultTimeout = 1,
+        }.ToString());
+        try
+        {
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            return connection;
+        }
+        catch
+        {
+            await connection.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
     private async Task ConfigureMaximumPageCountAsync(SqliteConnection connection,
         CancellationToken cancellationToken)
     {
@@ -974,10 +1356,12 @@ internal sealed class HorseIdentityMigrationJournal
         Directory.CreateDirectory(_directory);
         ThrowIfReparsePointInExistingPath(_directory);
         if (_protectedPaths.Contains(Path.GetFullPath(_databasePath))
-            || _protectedPaths.Contains(Path.GetFullPath(_lockPath)))
+            || _protectedPaths.Contains(Path.GetFullPath(_lockPath))
+            || _protectedPaths.Contains(Path.GetFullPath(_initializationMarkerPath)))
             throw new InvalidOperationException("Journal path conflicts with a configured store.");
         ThrowIfFileReparsePoint(_databasePath);
         ThrowIfFileReparsePoint(_lockPath);
+        ThrowIfFileReparsePoint(_initializationMarkerPath);
         await Task.CompletedTask.ConfigureAwait(false);
     }
 
@@ -986,7 +1370,9 @@ internal sealed class HorseIdentityMigrationJournal
         cancellationToken.ThrowIfCancellationRequested();
         ThrowIfReparsePointInExistingPath(_directory);
         ThrowIfFileReparsePoint(_databasePath);
-        if (_protectedPaths.Contains(Path.GetFullPath(_databasePath)))
+        ThrowIfFileReparsePoint(_initializationMarkerPath);
+        if (_protectedPaths.Contains(Path.GetFullPath(_databasePath))
+            || _protectedPaths.Contains(Path.GetFullPath(_initializationMarkerPath)))
             throw new InvalidOperationException("Journal path conflicts with a configured store.");
         return Task.CompletedTask;
     }

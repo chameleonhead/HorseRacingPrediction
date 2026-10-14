@@ -8,6 +8,7 @@ using EventFlow.Extensions;
 using HorseRacingPrediction.Api;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Api.Identity;
+using HorseRacingPrediction.Api.IdentityMigration;
 using HorseRacingPrediction.Api.Notifications;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Api.Web;
@@ -28,7 +29,16 @@ using Microsoft.OpenApi;
 using Microsoft.Extensions.Options;
 using System.Net;
 
+var horseIdentityMigrationExitCode = await HorseIdentityMigrationRuntimeMode.RunFixedCommandAsync(args);
+if (horseIdentityMigrationExitCode is { } migrationExitCode)
+{
+    Environment.ExitCode = migrationExitCode;
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(args);
+if (await HorseIdentityMigrationRuntimeMode.RunBlockedHostIfNeededAsync(builder))
+    return;
 
 builder.Services.Configure<ApiKeyOptions>(options =>
 {

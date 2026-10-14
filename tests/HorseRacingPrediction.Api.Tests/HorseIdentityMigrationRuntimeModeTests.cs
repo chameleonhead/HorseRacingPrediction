@@ -1,0 +1,405 @@
+using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Api.Identity;
+using HorseRacingPrediction.Api.IdentityMigration;
+using HorseRacingPrediction.Contracts.Identity;
+using HorseRacingPrediction.Domain.Predictions;
+using HorseRacingPrediction.Infrastructure.Persistence;
+using Microsoft.Data.Sqlite;
+
+namespace HorseRacingPrediction.Api.Tests;
+
+[TestClass]
+public sealed class HorseIdentityMigrationRuntimeModeTests
+{
+    [TestMethod]
+    public async Task FixedCommandRejectsMissingMalformedAndExtraArgumentsBeforeCreatingHostState()
+    {
+        var missing = HorseIdentityMigrationRuntimeMode.Parse([HorseIdentityMigrationRuntimeMode.CommandName]);
+        var malformed = HorseIdentityMigrationRuntimeMode.Parse([HorseIdentityMigrationRuntimeMode.CommandName, "not-a-guid"]);
+        var extra = HorseIdentityMigrationRuntimeMode.Parse([HorseIdentityMigrationRuntimeMode.CommandName,
+            Guid.NewGuid().ToString("D"), "--urls", "http://127.0.0.1:0"]);
+
+        Assert.AreEqual(HorseIdentityMigrationRuntimeModeKind.InvalidCommand, missing.Kind);
+        Assert.AreEqual(HorseIdentityMigrationRuntimeModeKind.InvalidCommand, malformed.Kind);
+        Assert.AreEqual(HorseIdentityMigrationRuntimeModeKind.InvalidCommand, extra.Kind);
+        Assert.AreEqual(2, await HorseIdentityMigrationRuntimeMode.RunFixedCommandAsync(
+            [HorseIdentityMigrationRuntimeMode.CommandName, "not-a-guid"]));
+        Assert.AreEqual(HorseIdentityMigrationRuntimeModeKind.NormalHost,
+            HorseIdentityMigrationRuntimeMode.Parse(["--urls", "http://127.0.0.1:5010"]).Kind);
+        Assert.AreEqual(HorseIdentityMigrationRuntimeModeKind.ExecuteOperation,
+            HorseIdentityMigrationRuntimeMode.Parse([HorseIdentityMigrationRuntimeMode.CommandName,
+                Guid.NewGuid().ToString("D")]).Kind);
+    }
+
+    [TestMethod]
+    public async Task ChildHelperTimesOutAndKillsTheNormalHostProcessTree()
+    {
+        await using var stores = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
+
+        var result = await RunMigrationCommandAsync(stores,
+            ["--urls", "http://127.0.0.1:0"], TimeSpan.FromSeconds(5));
+
+        Assert.IsTrue(result.TimedOut, "The normal host should remain alive until the bounded child wait expires.");
+        Assert.IsTrue(result.ExitedAfterCleanup, "The child process should be reaped by the timeout cleanup.");
+        try
+        {
+            using var child = Process.GetProcessById(result.ProcessId);
+            Assert.IsTrue(child.HasExited, "The child process must not remain alive after timeout cleanup.");
+        }
+        catch (ArgumentException)
+        {
+            // The OS has already removed the terminated child process.
+        }
+    }
+
+    [TestMethod]
+    public async Task BlockedHostServesHealthAndAuthenticatedJournalStatusWithoutCreatingBusinessStores()
+    {
+        using var fixture = new RuntimeFixture();
+        var operationId = Guid.NewGuid();
+        Assert.IsTrue((await fixture.Journal.StageAsync(operationId, Manifest(), DateTimeOffset.UtcNow)).Succeeded);
+        Assert.IsTrue((await fixture.Journal.ClaimWorkflowAsync(operationId, DateTimeOffset.UtcNow)).Succeeded);
+        await using (var lease = await fixture.Journal.TryAcquireExecutionAsync(operationId, DateTimeOffset.UtcNow)
+                     ?? throw new InvalidOperationException("The test operation did not acquire ownership."))
+            await lease.MarkPartialAsync(DateTimeOffset.UtcNow);
+
+        using var child = fixture.StartApiProcess();
+        try
+        {
+            using var client = await fixture.WaitForHealthAsync(child);
+            using var health = await client.GetAsync("/health");
+            Assert.AreEqual(HttpStatusCode.OK, health.StatusCode);
+
+            using var denied = await client.GetAsync($"{HorseIdentityMigrationRuntimeMode.StatusRoute.Replace("{operationId:guid}", operationId.ToString("D"))}");
+            Assert.AreEqual(HttpStatusCode.Unauthorized, denied.StatusCode,
+                "The API-key middleware must reject the request before journal-status routing.");
+
+            client.DefaultRequestHeaders.Add("X-Test-Horse-Key", fixture.ApiKey);
+            using var status = await client.GetAsync($"/api/v2/admin/horse-id-migration-operations/{operationId:D}");
+            Assert.AreEqual(HttpStatusCode.OK, status.StatusCode);
+            var body = await status.Content.ReadAsStringAsync();
+            StringAssert.Contains(body, "PartialUnverified");
+            Assert.IsFalse(File.Exists(fixture.EventStorePath));
+            Assert.IsFalse(File.Exists(fixture.CollectionStorePath));
+            Assert.IsFalse(File.Exists(fixture.ScheduleStorePath));
+            Assert.IsFalse(File.Exists(fixture.QueueStorePath));
+        }
+        finally
+        {
+            await RuntimeFixture.StopAsync(child);
+        }
+    }
+
+    [TestMethod]
+    public async Task LiveOwnerIsNotInterruptedByBlockedHostStartup()
+    {
+        using var fixture = new RuntimeFixture();
+        var operationId = Guid.NewGuid();
+        Assert.IsTrue((await fixture.Journal.StageAsync(operationId, Manifest(), DateTimeOffset.UtcNow)).Succeeded);
+        Assert.IsTrue((await fixture.Journal.ClaimWorkflowAsync(operationId, DateTimeOffset.UtcNow)).Succeeded);
+        await using var lease = await fixture.Journal.TryAcquireExecutionAsync(operationId, DateTimeOffset.UtcNow)
+            ?? throw new InvalidOperationException("The test operation did not acquire ownership.");
+
+        using var child = fixture.StartApiProcess();
+        try
+        {
+            using var client = await fixture.WaitForHealthAsync(child);
+            client.DefaultRequestHeaders.Add("X-Test-Horse-Key", fixture.ApiKey);
+            using var status = await client.GetAsync($"/api/v2/admin/horse-id-migration-operations/{operationId:D}");
+            Assert.AreEqual(HttpStatusCode.OK, status.StatusCode);
+            Assert.AreEqual(HorseIdentityMigrationOperationStatus.Running,
+                (await fixture.Journal.GetStatusAsync(operationId))!.Status);
+        }
+        finally
+        {
+            await RuntimeFixture.StopAsync(child);
+        }
+    }
+
+    [TestMethod]
+    public async Task FixedCommandRunsClaimedOperationAndSuccessfulGuidRetryReturnsReceiptWithoutRewriting()
+    {
+        await using var stores = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
+        const string oldHorseId = "horse-11111111-1111-4111-8111-111111111111";
+        const string raceId = "202609190101";
+        const string ticketId = "predictionticket-00000000-0000-4000-8000-000000000201";
+        await stores.SeedHorseAsync(oldHorseId);
+        await stores.SeedSerializedHorseEventAsync(oldHorseId);
+        await stores.SeedJraResourceAsync(oldHorseId);
+        var oldEntryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, oldHorseId);
+        await stores.SeedInterleavedTicketStreamAcrossPageBoundaryAsync(oldEntryId);
+        await stores.ExecuteAsync(stores.CollectionPath, $$"""
+            UPDATE collection_resources
+            SET AttributesJson='{"requestedByHorseId":"{{oldHorseId}}","userNote":"{{oldHorseId}}"}'
+            WHERE Type='Horse' AND Provider='JRA' AND ResourceId='{{oldHorseId}}';
+            """);
+        await stores.ExecuteAsync(stores.SchedulePath, """
+            INSERT INTO prediction_candidates
+                (RaceId, Status, FirstQueuedAt, AvailableAt, LeaseToken, LeaseExpiresAt, LastError, UpdatedAt)
+            VALUES ('preserve-schedule-race', 0, '2026-10-14T00:00:00+09:00',
+                    '2026-10-14T00:00:00+09:00', NULL, NULL, 'preserve error', '2026-10-14T00:00:00+09:00');
+            """);
+        await stores.ExecuteAsync(stores.EventStorePath, $$"""
+            INSERT INTO JraSubjectProfileReadModel
+                (rowid, SubjectId, Name, SourceIdentity, SourceUrl, AcquiredAt, Fields)
+            VALUES (0, '{{oldHorseId}}', 'preserve name', 'preserve source', 'https://example.invalid/profile',
+                    '2026-10-14T00:00:00+09:00', '{"display":"preserve"}');
+            INSERT INTO MemoSubjects (rowid, SubjectKey, Memos)
+            VALUES (-1, 'Horse:{{oldHorseId}}', '[]');
+            INSERT INTO PredictionTickets
+                (PredictionTicketId, RaceId, PredictorType, PredictorId, ConfidenceScore, SummaryComment,
+                 PredictedAt, TicketStatus, Marks, Evaluations, EvaluationStatus)
+            VALUES ('{{ticketId}}', '{{raceId}}', 'fixture', 'preserve-predictor', 0.5, 'preserve comment',
+                    '2026-10-14T00:00:00+09:00', 0,
+                    '[{"entryId":"{{oldEntryId}}","markCode":"A","predictedRank":1,"score":0.9,"comment":"preserve mark"}]',
+                    '[]', 0);
+            """);
+
+        var beforeInvalidCommands = await stores.SourceSnapshotAsync();
+        var missingGuid = await RunMigrationCommandAsync(stores, [HorseIdentityMigrationRuntimeMode.CommandName]);
+        var malformedGuid = await RunMigrationCommandAsync(stores,
+            [HorseIdentityMigrationRuntimeMode.CommandName, "not-a-guid"]);
+        var extraArgument = await RunMigrationCommandAsync(stores,
+            [HorseIdentityMigrationRuntimeMode.CommandName, Guid.NewGuid().ToString("D"), "unexpected"]);
+        Assert.AreEqual(2, missingGuid.ExitCode);
+        Assert.AreEqual(2, malformedGuid.ExitCode);
+        Assert.AreEqual(2, extraArgument.ExitCode);
+        Assert.AreEqual(beforeInvalidCommands, await stores.SourceSnapshotAsync(),
+            "Invalid fixed-mode invocations must return before any configured source is read or modified.");
+
+        var manifest = new HorseIdentityMigrationManifest(
+        [
+            new HorseIdentityMigrationManifestEntry(oldHorseId, "jra-horse:2024100828", true),
+        ]);
+        var journal = new HorseIdentityMigrationJournal(Path.GetDirectoryName(stores.CollectionPath)!,
+            [stores.EventStorePath, stores.CollectionPath, stores.SchedulePath]);
+        var operationId = Guid.NewGuid();
+        Assert.IsTrue((await journal.StageAsync(operationId, manifest, DateTimeOffset.UtcNow)).Succeeded);
+
+        var firstRun = await RunMigrationCommandAsync(stores,
+            [HorseIdentityMigrationRuntimeMode.CommandName, operationId.ToString("D")]);
+        Assert.AreEqual(0, firstRun.ExitCode,
+            "The fixed subcommand must execute the claimed operation through T10's owner-bound engine.");
+        Assert.IsFalse(firstRun.Output.Contains(stores.Root, StringComparison.OrdinalIgnoreCase),
+            "CLI output must not disclose configured store paths.");
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.Succeeded,
+            (await journal.GetStatusAsync(operationId))!.Status);
+        var afterFirstRun = await stores.SourceSnapshotAsync();
+        Assert.AreNotEqual(beforeInvalidCommands, afterFirstRun);
+        var destination = HorseIdentityMigrationManifestPolicy.Validate(manifest).Mappings.Single().DestinationHorseId;
+        await using (var eventStore = new SqliteConnection($"Data Source={stores.EventStorePath};Mode=ReadOnly;Pooling=False"))
+        {
+            await eventStore.OpenAsync();
+            await using var command = eventStore.CreateCommand();
+            command.CommandText = "SELECT HorseId FROM Horses;";
+            Assert.AreEqual(destination, await command.ExecuteScalarAsync());
+        }
+
+        var terminalRetry = await RunMigrationCommandAsync(stores,
+            [HorseIdentityMigrationRuntimeMode.CommandName, operationId.ToString("D")]);
+        Assert.AreEqual(0, terminalRetry.ExitCode,
+            "A verified same-GUID retry returns the durable success receipt instead of being rejected as unstaged.");
+        Assert.AreEqual(afterFirstRun, await stores.SourceSnapshotAsync(),
+            "A terminal retry must not reopen or rewrite source stores.");
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.Succeeded,
+            (await journal.GetStatusAsync(operationId))!.Status);
+    }
+
+    private static HorseIdentityMigrationManifest Manifest() => new(
+    [
+        new HorseIdentityMigrationManifestEntry(
+            "horse-00000000-0000-0000-0000-000000000111", "jra-horse:2024100828", true),
+    ]);
+
+    private static async Task<CliResult> RunMigrationCommandAsync(
+        HorseIdentityMigrationStoreEngineTests.StoreFixture stores, IReadOnlyList<string> arguments,
+        TimeSpan? timeout = null)
+    {
+        var process = new Process
+        {
+            StartInfo = new ProcessStartInfo("dotnet")
+            {
+                WorkingDirectory = stores.Root,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            },
+            EnableRaisingEvents = true,
+        };
+        process.StartInfo.ArgumentList.Add(typeof(HorseIdentityMigrationRuntimeMode).Assembly.Location);
+        foreach (var argument in arguments) process.StartInfo.ArgumentList.Add(argument);
+        process.StartInfo.Environment["ConnectionStrings__EventStore"] = $"Data Source={stores.EventStorePath};Pooling=False";
+        process.StartInfo.Environment["CollectionPlatform__StateDirectory"] = Path.GetDirectoryName(stores.CollectionPath)!;
+        process.StartInfo.Environment["CollectionPlatform__DatabaseFileName"] = Path.GetFileName(stores.CollectionPath);
+        process.StartInfo.Environment["PredictionScheduling__StateDirectory"] = Path.GetDirectoryName(stores.SchedulePath)!;
+        process.StartInfo.Environment["PredictionScheduling__StoreFileName"] = Path.GetFileName(stores.SchedulePath);
+        process.StartInfo.Environment["CollectionQueue__Provider"] = "Sqs";
+        process.StartInfo.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+        process.StartInfo.Environment["DOTNET_NOLOGO"] = "1";
+
+        var output = new StringBuilder(8192);
+        var outputLock = new object();
+        void Capture(string? line)
+        {
+            if (line is null) return;
+            lock (outputLock)
+            {
+                if (output.Length >= 8192) return;
+                output.Append(line.AsSpan(0, Math.Min(line.Length, 8192 - output.Length))).AppendLine();
+            }
+        }
+        process.OutputDataReceived += (_, eventArgs) => Capture(eventArgs.Data);
+        process.ErrorDataReceived += (_, eventArgs) => Capture(eventArgs.Data);
+        if (!process.Start()) throw new InvalidOperationException("The migration CLI child did not start.");
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+        process.StandardInput.Close();
+        var timedOut = false;
+        var processId = process.Id;
+        try
+        {
+            using var timeoutSource = new CancellationTokenSource(timeout ?? TimeSpan.FromSeconds(90));
+            try { await process.WaitForExitAsync(timeoutSource.Token).ConfigureAwait(false); }
+            catch (OperationCanceledException)
+            {
+                timedOut = true;
+                if (!process.HasExited) process.Kill(entireProcessTree: true);
+                using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await process.WaitForExitAsync(cleanup.Token).ConfigureAwait(false);
+            }
+            process.WaitForExit();
+            lock (outputLock) return new(process.ExitCode, output.ToString(), timedOut, processId, process.HasExited);
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+                using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await process.WaitForExitAsync(cleanup.Token).ConfigureAwait(false);
+            }
+            process.Dispose();
+        }
+    }
+
+    private sealed record CliResult(int ExitCode, string Output, bool TimedOut = false, int ProcessId = 0,
+        bool ExitedAfterCleanup = true);
+
+    private sealed class RuntimeFixture : IDisposable
+    {
+        private readonly string _root = Path.Combine(Path.GetTempPath(), "hrp-horse-id-runtime-tests", Guid.NewGuid().ToString("N"));
+        private readonly int _port;
+
+        internal RuntimeFixture()
+        {
+            Directory.CreateDirectory(_root);
+            StateDirectory = Path.Combine(_root, "appstate");
+            Directory.CreateDirectory(StateDirectory);
+            EventStorePath = Path.Combine(_root, "event.db");
+            CollectionStorePath = Path.Combine(StateDirectory, "collection-platform.db");
+            ScheduleStorePath = Path.Combine(_root, "schedule", "prediction-executions.db");
+            QueueStorePath = Path.Combine(_root, "queue.db");
+            ApiKey = "test-only-" + Guid.NewGuid().ToString("N");
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            _port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
+            Journal = new HorseIdentityMigrationJournal(StateDirectory,
+                [EventStorePath, CollectionStorePath, ScheduleStorePath, QueueStorePath]);
+        }
+
+        internal string StateDirectory { get; }
+        internal string EventStorePath { get; }
+        internal string CollectionStorePath { get; }
+        internal string ScheduleStorePath { get; }
+        internal string QueueStorePath { get; }
+        internal string ApiKey { get; }
+        internal HorseIdentityMigrationJournal Journal { get; }
+
+        internal Process StartApiProcess()
+        {
+            var apiAssembly = typeof(HorseIdentityMigrationRuntimeMode).Assembly.Location;
+            var process = new Process
+            {
+                StartInfo = new ProcessStartInfo("dotnet")
+                {
+                    WorkingDirectory = FindRepositoryRoot(),
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                },
+                EnableRaisingEvents = true,
+            };
+            process.StartInfo.ArgumentList.Add(apiAssembly);
+            process.StartInfo.ArgumentList.Add("--urls");
+            process.StartInfo.ArgumentList.Add($"http://127.0.0.1:{_port}");
+            process.StartInfo.Environment["CollectionPlatform__StateDirectory"] = StateDirectory;
+            process.StartInfo.Environment["ConnectionStrings__EventStore"] = $"Data Source={EventStorePath}";
+            process.StartInfo.Environment["PredictionScheduling__StateDirectory"] = Path.GetDirectoryName(ScheduleStorePath)!;
+            process.StartInfo.Environment["PredictionScheduling__StoreFileName"] = Path.GetFileName(ScheduleStorePath);
+            process.StartInfo.Environment["CollectionQueue__Provider"] = "Local";
+            process.StartInfo.Environment["CollectionQueue__LocalDatabasePath"] = QueueStorePath;
+            process.StartInfo.Environment["ApiKey__HeaderName"] = "X-Test-Horse-Key";
+            process.StartInfo.Environment["ApiKey__Key"] = ApiKey;
+            process.StartInfo.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+            process.StartInfo.Environment["DOTNET_NOLOGO"] = "1";
+            if (!process.Start()) throw new InvalidOperationException("API child process did not start.");
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            process.StandardInput.Close();
+            return process;
+        }
+
+        internal async Task<HttpClient> WaitForHealthAsync(Process process)
+        {
+            var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{_port}") };
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            while (!deadline.IsCancellationRequested)
+            {
+                if (process.HasExited)
+                {
+                    client.Dispose();
+                    throw new InvalidOperationException($"API child exited before health was ready ({process.ExitCode}).");
+                }
+                try
+                {
+                    using var response = await client.GetAsync("/health", deadline.Token);
+                    if (response.IsSuccessStatusCode) return client;
+                }
+                catch (HttpRequestException) { }
+                catch (TaskCanceledException) when (!deadline.IsCancellationRequested) { }
+                await Task.Delay(100, deadline.Token);
+            }
+            client.Dispose();
+            throw new TimeoutException("API child did not serve the bounded health endpoint.");
+        }
+
+        internal static async Task StopAsync(Process process)
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await process.WaitForExitAsync(timeout.Token);
+        }
+
+        private static string FindRepositoryRoot()
+        {
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "HorseRacingPrediction.sln")))
+                directory = directory.Parent;
+            return directory?.FullName ?? throw new DirectoryNotFoundException("Repository root was not found.");
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
+        }
+    }
+}

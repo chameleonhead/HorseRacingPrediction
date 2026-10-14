@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Buffers.Binary;
+using HorseRacingPrediction.Api.Identity;
 using HorseRacingPrediction.Api.IdentityMigration;
 using HorseRacingPrediction.Contracts.Identity;
 using Microsoft.Data.Sqlite;
@@ -37,6 +38,118 @@ public sealed class HorseIdentityMigrationJournalTests
     }
 
     [TestMethod]
+    public async Task StartupGuardInitializesOnceAndFailsClosedWhenEitherDurableFileDisappears()
+    {
+        using var fixture = new Fixture();
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Ready,
+            (await fixture.Journal.InspectStartupGuardAsync(Now)).State);
+        Assert.IsTrue(File.Exists(fixture.Journal.InitializationMarkerPath));
+        Assert.IsTrue(File.Exists(fixture.Journal.DatabasePath));
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Ready,
+            (await fixture.Journal.InspectStartupGuardAsync(Now)).State);
+
+        File.Delete(fixture.Journal.DatabasePath);
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Corrupt,
+            (await fixture.Journal.InspectStartupGuardAsync(Now)).State,
+            "A durable initialization marker plus a missing journal must not be treated as first install.");
+    }
+
+    [TestMethod]
+    public async Task StartupGuardPreservesStagedWorkButMarksUnownedRunningAsInterrupted()
+    {
+        using var fixture = new Fixture();
+        var stagedId = Guid.NewGuid();
+        Assert.IsTrue((await fixture.Journal.StageAsync(stagedId, Manifest(1), Now)).Succeeded);
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Ready,
+            (await fixture.Journal.InspectStartupGuardAsync(Now)).State);
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.Staged,
+            (await fixture.Journal.GetStatusAsync(stagedId))!.Status);
+
+        var runningId = Guid.NewGuid();
+        Assert.IsTrue((await fixture.Journal.StageAsync(runningId, Manifest(2), Now)).Succeeded);
+        Assert.IsTrue((await fixture.Journal.ClaimWorkflowAsync(runningId, Now)).Succeeded);
+        var ownerMarker = Path.Combine(fixture.Directory, "startup-guard-owner-ready");
+        using var owner = StartChild("hold", fixture.Directory, runningId, ownerMarker);
+        try
+        {
+            await WaitForMarkerAsync(owner, ownerMarker, TimeSpan.FromSeconds(30));
+            Assert.AreEqual(HorseIdentityMigrationOperationStatus.Running,
+                (await fixture.Journal.GetStatusAsync(runningId))!.Status);
+        }
+        finally
+        {
+            await StopOwnedProcessAsync(owner);
+        }
+
+        var guard = await fixture.Journal.InspectStartupGuardAsync(Now.AddMinutes(1));
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Interrupted, guard.State);
+        Assert.AreEqual(runningId, guard.OperationId);
+        var interrupted = await fixture.Journal.GetStatusAsync(runningId);
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.Interrupted, interrupted!.Status);
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.Staged,
+            (await fixture.Journal.GetStatusAsync(stagedId))!.Status);
+    }
+
+    [TestMethod]
+    public async Task StartupGuardNeverInterruptsLiveOwnerAndRejectsMissingMarker()
+    {
+        using var fixture = new Fixture();
+        var operationId = Guid.NewGuid();
+        Assert.IsTrue((await fixture.Journal.StageAsync(operationId, Manifest(1), Now)).Succeeded);
+        Assert.IsTrue((await fixture.Journal.ClaimWorkflowAsync(operationId, Now)).Succeeded);
+        await using (var lease = await fixture.Journal.TryAcquireExecutionAsync(operationId, Now))
+        {
+            Assert.IsNotNull(lease);
+            Assert.AreEqual(HorseIdentityMigrationStartupState.OwnerActive,
+                (await fixture.Journal.InspectStartupGuardAsync(Now)).State);
+            Assert.AreEqual(HorseIdentityMigrationOperationStatus.Running,
+                (await fixture.Journal.GetStatusAsync(operationId))!.Status);
+        }
+
+        using var missingMarker = new Fixture();
+        await missingMarker.Journal.StageAsync(Guid.NewGuid(), Manifest(1), Now);
+        File.Delete(missingMarker.Journal.InitializationMarkerPath);
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Corrupt,
+            (await missingMarker.Journal.InspectStartupGuardAsync(Now)).State);
+    }
+
+    [TestMethod]
+    public async Task ClaimedStagedRequestIsReboundToCanonicalValidatedManifest()
+    {
+        using var fixture = new Fixture();
+        var operationId = Guid.NewGuid();
+        Assert.IsTrue((await fixture.Journal.StageAsync(operationId, Manifest(1), Now)).Succeeded);
+        Assert.IsNull(await fixture.Journal.GetClaimedStagedRequestAsync(operationId));
+        Assert.IsTrue((await fixture.Journal.ClaimWorkflowAsync(operationId, Now)).Succeeded);
+
+        var staged = await fixture.Journal.GetClaimedStagedRequestAsync(operationId);
+        Assert.IsNotNull(staged);
+        Assert.AreEqual(operationId, staged.OperationId);
+        Assert.IsTrue(HorseIdentityMigrationManifestPolicy.Validate(staged.Manifest).IsValid);
+    }
+
+    [TestMethod]
+    public async Task OversizedPersistedStagedRequestIsRejectedBeforeJsonMaterialization()
+    {
+        using var fixture = new Fixture();
+        var operationId = Guid.NewGuid();
+        Assert.IsTrue((await fixture.Journal.StageAsync(operationId, Manifest(1), Now)).Succeeded);
+        Assert.IsTrue((await fixture.Journal.ClaimWorkflowAsync(operationId, Now)).Succeeded);
+        var oversizedJson = "\"" + new string('x', HorseIdentityMigrationJournal.MaximumRequestBytes) + "\"";
+        await using (var connection = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE migration_operations SET request_json = $json WHERE operation_id = $id;";
+            command.Parameters.AddWithValue("$json", oversizedJson);
+            command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await ExpectExceptionAsync<InvalidDataException>(() => fixture.Journal.GetClaimedStagedRequestAsync(operationId));
+    }
+
+    [TestMethod]
     public async Task CorruptPersistedStatusOrReasonFailsClosed()
     {
         using var fixture = new Fixture();
@@ -55,6 +168,54 @@ public sealed class HorseIdentityMigrationJournalTests
         }
 
         await ExpectExceptionAsync<InvalidDataException>(() => fixture.Journal.GetStatusAsync(operationId));
+    }
+
+    [TestMethod]
+    public async Task SucceededStatusWithoutExactVerifiedPageSetFailsStatusAndStartupGuard()
+    {
+        using var fixture = new Fixture();
+        var operationId = Guid.NewGuid();
+        var lease = await StartClaimedAsync(fixture, operationId);
+        var evidence = Evidence(0);
+        Assert.IsTrue((await fixture.Journal.RegisterRequiredPagesAsync(operationId, [Prepared(evidence)], Now)).Succeeded);
+        await AdvanceToVerifiedAsync(fixture.Journal, operationId, evidence);
+        await lease.CompleteAsync(Now);
+        await lease.DisposeAsync();
+
+        await using (var connection = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM migration_required_pages WHERE operation_id = $id;";
+            command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await ExpectExceptionAsync<InvalidDataException>(() => fixture.Journal.GetStatusAsync(operationId));
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Corrupt,
+            (await fixture.Journal.InspectStartupGuardAsync(Now)).State);
+    }
+
+    [TestMethod]
+    public async Task DefinedButInconsistentRunningReasonPairFailsClosed()
+    {
+        using var fixture = new Fixture();
+        var operationId = Guid.NewGuid();
+        Assert.IsTrue((await fixture.Journal.StageAsync(operationId, Manifest(1), Now)).Succeeded);
+        await using (var connection = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE migration_operations SET status = $running, reason = $interrupted WHERE operation_id = $id;";
+            command.Parameters.AddWithValue("$running", (int)HorseIdentityMigrationOperationStatus.Running);
+            command.Parameters.AddWithValue("$interrupted", (int)HorseIdentityMigrationJournalReason.OperationInterrupted);
+            command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await ExpectExceptionAsync<InvalidDataException>(() => fixture.Journal.GetStatusAsync(operationId));
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Corrupt,
+            (await fixture.Journal.InspectStartupGuardAsync(Now)).State);
     }
 
     [TestMethod]
