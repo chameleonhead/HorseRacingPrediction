@@ -405,7 +405,7 @@ public sealed class TypedHorseIdentityEventTransformer
         {
             case JsonValueKind.Object:
                 {
-                var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     foreach (var property in value.EnumerateObject())
                         if (!names.Add(property.Name) || HasDuplicatePropertyNames(property.Value)) return true;
                     return false;
