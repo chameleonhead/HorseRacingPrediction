@@ -159,6 +159,39 @@ internal sealed class TypedHorseIdentityStoreReaders(
         return new(schemas, roots, typedReferences.IsComplete, typedReferences);
     }
 
+    internal TypedHorseIdentityReferenceReader CreateReferenceReaderForExecution() =>
+        new(eventJsonSerializer, domainEventFactory);
+
+    internal async Task<SqliteConnection?> OpenConfiguredStoreForExecutionAsync(
+        MigrationStoreSurface surface, CancellationToken cancellationToken)
+    {
+        var store = ResolveConfiguredStores().SingleOrDefault(candidate => candidate.Surface == surface);
+        if (store is null || string.IsNullOrWhiteSpace(store.Path) || !File.Exists(store.Path))
+        {
+            if (store is { Required: false }) return null;
+            throw new InvalidOperationException("Configured migration store is unavailable.");
+        }
+
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = store.Path,
+            Mode = SqliteOpenMode.ReadWrite,
+            Cache = SqliteCacheMode.Private,
+            Pooling = false,
+        }.ToString();
+        var connection = new SqliteConnection(connectionString);
+        try
+        {
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            return connection;
+        }
+        catch
+        {
+            await connection.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
     private List<ConfiguredStore> ResolveConfiguredStores()
     {
         var eventConnectionString = configuration.GetConnectionString("EventStore") ?? "Data Source=eventstore.db";

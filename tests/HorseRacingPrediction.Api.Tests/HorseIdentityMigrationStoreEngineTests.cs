@@ -1718,7 +1718,7 @@ public sealed class HorseIdentityMigrationStoreEngineTests
         return validation.Mappings.Single().DestinationHorseId;
     }
 
-    private sealed class StoreFixture : IAsyncDisposable
+    internal sealed class StoreFixture : IAsyncDisposable
     {
         private static readonly string TemporaryParent = Path.Combine(Path.GetTempPath(), "hrp-horse-id-store-engine-tests");
         private readonly string _root;
@@ -1739,6 +1739,7 @@ public sealed class HorseIdentityMigrationStoreEngineTests
         internal string CollectionPath { get; }
         internal string QueuePath => Path.Combine(_root, "queue", "local-collection-queue.db");
         internal string SchedulePath { get; }
+        internal string Root => _root;
         internal IServiceProvider EventFlowServices => _eventFlowServices;
 
         internal static async Task<StoreFixture> CreateAsync(bool createEventStore = true)
@@ -1788,6 +1789,11 @@ public sealed class HorseIdentityMigrationStoreEngineTests
 
         internal TypedHorseIdentityStoreEngine CreateEngineWithEventFlow(string queueProvider = "Sqs")
         {
+            return new(CreateReadersWithEventFlow(queueProvider));
+        }
+
+        internal TypedHorseIdentityStoreReaders CreateReadersWithEventFlow(string queueProvider = "Sqs")
+        {
             var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:EventStore"] = $"Data Source={EventStorePath};Pooling=False",
@@ -1811,7 +1817,7 @@ public sealed class HorseIdentityMigrationStoreEngineTests
                 scheduleOptions, queueOptions, _environment,
                 _eventFlowServices.GetRequiredService<IEventJsonSerializer>(),
                 _eventFlowServices.GetRequiredService<IDomainEventFactory>());
-            return new(readers);
+            return readers;
         }
 
         internal async Task SeedHorseAsync(string horseId)
@@ -2141,6 +2147,64 @@ public sealed class HorseIdentityMigrationStoreEngineTests
                 command.Parameters.AddWithValue("$global", index + 2);
                 command.Parameters.AddWithValue("$aggregate", aggregateId);
                 command.Parameters.AddWithValue("$name", aggregateName);
+                command.Parameters.AddWithValue("$data", serialized.SerializedData);
+                command.Parameters.AddWithValue("$metadata", serialized.SerializedMetadata);
+                await command.ExecuteNonQueryAsync();
+            }
+        }
+
+        internal async Task SeedInterleavedTicketStreamAcrossPageBoundaryAsync(string entryId)
+        {
+            var events = new List<(string AggregateId, string AggregateName, int Sequence, IAggregateEvent Event)>
+            {
+                ("predictionticket-00000000-0000-4000-8000-000000000201", nameof(PredictionTicketAggregate), 1,
+                    new PredictionTicketCreated("202609190101", "fixture", "preserve-predictor", .5m,
+                        "preserve summary", "preserve fingerprint")),
+            };
+            for (var index = 0; index < 126; index++)
+            {
+                var id = $"00000000-0000-4000-8000-{index + 301:D12}";
+                if (index % 2 == 0)
+                    events.Add(($"jockey-{id}", nameof(JockeyAggregate), 1,
+                        new JockeyRegistered("Preserve Jockey", "preserve-jockey")));
+                else
+                    events.Add(($"trainer-{id}", nameof(TrainerAggregate), 1,
+                        new TrainerRegistered("Preserve Trainer", "preserve-trainer")));
+            }
+            events.Add(("predictionticket-00000000-0000-4000-8000-000000000201", nameof(PredictionTicketAggregate), 2,
+                new PredictionMarkAdded(entryId, "A", 1, .9m, "preserve event comment")));
+
+            var factory = _eventFlowServices.GetRequiredService<IDomainEventFactory>();
+            var serializer = _eventFlowServices.GetRequiredService<IEventJsonSerializer>();
+            await using var connection = new SqliteConnection($"Data Source={EventStorePath};Pooling=False");
+            await connection.OpenAsync();
+            for (var index = 0; index < events.Count; index++)
+            {
+                var (aggregateId, aggregateName, sequence, aggregateEvent) = events[index];
+                var metadata = new Metadata(new Dictionary<string, string>
+                {
+                    ["aggregate_id"] = aggregateId,
+                    ["aggregate_name"] = aggregateName,
+                    ["aggregate_sequence_number"] = sequence.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["global_sequence_number"] = (index + 2).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["batch_id"] = "interleaved-page-fixture",
+                    ["event_name"] = aggregateEvent.GetType().Name,
+                    ["event_version"] = "1",
+                    ["event_id"] = $"event-{Guid.NewGuid():D}",
+                    ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
+                });
+                var domainEvent = factory.Create(aggregateEvent, metadata, aggregateId, sequence);
+                var serialized = serializer.Serialize(domainEvent);
+                await using var command = connection.CreateCommand();
+                command.CommandText = """
+                    INSERT INTO EventEntity
+                        (GlobalSequenceNumber, AggregateId, AggregateName, AggregateSequenceNumber, BatchId, Data, Metadata)
+                    VALUES ($global, $aggregate, $name, $sequence, 'interleaved-page-fixture', $data, $metadata);
+                    """;
+                command.Parameters.AddWithValue("$global", index + 2);
+                command.Parameters.AddWithValue("$aggregate", aggregateId);
+                command.Parameters.AddWithValue("$name", aggregateName);
+                command.Parameters.AddWithValue("$sequence", sequence);
                 command.Parameters.AddWithValue("$data", serialized.SerializedData);
                 command.Parameters.AddWithValue("$metadata", serialized.SerializedMetadata);
                 await command.ExecuteNonQueryAsync();

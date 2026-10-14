@@ -42,10 +42,70 @@ internal sealed record TypedHorseIdentityReferenceReadResult(
     TypedHorseIdentityReferenceReadStatus Status,
     IReadOnlyList<TypedHorseIdentityPageEvidence> Pages,
     long InspectedRows,
+    long InspectedBytes,
     string? Failure)
 {
     internal bool IsComplete => Status == TypedHorseIdentityReferenceReadStatus.Complete;
     internal bool HasCollision => Status == TypedHorseIdentityReferenceReadStatus.Collision;
+}
+
+internal sealed record TypedHorseIdentityPhysicalRow(long RowId, IReadOnlyList<object?> Values);
+internal sealed record TypedHorseIdentityTransformedRow(
+    long RowId,
+    IReadOnlyList<object?> SourceValues,
+    IReadOnlyList<object?> ExpectedValues);
+internal sealed record TypedHorseIdentityExecutionPage(
+    TypedHorseIdentityPageEvidence Evidence,
+    string MembershipHash);
+
+internal sealed class TypedHorseIdentityExecutionBudget
+{
+    private readonly TimeProvider _timeProvider;
+    private readonly DateTimeOffset _startedAt;
+    private long _rows;
+    private long _bytes;
+    private long _summaryBytes;
+
+    internal TypedHorseIdentityExecutionBudget(TimeProvider? timeProvider = null)
+    {
+        _timeProvider = timeProvider ?? TimeProvider.System;
+        _startedAt = _timeProvider.GetUtcNow();
+    }
+
+    internal void AddRow(long bytes, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _rows++;
+        _bytes += Math.Max(0, bytes);
+        if (_rows > 1_000_000 || _bytes > 4L * 1024 * 1024 * 1024
+            || _timeProvider.GetUtcNow() - _startedAt >= TimeSpan.FromMinutes(30))
+            throw new InvalidDataException("Canonical physical evidence exceeded its inspection bound.");
+    }
+
+    internal void AddPreviouslyScanned(long rows, long bytes, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (rows < 0 || bytes < 0) throw new InvalidDataException("Physical scan accounting is invalid.");
+        _rows += rows;
+        _bytes += bytes;
+        EnsureWithinBounds(cancellationToken);
+    }
+
+    internal void EnsureWithinBounds(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_rows > 1_000_000 || _bytes > 4L * 1024 * 1024 * 1024
+            || _timeProvider.GetUtcNow() - _startedAt >= TimeSpan.FromMinutes(30))
+            throw new InvalidDataException("Canonical physical evidence exceeded its inspection bound.");
+    }
+
+    internal void AddPage(long bytes)
+    {
+        _summaryBytes += Math.Max(0, bytes);
+        if (_summaryBytes > 1024 * 1024
+            || _timeProvider.GetUtcNow() - _startedAt >= TimeSpan.FromMinutes(30))
+            throw new InvalidDataException("Canonical physical evidence exceeded its summary bound.");
+    }
 }
 
 /// <summary>
@@ -416,6 +476,7 @@ internal sealed class TypedHorseIdentityReferenceReader
         foreach (var (table, keyColumn, jsonColumns) in new[]
         {
             ("Horses", "HorseId", new[] { "Aliases" }),
+            ("JraSubjectProfileReadModel", "SubjectId", new[] { "Fields" }),
             ("Jockeys", "JockeyId", new[] { "Aliases" }),
             ("Trainers", "TrainerId", new[] { "Aliases" }),
             ("RacePredictionContexts", "RaceId", new[] { "Entries", "WeatherObservations", "TrackConditionObservations", "OddsSnapshots" }),
@@ -504,7 +565,8 @@ internal sealed class TypedHorseIdentityReferenceReader
                 var keyIndex = tableColumns.FindIndex(column => column.Equals(keyColumn,
                     StringComparison.OrdinalIgnoreCase));
                 if (rawValues[keyIndex] is not { } key) return false;
-                var keyChanges = table is "Horses" or "HorseWeightHistories" or "HorseRaceHistories";
+                var keyChanges = table is "Horses" or "HorseWeightHistories" or "HorseRaceHistories"
+                    or "JraSubjectProfileReadModel";
                 if (keyChanges && state.Replacements.TryGetValue(key, out var mappedKey))
                     expectedValues[keyIndex] = "text:" + mappedKey;
                 var raceIndex = tableColumns.FindIndex(column => column.Equals("RaceId",
@@ -722,6 +784,56 @@ internal sealed class TypedHorseIdentityReferenceReader
         {
             return false;
         }
+    }
+
+    // Execution uses the same finite DTO/property recipes as the read-only evidence pass.
+    // Keep this entry explicit: callers cannot request arbitrary JSON property replacement.
+    internal static bool TryTransformKnownJsonForExecution(
+        string table, string column, string json, string rowKey, string? raceId,
+        IReadOnlyList<HorseIdentityMigrationMapping> mappings, out string expectedJson)
+    {
+        var oldIds = mappings.Select(mapping => mapping.OldHorseId).ToHashSet(StringComparer.Ordinal);
+        var destinationIds = mappings.Select(mapping => mapping.DestinationHorseId).ToHashSet(StringComparer.Ordinal);
+        var replacements = mappings.ToDictionary(mapping => mapping.OldHorseId,
+            mapping => mapping.DestinationHorseId, StringComparer.Ordinal);
+        var state = new ReadState([], oldIds, destinationIds, replacements,
+            Stopwatch.StartNew(), 0, 0);
+        return TryTransformKnownJson(table, column, json, rowKey, raceId, state, out expectedJson);
+    }
+
+    internal static string TransformExactHorseReferenceForExecution(
+        string value, IReadOnlyList<HorseIdentityMigrationMapping> mappings) =>
+        mappings.FirstOrDefault(mapping => string.Equals(mapping.OldHorseId, value, StringComparison.Ordinal))
+            ?.DestinationHorseId ?? value;
+
+    internal static bool TryTransformCollectionMetadataForExecution(
+        string json, IReadOnlyList<HorseIdentityMigrationMapping> mappings, out string expectedJson)
+    {
+        var oldIds = mappings.Select(mapping => mapping.OldHorseId).ToHashSet(StringComparer.Ordinal);
+        var destinationIds = mappings.Select(mapping => mapping.DestinationHorseId).ToHashSet(StringComparer.Ordinal);
+        var replacements = mappings.ToDictionary(mapping => mapping.OldHorseId,
+            mapping => mapping.DestinationHorseId, StringComparer.Ordinal);
+        var state = new ReadState([], oldIds, destinationIds, replacements,
+            Stopwatch.StartNew(), 0, 0);
+        return TryTransformCollectionMetadata(json, state, out expectedJson);
+    }
+
+    internal bool TryTransformEventForExecution(
+        TypedHorseIdentityEventRecord record, IReadOnlyList<HorseIdentityMigrationMapping> mappings,
+        TypedHorseIdentityTicketStreamContext? ticketContext, out TypedHorseIdentityEventRecord expectedRecord)
+    {
+        expectedRecord = record;
+        if (_eventJsonSerializer is null || _domainEventFactory is null) return false;
+        var replacements = mappings.ToDictionary(mapping => mapping.OldHorseId,
+            mapping => mapping.DestinationHorseId, StringComparer.Ordinal);
+        var transformation = new TypedHorseIdentityEventTransformer(_eventJsonSerializer,
+            _domainEventFactory, replacements).Transform(record, ticketContext);
+        if (transformation.IsAccepted && transformation.Event is not null)
+        {
+            expectedRecord = transformation.Event;
+            return true;
+        }
+        return IsKnownUnchangedSubjectEvent(record);
     }
 
     private static bool SerializeExact<T>(string source, T? value, JsonSerializerOptions options,
@@ -1145,6 +1257,464 @@ internal sealed class TypedHorseIdentityReferenceReader
         _ => value.GetType().FullName + ":" + Convert.ToString(value,
             System.Globalization.CultureInfo.InvariantCulture),
     };
+
+    internal static string ComputeMembershipHash(IReadOnlyList<long> rowIds)
+    {
+        ArgumentNullException.ThrowIfNull(rowIds);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        Append(hash, "rowid-membership-v1");
+        foreach (var rowId in rowIds) Append(hash, rowId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
+
+    internal static (string BeforeHash, string ExpectedAfterHash) ComputePhysicalPageHashes(
+        IReadOnlyList<string> orderedColumns,
+        IReadOnlyList<TypedHorseIdentityTransformedRow> rows)
+    {
+        using var before = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        using var after = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        foreach (var row in rows)
+        {
+            Append(before, row.RowId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Append(after, row.RowId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            for (var index = 0; index < orderedColumns.Count; index++)
+            {
+                Append(before, orderedColumns[index]);
+                Append(after, orderedColumns[index]);
+                Append(before, StableSqlValue(row.SourceValues[index] ?? DBNull.Value) ?? "<null>");
+                Append(after, StableSqlValue(row.ExpectedValues[index] ?? DBNull.Value) ?? "<null>");
+            }
+        }
+        return (Convert.ToHexString(before.GetHashAndReset()), Convert.ToHexString(after.GetHashAndReset()));
+    }
+
+    internal static bool TryTransformPhysicalRow(
+        MigrationStoreSurface surface,
+        string table,
+        IReadOnlyList<string> orderedColumns,
+        IReadOnlyList<object?> sourceValues,
+        IReadOnlyList<HorseIdentityMigrationMapping> mappings,
+        out object?[] expectedValues)
+    {
+        var values = sourceValues.ToArray();
+        expectedValues = values;
+        if (orderedColumns.Count != sourceValues.Count || orderedColumns.Count == 0) return false;
+        var indexes = orderedColumns.Select((column, index) => (column, index))
+            .ToDictionary(item => item.column, item => item.index, StringComparer.OrdinalIgnoreCase);
+        object? Get(string column) => indexes.TryGetValue(column, out var index) ? values[index] : null;
+        bool SetText(string column, string? value)
+        {
+            if (!indexes.TryGetValue(column, out var index)) return false;
+            values[index] = value;
+            return true;
+        }
+        string? Text(string column) => Get(column) as string;
+        string Map(string value) => TransformExactHorseReferenceForExecution(value, mappings);
+
+        if (surface == MigrationStoreSurface.CollectionPlatform)
+        {
+            var type = Text("Type") ?? Text("ResourceType") ?? Text("CanonicalResourceType");
+            var provider = Text("Provider") ?? Text("CanonicalResourceProvider");
+            var isHorseResource = string.Equals(type, "Horse", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(provider, "JRA", StringComparison.OrdinalIgnoreCase);
+            if (table is "collection_resources" or "collection_resource_suppressions"
+                && isHorseResource && Text("ResourceId") is { } resourceId
+                && !SetText("ResourceId", Map(resourceId))) return false;
+            if (table == "collection_failure_notifications" && isHorseResource
+                && Text("CanonicalResourceId") is { } canonicalId
+                && !SetText("CanonicalResourceId", Map(canonicalId))) return false;
+            if (table == "collection_subject_identification_selections" && isHorseResource
+                && Text("ResourceId") is { } selectedId && !SetText("ResourceId", Map(selectedId))) return false;
+            if (Text("SubjectHorseId") is { } subjectHorseId && !SetText("SubjectHorseId", Map(subjectHorseId)))
+                return false;
+            if (Text("RequestedByHorseId") is { } requestedByHorseId
+                && !SetText("RequestedByHorseId", Map(requestedByHorseId))) return false;
+            foreach (var jsonColumn in new[] { "AttributesJson", "MetadataJson" })
+            {
+                if (Text(jsonColumn) is not { } json) continue;
+                if (!TryTransformCollectionMetadataForExecution(json, mappings, out var transformed)) return false;
+                if (!SetText(jsonColumn, transformed)) return false;
+            }
+            return true;
+        }
+
+        if (surface != MigrationStoreSurface.EventStore) return true;
+        var keyColumn = table switch
+        {
+            "Horses" or "HorseWeightHistories" or "HorseRaceHistories" => "HorseId",
+            "JraSubjectProfileReadModel" => "SubjectId",
+            "HorseIdentityRepairCandidates" or "HorseIdentityRepairRedirects" => "SourceHorseId",
+            _ => null,
+        };
+        if (keyColumn is not null && Text(keyColumn) is { } key && !SetText(keyColumn, Map(key))) return false;
+        if (table is "HorseIdentityRepairCandidates" or "HorseIdentityRepairRedirects"
+            && Text("TargetHorseId") is { } targetHorseId && !SetText("TargetHorseId", Map(targetHorseId)))
+            return false;
+        if (table == "SubjectIdentificationRepairIssues"
+            && Text("SubjectId") is { } subjectId && !SetText("SubjectId", Map(subjectId))) return false;
+        if (table == "SubjectIdentificationRepairIssues"
+            && Text("TargetSubjectId") is { } targetSubjectId && !SetText("TargetSubjectId", Map(targetSubjectId)))
+            return false;
+        if (table == "MemoSubjects" && Text("SubjectKey") is { } subjectKey)
+        {
+            foreach (var mapping in mappings)
+            {
+                var oldKey = MemoBySubjectLocator.MakeKey(MemoSubjectType.Horse, mapping.OldHorseId);
+                if (string.Equals(subjectKey, oldKey, StringComparison.Ordinal))
+                    if (!SetText("SubjectKey", MemoBySubjectLocator.MakeKey(MemoSubjectType.Horse,
+                            mapping.DestinationHorseId))) return false;
+            }
+        }
+
+        var jsonRoles = table switch
+        {
+            "Horses" => new[] { "Aliases" },
+            "JraSubjectProfileReadModel" => new[] { "Fields" },
+            "Jockeys" or "Trainers" => new[] { "Aliases" },
+            "RacePredictionContexts" => new[] { "Entries", "WeatherObservations", "TrackConditionObservations", "OddsSnapshots" },
+            "RaceResults" => new[] { "EntryResults", "EntryIndexes", "PayoutResult" },
+            "PredictionTickets" => new[] { "Marks", "Evaluations" },
+            "HorseWeightHistories" => new[] { "WeightHistory" },
+            "PredictionComparisons" => new[] { "TicketStates", "EntryIndexes", "EntryResults", "PayoutResult" },
+            "MemoSubjects" => new[] { "Memos" },
+            "HorseRaceHistories" => new[] { "Entries" },
+            "JockeyRaceHistories" => new[] { "Entries" },
+            _ => [],
+        };
+        var keyName = table switch
+        {
+            "Horses" or "HorseWeightHistories" or "HorseRaceHistories" => "HorseId",
+            "JraSubjectProfileReadModel" => "SubjectId",
+            "Jockeys" => "JockeyId",
+            "Trainers" => "TrainerId",
+            "RacePredictionContexts" or "RaceResults" or "PredictionComparisons" => "RaceId",
+            "PredictionTickets" => "PredictionTicketId",
+            "JockeyRaceHistories" => "JockeyId",
+            "MemoSubjects" => "SubjectKey",
+            _ => "",
+        };
+        var rowKey = keyName.Length > 0 ? Text(keyName) : null;
+        var raceId = Text("RaceId") ?? (table == "RacePredictionContexts" ? rowKey : null);
+        foreach (var jsonColumn in jsonRoles)
+        {
+            if (Text(jsonColumn) is not { } json) continue;
+            if (!TryTransformKnownJsonForExecution(table, jsonColumn, json, rowKey ?? "", raceId,
+                    mappings, out var transformed) || !SetText(jsonColumn, transformed)) return false;
+        }
+        return true;
+    }
+
+    internal static async Task<IReadOnlyList<TypedHorseIdentityPhysicalRow>> ReadPhysicalRowsByRowIdsAsync(
+        SqliteConnection connection,
+        string table,
+        IReadOnlyList<string> orderedColumns,
+        IReadOnlyList<long> rowIds,
+        CancellationToken cancellationToken,
+        TypedHorseIdentityExecutionBudget? budget = null)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentException.ThrowIfNullOrWhiteSpace(table);
+        ArgumentNullException.ThrowIfNull(orderedColumns);
+        ArgumentNullException.ThrowIfNull(rowIds);
+        if (rowIds.Count is < 1 or > PageSize
+            || rowIds.Distinct().Count() != rowIds.Count || orderedColumns.Count == 0
+            || table.Contains('"') || orderedColumns.Any(column => string.IsNullOrWhiteSpace(column)
+                || column.Contains('"')))
+            throw new InvalidDataException("Physical page definition is invalid.");
+
+        var placeholders = rowIds.Select((_, index) => "$row" + index.ToString(
+            System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+        var projection = string.Join(",", orderedColumns.Select(column =>
+            $"CASE WHEN length(CAST(\"{column}\" AS BLOB)) <= $maxBytes THEN \"{column}\" ELSE NULL END, "
+            + $"length(CAST(\"{column}\" AS BLOB))"));
+        await using var command = connection.CreateCommand();
+        command.CommandTimeout = 1;
+        command.CommandText = $"SELECT rowid,{projection} FROM \"{table}\" WHERE rowid IN ({string.Join(',', placeholders)}) ORDER BY rowid;";
+        command.Parameters.AddWithValue("$maxBytes", MaximumSerializedBytes);
+        for (var index = 0; index < rowIds.Count; index++)
+            command.Parameters.AddWithValue(placeholders[index], rowIds[index]);
+
+        var rows = new List<TypedHorseIdentityPhysicalRow>(rowIds.Count);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var rowId = reader.GetInt64(0);
+            var values = new object?[orderedColumns.Count];
+            long rowBytes = sizeof(long);
+            for (var index = 0; index < orderedColumns.Count; index++)
+            {
+                var valueIndex = 1 + index * 2;
+                var lengthIndex = valueIndex + 1;
+                if (reader.IsDBNull(valueIndex) != reader.IsDBNull(lengthIndex))
+                    throw new InvalidDataException("Physical page contains an oversized value.");
+                if (!reader.IsDBNull(valueIndex))
+                {
+                    if (reader.GetInt64(lengthIndex) > MaximumSerializedBytes)
+                        throw new InvalidDataException("Physical page value exceeds the configured bound.");
+                    rowBytes += reader.GetInt64(lengthIndex);
+                    values[index] = reader.GetValue(valueIndex);
+                }
+            }
+            budget?.AddRow(rowBytes, cancellationToken);
+            rows.Add(new(rowId, values));
+        }
+        if (!rows.Select(row => row.RowId).SequenceEqual(rowIds.Order()))
+            throw new InvalidDataException("Physical page membership changed.");
+        return rows;
+    }
+
+    internal async Task<IReadOnlyList<TypedHorseIdentityExecutionPage>> PrepareCanonicalExecutionPagesAsync(
+        MigrationStoreSurface surface,
+        SqliteConnection connection,
+        IReadOnlyList<HorseIdentityMigrationMapping> mappings,
+        TypedHorseIdentityExecutionBudget budget,
+        CancellationToken cancellationToken)
+    {
+        var pages = new List<TypedHorseIdentityExecutionPage>();
+        ArgumentNullException.ThrowIfNull(budget);
+        var tables = new List<string>();
+        await using (var inventory = connection.CreateCommand())
+        {
+            inventory.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;";
+            await using var reader = await inventory.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) tables.Add(reader.GetString(0));
+        }
+
+        foreach (var table in tables)
+        {
+            if (table.Contains('"')) throw new InvalidDataException("Physical table identifier is unsupported.");
+            var columns = new List<string>();
+            await using (var schema = connection.CreateCommand())
+            {
+                schema.CommandText = $"PRAGMA table_info(\"{table}\");";
+                await using var reader = await schema.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) columns.Add(reader.GetString(1));
+            }
+            if (columns.Count == 0 || columns.Any(column => column.Contains('"')))
+                throw new InvalidDataException("Physical table schema is unsupported.");
+
+            long? afterRowId = null;
+            while (true)
+            {
+                var projection = string.Join(",", columns.Select(column =>
+                    $"CASE WHEN length(CAST(\"{column}\" AS BLOB)) <= $maxBytes THEN \"{column}\" ELSE NULL END, "
+                    + $"length(CAST(\"{column}\" AS BLOB))"));
+                await using var command = connection.CreateCommand();
+                command.CommandTimeout = 1;
+                command.CommandText = $"SELECT rowid,{projection} FROM \"{table}\" "
+                    + (afterRowId.HasValue ? "WHERE rowid > $after " : string.Empty)
+                    + "ORDER BY rowid LIMIT $limit;";
+                command.Parameters.AddWithValue("$maxBytes", MaximumSerializedBytes);
+                if (afterRowId.HasValue) command.Parameters.AddWithValue("$after", afterRowId.Value);
+                command.Parameters.AddWithValue("$limit", PageSize + 1);
+                await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                using var before = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                using var after = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                var rowIds = new List<long>(PageSize);
+                var eventContexts = new Dictionary<string, TypedHorseIdentityTicketStreamContext>(StringComparer.Ordinal);
+                while (rowIds.Count < PageSize && await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    var rowId = reader.GetInt64(0);
+                    var source = new object?[columns.Count];
+                    long rowBytes = sizeof(long);
+                    for (var index = 0; index < columns.Count; index++)
+                    {
+                        var valueIndex = 1 + index * 2;
+                        var lengthIndex = valueIndex + 1;
+                        if (reader.IsDBNull(valueIndex) != reader.IsDBNull(lengthIndex))
+                            throw new InvalidDataException("Physical row exceeds the serialized-field bound.");
+                        if (!reader.IsDBNull(valueIndex))
+                        {
+                            if (reader.GetInt64(lengthIndex) > MaximumSerializedBytes)
+                                throw new InvalidDataException("Physical row exceeds the serialized-field bound.");
+                            rowBytes += reader.GetInt64(lengthIndex);
+                            source[index] = reader.GetValue(valueIndex);
+                        }
+                    }
+                    var expected = source.ToArray();
+                    if (surface == MigrationStoreSurface.EventStore && table == "EventEntity")
+                    {
+                        if (!await TryTransformEventEntityRowAsync(connection, columns, source, expected,
+                                eventContexts, mappings, cancellationToken, budget).ConfigureAwait(false))
+                            throw new InvalidDataException("Event row has no registered typed transformation recipe.");
+                    }
+                    else if (!TryTransformPhysicalRow(surface, table, columns, source, mappings, out expected))
+                        throw new InvalidDataException("Physical row has no registered typed transformation recipe.");
+
+                    Append(before, rowId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    Append(after, rowId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    for (var index = 0; index < columns.Count; index++)
+                    {
+                        Append(before, columns[index]);
+                        Append(after, columns[index]);
+                        Append(before, StableSqlValue(source[index] ?? DBNull.Value) ?? "<null>");
+                        Append(after, StableSqlValue(expected[index] ?? DBNull.Value) ?? "<null>");
+                    }
+                    rowIds.Add(rowId);
+                    budget.AddRow(rowBytes, cancellationToken);
+                }
+                var hasMore = await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                if (rowIds.Count == 0)
+                {
+                    if (afterRowId is null)
+                    {
+                        var empty = Convert.ToHexString(SHA256.HashData([]));
+                        pages.Add(new(new(surface, table, 0, empty, empty, "start", "end"), ComputeMembershipHash([])));
+                    }
+                    break;
+                }
+                var evidence = new TypedHorseIdentityPageEvidence(surface, table, rowIds.Count,
+                    Convert.ToHexString(before.GetHashAndReset()), Convert.ToHexString(after.GetHashAndReset()),
+                    afterRowId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "start",
+                    hasMore ? rowIds[^1].ToString(System.Globalization.CultureInfo.InvariantCulture) : "end");
+                pages.Add(new(evidence, ComputeMembershipHash(rowIds)));
+                var summaryBytes = Encoding.UTF8.GetByteCount(surface.ToString()) + Encoding.UTF8.GetByteCount(table)
+                    + Encoding.UTF8.GetByteCount(evidence.BeforeHash) + Encoding.UTF8.GetByteCount(evidence.ExpectedAfterHash)
+                    + Encoding.UTF8.GetByteCount(evidence.FirstKey ?? string.Empty)
+                    + Encoding.UTF8.GetByteCount(evidence.LastKey ?? string.Empty) + sizeof(long) + sizeof(int);
+                budget.AddPage(summaryBytes);
+                if (!hasMore) break;
+                afterRowId = rowIds[^1];
+            }
+        }
+        return pages;
+    }
+
+    internal async Task<IReadOnlyList<TypedHorseIdentityTransformedRow>> ReadAndTransformExecutionPageAsync(
+        SqliteConnection connection,
+        TypedHorseIdentityPageEvidence evidence,
+        IReadOnlyList<HorseIdentityMigrationMapping> mappings,
+        CancellationToken cancellationToken,
+        TypedHorseIdentityExecutionBudget? budget = null)
+    {
+        var initialPage = string.Equals(evidence.FirstKey, "start", StringComparison.Ordinal);
+        var terminalPage = string.Equals(evidence.LastKey, "end", StringComparison.Ordinal);
+        var hasAfter = long.TryParse(evidence.FirstKey, System.Globalization.NumberStyles.AllowLeadingSign,
+            System.Globalization.CultureInfo.InvariantCulture, out var afterRowId);
+        var hasThrough = long.TryParse(evidence.LastKey, System.Globalization.NumberStyles.AllowLeadingSign,
+            System.Globalization.CultureInfo.InvariantCulture, out var throughRowId);
+        if ((!initialPage && !hasAfter) || (!terminalPage && !hasThrough)
+            || hasAfter && hasThrough && throughRowId <= afterRowId || evidence.RowCount is < 0 or > PageSize)
+            throw new InvalidDataException("Execution page key bounds are invalid.");
+        var columns = new List<string>();
+        await using (var schema = connection.CreateCommand())
+        {
+            schema.CommandText = $"PRAGMA table_info(\"{evidence.Table}\");";
+            await using var reader = await schema.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) columns.Add(reader.GetString(1));
+        }
+        if (columns.Count == 0 || columns.Any(column => column.Contains('"')))
+            throw new InvalidDataException("Execution page schema is invalid.");
+
+        var rowIds = new List<long>((int)evidence.RowCount);
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandTimeout = 1;
+            command.CommandText = "SELECT rowid FROM \"" + evidence.Table + "\" "
+                + (initialPage ? string.Empty : "WHERE rowid > $after ")
+                + (initialPage && !terminalPage ? "WHERE rowid <= $through "
+                    : !initialPage && !terminalPage ? "AND rowid <= $through " : string.Empty)
+                + "ORDER BY rowid LIMIT $limit;";
+            if (!initialPage) command.Parameters.AddWithValue("$after", afterRowId);
+            if (!terminalPage) command.Parameters.AddWithValue("$through", throughRowId);
+            command.Parameters.AddWithValue("$limit", PageSize + 1);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) rowIds.Add(reader.GetInt64(0));
+        }
+        if (rowIds.Count != evidence.RowCount || rowIds.Count > PageSize)
+            throw new InvalidDataException("Execution page membership changed.");
+
+        var sourceRows = rowIds.Count == 0 ? [] : await ReadPhysicalRowsByRowIdsAsync(connection,
+            evidence.Table, columns, rowIds, cancellationToken, budget).ConfigureAwait(false);
+        if (!sourceRows.Select(row => row.RowId).SequenceEqual(rowIds))
+            throw new InvalidDataException("Execution page membership changed.");
+
+        var contexts = new Dictionary<string, TypedHorseIdentityTicketStreamContext>(StringComparer.Ordinal);
+        var transformed = new List<TypedHorseIdentityTransformedRow>(sourceRows.Count);
+        foreach (var row in sourceRows)
+        {
+            var expected = row.Values.ToArray();
+            if (evidence.Surface == MigrationStoreSurface.EventStore && evidence.Table == "EventEntity")
+            {
+                if (!await TryTransformEventEntityRowAsync(connection, columns, row.Values, expected,
+                        contexts, mappings, cancellationToken, budget).ConfigureAwait(false))
+                    throw new InvalidDataException("Event row has no registered typed transformation recipe.");
+            }
+            else if (!TryTransformPhysicalRow(evidence.Surface, evidence.Table, columns, row.Values,
+                         mappings, out expected))
+                throw new InvalidDataException("Physical row has no registered typed transformation recipe.");
+            transformed.Add(new(row.RowId, row.Values, expected));
+        }
+        return transformed;
+    }
+
+    private async Task<bool> TryTransformEventEntityRowAsync(
+        SqliteConnection connection,
+        IReadOnlyList<string> columns,
+        IReadOnlyList<object?> source,
+        object?[] expected,
+        Dictionary<string, TypedHorseIdentityTicketStreamContext> contexts,
+        IReadOnlyList<HorseIdentityMigrationMapping> mappings,
+        CancellationToken cancellationToken,
+        TypedHorseIdentityExecutionBudget? budget)
+    {
+        var indexes = columns.Select((column, index) => (column, index))
+            .ToDictionary(item => item.column, item => item.index, StringComparer.OrdinalIgnoreCase);
+        string? Text(string column) => indexes.TryGetValue(column, out var index) ? source[index] as string : null;
+        var aggregateId = Text("AggregateId");
+        var aggregateName = Text("AggregateName");
+        var data = Text("Data");
+        var metadata = Text("Metadata");
+        if (aggregateId is null || aggregateName is null || data is null || metadata is null
+            || !indexes.TryGetValue("GlobalSequenceNumber", out var globalIndex)
+            || !indexes.TryGetValue("AggregateSequenceNumber", out var sequenceIndex)
+            || !indexes.TryGetValue("BatchId", out var batchIndex)) return false;
+
+        TypedHorseIdentityTicketStreamContext? context = null;
+        if (string.Equals(aggregateName, nameof(PredictionTicketAggregate), StringComparison.Ordinal)
+            && Convert.ToInt32(source[sequenceIndex], System.Globalization.CultureInfo.InvariantCulture) > 1)
+        {
+            if (!contexts.TryGetValue(aggregateId, out context))
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandTimeout = 1;
+                command.CommandText = """
+                    SELECT rowid,
+                        CASE WHEN length(CAST(Data AS BLOB)) <= $maxBytes THEN Data ELSE NULL END,
+                        length(CAST(Data AS BLOB))
+                    FROM EventEntity WHERE AggregateId=$id AND AggregateSequenceNumber=1;
+                    """;
+                command.Parameters.AddWithValue("$maxBytes", MaximumSerializedBytes);
+                command.Parameters.AddWithValue("$id", aggregateId);
+                string? created;
+                await using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) return false;
+                    if (reader.IsDBNull(1) != reader.IsDBNull(2) || reader.IsDBNull(1)
+                        || reader.GetInt64(2) > MaximumSerializedBytes) return false;
+                    var dataBytes = reader.GetInt64(2);
+                    budget?.AddRow(sizeof(long) + dataBytes, cancellationToken);
+                    created = reader.GetString(1);
+                    if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) return false;
+                }
+                if (created is null || !TryReadTicketCreatedContext(created, aggregateId, out context)) return false;
+                contexts.Add(aggregateId, context);
+            }
+        }
+        var record = new TypedHorseIdentityEventRecord(
+            Convert.ToInt64(source[globalIndex], System.Globalization.CultureInfo.InvariantCulture),
+            aggregateId, aggregateName,
+            Convert.ToInt32(source[sequenceIndex], System.Globalization.CultureInfo.InvariantCulture), data, metadata);
+        if (!TryTransformEventForExecution(record, mappings, context, out var transformed)) return false;
+        expected[globalIndex] = transformed.GlobalSequenceNumber;
+        expected[indexes["AggregateId"]] = transformed.AggregateId;
+        expected[indexes["AggregateName"]] = transformed.AggregateName;
+        expected[sequenceIndex] = transformed.AggregateSequenceNumber;
+        expected[batchIndex] = source[batchIndex];
+        expected[indexes["Data"]] = transformed.Data;
+        expected[indexes["Metadata"]] = transformed.Metadata;
+        return true;
+    }
 
     private static bool TryTransformCollectionMetadata(
         string json, ReadState state, out string expectedJson)
@@ -1752,6 +2322,6 @@ internal sealed class TypedHorseIdentityReferenceReader
             TypedHorseIdentityReferenceReadStatus status, string? failure = null) =>
             new(status == TypedHorseIdentityReferenceReadStatus.Complete && (failure ?? Failure) is not null
                     ? TypedHorseIdentityReferenceReadStatus.Incomplete : status,
-                Pages.ToArray(), InspectedRows, failure ?? Failure);
+                Pages.ToArray(), InspectedRows, InputBytes, failure ?? Failure);
     }
 }

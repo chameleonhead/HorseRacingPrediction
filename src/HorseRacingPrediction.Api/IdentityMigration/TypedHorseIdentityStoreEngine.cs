@@ -44,6 +44,26 @@ internal sealed record HorseIdentityStorePlan(
 /// </summary>
 internal sealed class TypedHorseIdentityStoreEngine(TypedHorseIdentityStoreReaders readers)
 {
+    internal Task<MigrationStoreReadSnapshot> InspectExecutionInputsAsync(
+        HorseIdentityMigrationManifest? manifest, CancellationToken cancellationToken)
+    {
+        var validation = HorseIdentityMigrationManifestPolicy.Validate(manifest);
+        if (!validation.IsValid)
+            throw new InvalidOperationException("Migration manifest is invalid.");
+        return readers.InspectAsync(validation.Mappings, cancellationToken);
+    }
+
+    internal Task<TypedHorseIdentityExecutionResult> ExecuteOwnedAsync(
+        Guid operationId,
+        HorseIdentityMigrationManifest? manifest,
+        HorseIdentityMigrationJournal journal,
+        CancellationToken cancellationToken,
+        Func<CancellationToken, Task>? beforeFirstWrite = null,
+        Func<CancellationToken, Task>? afterPageCommit = null,
+        TimeProvider? timeProvider = null) =>
+        new TypedHorseIdentityStoreWriter(readers, this, journal, beforeFirstWrite, afterPageCommit, timeProvider)
+            .ExecuteAsync(operationId, manifest, cancellationToken);
+
     internal async Task<HorseIdentityStorePlan> InspectAsync(
         HorseIdentityMigrationManifest? manifest,
         CancellationToken cancellationToken)
