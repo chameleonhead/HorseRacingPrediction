@@ -7,8 +7,12 @@ using EventFlow.EntityFramework;
 using EventFlow.EntityFramework.EventStores;
 using EventFlow.Extensions;
 using HorseRacingPrediction.Application.Commands.Horses;
+using HorseRacingPrediction.Application.Commands.Memos;
+using HorseRacingPrediction.Application.Commands.Predictions;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Domain.Horses;
+using HorseRacingPrediction.Domain.Memos;
+using HorseRacingPrediction.Domain.Predictions;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.Infrastructure.Persistence.HorseIdentityMigration;
@@ -241,6 +245,246 @@ public sealed class HorseIdentityMigrationEventTransformerTests
     }
 
     [TestMethod]
+    public async Task TransformsAllMemoSubjectListsAndPreservesNonHorseFields()
+    {
+        using var fixture = await EventFixture.CreateAsync();
+        var oldHorseId = HorseIdFor(90);
+        var newHorseId = HorseIdFor(91);
+        var memoId = new MemoId("memo-00000000-0000-4000-8000-000000000190");
+        var link = new MemoLink("link-1", MemoLinkType.Url,
+            $"title {oldHorseId}", $"https://example.test/{oldHorseId}", oldHorseId);
+
+        await fixture.CommandBus.PublishAsync(new CreateMemoCommand(
+            memoId, "author-1", "Note", $"created {oldHorseId}",
+            DateTimeOffset.Parse("2026-10-14T01:00:00Z"),
+            [new(MemoSubjectType.Horse, oldHorseId), new(MemoSubjectType.Trainer, oldHorseId)],
+            [link]), CancellationToken.None);
+        await fixture.CommandBus.PublishAsync(new UpdateMemoCommand(
+            memoId, content: $"updated {oldHorseId}", links: [link]), CancellationToken.None);
+        await fixture.CommandBus.PublishAsync(new ChangeMemoSubjectsCommand(memoId,
+            [new(MemoSubjectType.Horse, oldHorseId), new(MemoSubjectType.Jockey, oldHorseId)]),
+            CancellationToken.None);
+        await fixture.CommandBus.PublishAsync(new DeleteMemoCommand(memoId), CancellationToken.None);
+
+        var records = await fixture.ReadRecordsAsync(memoId.Value, nameof(MemoAggregate));
+        Assert.AreEqual(4, records.Count);
+        var transformer = fixture.Transformer(new Dictionary<string, string> { [oldHorseId] = newHorseId });
+
+        foreach (var record in records)
+        {
+            var result = transformer.Transform(record);
+            Assert.AreEqual(TypedHorseIdentityEventTransformStatus.Transformed, result.Status,
+                $"{fixture.EventType(record)}: {result.Reason}");
+            Assert.IsNotNull(result.Event);
+            await fixture.ReplaceRecordAsync(result.Event);
+        }
+
+        var created = JsonNode.Parse(transformer.Transform(records[0]).Event!.Data)!.AsObject();
+        AssertSubjectId(created, "subjects", 0, newHorseId);
+        AssertSubjectId(created, "subjects", 1, oldHorseId);
+        Assert.AreEqual($"created {oldHorseId}", StringProperty(created, "content"));
+        var createdLink = ArrayProperty(created, "links")[0]!.AsObject();
+        Assert.AreEqual($"https://example.test/{oldHorseId}", StringProperty(createdLink, "url"));
+        Assert.AreEqual(oldHorseId, StringProperty(createdLink, "storageKey"));
+
+        var updated = JsonNode.Parse(transformer.Transform(records[1]).Event!.Data)!.AsObject();
+        AssertSubjectId(updated, "currentSubjects", 0, newHorseId);
+        AssertSubjectId(updated, "currentSubjects", 1, oldHorseId);
+        Assert.AreEqual($"updated {oldHorseId}", StringProperty(updated, "content"));
+
+        var changed = JsonNode.Parse(transformer.Transform(records[2]).Event!.Data)!.AsObject();
+        AssertSubjectId(changed, "addedSubjects", 0, oldHorseId);
+        AssertSubjectId(changed, "removedSubjects", 0, oldHorseId);
+        AssertSubjectId(changed, "allSubjects", 0, newHorseId);
+        AssertSubjectId(changed, "allSubjects", 1, oldHorseId);
+
+        var deleted = JsonNode.Parse(transformer.Transform(records[3]).Event!.Data)!.AsObject();
+        AssertSubjectId(deleted, "subjects", 0, newHorseId);
+        AssertSubjectId(deleted, "subjects", 1, oldHorseId);
+
+        var unknownMemoType = JsonNode.Parse(records[0].Data)!.AsObject();
+        ArrayProperty(unknownMemoType, "subjects")[0]!.AsObject()[FindPropertyName(
+            ArrayProperty(unknownMemoType, "subjects")[0]!.AsObject(), "subjectType")] = 999;
+        var unknownTypeResult = transformer.Transform(records[0] with { Data = unknownMemoType.ToJsonString() });
+        Assert.AreEqual(TypedHorseIdentityEventTransformStatus.Rejected, unknownTypeResult.Status);
+        Assert.AreEqual(TypedHorseIdentityEventTransformReason.UnsupportedPayloadShape, unknownTypeResult.Reason);
+
+        var nullMemoSubject = JsonNode.Parse(records[0].Data)!.AsObject();
+        var nullSubject = ArrayProperty(nullMemoSubject, "subjects")[0]!.AsObject();
+        nullSubject[FindPropertyName(nullSubject, "subjectId")] = null;
+        var nullSubjectResult = transformer.Transform(records[0] with { Data = nullMemoSubject.ToJsonString() });
+        Assert.AreEqual(TypedHorseIdentityEventTransformStatus.Rejected, nullSubjectResult.Status);
+        Assert.AreEqual(TypedHorseIdentityEventTransformReason.UnsupportedPayloadShape, nullSubjectResult.Reason);
+
+        _ = await fixture.AggregateStore.LoadAsync<MemoAggregate, MemoId>(memoId, CancellationToken.None);
+    }
+
+    [TestMethod]
+    public async Task TransformsTicketMarksAndHorseRationalesOnlyWithValidatedStreamContext()
+    {
+        using var fixture = await EventFixture.CreateAsync();
+        var oldHorseId = HorseIdFor(92);
+        var newHorseId = HorseIdFor(93);
+        var raceId = "race-00000000-0000-4000-8000-000000000192";
+        var ticketId = new PredictionTicketId("predictionticket-00000000-0000-4000-8000-000000000192");
+        var deterministicEntryId = DeterministicEntryId(raceId, oldHorseId);
+
+        await fixture.CommandBus.PublishAsync(new CreatePredictionTicketCommand(
+            ticketId, raceId, "AI", "model-v1", .85m, $"summary {oldHorseId}",
+            $"fingerprint-{oldHorseId}"), CancellationToken.None);
+        await fixture.CommandBus.PublishAsync(new AddPredictionMarkCommand(
+            ticketId, deterministicEntryId, "◎", 1, 95m, $"mark {oldHorseId}"), CancellationToken.None);
+        await fixture.CommandBus.PublishAsync(new AddPredictionMarkCommand(
+            ticketId, $"manual-{oldHorseId}", "○", 2, 80m, null), CancellationToken.None);
+        await fixture.CommandBus.PublishAsync(new AddPredictionRationaleCommand(
+            ticketId, "Horse", oldHorseId, "SpeedFigure", $"signal {oldHorseId}",
+            $"explanation {oldHorseId}"), CancellationToken.None);
+        await fixture.CommandBus.PublishAsync(new AddPredictionRationaleCommand(
+            ticketId, "Trainer", oldHorseId, "Stable", $"signal {oldHorseId}",
+            $"explanation {oldHorseId}"), CancellationToken.None);
+
+        var records = await fixture.ReadRecordsAsync(ticketId.Value, nameof(PredictionTicketAggregate));
+        Assert.AreEqual(5, records.Count);
+        Assert.AreEqual(1, records.Count(record => fixture.GetAggregateEvent(record) is PredictionTicketCreated));
+        var createdRecord = records.Single(record => fixture.GetAggregateEvent(record) is PredictionTicketCreated);
+        var createdEvent = (PredictionTicketCreated)fixture.GetAggregateEvent(createdRecord);
+        var context = new TypedHorseIdentityTicketStreamContext(
+            ticketId.Value, createdRecord.AggregateSequenceNumber, createdEvent.RaceId);
+        var transformer = fixture.Transformer(new Dictionary<string, string> { [oldHorseId] = newHorseId });
+
+        var createdResult = transformer.Transform(createdRecord, context);
+        Assert.AreEqual(TypedHorseIdentityEventTransformStatus.Unchanged, createdResult.Status,
+            createdResult.Reason.ToString());
+        Assert.AreSame(createdRecord, createdResult.Event);
+        Assert.AreEqual($"fingerprint-{oldHorseId}", createdEvent.EntryAssignmentFingerprint);
+
+        var deterministicMark = records.Single(record => fixture.GetAggregateEvent(record) is PredictionMarkAdded
+            mark && mark.EntryId == deterministicEntryId);
+        var deterministicResult = transformer.Transform(deterministicMark, context);
+        Assert.AreEqual(TypedHorseIdentityEventTransformStatus.Transformed, deterministicResult.Status,
+            deterministicResult.Reason.ToString());
+        var deterministicData = JsonNode.Parse(deterministicResult.Event!.Data)!.AsObject();
+        Assert.AreEqual(DeterministicEntryId(raceId, newHorseId), StringProperty(deterministicData, "entryId"));
+        Assert.AreEqual($"mark {oldHorseId}", StringProperty(deterministicData, "comment"));
+
+        var manualMark = records.Single(record => fixture.GetAggregateEvent(record) is PredictionMarkAdded
+            mark && mark.EntryId == $"manual-{oldHorseId}");
+        var manualResult = transformer.Transform(manualMark, context);
+        Assert.AreEqual(TypedHorseIdentityEventTransformStatus.Unchanged, manualResult.Status);
+        Assert.AreSame(manualMark, manualResult.Event);
+
+        var horseRationale = records.Single(record => fixture.GetAggregateEvent(record) is PredictionRationaleAdded
+            rationale && rationale.SubjectType == "Horse");
+        var horseRationaleResult = transformer.Transform(horseRationale, context);
+        Assert.AreEqual(TypedHorseIdentityEventTransformStatus.Transformed, horseRationaleResult.Status,
+            horseRationaleResult.Reason.ToString());
+        var rationaleData = JsonNode.Parse(horseRationaleResult.Event!.Data)!.AsObject();
+        Assert.AreEqual(newHorseId, StringProperty(rationaleData, "subjectId"));
+        Assert.AreEqual($"signal {oldHorseId}", StringProperty(rationaleData, "signalValue"));
+        Assert.AreEqual($"explanation {oldHorseId}", StringProperty(rationaleData, "explanationText"));
+
+        var trainerRationale = records.Single(record => fixture.GetAggregateEvent(record) is PredictionRationaleAdded
+            rationale && rationale.SubjectType == "Trainer");
+        var trainerResult = transformer.Transform(trainerRationale, context);
+        Assert.AreEqual(TypedHorseIdentityEventTransformStatus.Unchanged, trainerResult.Status);
+        Assert.AreSame(trainerRationale, trainerResult.Event);
+
+        var missingContext = transformer.Transform(deterministicMark);
+        Assert.AreEqual(TypedHorseIdentityEventTransformStatus.Rejected, missingContext.Status);
+        Assert.IsNull(missingContext.Event);
+        var wrongContext = transformer.Transform(deterministicMark,
+            context with { AggregateId = "ticket-other" });
+        Assert.AreEqual(TypedHorseIdentityEventTransformStatus.Rejected, wrongContext.Status);
+        Assert.IsNull(wrongContext.Event);
+        var lateCreatedContext = transformer.Transform(deterministicMark,
+            context with { CreatedAggregateSequenceNumber = deterministicMark.AggregateSequenceNumber });
+        Assert.AreEqual(TypedHorseIdentityEventTransformStatus.Rejected, lateCreatedContext.Status);
+        Assert.IsNull(lateCreatedContext.Event);
+
+        var nullEntryIdData = JsonNode.Parse(deterministicMark.Data)!.AsObject();
+        nullEntryIdData[FindPropertyName(nullEntryIdData, "entryId")] = null;
+        var nullEntryIdResult = transformer.Transform(
+            deterministicMark with { Data = nullEntryIdData.ToJsonString() }, context);
+        Assert.AreEqual(TypedHorseIdentityEventTransformStatus.Rejected, nullEntryIdResult.Status);
+        Assert.AreEqual(TypedHorseIdentityEventTransformReason.UnsupportedPayloadShape, nullEntryIdResult.Reason);
+
+        var emptyEntryIdData = JsonNode.Parse(deterministicMark.Data)!.AsObject();
+        emptyEntryIdData[FindPropertyName(emptyEntryIdData, "entryId")] = string.Empty;
+        var emptyEntryIdResult = transformer.Transform(
+            deterministicMark with { Data = emptyEntryIdData.ToJsonString() }, context);
+        Assert.AreEqual(TypedHorseIdentityEventTransformStatus.Rejected, emptyEntryIdResult.Status);
+        Assert.AreEqual(TypedHorseIdentityEventTransformReason.UnsupportedPayloadShape, emptyEntryIdResult.Reason);
+
+        foreach (var result in records.Select(record => transformer.Transform(record, context)))
+            if (result.Status == TypedHorseIdentityEventTransformStatus.Transformed)
+                await fixture.ReplaceRecordAsync(result.Event!);
+
+        var replayed = await fixture.AggregateStore.LoadAsync<PredictionTicketAggregate, PredictionTicketId>(
+            ticketId, CancellationToken.None);
+        var details = replayed.GetDetails();
+        Assert.IsTrue(details.Marks.Any(mark => mark.EntryId == DeterministicEntryId(raceId, newHorseId)));
+        Assert.IsTrue(details.Marks.Any(mark => mark.EntryId == $"manual-{oldHorseId}"));
+        Assert.IsTrue(details.Rationales.Any(rationale => rationale.SubjectType == "Horse"
+            && rationale.SubjectId == newHorseId
+            && rationale.SignalValue == $"signal {oldHorseId}"
+            && rationale.ExplanationText == $"explanation {oldHorseId}"));
+        Assert.IsTrue(details.Rationales.Any(rationale => rationale.SubjectType == "Trainer"
+            && rationale.SubjectId == oldHorseId));
+    }
+
+    [TestMethod]
+    public async Task RejectsMissingNullAndInvalidPredictionTicketCreatedTimestamp()
+    {
+        using var fixture = await EventFixture.CreateAsync();
+        var ticketId = new PredictionTicketId("predictionticket-00000000-0000-4000-8000-000000000193");
+        var raceId = "race-00000000-0000-4000-8000-000000000193";
+        await fixture.CommandBus.PublishAsync(new CreatePredictionTicketCommand(
+            ticketId, raceId, "AI", "model-v1", .85m, "timestamp validation", "fingerprint"),
+            CancellationToken.None);
+
+        var createdRecord = (await fixture.ReadRecordsAsync(
+            ticketId.Value, nameof(PredictionTicketAggregate))).Single();
+        var createdEvent = (PredictionTicketCreated)fixture.GetAggregateEvent(createdRecord);
+        var context = new TypedHorseIdentityTicketStreamContext(
+            ticketId.Value, createdRecord.AggregateSequenceNumber, createdEvent.RaceId);
+        var transformer = fixture.Transformer(new Dictionary<string, string>
+        {
+            [HorseIdFor(94)] = HorseIdFor(95),
+        });
+
+        var valid = transformer.Transform(createdRecord, context);
+        Assert.AreEqual(TypedHorseIdentityEventTransformStatus.Unchanged, valid.Status,
+            valid.Reason.ToString());
+        Assert.AreSame(createdRecord, valid.Event);
+        Assert.AreEqual(createdRecord.Data, valid.Event!.Data);
+        Assert.AreEqual(createdRecord.Metadata, valid.Event.Metadata);
+
+        var timestampName = FindPropertyName(JsonNode.Parse(createdRecord.Data)!.AsObject(), "predictedAt");
+        var malformedValues = new (string Name, Action<JsonObject> Mutate,
+            TypedHorseIdentityEventTransformReason ExpectedReason)[]
+        {
+            ("missing", data => data.Remove(timestampName), TypedHorseIdentityEventTransformReason.UnsupportedPayloadShape),
+            ("null", data => data[timestampName] = null, TypedHorseIdentityEventTransformReason.InvalidJson),
+            ("invalid", data => data[timestampName] = "not-a-timestamp", TypedHorseIdentityEventTransformReason.InvalidJson),
+            ("locale-dependent", data => data[timestampName] = "10/14/2026 13:01:08 +09:00", TypedHorseIdentityEventTransformReason.UnsupportedPayloadShape),
+            ("date-only", data => data[timestampName] = "2026-10-14", TypedHorseIdentityEventTransformReason.UnsupportedPayloadShape),
+            ("unqualified-offset", data => data[timestampName] = "2026-10-14T13:01:08.1234567", TypedHorseIdentityEventTransformReason.UnsupportedPayloadShape),
+            ("unknown-created-field", data => data["unmodeledCreatedField"] = "unexpected", TypedHorseIdentityEventTransformReason.UnsupportedPayloadShape),
+            ("other-created-field-null", data => data[FindPropertyName(data, "confidenceScore")] = null, TypedHorseIdentityEventTransformReason.InvalidJson),
+        };
+
+        foreach (var (name, mutate, expectedReason) in malformedValues)
+        {
+            var data = JsonNode.Parse(createdRecord.Data)!.AsObject();
+            mutate(data);
+            var result = transformer.Transform(createdRecord with { Data = data.ToJsonString() }, context);
+            Assert.AreEqual(TypedHorseIdentityEventTransformStatus.Rejected, result.Status, name);
+            Assert.AreEqual(expectedReason, result.Reason, name);
+            Assert.IsNull(result.Event, name);
+        }
+    }
+
+    [TestMethod]
     public async Task RejectsUnknownVersionUnknownFieldsAndWrongTypedHorseReference()
     {
         using var fixture = await EventFixture.CreateAsync();
@@ -368,6 +612,15 @@ public sealed class HorseIdentityMigrationEventTransformerTests
     private static string StringProperty(JsonObject value, string expectedName) =>
         value[FindPropertyName(value, expectedName)]!.GetValue<string>();
 
+    private static JsonArray ArrayProperty(JsonObject value, string expectedName) =>
+        value[FindPropertyName(value, expectedName)]!.AsArray();
+
+    private static void AssertSubjectId(JsonObject value, string listName, int index, string expectedId)
+    {
+        var subject = ArrayProperty(value, listName)[index]!.AsObject();
+        Assert.AreEqual(expectedId, StringProperty(subject, "subjectId"));
+    }
+
     private static string FindPropertyName(JsonObject value, string expectedName) =>
         value.Select(property => property.Key)
             .SingleOrDefault(name => string.Equals(name, expectedName, StringComparison.OrdinalIgnoreCase))
@@ -419,6 +672,15 @@ public sealed class HorseIdentityMigrationEventTransformerTests
             _services.GetRequiredService<IDomainEventFactory>(),
             map);
 
+        public IDomainEvent GetDomainEvent(TypedHorseIdentityEventRecord record) =>
+            _services.GetRequiredService<IEventJsonSerializer>()
+                .Deserialize(record.Data, record.Metadata);
+
+        public IAggregateEvent GetAggregateEvent(TypedHorseIdentityEventRecord record) =>
+            GetDomainEvent(record).GetAggregateEvent();
+
+        public string EventType(TypedHorseIdentityEventRecord record) => GetAggregateEvent(record).GetType().Name;
+
         public async Task<TypedHorseIdentityEventRecord> ReadRecordAsync(string aggregateId, string aggregateName, int sequence)
         {
             await using var context = _dbContextProvider.CreateContext();
@@ -427,6 +689,19 @@ public sealed class HorseIdentityMigrationEventTransformerTests
                 && row.AggregateSequenceNumber == sequence);
             return new TypedHorseIdentityEventRecord(entity.GlobalSequenceNumber, entity.AggregateId,
                 entity.AggregateName, entity.AggregateSequenceNumber, entity.Data, entity.Metadata);
+        }
+
+        public async Task<IReadOnlyList<TypedHorseIdentityEventRecord>> ReadRecordsAsync(
+            string aggregateId, string aggregateName)
+        {
+            await using var context = _dbContextProvider.CreateContext();
+            return await context.Set<EventEntity>().AsNoTracking().Where(row =>
+                    row.AggregateId == aggregateId && row.AggregateName == aggregateName)
+                .OrderBy(row => row.AggregateSequenceNumber)
+                .Select(entity => new TypedHorseIdentityEventRecord(
+                    entity.GlobalSequenceNumber, entity.AggregateId, entity.AggregateName,
+                    entity.AggregateSequenceNumber, entity.Data, entity.Metadata))
+                .ToListAsync();
         }
 
         public async Task<TypedHorseIdentityEventRecord> ReadRecordOfTypeAsync<TEvent>(string aggregateId)

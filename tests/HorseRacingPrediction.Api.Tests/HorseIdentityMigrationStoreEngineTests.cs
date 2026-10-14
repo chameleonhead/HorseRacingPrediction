@@ -153,6 +153,35 @@ public sealed class HorseIdentityMigrationStoreEngineTests
     }
 
     [TestMethod]
+    public async Task ChangedSchemaDefaultStopsBeforeRootReads()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.EventStorePath, """
+            DROP INDEX IX_OwnerAliasMappings_OwnerId;
+            ALTER TABLE OwnerAliasMappings RENAME TO OwnerAliasMappings_original;
+            CREATE TABLE OwnerAliasMappings (
+                NormalizedAlias TEXT NOT NULL PRIMARY KEY,
+                AliasName TEXT NOT NULL,
+                OwnerId TEXT NOT NULL,
+                Reason TEXT NOT NULL,
+                CreatedAt TEXT NOT NULL,
+                IsDisplayName INTEGER NOT NULL DEFAULT 1
+            );
+            CREATE INDEX IX_OwnerAliasMappings_OwnerId ON OwnerAliasMappings (OwnerId);
+            DROP TABLE OwnerAliasMappings_original;
+            """);
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, result.Reason);
+        Assert.AreEqual(MigrationStoreReadStatus.UnknownShape,
+            result.Stores.Single(store => store.Surface == MigrationStoreSurface.EventStore).Status);
+        Assert.IsEmpty(result.Roots);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
     public async Task UnknownIndexStopsBeforeRootReads()
     {
         await using var fixture = await StoreFixture.CreateAsync();
@@ -197,6 +226,202 @@ public sealed class HorseIdentityMigrationStoreEngineTests
             DROP INDEX IX_race_repair_holds_RaceId;
             CREATE UNIQUE INDEX IX_race_repair_holds_RaceId
                 ON race_repair_holds (RaceId) WHERE ReleasedAt IS NOT NULL;
+            """);
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, result.Reason);
+        Assert.AreEqual(MigrationStoreReadStatus.UnknownShape,
+            result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
+        Assert.IsEmpty(result.Roots);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task ChangedIndexOrderingOrCollationStopsBeforeRootReads()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.CollectionPath, """
+            DROP INDEX IX_race_repair_holds_OperationId;
+            CREATE UNIQUE INDEX IX_race_repair_holds_OperationId
+                ON race_repair_holds (OperationId COLLATE NOCASE DESC);
+            """);
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, result.Reason);
+        Assert.AreEqual(MigrationStoreReadStatus.UnknownShape,
+            result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
+        Assert.IsEmpty(result.Roots);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task ChangedKnownCheckConstraintStopsBeforeRootReads()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.CollectionPath, """
+            DROP TABLE collection_dispatcher_fairness_state;
+            CREATE TABLE collection_dispatcher_fairness_state (
+                StateId INTEGER NOT NULL PRIMARY KEY CHECK (StateId = 2),
+                ConsecutiveRealtime INTEGER NOT NULL DEFAULT 0,
+                LastGrantedLane TEXT NULL,
+                LastNonRealtimeLane TEXT NULL,
+                ReservationSequence INTEGER NOT NULL DEFAULT 0,
+                ScanAvailableAt TEXT NULL,
+                ScanOutboxId TEXT NULL,
+                UpdatedAt TEXT NOT NULL
+            );
+            """);
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, result.Reason);
+        Assert.AreEqual(MigrationStoreReadStatus.UnknownShape,
+            result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
+        Assert.IsEmpty(result.Roots);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task FreshEfCollectionLayoutWithoutFairnessCheckIsAccepted()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanReason.TypedReferenceClosurePending, result.Reason);
+        Assert.AreEqual(MigrationStoreReadStatus.Observed,
+            result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
+        Assert.HasCount(1, result.Roots);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task AddedCheckConstraintStopsBeforeRootReads()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.CollectionPath, """
+            DROP TABLE collection_dispatcher_fairness_state;
+            CREATE TABLE collection_dispatcher_fairness_state (
+                StateId INTEGER NOT NULL PRIMARY KEY CHECK (StateId = 1),
+                ConsecutiveRealtime INTEGER NOT NULL DEFAULT 0,
+                LastGrantedLane TEXT NULL,
+                LastNonRealtimeLane TEXT NULL,
+                ReservationSequence INTEGER NOT NULL DEFAULT 0,
+                ScanAvailableAt TEXT NULL,
+                ScanOutboxId TEXT NULL,
+                UpdatedAt TEXT NOT NULL,
+                CHECK (StateId > 0)
+            );
+            """);
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, result.Reason);
+        Assert.AreEqual(MigrationStoreReadStatus.UnknownShape,
+            result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
+        Assert.IsEmpty(result.Roots);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task GeneratedColumnStopsBeforeRootReads()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.CollectionPath,
+            "ALTER TABLE collection_dispatcher_fairness_state ADD COLUMN GeneratedState TEXT GENERATED ALWAYS AS (StateId) VIRTUAL;");
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, result.Reason);
+        Assert.AreEqual(MigrationStoreReadStatus.UnknownShape,
+            result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
+        Assert.IsEmpty(result.Roots);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task DeferrableForeignKeyStopsBeforeRootReads()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.CollectionPath, """
+            DROP INDEX IX_collection_batch_recovery_progress_Kind_LastVisitedSequence_BatchId;
+            ALTER TABLE collection_batch_recovery_progress RENAME TO collection_batch_recovery_progress_original;
+            CREATE TABLE collection_batch_recovery_progress (
+                BatchId TEXT NOT NULL CONSTRAINT PK_collection_batch_recovery_progress PRIMARY KEY
+                    REFERENCES collection_backfill_batches (BatchId) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+                Kind TEXT NOT NULL,
+                NextDate TEXT NULL,
+                LastVisitedSequence INTEGER NOT NULL,
+                ReviewReason TEXT NULL,
+                LastErrorCode TEXT NULL
+            );
+            CREATE INDEX IX_collection_batch_recovery_progress_Kind_LastVisitedSequence_BatchId
+                ON collection_batch_recovery_progress (Kind, LastVisitedSequence, BatchId);
+            DROP TABLE collection_batch_recovery_progress_original;
+            """);
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, result.Reason);
+        Assert.AreEqual(MigrationStoreReadStatus.UnknownShape,
+            result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
+        Assert.IsEmpty(result.Roots);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task InlineUniqueConstraintStopsBeforeRootReads()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.CollectionPath, """
+            DROP TABLE collection_dispatcher_fairness_state;
+            CREATE TABLE collection_dispatcher_fairness_state (
+                StateId INTEGER NOT NULL PRIMARY KEY CHECK (StateId = 1),
+                ConsecutiveRealtime INTEGER NOT NULL DEFAULT 0,
+                LastGrantedLane TEXT NULL UNIQUE,
+                LastNonRealtimeLane TEXT NULL,
+                ReservationSequence INTEGER NOT NULL DEFAULT 0,
+                ScanAvailableAt TEXT NULL,
+                ScanOutboxId TEXT NULL,
+                UpdatedAt TEXT NOT NULL
+            );
+            """);
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, result.Reason);
+        Assert.AreEqual(MigrationStoreReadStatus.UnknownShape,
+            result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
+        Assert.IsEmpty(result.Roots);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task PrimaryKeyDirectionStopsBeforeRootReads()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.CollectionPath, """
+            DROP TABLE collection_dispatcher_fairness_state;
+            CREATE TABLE collection_dispatcher_fairness_state (
+                StateId INTEGER NOT NULL PRIMARY KEY DESC CHECK (StateId = 1),
+                ConsecutiveRealtime INTEGER NOT NULL DEFAULT 0,
+                LastGrantedLane TEXT NULL,
+                LastNonRealtimeLane TEXT NULL,
+                ReservationSequence INTEGER NOT NULL DEFAULT 0,
+                ScanAvailableAt TEXT NULL,
+                ScanOutboxId TEXT NULL,
+                UpdatedAt TEXT NOT NULL
+            );
             """);
 
         var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
@@ -254,6 +479,249 @@ public sealed class HorseIdentityMigrationStoreEngineTests
         Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, result.Reason);
         Assert.AreEqual(MigrationStoreReadStatus.UnknownShape,
             result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
+        Assert.IsEmpty(result.Roots);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task MissingCollectionHistoryStopsBeforeRootReads()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.CollectionPath,
+            "DELETE FROM collection_schema_history;");
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, result.Reason);
+        Assert.AreEqual(MigrationStoreReadStatus.UnknownShape,
+            result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
+        Assert.IsEmpty(result.Roots);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task SourceProvenCollectionUpgradeSuffixThroughVersion25IsAccepted()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.CollectionPath, """
+            DELETE FROM collection_schema_history;
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (23, 'v23-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (24, 'v24-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (25, 'v25-fixture');
+            """);
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanReason.TypedReferenceClosurePending, result.Reason);
+        Assert.AreEqual(MigrationStoreReadStatus.Observed,
+            result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
+        Assert.HasCount(1, result.Roots);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task SourceProvenCollectionUpgradeSuffixStartingAtVersion6IsAccepted()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.CollectionPath, """
+            DELETE FROM collection_schema_history;
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (6, 'v6-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (7, 'v7-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (8, 'v8-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (9, 'v9-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (10, 'v10-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (11, 'v11-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (12, 'v12-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (13, 'v13-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (14, 'v14-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (15, 'v15-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (16, 'v16-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (17, 'v17-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (18, 'v18-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (19, 'v19-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (20, 'v20-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (21, 'v21-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (22, 'v22-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (23, 'v23-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (24, 'v24-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (25, 'v25-fixture');
+            """);
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanReason.TypedReferenceClosurePending, result.Reason);
+        Assert.AreEqual(MigrationStoreReadStatus.Observed,
+            result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
+        Assert.HasCount(1, result.Roots);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task GappedCollectionUpgradeHistoryStopsBeforeRootReads()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.CollectionPath, """
+            DELETE FROM collection_schema_history;
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (6, 'v6-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (8, 'v8-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (9, 'v9-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (10, 'v10-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (11, 'v11-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (12, 'v12-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (13, 'v13-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (14, 'v14-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (15, 'v15-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (16, 'v16-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (17, 'v17-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (18, 'v18-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (19, 'v19-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (20, 'v20-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (21, 'v21-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (22, 'v22-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (23, 'v23-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (24, 'v24-fixture');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (25, 'v25-fixture');
+            """);
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, result.Reason);
+        Assert.AreEqual(MigrationStoreReadStatus.UnknownShape,
+            result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
+        Assert.IsEmpty(result.Roots);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task ChangedCollectionForeignKeyActionStopsBeforeRootReads()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.CollectionPath, """
+            DROP INDEX IX_collection_batch_recovery_progress_Kind_LastVisitedSequence_BatchId;
+            ALTER TABLE collection_batch_recovery_progress RENAME TO collection_batch_recovery_progress_original;
+            CREATE TABLE collection_batch_recovery_progress (
+                BatchId TEXT NOT NULL CONSTRAINT PK_collection_batch_recovery_progress PRIMARY KEY
+                    REFERENCES collection_backfill_batches (BatchId) ON DELETE RESTRICT,
+                Kind TEXT NOT NULL,
+                NextDate TEXT NULL,
+                LastVisitedSequence INTEGER NOT NULL,
+                ReviewReason TEXT NULL,
+                LastErrorCode TEXT NULL
+            );
+            CREATE INDEX IX_collection_batch_recovery_progress_Kind_LastVisitedSequence_BatchId
+                ON collection_batch_recovery_progress (Kind, LastVisitedSequence, BatchId);
+            DROP TABLE collection_batch_recovery_progress_original;
+            """);
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, result.Reason);
+        Assert.AreEqual(MigrationStoreReadStatus.UnknownShape,
+            result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
+        Assert.IsEmpty(result.Roots);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task ChangedCollectionForeignKeyUpdateActionStopsBeforeRootReads()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.CollectionPath, """
+            DROP INDEX IX_collection_batch_recovery_progress_Kind_LastVisitedSequence_BatchId;
+            ALTER TABLE collection_batch_recovery_progress RENAME TO collection_batch_recovery_progress_original;
+            CREATE TABLE collection_batch_recovery_progress (
+                BatchId TEXT NOT NULL CONSTRAINT PK_collection_batch_recovery_progress PRIMARY KEY
+                    REFERENCES collection_backfill_batches (BatchId) ON DELETE CASCADE ON UPDATE CASCADE,
+                Kind TEXT NOT NULL,
+                NextDate TEXT NULL,
+                LastVisitedSequence INTEGER NOT NULL,
+                ReviewReason TEXT NULL,
+                LastErrorCode TEXT NULL
+            );
+            CREATE INDEX IX_collection_batch_recovery_progress_Kind_LastVisitedSequence_BatchId
+                ON collection_batch_recovery_progress (Kind, LastVisitedSequence, BatchId);
+            DROP TABLE collection_batch_recovery_progress_original;
+            """);
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, result.Reason);
+        Assert.AreEqual(MigrationStoreReadStatus.UnknownShape,
+            result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
+        Assert.IsEmpty(result.Roots);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task MissingCollectionForeignKeyStopsBeforeRootReads()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.CollectionPath, """
+            DROP INDEX IX_collection_batch_recovery_progress_Kind_LastVisitedSequence_BatchId;
+            ALTER TABLE collection_batch_recovery_progress RENAME TO collection_batch_recovery_progress_original;
+            CREATE TABLE collection_batch_recovery_progress (
+                BatchId TEXT NOT NULL CONSTRAINT PK_collection_batch_recovery_progress PRIMARY KEY,
+                Kind TEXT NOT NULL,
+                NextDate TEXT NULL,
+                LastVisitedSequence INTEGER NOT NULL,
+                ReviewReason TEXT NULL,
+                LastErrorCode TEXT NULL
+            );
+            CREATE INDEX IX_collection_batch_recovery_progress_Kind_LastVisitedSequence_BatchId
+                ON collection_batch_recovery_progress (Kind, LastVisitedSequence, BatchId);
+            DROP TABLE collection_batch_recovery_progress_original;
+            """);
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, result.Reason);
+        Assert.AreEqual(MigrationStoreReadStatus.UnknownShape,
+            result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
+        Assert.IsEmpty(result.Roots);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task UnknownEventStoreMigrationIdStopsBeforeRootReads()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.EventStorePath, """
+            INSERT INTO __EFMigrationsHistory (MigrationId, ProductVersion)
+            VALUES ('99999999999999_FutureMigration', '10.0.0');
+            """);
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, result.Reason);
+        Assert.AreEqual(MigrationStoreReadStatus.UnknownShape,
+            result.Stores.Single(store => store.Surface == MigrationStoreSurface.EventStore).Status);
+        Assert.IsEmpty(result.Roots);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task MissingEventStoreMigrationIdStopsBeforeRootReads()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.EventStorePath, """
+            DELETE FROM __EFMigrationsHistory
+            WHERE MigrationId = (SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId LIMIT 1);
+            """);
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, result.Reason);
+        Assert.AreEqual(MigrationStoreReadStatus.UnknownShape,
+            result.Stores.Single(store => store.Surface == MigrationStoreSurface.EventStore).Status);
         Assert.IsEmpty(result.Roots);
         Assert.IsFalse(result.CanWrite);
     }

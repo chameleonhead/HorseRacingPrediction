@@ -1,4 +1,5 @@
 using System.Data;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using HorseRacingPrediction.Api.CollectionController;
@@ -87,6 +88,7 @@ internal sealed class TypedHorseIdentityStoreReaders(
     private const int SchemaObjectPageSize = 128;
     private const int MaximumSchemaObjects = 512;
     private const int MaximumSchemaSqlBytes = 8192;
+    private const int MaximumMigrationHistoryRows = 512;
     private const int CurrentCollectionPlatformSchemaVersion = 25;
     private const int MaximumCollectionSchemaHistoryRows = CurrentCollectionPlatformSchemaVersion;
 
@@ -115,6 +117,12 @@ internal sealed class TypedHorseIdentityStoreReaders(
         new(BuildExpectedEventStoreModel);
     private static readonly Lazy<IReadOnlyDictionary<string, ExpectedTable>> CollectionPlatformModel =
         new(BuildExpectedCollectionPlatformModel);
+    private static readonly Lazy<IReadOnlyList<string>> EventStoreMigrationIds = new(
+        static () =>
+        {
+            using var context = CreateEventStoreModel();
+            return context.Database.GetMigrations().Order(StringComparer.Ordinal).ToArray();
+        });
 
     internal async Task<MigrationStoreReadSnapshot> InspectAsync(
         IReadOnlyList<HorseIdentityMigrationMapping> mappings,
@@ -248,6 +256,15 @@ internal sealed class TypedHorseIdentityStoreReaders(
     {
         var model = new Dictionary<string, ExpectedTable>(
             BuildExpectedModel(CreateEventStoreModel()), StringComparer.OrdinalIgnoreCase);
+        var raceContextColumns = new Dictionary<string, ExpectedColumn>(
+            model["RacePredictionContexts"].Columns, StringComparer.OrdinalIgnoreCase)
+        {
+            ["OddsSnapshots"] = new("TEXT", false, 0, "'[]'"),
+        };
+        model["RacePredictionContexts"] = model["RacePredictionContexts"] with
+        {
+            Columns = raceContextColumns,
+        };
         var raceContexts = model["RacePredictionContexts"];
         var indexes = new Dictionary<string, ExpectedIndex>(raceContexts.Indexes,
             StringComparer.OrdinalIgnoreCase)
@@ -269,13 +286,24 @@ internal sealed class TypedHorseIdentityStoreReaders(
                 var primaryKeyColumns = table.PrimaryKey?.Columns ?? [];
                 var columns = table.Columns.ToDictionary(column => column.Name,
                     column => new ExpectedColumn(column.StoreType, column.IsNullable,
-                        Array.IndexOf(primaryKeyColumns.ToArray(), column) + 1),
+                        Array.IndexOf(primaryKeyColumns.ToArray(), column) + 1,
+                        NormalizeExpectedDefault(column.DefaultValue, column.DefaultValueSql)),
                     StringComparer.OrdinalIgnoreCase);
                 var indexes = table.Indexes.ToDictionary(index => index.Name,
                     index => new ExpectedIndex(index.Columns.Select(column => column.Name).ToArray(),
                         index.IsUnique, index.Filter),
                     StringComparer.OrdinalIgnoreCase);
-                tables.Add(table.Name, new(columns, indexes));
+                var foreignKeys = table.ForeignKeyConstraints
+                    .Select(constraint => new ExpectedForeignKey(
+                        constraint.Columns.Select(column => column.Name).ToArray(),
+                        constraint.PrincipalTable.Name,
+                        constraint.PrincipalColumns.Select(column => column.Name).ToArray(),
+                        NormalizeReferentialAction(constraint.OnDeleteAction.ToString()),
+                        "NO ACTION"))
+                    .OrderBy(constraint => constraint.PrincipalTable, StringComparer.Ordinal)
+                    .ThenBy(constraint => string.Join("\u001f", constraint.Columns), StringComparer.Ordinal)
+                    .ToArray();
+                tables.Add(table.Name, new(columns, indexes, foreignKeys));
             }
             return tables;
         }
@@ -317,7 +345,7 @@ internal sealed class TypedHorseIdentityStoreReaders(
                         ["body"] = new("TEXT", false, 0),
                         ["visible_at"] = new("TEXT", false, 0),
                         ["receipt_handle"] = new("TEXT", true, 0),
-                        ["receive_count"] = new("INTEGER", false, 0),
+                        ["receive_count"] = new("INTEGER", false, 0, "0"),
                         ["dead_letter"] = new("INTEGER", false, 0),
                         ["created_at"] = new("TEXT", false, 0),
                     }, new Dictionary<string, ExpectedIndex>(StringComparer.OrdinalIgnoreCase)),
@@ -346,7 +374,9 @@ internal sealed class TypedHorseIdentityStoreReaders(
             var expectedShapes = GetExpectedTables(store.Surface);
             var expectedTables = expectedShapes.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
             var acceptedMetadataTables = MetadataTableShapes(store.Surface);
-            var tables = objects.Where(item => item.Type == "table").Select(item => item.Name)
+            var tableObjects = objects.Where(item => item.Type == "table")
+                .ToDictionary(item => item.Name, StringComparer.OrdinalIgnoreCase);
+            var tables = tableObjects.Keys
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var missingTables = !expectedTables.SetEquals(store.ExpectedTables)
                 || expectedTables.Any(table => !tables.Contains(table));
@@ -360,20 +390,36 @@ internal sealed class TypedHorseIdentityStoreReaders(
             });
             var malformedSchema = unknownObjects > 0
                 || store.MetadataTables.Any(table => !tables.Contains(table));
+            var collectionHistoryLayout = CollectionSchemaHistoryLayout.Unknown;
+            if (store.Surface == MigrationStoreSurface.CollectionPlatform
+                && tables.Contains("collection_schema_history", StringComparer.OrdinalIgnoreCase))
+            {
+                collectionHistoryLayout = await ReadCollectionSchemaHistoryLayoutAsync(
+                    connection, transaction, cancellationToken).ConfigureAwait(false);
+                if (collectionHistoryLayout == CollectionSchemaHistoryLayout.Unknown)
+                    malformedSchema = true;
+            }
+
             foreach (var tableName in tables)
             {
                 var expected = expectedShapes.TryGetValue(tableName, out var modelShape)
                     ? modelShape
                     : acceptedMetadataTables.GetValueOrDefault(tableName);
                 if (expected is null || !await MatchesTableShapeAsync(connection, transaction,
-                        tableName, expected, cancellationToken).ConfigureAwait(false))
+                        tableName, expected, tableObjects[tableName].Sql, cancellationToken).ConfigureAwait(false))
                 {
                     malformedSchema = true;
                 }
             }
             if (store.Surface == MigrationStoreSurface.CollectionPlatform
-                && tables.Contains("collection_schema_history", StringComparer.OrdinalIgnoreCase)
-                && !await MatchesCollectionSchemaHistoryAsync(connection, transaction, cancellationToken)
+                && collectionHistoryLayout != CollectionSchemaHistoryLayout.Unknown
+                && !MatchesCollectionSchemaLayout(tableObjects, collectionHistoryLayout))
+            {
+                malformedSchema = true;
+            }
+            if (store.Surface == MigrationStoreSurface.EventStore
+                && tables.Contains("__EFMigrationsHistory", StringComparer.OrdinalIgnoreCase)
+                && !await MatchesEventStoreMigrationHistoryAsync(connection, transaction, cancellationToken)
                     .ConfigureAwait(false))
             {
                 malformedSchema = true;
@@ -501,18 +547,26 @@ internal sealed class TypedHorseIdentityStoreReaders(
         SqliteTransaction transaction,
         string tableName,
         ExpectedTable expected,
+        string? tableSql,
         CancellationToken cancellationToken)
     {
+        if (!MatchesSupportedTableSyntax(tableName, tableSql))
+            return false;
+
         var actualColumns = new Dictionary<string, ActualColumn>(StringComparer.OrdinalIgnoreCase);
         await using (var command = connection.CreateCommand())
         {
             command.Transaction = transaction;
             command.CommandTimeout = CommandTimeoutSeconds;
-            command.CommandText = $"PRAGMA table_info({QuoteIdentifier(tableName)});";
+            command.CommandText = $"PRAGMA table_xinfo({QuoteIdentifier(tableName)});";
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (reader.FieldCount < 7)
+                return false;
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
                 if (actualColumns.Count >= 512)
+                    return false;
+                if (reader.GetInt32(6) != 0)
                     return false;
                 actualColumns[reader.GetString(1)] = new(
                     reader.GetString(2), reader.GetInt32(3) != 0, reader.IsDBNull(4) ? null : reader.GetString(4),
@@ -521,14 +575,43 @@ internal sealed class TypedHorseIdentityStoreReaders(
         }
 
         if (actualColumns.Count != expected.Columns.Count)
+        {
             return false;
+        }
         foreach (var (name, expectedColumn) in expected.Columns)
         {
             if (!actualColumns.TryGetValue(name, out var actual)
                 || !string.Equals(actual.Type, expectedColumn.Type, StringComparison.OrdinalIgnoreCase)
                 || actual.PrimaryKeyOrdinal != expectedColumn.PrimaryKeyOrdinal
-                || IsActualColumnNullable(actualColumns, actual) != expectedColumn.Nullable)
+                || IsActualColumnNullable(actualColumns, actual) != expectedColumn.Nullable
+                || !string.Equals(NormalizeSqlExpression(actual.DefaultValue),
+                    NormalizeSqlExpression(expectedColumn.DefaultExpression), StringComparison.Ordinal))
+            {
                 return false;
+            }
+        }
+
+        var actualForeignKeys = await ReadForeignKeysAsync(connection, transaction, tableName, cancellationToken)
+            .ConfigureAwait(false);
+        var expectedForeignKeys = (expected.ForeignKeys ?? [])
+            .OrderBy(foreignKey => foreignKey.PrincipalTable, StringComparer.Ordinal)
+            .ThenBy(foreignKey => string.Join("\u001f", foreignKey.Columns), StringComparer.Ordinal)
+            .ToArray();
+        if (actualForeignKeys is null
+            || actualForeignKeys.Count != expectedForeignKeys.Length
+            || !actualForeignKeys.OrderBy(foreignKey => foreignKey.PrincipalTable, StringComparer.Ordinal)
+                .ThenBy(foreignKey => string.Join("\u001f", foreignKey.Columns), StringComparer.Ordinal)
+                .Zip(expectedForeignKeys).All(pair =>
+                pair.First.Columns.SequenceEqual(pair.Second.Columns, StringComparer.OrdinalIgnoreCase)
+                && string.Equals(pair.First.PrincipalTable, pair.Second.PrincipalTable,
+                    StringComparison.OrdinalIgnoreCase)
+                && pair.First.PrincipalColumns.SequenceEqual(pair.Second.PrincipalColumns,
+                    StringComparer.OrdinalIgnoreCase)
+                && string.Equals(pair.First.OnDelete, pair.Second.OnDelete, StringComparison.Ordinal)
+                && string.Equals(pair.First.OnUpdate, pair.Second.OnUpdate, StringComparison.Ordinal)
+                && string.Equals(pair.First.Match, "NONE", StringComparison.Ordinal)))
+        {
+            return false;
         }
 
         var actualIndexes = new Dictionary<string, ActualIndex>(StringComparer.OrdinalIgnoreCase);
@@ -540,36 +623,119 @@ internal sealed class TypedHorseIdentityStoreReaders(
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
+                if (reader.IsDBNull(1) || reader.IsDBNull(2) || reader.IsDBNull(3) || reader.IsDBNull(4))
+                    return false;
                 var name = reader.GetString(1);
-                if (name.StartsWith("sqlite_autoindex_", StringComparison.OrdinalIgnoreCase))
-                    continue;
                 if (actualIndexes.Count >= 128)
                     return false;
-                actualIndexes[name] = new(reader.GetInt32(2) != 0, reader.GetInt32(4) != 0,
+                var origin = reader.GetString(3).ToLowerInvariant();
+                if (origin is not ("c" or "pk" or "u"))
+                    return false;
+                actualIndexes[name] = new(reader.GetInt32(2) != 0, reader.GetInt32(4) != 0, origin,
                     await ReadIndexPredicateAsync(connection, transaction, name, cancellationToken)
                         .ConfigureAwait(false));
             }
         }
 
-        if (actualIndexes.Count != expected.Indexes.Count
-            || !actualIndexes.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
-                .SetEquals(expected.Indexes.Keys))
+        var expectedPrimaryKey = expected.Columns
+            .Where(pair => pair.Value.PrimaryKeyOrdinal > 0)
+            .OrderBy(pair => pair.Value.PrimaryKeyOrdinal)
+            .Select(pair => pair.Key)
+            .ToArray();
+        var primaryKeyIndexes = actualIndexes.Where(pair => pair.Value.Origin == "pk").ToArray();
+        var uniqueConstraintIndexes = actualIndexes.Where(pair => pair.Value.Origin == "u").ToArray();
+        if (uniqueConstraintIndexes.Length > 0
+            || (expectedPrimaryKey.Length > 0
+                && !IsImplicitIntegerRowId(expected.Columns, expectedPrimaryKey)
+                && primaryKeyIndexes.Length != 1)
+            || (IsImplicitIntegerRowId(expected.Columns, expectedPrimaryKey)
+                && primaryKeyIndexes.Length != 0))
             return false;
+        if (primaryKeyIndexes.Length == 1)
+        {
+            var primaryKeyColumns = await ReadIndexColumnsAsync(connection, transaction,
+                primaryKeyIndexes[0].Key, cancellationToken).ConfigureAwait(false);
+            if (primaryKeyColumns.Count != expectedPrimaryKey.Length
+                || !primaryKeyColumns.Select(column => column.Name)
+                    .SequenceEqual(expectedPrimaryKey, StringComparer.OrdinalIgnoreCase)
+                || primaryKeyColumns.Any(column => column.Descending
+                    || !string.Equals(column.Collation, "BINARY", StringComparison.OrdinalIgnoreCase)))
+                return false;
+        }
+
+        var userIndexes = actualIndexes.Where(pair => pair.Value.Origin == "c")
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+        if (userIndexes.Count != expected.Indexes.Count
+            || !userIndexes.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
+                .SetEquals(expected.Indexes.Keys))
+        {
+            return false;
+        }
 
         foreach (var (indexName, expectedIndex) in expected.Indexes)
         {
-            var actualIndex = actualIndexes[indexName];
+            if (!userIndexes.TryGetValue(indexName, out var actualIndex))
+                return false;
             if (actualIndex.Unique != expectedIndex.Unique
                 || actualIndex.Partial != (expectedIndex.Predicate is not null)
                 || !string.Equals(actualIndex.Predicate, NormalizeSqlExpression(expectedIndex.Predicate),
                     StringComparison.OrdinalIgnoreCase))
+            {
                 return false;
+            }
             var actualIndexColumns = await ReadIndexColumnsAsync(connection, transaction, indexName, cancellationToken)
                 .ConfigureAwait(false);
-            if (!actualIndexColumns.SequenceEqual(expectedIndex.Columns, StringComparer.OrdinalIgnoreCase))
+            if (actualIndexColumns.Count != expectedIndex.Columns.Count
+                || !actualIndexColumns.Select(column => column.Name)
+                    .SequenceEqual(expectedIndex.Columns, StringComparer.OrdinalIgnoreCase)
+                || actualIndexColumns.Any(column => column.Descending
+                    || !string.Equals(column.Collation, "BINARY", StringComparison.OrdinalIgnoreCase)))
                 return false;
         }
         return true;
+    }
+
+    private static async Task<IReadOnlyList<ActualForeignKey>?> ReadForeignKeysAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string tableName,
+        CancellationToken cancellationToken)
+    {
+        var rows = new Dictionary<int, List<(int Sequence, string Column, string PrincipalColumn, string PrincipalTable,
+            string OnDelete, string OnUpdate, string Match)>>();
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandTimeout = CommandTimeoutSeconds;
+        command.CommandText = $"PRAGMA foreign_key_list({QuoteIdentifier(tableName)});";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (reader.FieldCount < 8)
+            return null;
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (rows.Values.Sum(value => value.Count) >= 512
+                || reader.IsDBNull(0) || reader.IsDBNull(1) || reader.IsDBNull(2)
+                || reader.IsDBNull(3) || reader.IsDBNull(4) || reader.IsDBNull(5)
+                || reader.IsDBNull(6) || reader.IsDBNull(7))
+                return null;
+            var id = reader.GetInt32(0);
+            if (!rows.TryGetValue(id, out var foreignKeyRows))
+            {
+                foreignKeyRows = [];
+                rows.Add(id, foreignKeyRows);
+            }
+            foreignKeyRows.Add((reader.GetInt32(1), reader.GetString(3), reader.GetString(4),
+                reader.GetString(2), NormalizeReferentialAction(reader.GetString(6)),
+                NormalizeReferentialAction(reader.GetString(5)),
+                reader.GetString(7)));
+        }
+
+        return rows.OrderBy(pair => pair.Key).Select(pair =>
+        {
+            var ordered = pair.Value.OrderBy(row => row.Sequence).ToArray();
+            return new ActualForeignKey(ordered.Select(row => row.Column).ToArray(), ordered[0].PrincipalTable,
+                ordered.Select(row => row.PrincipalColumn).ToArray(), ordered[0].OnDelete, ordered[0].OnUpdate,
+                ordered[0].Match.ToUpperInvariant());
+        }).ToArray();
     }
 
     private static bool IsActualColumnNullable(
@@ -585,6 +751,161 @@ internal sealed class TypedHorseIdentityStoreReaders(
             && string.Equals(actual.Type, "INTEGER", StringComparison.OrdinalIgnoreCase);
         return !isImplicitIntegerRowId && !actual.NotNull;
     }
+
+    private static bool IsImplicitIntegerRowId(
+        IReadOnlyDictionary<string, ExpectedColumn> columns,
+        IReadOnlyList<string> primaryKeyColumns) => primaryKeyColumns.Count == 1
+            && string.Equals(columns[primaryKeyColumns[0]].Type, "INTEGER", StringComparison.OrdinalIgnoreCase);
+
+    private static bool MatchesSupportedTableSyntax(string tableName, string? tableSql)
+    {
+        if (string.IsNullOrWhiteSpace(tableSql))
+            return false;
+
+        if (ContainsSqlKeyword(tableSql, "GENERATED")
+            || ContainsSqlKeyword(tableSql, "DEFERRABLE")
+            || ContainsSqlKeyword(tableSql, "STRICT")
+            || (ContainsSqlKeyword(tableSql, "WITHOUT") && ContainsSqlKeyword(tableSql, "ROWID")))
+            return false;
+
+        var checks = ExtractCheckExpressions(tableSql);
+        if (string.Equals(tableName, "collection_dispatcher_fairness_state",
+                StringComparison.OrdinalIgnoreCase))
+            return checks.Count == 0;
+
+        return checks.Count == 0;
+    }
+
+    private static bool ContainsSqlKeyword(string sql, string keyword)
+    {
+        char quote = '\0';
+        for (var index = 0; index < sql.Length; index++)
+        {
+            var character = sql[index];
+            if (quote != '\0')
+            {
+                if (character == quote)
+                {
+                    if (index + 1 < sql.Length && sql[index + 1] == quote)
+                        index++;
+                    else
+                        quote = '\0';
+                }
+                continue;
+            }
+            if (character is '\'' or '"' or '`' or '[')
+            {
+                quote = character == '[' ? ']' : character;
+                continue;
+            }
+            if (index + keyword.Length <= sql.Length
+                && sql.AsSpan(index, keyword.Length).Equals(keyword, StringComparison.OrdinalIgnoreCase)
+                && (index == 0 || !IsSqlIdentifierCharacter(sql[index - 1]))
+                && (index + keyword.Length == sql.Length
+                    || !IsSqlIdentifierCharacter(sql[index + keyword.Length])))
+                return true;
+        }
+        return false;
+    }
+
+    private static IReadOnlyList<string> ExtractCheckExpressions(string sql)
+    {
+        var expressions = new List<string>();
+        char quote = '\0';
+        for (var index = 0; index < sql.Length; index++)
+        {
+            var character = sql[index];
+            if (quote != '\0')
+            {
+                if (character == quote)
+                {
+                    if (index + 1 < sql.Length && sql[index + 1] == quote)
+                        index++;
+                    else
+                        quote = '\0';
+                }
+                continue;
+            }
+            if (character is '\'' or '"' or '`' or '[')
+            {
+                quote = character == '[' ? ']' : character;
+                continue;
+            }
+            if (index + 5 > sql.Length
+                || !sql.AsSpan(index, 5).Equals("CHECK", StringComparison.OrdinalIgnoreCase)
+                || (index > 0 && IsSqlIdentifierCharacter(sql[index - 1]))
+                || (index + 5 < sql.Length && IsSqlIdentifierCharacter(sql[index + 5])))
+                continue;
+
+            var open = index + 5;
+            while (open < sql.Length && char.IsWhiteSpace(sql[open])) open++;
+            if (open >= sql.Length || sql[open] != '(')
+                return ["\u0000invalid-check-expression"];
+            var depth = 0;
+            var start = open + 1;
+            quote = '\0';
+            for (var cursor = open; cursor < sql.Length; cursor++)
+            {
+                var nested = sql[cursor];
+                if (quote != '\0')
+                {
+                    if (nested == quote)
+                    {
+                        if (cursor + 1 < sql.Length && sql[cursor + 1] == quote)
+                            cursor++;
+                        else
+                            quote = '\0';
+                    }
+                    continue;
+                }
+                if (nested is '\'' or '"' or '`' or '[')
+                {
+                    quote = nested == '[' ? ']' : nested;
+                    continue;
+                }
+                if (nested == '(') depth++;
+                else if (nested == ')' && --depth == 0)
+                {
+                    expressions.Add(NormalizeSqlExpression(sql[start..cursor])
+                        ?? "\u0000invalid-check-expression");
+                    index = cursor;
+                    break;
+                }
+                if (cursor == sql.Length - 1)
+                    return ["\u0000invalid-check-expression"];
+            }
+        }
+        return expressions;
+    }
+
+    private static bool IsSqlIdentifierCharacter(char character) => char.IsLetterOrDigit(character)
+        || character is '_' or '$';
+
+    private static string? NormalizeExpectedDefault(object? value, string? sql)
+    {
+        if (sql is not null)
+            return NormalizeSqlExpression(sql);
+        if (value is null)
+            return null;
+        return value switch
+        {
+            bool boolean => boolean ? "1" : "0",
+            string text => $"'{text.Replace("'", "''", StringComparison.Ordinal)}'",
+            char character => $"'{character.ToString().Replace("'", "''", StringComparison.Ordinal)}'",
+            byte[] bytes => $"X'{Convert.ToHexString(bytes)}'",
+            _ => Convert.ToString(value, CultureInfo.InvariantCulture),
+        };
+    }
+
+    private static string NormalizeReferentialAction(string action) => action switch
+    {
+        "NoAction" => "NO ACTION",
+        "Restrict" => "RESTRICT",
+        "Cascade" => "CASCADE",
+        "SetNull" => "SET NULL",
+        "SetDefault" => "SET DEFAULT",
+        _ => action.ToUpperInvariant(),
+    };
 
     private static async Task<string?> ReadIndexPredicateAsync(
         SqliteConnection connection,
@@ -604,11 +925,48 @@ internal sealed class TypedHorseIdentityStoreReaders(
         return where < 0 ? null : NormalizeSqlExpression(sql[(where + 7)..].TrimEnd(';'));
     }
 
-    private static string? NormalizeSqlExpression(string? expression) => expression is null
-        ? null
-        : string.Concat(expression.Where(character => !char.IsWhiteSpace(character)));
+    private static string? NormalizeSqlExpression(string? expression)
+    {
+        if (expression is null)
+            return null;
 
-    private static async Task<bool> MatchesCollectionSchemaHistoryAsync(
+        var normalized = new StringBuilder(expression.Length);
+        char quote = '\0';
+        for (var index = 0; index < expression.Length; index++)
+        {
+            var character = expression[index];
+            if (quote != '\0')
+            {
+                normalized.Append(character);
+                if (character == quote)
+                {
+                    if (index + 1 < expression.Length && expression[index + 1] == quote)
+                        normalized.Append(expression[++index]);
+                    else
+                        quote = '\0';
+                }
+                else if (quote == ']' && character == ']')
+                {
+                    quote = '\0';
+                }
+                continue;
+            }
+
+            if (character is '\'' or '"' or '`' or '[')
+            {
+                quote = character == '[' ? ']' : character;
+                normalized.Append(character);
+            }
+            else if (!char.IsWhiteSpace(character))
+            {
+                normalized.Append(character);
+            }
+        }
+
+        return quote == '\0' ? normalized.ToString() : "\u0000invalid-sql-expression";
+    }
+
+    private static async Task<CollectionSchemaHistoryLayout> ReadCollectionSchemaHistoryLayoutAsync(
         SqliteConnection connection, SqliteTransaction transaction, CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
@@ -621,38 +979,96 @@ internal sealed class TypedHorseIdentityStoreReaders(
             LIMIT $limit;
             """;
         command.Parameters.AddWithValue("$limit", MaximumCollectionSchemaHistoryRows + 1);
-        var count = 0;
-        var previous = 0;
+        var versions = new List<int>(MaximumCollectionSchemaHistoryRows);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            if (reader.IsDBNull(0)) return false;
-            var version = reader.GetInt32(0);
-            if (version <= previous || version is < 1 or > CurrentCollectionPlatformSchemaVersion)
-                return false;
-            previous = version;
-            count++;
-            if (count > MaximumCollectionSchemaHistoryRows) return false;
+            if (reader.IsDBNull(0) || versions.Count >= MaximumCollectionSchemaHistoryRows)
+                return CollectionSchemaHistoryLayout.Unknown;
+            var version = reader.GetInt64(0);
+            if (version is < 1 or > CurrentCollectionPlatformSchemaVersion
+                || (versions.Count > 0 && version != versions[^1] + 1))
+                return CollectionSchemaHistoryLayout.Unknown;
+            versions.Add((int)version);
         }
 
-        return count > 0 && previous == CurrentCollectionPlatformSchemaVersion;
+        if (versions.Count == 1 && versions[0] == CurrentCollectionPlatformSchemaVersion)
+            return CollectionSchemaHistoryLayout.FreshEf;
+        if (versions.Count == 0 || versions[^1] != CurrentCollectionPlatformSchemaVersion)
+            return CollectionSchemaHistoryLayout.Unknown;
+        return CollectionSchemaHistoryLayout.Upgrade;
     }
 
-    private static async Task<IReadOnlyList<string>> ReadIndexColumnsAsync(
-        SqliteConnection connection, SqliteTransaction transaction, string indexName,
-        CancellationToken cancellationToken)
+    private static bool MatchesCollectionSchemaLayout(
+        IReadOnlyDictionary<string, SchemaObject> tableObjects, CollectionSchemaHistoryLayout historyLayout)
     {
-        var columns = new List<string>(16);
+        if (!tableObjects.TryGetValue("collection_dispatcher_fairness_state", out var fairness))
+            return false;
+        var checks = ExtractCheckExpressions(fairness.Sql ?? string.Empty);
+        return historyLayout switch
+        {
+            // The recognized upgrade fixture is the fresh-EF layout carried through a
+            // bounded migration suffix. Manual v19+ layouts add a CHECK and also carry
+            // DDL defaults not yet represented by this reader, so they remain fail-closed.
+            CollectionSchemaHistoryLayout.FreshEf or CollectionSchemaHistoryLayout.Upgrade => checks.Count == 0,
+            _ => false,
+        };
+    }
+
+    private static async Task<bool> MatchesEventStoreMigrationHistoryAsync(
+        SqliteConnection connection, SqliteTransaction transaction, CancellationToken cancellationToken)
+    {
+        var expected = EventStoreMigrationIds.Value;
+        if (expected.Count == 0 || expected.Count > MaximumMigrationHistoryRows)
+            return false;
+
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandTimeout = CommandTimeoutSeconds;
-        command.CommandText = $"PRAGMA index_info({QuoteIdentifier(indexName)});";
+        command.CommandText = """
+            SELECT CASE WHEN length(CAST(MigrationId AS BLOB)) <= 512
+                        THEN MigrationId ELSE NULL END
+            FROM __EFMigrationsHistory
+            ORDER BY MigrationId
+            LIMIT $limit;
+            """;
+        command.Parameters.AddWithValue("$limit", Math.Min(expected.Count + 1, MaximumMigrationHistoryRows + 1));
+        var actual = new List<string>(expected.Count);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            if (columns.Count >= 16 || reader.IsDBNull(2))
+            if (actual.Count >= MaximumMigrationHistoryRows || reader.IsDBNull(0))
+                return false;
+            actual.Add(reader.GetString(0));
+        }
+
+        var valid = actual.SequenceEqual(expected, StringComparer.Ordinal);
+        return valid;
+    }
+
+    private static async Task<IReadOnlyList<ActualIndexColumn>> ReadIndexColumnsAsync(
+        SqliteConnection connection, SqliteTransaction transaction, string indexName,
+        CancellationToken cancellationToken)
+    {
+        var columns = new List<ActualIndexColumn>(16);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandTimeout = CommandTimeoutSeconds;
+        command.CommandText = $"PRAGMA index_xinfo({QuoteIdentifier(indexName)});";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (reader.FieldCount < 6)
+        {
+            return [];
+        }
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (columns.Count >= 16 || reader.IsDBNull(5))
                 return [];
-            columns.Add(reader.GetString(2));
+            if (reader.GetInt32(5) == 0)
+                continue;
+            if (reader.IsDBNull(1) || reader.IsDBNull(2) || reader.IsDBNull(3) || reader.IsDBNull(4))
+                return [];
+            columns.Add(new(reader.GetString(2), reader.GetInt32(3) != 0, reader.GetString(4)));
         }
         return columns;
     }
@@ -806,17 +1222,43 @@ internal sealed class TypedHorseIdentityStoreReaders(
 
     private sealed record ExpectedTable(
         IReadOnlyDictionary<string, ExpectedColumn> Columns,
-        IReadOnlyDictionary<string, ExpectedIndex> Indexes);
+        IReadOnlyDictionary<string, ExpectedIndex> Indexes,
+        IReadOnlyList<ExpectedForeignKey>? ForeignKeys = null);
 
-    private sealed record ExpectedColumn(string Type, bool Nullable, int PrimaryKeyOrdinal);
+    private sealed record ExpectedColumn(string Type, bool Nullable, int PrimaryKeyOrdinal,
+        string? DefaultExpression = null);
+
+    private sealed record ExpectedForeignKey(
+        IReadOnlyList<string> Columns,
+        string PrincipalTable,
+        IReadOnlyList<string> PrincipalColumns,
+        string OnDelete,
+        string OnUpdate);
 
     private sealed record ExpectedIndex(IReadOnlyList<string> Columns, bool Unique, string? Predicate);
 
     private sealed record ActualColumn(string Type, bool NotNull, string? DefaultValue, int PrimaryKeyOrdinal);
 
-    private sealed record ActualIndex(bool Unique, bool Partial, string? Predicate);
+    private sealed record ActualForeignKey(
+        IReadOnlyList<string> Columns,
+        string PrincipalTable,
+        IReadOnlyList<string> PrincipalColumns,
+        string OnDelete,
+        string OnUpdate,
+        string Match);
+
+    private sealed record ActualIndex(bool Unique, bool Partial, string Origin, string? Predicate);
+
+    private sealed record ActualIndexColumn(string Name, bool Descending, string Collation);
 
     private sealed record SchemaScan(IReadOnlyList<SchemaObject> Objects, bool Truncated);
 
     private sealed record SchemaObject(string Type, string Name, string? Sql, long SqlBytes);
+
+    private enum CollectionSchemaHistoryLayout
+    {
+        Unknown,
+        FreshEf,
+        Upgrade,
+    }
 }

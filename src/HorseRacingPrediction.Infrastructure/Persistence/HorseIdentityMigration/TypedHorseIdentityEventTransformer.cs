@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using EventFlow.Aggregates;
@@ -6,6 +7,8 @@ using EventFlow.Core;
 using EventFlow.EventStores;
 using HorseRacingPrediction.Contracts.Common;
 using HorseRacingPrediction.Domain.Horses;
+using HorseRacingPrediction.Domain.Memos;
+using HorseRacingPrediction.Domain.Predictions;
 using HorseRacingPrediction.Domain.Races;
 
 namespace HorseRacingPrediction.Infrastructure.Persistence.HorseIdentityMigration;
@@ -18,6 +21,15 @@ public sealed record TypedHorseIdentityEventRecord(
     int AggregateSequenceNumber,
     string Data,
     string Metadata);
+
+/// <summary>
+/// Caller-validated context for a PredictionTicket aggregate stream. The caller must
+/// validate the complete stream and derive this from its PredictionTicketCreated event.
+/// </summary>
+public sealed record TypedHorseIdentityTicketStreamContext(
+    string AggregateId,
+    int CreatedAggregateSequenceNumber,
+    string RaceId);
 
 public enum TypedHorseIdentityEventTransformStatus
 {
@@ -53,7 +65,8 @@ public sealed record TypedHorseIdentityEventTransformResult(
 
 /// <summary>
 /// Produces a transformed EventFlow row without writing it. Only registered, explicitly
-/// understood Horse and Race event payloads are accepted; all other aggregates/types fail closed.
+/// understood Horse, Race, Memo, and PredictionTicket event payloads are accepted; all other
+/// aggregates/types fail closed.
 /// </summary>
 public sealed class TypedHorseIdentityEventTransformer
 {
@@ -91,7 +104,9 @@ public sealed class TypedHorseIdentityEventTransformer
         _oldToNewHorseIds = SnapshotMappings(oldToNewHorseIds);
     }
 
-    public TypedHorseIdentityEventTransformResult Transform(TypedHorseIdentityEventRecord? record)
+    public TypedHorseIdentityEventTransformResult Transform(
+        TypedHorseIdentityEventRecord? record,
+        TypedHorseIdentityTicketStreamContext? ticketContext = null)
     {
         if (record is null || record.GlobalSequenceNumber <= 0 || record.AggregateSequenceNumber <= 0
             || string.IsNullOrWhiteSpace(record.AggregateId) || string.IsNullOrWhiteSpace(record.AggregateName)
@@ -121,12 +136,17 @@ public sealed class TypedHorseIdentityEventTransformer
             return Rejected(TypedHorseIdentityEventTransformReason.InvalidJson);
         }
 
+        var originalAggregateEvent = domainEvent.GetAggregateEvent();
+        var dataMatchesCanonical = originalAggregateEvent is PredictionTicketCreated
+            ? HasSameJsonExceptGeneratedTicketTimestamp(record.Data, canonicalOriginal.SerializedData)
+            : HasSameJsonValues(record.Data, canonicalOriginal.SerializedData);
+
         if (!HasSupportedMetadata(domainEvent, record))
             return Rejected(TypedHorseIdentityEventTransformReason.MetadataMismatch);
         if (domainEvent.Metadata.EventVersion != SupportedEventVersion)
             return Rejected(TypedHorseIdentityEventTransformReason.UnsupportedEventVersion);
 
-        if (!HasSameJsonValues(record.Data, canonicalOriginal.SerializedData)
+        if (!dataMatchesCanonical
             || !HasSameJsonValues(record.Metadata, canonicalOriginal.SerializedMetadata))
             return Rejected(TypedHorseIdentityEventTransformReason.UnsupportedPayloadShape);
 
@@ -142,7 +162,7 @@ public sealed class TypedHorseIdentityEventTransformer
                     return Rejected(TypedHorseIdentityEventTransformReason.UnsupportedAggregate);
 
                 transformedAggregateId = MapHorseId(record.AggregateId);
-                aggregateEvent = domainEvent.GetAggregateEvent();
+                aggregateEvent = originalAggregateEvent;
                 if (!HorseEventsWithoutTypedHorseReferences.Contains(domainEvent.EventType))
                     return Rejected(TypedHorseIdentityEventTransformReason.UnsupportedEventType);
 
@@ -153,7 +173,20 @@ public sealed class TypedHorseIdentityEventTransformer
             {
                 transformedAggregateId = record.AggregateId;
                 (aggregateEvent, payloadChanged) = TransformRaceEvent(
-                    domainEvent.GetAggregateEvent(), record.AggregateId);
+                    originalAggregateEvent, record.AggregateId);
+            }
+            else if (domainEvent.AggregateType == typeof(MemoAggregate)
+                && string.Equals(record.AggregateName, nameof(MemoAggregate), StringComparison.Ordinal))
+            {
+                transformedAggregateId = record.AggregateId;
+                (aggregateEvent, payloadChanged) = TransformMemoEvent(originalAggregateEvent);
+            }
+            else if (domainEvent.AggregateType == typeof(PredictionTicketAggregate)
+                && string.Equals(record.AggregateName, nameof(PredictionTicketAggregate), StringComparison.Ordinal))
+            {
+                transformedAggregateId = record.AggregateId;
+                (aggregateEvent, payloadChanged) = TransformPredictionTicketEvent(
+                    originalAggregateEvent, record, ticketContext);
             }
             else
             {
@@ -202,7 +235,10 @@ public sealed class TypedHorseIdentityEventTransformer
             return Rejected(TypedHorseIdentityEventTransformReason.OversizedPayload);
 
         if (!HasSameJsonExceptField(record.Metadata, serialized.SerializedMetadata, AggregateIdMetadataKey)
-            || !HasSameJsonExceptIdentityFields(canonicalOriginal.SerializedData, serialized.SerializedData))
+            || !HasSameJsonExceptIdentityFields(
+                canonicalOriginal.SerializedData,
+                serialized.SerializedData,
+                GetAdditionalIdentityField(originalAggregateEvent)))
             return Rejected(TypedHorseIdentityEventTransformReason.UnsupportedPayloadShape);
 
         if (serialized.AggregateSequenceNumber != record.AggregateSequenceNumber
@@ -224,6 +260,147 @@ public sealed class TypedHorseIdentityEventTransformer
                 Metadata = serialized.SerializedMetadata,
             });
     }
+
+    private (IAggregateEvent Event, bool Changed) TransformMemoEvent(IAggregateEvent value)
+    {
+        switch (value)
+        {
+            case MemoCreated e:
+                {
+                    var subjects = TransformMemoSubjects(e.Subjects, out var changed);
+                    return changed
+                        ? (new MemoCreated(e.AuthorId, e.MemoType, e.Content, e.CreatedAt, subjects, e.Links), true)
+                        : (e, false);
+                }
+            case MemoUpdated e:
+                {
+                    var subjects = TransformMemoSubjects(e.CurrentSubjects, out var changed);
+                    return changed
+                        ? (new MemoUpdated(e.MemoType, e.Content, e.Links, subjects), true)
+                        : (e, false);
+                }
+            case MemoDeleted e:
+                {
+                    var subjects = TransformMemoSubjects(e.Subjects, out var changed);
+                    return changed
+                        ? (new MemoDeleted(subjects), true)
+                        : (e, false);
+                }
+            case MemoSubjectsChanged e:
+                {
+                    var added = TransformMemoSubjects(e.AddedSubjects, out var addedChanged);
+                    var removed = TransformMemoSubjects(e.RemovedSubjects, out var removedChanged);
+                    var all = TransformMemoSubjects(e.AllSubjects, out var allChanged);
+                    return addedChanged || removedChanged || allChanged
+                        ? (new MemoSubjectsChanged(added, removed, all, e.AuthorId, e.MemoType,
+                            e.Content, e.CreatedAt, e.Links), true)
+                        : (e, false);
+                }
+            default:
+                throw new UnsupportedEventException();
+        }
+    }
+
+    private (IAggregateEvent Event, bool Changed) TransformPredictionTicketEvent(
+        IAggregateEvent value,
+        TypedHorseIdentityEventRecord record,
+        TypedHorseIdentityTicketStreamContext? ticketContext)
+    {
+        switch (value)
+        {
+            case PredictionTicketCreated:
+                // Do not reconstruct this event: its constructor assigns PredictedAt = Now.
+                return (value, false);
+            case PredictionMarkAdded e:
+                {
+                    if (string.IsNullOrEmpty(e.EntryId) || !IsValidTicketContext(record, ticketContext))
+                        throw new UnsupportedShapeException();
+
+                    var entryId = TransformTicketEntryId(e.EntryId, ticketContext!.RaceId, out var changed);
+                    return changed
+                        ? (new PredictionMarkAdded(entryId, e.MarkCode, e.PredictedRank, e.Score, e.Comment), true)
+                        : (e, false);
+                }
+            case PredictionRationaleAdded e:
+                {
+                    if (e.SubjectType is null || e.SubjectId is null)
+                        throw new UnsupportedShapeException();
+
+                    if (!string.Equals(e.SubjectType, "Horse", StringComparison.Ordinal))
+                        return (e, false);
+
+                    var subjectId = MapHorseId(e.SubjectId);
+                    return subjectId != e.SubjectId
+                        ? (new PredictionRationaleAdded(e.SubjectType, subjectId, e.SignalType,
+                            e.SignalValue, e.ExplanationText), true)
+                        : (e, false);
+                }
+            case BettingSuggestionAdded:
+            case PredictionTicketFinalized:
+            case PredictionTicketWithdrawn:
+            case PredictionTicketEvaluated:
+            case PredictionEvaluationRecalculated:
+            case PredictionMetadataCorrected:
+                return (value, false);
+            default:
+                throw new UnsupportedEventException();
+        }
+    }
+
+    private IReadOnlyList<MemoSubject> TransformMemoSubjects(
+        IReadOnlyList<MemoSubject> subjects,
+        out bool changed)
+    {
+        if (subjects is null)
+            throw new UnsupportedShapeException();
+
+        changed = false;
+        var transformed = new MemoSubject[subjects.Count];
+        for (var index = 0; index < subjects.Count; index++)
+        {
+            var subject = subjects[index] ?? throw new UnsupportedShapeException();
+            if (!Enum.IsDefined(subject.SubjectType) || subject.SubjectId is null)
+                throw new UnsupportedShapeException();
+
+            var subjectId = subject.SubjectType == MemoSubjectType.Horse
+                ? MapHorseId(subject.SubjectId)
+                : subject.SubjectId;
+            transformed[index] = subjectId == subject.SubjectId
+                ? subject
+                : new MemoSubject(subject.SubjectType, subjectId);
+            changed |= subjectId != subject.SubjectId;
+        }
+
+        return changed ? Array.AsReadOnly(transformed) : subjects;
+    }
+
+    private string TransformTicketEntryId(string entryId, string raceId, out bool changed)
+    {
+        foreach (var (oldHorseId, newHorseId) in _oldToNewHorseIds)
+        {
+            if (string.Equals(entryId,
+                    DeterministicIdGenerator.BuildRaceEntryId(raceId, oldHorseId),
+                    StringComparison.Ordinal))
+            {
+                changed = true;
+                return DeterministicIdGenerator.BuildRaceEntryId(raceId, newHorseId);
+            }
+        }
+
+        changed = false;
+        return entryId;
+    }
+
+    private static bool IsValidTicketContext(
+        TypedHorseIdentityEventRecord record,
+        TypedHorseIdentityTicketStreamContext? context) =>
+        context is not null
+        && !string.IsNullOrWhiteSpace(context.AggregateId)
+        && !string.IsNullOrWhiteSpace(context.RaceId)
+        && FitsSerializedBound(context.RaceId)
+        && context.CreatedAggregateSequenceNumber > 0
+        && string.Equals(context.AggregateId, record.AggregateId, StringComparison.Ordinal)
+        && record.AggregateSequenceNumber > context.CreatedAggregateSequenceNumber;
 
     private (IAggregateEvent Event, bool Changed) TransformRaceEvent(IAggregateEvent value, string raceId)
     {
@@ -420,15 +597,63 @@ public sealed class TypedHorseIdentityEventTransformer
     private static bool HasSameJsonValues(string candidate, string canonical) =>
         HasSameJson(candidate, canonical, static _ => false);
 
+    private static bool HasSameJsonExceptGeneratedTicketTimestamp(string candidate, string canonical)
+    {
+        using var candidateDocument = ParseBoundedJson(candidate);
+        if (candidateDocument is null || candidateDocument.RootElement.ValueKind != JsonValueKind.Object)
+            return false;
+
+        var timestamp = candidateDocument.RootElement.EnumerateObject()
+            .FirstOrDefault(property => string.Equals(property.Name, "PredictedAt", StringComparison.OrdinalIgnoreCase));
+        return timestamp.Value.ValueKind == JsonValueKind.String
+            && timestamp.Value.GetString() is { } value
+            && IsExplicitIsoTimestamp(value)
+            && HasSameJsonExceptField(candidate, canonical, "PredictedAt");
+    }
+
+    private static bool IsExplicitIsoTimestamp(string value)
+    {
+        if (value.EndsWith('Z'))
+            value = value[..^1] + "+00:00";
+        else if (value.Length < 6
+            || (value[value.Length - 6] != '+' && value[value.Length - 6] != '-'))
+            return false;
+
+        return DateTimeOffset.TryParseExact(
+                   value,
+                   "yyyy-MM-dd'T'HH:mm:ss.FFFFFFFzzz",
+                   CultureInfo.InvariantCulture,
+                   DateTimeStyles.None,
+                   out _)
+            || DateTimeOffset.TryParseExact(
+                value,
+                "yyyy-MM-dd'T'HH:mm:sszzz",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out _);
+    }
+
     private static bool HasSameJsonExceptField(string candidate, string canonical, string allowedField) =>
         HasSameJson(candidate, canonical, name => string.Equals(name, allowedField, StringComparison.OrdinalIgnoreCase));
 
-    private static bool HasSameJsonExceptIdentityFields(string candidate, string canonical) =>
-        HasSameJson(candidate, canonical, static name => name is not null
+    private static bool HasSameJsonExceptIdentityFields(
+        string candidate,
+        string canonical,
+        string? additionalIdentityField = null) =>
+        HasSameJson(candidate, canonical, name => name is not null
             && (name.Equals("horseId", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("previousHorseId", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("winningHorseId", StringComparison.OrdinalIgnoreCase)
-                || name.Equals("entryId", StringComparison.OrdinalIgnoreCase)));
+                || name.Equals("entryId", StringComparison.OrdinalIgnoreCase)
+                || (additionalIdentityField is not null
+                    && name.Equals(additionalIdentityField, StringComparison.OrdinalIgnoreCase))));
+
+    private static string? GetAdditionalIdentityField(IAggregateEvent value) => value switch
+    {
+        MemoCreated or MemoUpdated or MemoDeleted or MemoSubjectsChanged => "subjectId",
+        PredictionRationaleAdded => "subjectId",
+        _ => null,
+    };
 
     private static bool HasSameJson(string candidate, string canonical, Func<string?, bool> mayDiffer)
     {
