@@ -1,15 +1,28 @@
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Api.Identity;
 using HorseRacingPrediction.Api.IdentityMigration;
+using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts.Collection;
 using HorseRacingPrediction.Contracts.Identity;
+using HorseRacingPrediction.Domain.Horses;
+using HorseRacingPrediction.Domain.Jockeys;
+using HorseRacingPrediction.Domain.Predictions;
+using HorseRacingPrediction.Domain.Races;
+using HorseRacingPrediction.Domain.Trainers;
 using HorseRacingPrediction.Infrastructure.Persistence;
+using HorseRacingPrediction.Infrastructure.Persistence.HorseIdentityMigration;
 using HorseRacingPrediction.PredictionScheduling;
+using EventFlow.Aggregates;
+using EventFlow.EventStores;
+using EventFlow.Extensions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.IO.Compression;
 using System.Security.Cryptography;
@@ -44,6 +57,554 @@ public sealed class HorseIdentityMigrationStoreEngineTests
         Assert.AreEqual(MigrationRootStatus.Present, result.Roots.Single().SourceStatus);
         Assert.IsFalse(result.Roots.Single().HasTargetCollision);
         Assert.AreEqual(before, await fixture.SourceSnapshotAsync(), "The read-only scan must not mutate source stores.");
+    }
+
+    [TestMethod]
+    public async Task TypedClosureEmitsBoundedImmutablePageEvidence()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        var before = await fixture.SourceSnapshotAsync();
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.IsFalse(result.CanWrite);
+        Assert.IsNotEmpty(result.TypedReferenceEvidence);
+        Assert.IsTrue(result.TypedReferenceEvidence.All(page => page.BeforeHash.Length == 64
+            && page.ExpectedAfterHash.Length == 64 && page.RowCount >= 0));
+        Assert.AreEqual(before, await fixture.SourceSnapshotAsync());
+    }
+
+    [TestMethod]
+    public async Task MemoLocatorKeyCollisionIsReportedWithSourceAndDestinationRows()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.EventStorePath, $"""
+            INSERT INTO MemoSubjects (SubjectKey, Memos) VALUES
+                ('Horse:{OldHorseId}', '[]'),
+                ('Horse:{DestinationHorseId()}', '[]');
+            """);
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanStatus.DestinationCollision, result.Status);
+        Assert.AreEqual(HorseIdentityStorePlanReason.DestinationCollision, result.Reason);
+        Assert.IsFalse(result.CanWrite);
+        Assert.IsTrue(result.TypedReferenceEvidence.Any(page => page.Table == "MemoSubjects"));
+    }
+
+    [TestMethod]
+    public async Task RaceProjectionUsesExactDtoSerializerAndChangesOnlyTypedHorseValue()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedRacePredictionContextAsync(OldHorseId);
+
+        var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+        var page = result.TypedReferenceEvidence.Single(evidence =>
+            evidence.Table == "RacePredictionContexts");
+        Assert.AreNotEqual(page.ExpectedAfterHash, page.BeforeHash,
+            "The DTO serializer must expose the mapped Horse value in expected-after evidence.");
+        Assert.AreEqual(HorseIdentityStorePlanStatus.Incomplete, result.Status,
+            "Missing EventFlow serializer/factory bindings must explicitly prevent completion.");
+        Assert.AreEqual("registered-event-codec-unavailable", result.TypedReferenceFailure);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task OddsAndNestedTicketProjectionDtosRebuildOnlyExactDerivedEntryIds()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        const string raceId = "race-typed-reference";
+        var oldEntryId = HorseRacingPrediction.Contracts.Common.DeterministicIdGenerator
+            .BuildRaceEntryId(raceId, OldHorseId);
+        var newHorseId = DestinationHorseId();
+        var newEntryId = HorseRacingPrediction.Contracts.Common.DeterministicIdGenerator
+            .BuildRaceEntryId(raceId, newHorseId);
+        await fixture.SeedRacePredictionContextAsync(OldHorseId, oldEntryId);
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        jsonOptions.Converters.Add(new HorseRacingPrediction.Contracts.Common.Time.JstStoredDateTimeOffsetJsonConverter());
+        var odds = JsonSerializer.Serialize(new[]
+        {
+            new RaceOddsSnapshot(DateTimeOffset.Parse("2026-10-14T00:00:00+09:00"), [], [],
+                [new RaceOddsAssignment(1, OldHorseId, oldEntryId, 1)]),
+        }, jsonOptions);
+        var mark = new PredictionMarkSnapshot(oldEntryId, "A", 1, .9m, "keep user text");
+        var marks = JsonSerializer.Serialize(new[] { mark }, jsonOptions);
+        var states = JsonSerializer.Serialize(new[]
+        {
+            new PredictionComparisonTicketState
+            {
+                PredictionTicketId = "ticket-typed", PredictorType = "fixture", PredictorId = "predictor-typed",
+                Status = TicketStatus.Draft, ConfidenceScore = .5m, SummaryComment = "preserve summary",
+                PredictedAt = DateTimeOffset.Parse("2026-10-14T00:00:00+09:00"), Marks = [mark],
+                Evaluations = [], EvaluationStatus = EvaluationStatus.Ready,
+            },
+        }, jsonOptions);
+        await fixture.ExecuteAsync(fixture.EventStorePath, $$"""
+            UPDATE RacePredictionContexts SET OddsSnapshots = '{{odds.Replace("'", "''")}}'
+            WHERE RaceId = '{{raceId}}';
+            INSERT INTO PredictionTickets
+                (PredictionTicketId, RaceId, PredictorType, PredictorId, ConfidenceScore, SummaryComment,
+                 PredictedAt, TicketStatus, Marks, Evaluations, EvaluationStatus)
+            VALUES ('ticket-typed', '{{raceId}}', 'fixture', 'predictor-typed', 0.5, 'preserve summary',
+                    '2026-10-14T00:00:00+09:00', 0, '{{marks.Replace("'", "''")}}', '[]', 0);
+            INSERT INTO PredictionComparisons
+                (RaceId, RaceName, WinningHorseName, ResultDeclaredAt, TicketStates, EntryIndexes, EntryResults, PayoutResult)
+            VALUES ('{{raceId}}', 'preserve race text', NULL, NULL, '{{states.Replace("'", "''")}}',
+                    '[]', '[]', NULL);
+            """);
+
+        var result = await fixture.CreateEngineWithEventFlow().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.IsNull(result.TypedReferenceFailure, result.TypedReferenceFailure);
+        Assert.IsFalse(result.CanWrite);
+        foreach (var table in new[] { "RacePredictionContexts", "PredictionTickets", "PredictionComparisons" })
+            Assert.IsTrue(result.TypedReferenceEvidence.Any(page => page.Table == table
+                && page.ExpectedAfterHash != page.BeforeHash), $"Expected the typed projection in {table} to change.");
+
+        var sourceContextEntry = JsonSerializer.Deserialize<List<RacePredictionContextEntry>>(
+            (await fixture.ReadRacePredictionContextAsync(raceId))[1], jsonOptions)!.Single();
+        var expectedContextEntry = sourceContextEntry with { HorseId = newHorseId, EntryId = newEntryId };
+        Assert.AreEqual(OldHorseId, sourceContextEntry.HorseId, "Read-only planning must not mutate source rows.");
+        Assert.AreEqual(newHorseId, expectedContextEntry.HorseId);
+        Assert.AreEqual(newEntryId, expectedContextEntry.EntryId);
+        var sourceOdds = await fixture.ReadProjectionJsonAsync("RacePredictionContexts", "OddsSnapshots", "RaceId", raceId);
+        var oddsSource = JsonSerializer.Deserialize<List<RaceOddsSnapshot>>(sourceOdds, jsonOptions)!.Single();
+        var oddsProjection = oddsSource with
+        {
+            Assignments = oddsSource.Assignments!.Select(assignment =>
+            assignment with { HorseId = newHorseId, EntryId = newEntryId }).ToArray()
+        };
+        Assert.AreEqual(OldHorseId, oddsSource.Assignments!.Single().HorseId);
+        Assert.AreEqual(newHorseId, oddsProjection.Assignments!.Single().HorseId);
+        Assert.AreEqual(newEntryId, oddsProjection.Assignments.Single().EntryId);
+        var sourceTicketMark = JsonSerializer.Deserialize<List<PredictionMarkSnapshot>>(
+            await fixture.ReadProjectionJsonAsync("PredictionTickets", "Marks", "PredictionTicketId", "ticket-typed"),
+            jsonOptions)!.Single();
+        var ticketMark = sourceTicketMark with { EntryId = newEntryId };
+        Assert.AreEqual(oldEntryId, sourceTicketMark.EntryId);
+        Assert.AreEqual(newEntryId, ticketMark.EntryId);
+        Assert.AreEqual("keep user text", ticketMark.Comment);
+        var sourceComparisonState = JsonSerializer.Deserialize<List<PredictionComparisonTicketState>>(
+            await fixture.ReadProjectionJsonAsync("PredictionComparisons", "TicketStates", "RaceId", raceId),
+            jsonOptions)!.Single();
+        var expectedComparisonMark = sourceComparisonState.Marks.Single() with { EntryId = newEntryId };
+        Assert.AreEqual(oldEntryId, sourceComparisonState.Marks.Single().EntryId);
+        Assert.AreEqual(newEntryId, expectedComparisonMark.EntryId);
+        Assert.AreEqual("preserve summary", sourceComparisonState.SummaryComment);
+    }
+
+    [TestMethod]
+    public async Task RegisteredEventFlowCodecAndTypedProjectionProduceExactDerivedEntryEvidence()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        var raceId = "race-typed-reference";
+        var oldEntryId = HorseRacingPrediction.Contracts.Common.DeterministicIdGenerator
+            .BuildRaceEntryId(raceId, OldHorseId);
+        await fixture.SeedRacePredictionContextAsync(OldHorseId, oldEntryId);
+        var stored = await fixture.ReadRacePredictionContextAsync(raceId);
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var originalEntries = JsonSerializer.Deserialize<List<
+            HorseRacingPrediction.Application.Queries.ReadModels.RacePredictionContextEntry>>(stored[1], options)!;
+        var canonicalEntries = JsonSerializer.Serialize(originalEntries, options);
+        Assert.IsTrue(System.Text.Json.Nodes.JsonNode.DeepEquals(
+            System.Text.Json.Nodes.JsonNode.Parse(stored[1]),
+            System.Text.Json.Nodes.JsonNode.Parse(canonicalEntries)), $"{stored[1]} != {canonicalEntries}");
+
+        var result = await fixture.CreateEngineWithEventFlow().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.IsNull(result.TypedReferenceFailure, result.TypedReferenceFailure);
+        var page = result.TypedReferenceEvidence.Single(evidence => evidence.Table == "RacePredictionContexts");
+        var newHorseId = DestinationHorseId();
+        var newEntryId = HorseRacingPrediction.Contracts.Common.DeterministicIdGenerator
+            .BuildRaceEntryId(raceId, newHorseId);
+        var expectedEntries = JsonSerializer.Serialize(originalEntries.Select(entry => entry with
+        {
+            HorseId = newHorseId,
+            EntryId = newEntryId,
+        }), options);
+        Assert.AreEqual(page.ExpectedAfterHash,
+            await fixture.ComputeRacePredictionContextExpectedAfterHashAsync(raceId, expectedEntries),
+            "Evidence must hash the exact serialized HorseId and deterministic EntryId result.");
+        using (var document = JsonDocument.Parse(expectedEntries))
+        {
+            var entry = document.RootElement[0];
+            Assert.AreEqual(newHorseId, entry.GetProperty("horseId").GetString());
+            Assert.AreEqual(newEntryId, entry.GetProperty("entryId").GetString());
+        }
+        Assert.IsNull(result.TypedReferenceFailure,
+            "A real registered EventFlow serializer/factory must accept the canonical Horse event.");
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task TicketCreatedStreamBindsRaceAndHashesExactDerivedMark()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        var ticket = await fixture.SeedSerializedTicketStreamAsync(OldHorseId);
+        var before = await fixture.ReadEventRowsAsync();
+
+        var result = await fixture.CreateEngineWithEventFlow().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.IsNull(result.TypedReferenceFailure, result.TypedReferenceFailure);
+        Assert.IsFalse(result.CanWrite);
+        var serializer = fixture.EventFlowServices.GetRequiredService<IEventJsonSerializer>();
+        var factory = fixture.EventFlowServices.GetRequiredService<IDomainEventFactory>();
+        var transformer = new TypedHorseIdentityEventTransformer(serializer, factory,
+            new Dictionary<string, string> { [OldHorseId] = DestinationHorseId() });
+        var context = new TypedHorseIdentityTicketStreamContext(ticket.AggregateId, 1, ticket.RaceId);
+        var expectedRows = before.Select(row =>
+        {
+            var eventContext = row.Record.AggregateName == nameof(PredictionTicketAggregate)
+                && row.Record.AggregateSequenceNumber > 1 ? context : null;
+            var transformed = transformer.Transform(row.Record, eventContext);
+            Assert.IsTrue(transformed.IsAccepted, transformed.Reason.ToString());
+            return (row.RowId, row.BatchId, row.Record, transformed.Event!);
+        }).ToArray();
+        var pages = result.TypedReferenceEvidence.Where(evidence => evidence.Table == "EventEntity").ToArray();
+        Assert.AreEqual((long)before.Count, pages.Sum(page => page.RowCount),
+            $"failure={result.TypedReferenceFailure}; status={result.Status}; evidence={string.Join(',', result.TypedReferenceEvidence.Select(page => page.Table))}");
+        foreach (var page in pages)
+        {
+            Assert.IsTrue(long.TryParse(page.FirstKey, out var firstRowId));
+            Assert.IsTrue(long.TryParse(page.LastKey, out var lastRowId));
+            var pageBefore = before.Where(row => row.RowId >= firstRowId && row.RowId <= lastRowId).ToArray();
+            var pageExpected = expectedRows.Where(row => row.RowId >= firstRowId && row.RowId <= lastRowId).ToArray();
+            Assert.AreEqual(page.RowCount, pageBefore.LongLength);
+            Assert.AreEqual(page.BeforeHash,
+                ComputeEventEvidenceHash(pageBefore.Select(row =>
+                    (row.RowId, row.BatchId, row.Record, row.Record))));
+            Assert.AreEqual(page.ExpectedAfterHash, ComputeEventEvidenceHash(pageExpected));
+        }
+
+        var mark = expectedRows.Select(row => row.Item4).Single(record =>
+            record.AggregateId == ticket.AggregateId && record.AggregateSequenceNumber == 2);
+        var markEvent = (PredictionMarkAdded)serializer.Deserialize(mark.Data, mark.Metadata).GetAggregateEvent();
+        Assert.AreEqual(HorseRacingPrediction.Contracts.Common.DeterministicIdGenerator
+            .BuildRaceEntryId(ticket.RaceId, DestinationHorseId()),
+            markEvent.EntryId);
+        Assert.AreEqual($"comment {OldHorseId}", markEvent.Comment);
+    }
+
+    [TestMethod]
+    public async Task RegisteredJockeyAndTrainerStreamsAreSupportedAndHashUnchanged()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        await fixture.SeedSerializedJockeyTrainerEventsAsync();
+        var sourceRows = await fixture.ReadEventRowsAsync();
+
+        var result = await fixture.CreateEngineWithEventFlow().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.IsNull(result.TypedReferenceFailure, result.TypedReferenceFailure);
+        Assert.IsFalse(result.CanWrite);
+        var subjectRows = sourceRows.Where(row => row.Record.AggregateName is nameof(JockeyAggregate)
+            or nameof(TrainerAggregate)).ToArray();
+        var subjectPages = result.TypedReferenceEvidence.Where(page => page.Table == "EventEntity"
+            && long.TryParse(page.FirstKey, out var first) && long.TryParse(page.LastKey, out var last)
+            && subjectRows.Any(row => row.RowId >= first && row.RowId <= last)).ToArray();
+        Assert.AreEqual((long)subjectRows.Length, subjectPages.Sum(page => page.RowCount));
+        Assert.IsTrue(subjectPages.All(page => page.BeforeHash == page.ExpectedAfterHash),
+            "Known unaffected Jockey/Trainer records must be accepted and remain byte-stable.");
+    }
+
+    [TestMethod]
+    public async Task EventEntityEvidenceHashesAllPhysicalColumnsAndDetectsNonIdentityMutations()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        await fixture.SeedSerializedJockeyTrainerEventsAsync();
+
+        static TypedHorseIdentityPageEvidence PageFor(HorseIdentityStorePlan result, long rowId) =>
+            result.TypedReferenceEvidence.Single(page => page.Table == "EventEntity"
+                && long.TryParse(page.FirstKey, out var first) && long.TryParse(page.LastKey, out var last)
+                && rowId >= first && rowId <= last);
+
+        var first = await fixture.CreateEngineWithEventFlow().InspectAsync(Manifest(), CancellationToken.None);
+        Assert.IsNull(first.TypedReferenceFailure, first.TypedReferenceFailure);
+        var firstRows = await fixture.ReadEventRowsAsync();
+        var jockey = firstRows.Single(row => row.Record.AggregateName == nameof(JockeyAggregate));
+        var firstPage = PageFor(first, jockey.RowId);
+        Assert.AreEqual(firstPage.BeforeHash, ComputeEventEvidenceHash(
+            [(jockey.RowId, jockey.BatchId, jockey.Record, jockey.Record)]));
+        Assert.AreEqual(firstPage.ExpectedAfterHash, ComputeEventEvidenceHash(
+            [(jockey.RowId, jockey.BatchId, jockey.Record, jockey.Record)]));
+
+        await fixture.ExecuteAsync(fixture.EventStorePath,
+            "UPDATE EventEntity SET BatchId = 'batch-id-mutated' WHERE AggregateName = 'JockeyAggregate';");
+        var afterBatchMutation = await fixture.CreateEngineWithEventFlow()
+            .InspectAsync(Manifest(), CancellationToken.None);
+        Assert.IsNull(afterBatchMutation.TypedReferenceFailure, afterBatchMutation.TypedReferenceFailure);
+        var batchRows = await fixture.ReadEventRowsAsync();
+        var batchJockey = batchRows.Single(row => row.Record.AggregateName == nameof(JockeyAggregate));
+        var batchPage = PageFor(afterBatchMutation, batchJockey.RowId);
+        Assert.AreNotEqual(firstPage.BeforeHash, batchPage.BeforeHash,
+            "BatchId is a physical source column and must affect page evidence.");
+        Assert.AreEqual(batchPage.BeforeHash, ComputeEventEvidenceHash(
+            [(batchJockey.RowId, batchJockey.BatchId, batchJockey.Record, batchJockey.Record)]));
+
+        await fixture.ExecuteAsync(fixture.EventStorePath,
+            "UPDATE EventEntity SET GlobalSequenceNumber = 1001 WHERE AggregateName = 'JockeyAggregate';");
+        var afterSequenceMutation = await fixture.CreateEngineWithEventFlow()
+            .InspectAsync(Manifest(), CancellationToken.None);
+        Assert.IsNull(afterSequenceMutation.TypedReferenceFailure, afterSequenceMutation.TypedReferenceFailure);
+        var sequenceRows = await fixture.ReadEventRowsAsync();
+        var sequenceJockey = sequenceRows.Single(row => row.Record.AggregateName == nameof(JockeyAggregate));
+        var sequencePage = PageFor(afterSequenceMutation, sequenceJockey.RowId);
+        Assert.AreNotEqual(batchPage.BeforeHash, sequencePage.BeforeHash,
+            "GlobalSequenceNumber must affect evidence even though rowid owns stable membership.");
+        Assert.AreEqual(sequencePage.BeforeHash, ComputeEventEvidenceHash(
+            [(sequenceJockey.RowId, sequenceJockey.BatchId, sequenceJockey.Record, sequenceJockey.Record)]));
+    }
+
+    [TestMethod]
+    public async Task LocalQueueAcceptsOnlyActualWakeAndDispatchSerializationsAndHashesFullRows()
+    {
+        var serializerOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        serializerOptions.Converters.Add(new HorseRacingPrediction.Contracts.Common.Time
+            .JstStoredDateTimeOffsetJsonConverter());
+        var wakeBody = JsonSerializer.Serialize(new CollectionWakeSignal(
+            Guid.NewGuid(), Guid.NewGuid(), "reservation-closure-fixture"), serializerOptions);
+        var dispatchBody = JsonSerializer.Serialize(new CollectionDispatchEnvelope(
+            Guid.NewGuid(),
+            new CollectionDispatchCompatibilityKey("JRA", new CollectionDefinitionId("race-detail"),
+                null, CollectionLane.Normal),
+            [new CollectionDispatchTaskReference(Guid.NewGuid(), 1)]), serializerOptions);
+
+        foreach (var body in new[] { wakeBody, dispatchBody })
+        {
+            await using var fixture = await StoreFixture.CreateAsync();
+            await fixture.SeedHorseAsync(OldHorseId);
+            await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+            await fixture.SeedLocalQueueMessageAsync(body);
+
+            var result = await fixture.CreateEngineWithEventFlow("Local")
+                .InspectAsync(Manifest(), CancellationToken.None);
+
+            Assert.IsNull(result.TypedReferenceFailure, result.TypedReferenceFailure);
+            Assert.IsFalse(result.CanWrite);
+            Assert.IsTrue(result.TypedReferenceEvidence.Any(evidence =>
+                evidence.Table == "local_collection_messages"),
+                $"Expected queue evidence; status={result.Status}, reason={result.Reason}, "
+                + $"schemas={string.Join(',', result.Stores.Select(schema => $"{schema.Surface}:{schema.Status}:{schema.TableCount}:{schema.UnknownObjectCount}"))}, "
+                + $"pages={string.Join(',', result.TypedReferenceEvidence.Select(evidence => evidence.Table))}");
+            var page = result.TypedReferenceEvidence.Single(evidence =>
+                evidence.Table == "local_collection_messages");
+            Assert.AreEqual(page.ExpectedAfterHash, page.BeforeHash);
+            Assert.AreEqual(await fixture.ComputeLocalQueueEvidenceHashAsync(), page.BeforeHash);
+        }
+    }
+
+    [TestMethod]
+    public async Task LocalQueueRejectsUnknownAndAffectedTypedBodiesBeforeUnchangedDisposition()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        options.Converters.Add(new HorseRacingPrediction.Contracts.Common.Time.JstStoredDateTimeOffsetJsonConverter());
+        var supportedWake = JsonSerializer.Serialize(new CollectionWakeSignal(
+            Guid.NewGuid(), Guid.NewGuid(), "reservation-affected-fixture"), options);
+        var affectedWake = supportedWake[..^1] + $",\"horseId\":\"{OldHorseId}\"}}";
+
+        foreach (var (body, expectedFailure) in new[]
+        {
+            ("{\"futureQueueShape\":true}", "queue-body-shape-unsupported"),
+            (affectedWake, "queue-reference-requires-generation-recipe"),
+        })
+        {
+            await using var fixture = await StoreFixture.CreateAsync();
+            await fixture.SeedHorseAsync(OldHorseId);
+            await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+            await fixture.SeedLocalQueueMessageAsync(body);
+
+            var result = await fixture.CreateEngineWithEventFlow("Local")
+                .InspectAsync(Manifest(), CancellationToken.None);
+
+            Assert.AreEqual(HorseIdentityStorePlanStatus.Incomplete, result.Status);
+            Assert.AreEqual(expectedFailure, result.TypedReferenceFailure);
+            Assert.IsFalse(result.CanWrite);
+        }
+    }
+
+    [TestMethod]
+    public async Task LocalQueueEvidenceDetectsChangesToEveryPhysicalNonBodyColumn()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        options.Converters.Add(new HorseRacingPrediction.Contracts.Common.Time.JstStoredDateTimeOffsetJsonConverter());
+        var firstBody = JsonSerializer.Serialize(new CollectionWakeSignal(
+            Guid.NewGuid(), Guid.NewGuid(), "reservation-mutation-fixture"), options);
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        await fixture.SeedLocalQueueMessageAsync(firstBody);
+
+        var currentHash = await fixture.InspectLocalQueueHashAsync();
+        Assert.AreEqual(await fixture.ComputeLocalQueueEvidenceHashAsync(), currentHash.Page.BeforeHash);
+        Assert.AreEqual(currentHash.Page.ExpectedAfterHash, currentHash.Page.BeforeHash);
+        var mutations = new (string Sql, string Reason)[]
+        {
+            ("UPDATE local_collection_messages SET message_id = 7;", "message_id"),
+            ("UPDATE local_collection_messages SET visible_at = '2026-10-14 13:00:00.000';", "visible_at"),
+            ("UPDATE local_collection_messages SET receipt_handle = 'receipt-mutated';", "receipt_handle"),
+            ("UPDATE local_collection_messages SET receive_count = 2;", "receive_count"),
+            ("UPDATE local_collection_messages SET dead_letter = 1;", "dead_letter"),
+            ("UPDATE local_collection_messages SET created_at = '2026-10-14 12:01:00.000';", "created_at"),
+        };
+        foreach (var (sql, reason) in mutations)
+        {
+            await fixture.ExecuteAsync(fixture.QueuePath, sql);
+            var next = await fixture.InspectLocalQueueHashAsync();
+            Assert.AreNotEqual(next.Page.BeforeHash, currentHash.Page.BeforeHash,
+                $"A physical queue-row mutation to {reason} must change the full-row digest.");
+            Assert.AreEqual(await fixture.ComputeLocalQueueEvidenceHashAsync(), next.Page.BeforeHash);
+            Assert.AreEqual(next.Page.ExpectedAfterHash, next.Page.BeforeHash);
+            Assert.IsNull(next.Result.TypedReferenceFailure, next.Result.TypedReferenceFailure);
+            currentHash = next;
+        }
+    }
+
+    [TestMethod]
+    public async Task AffectedSnapshotBlocksButUnrelatedSnapshotDoesNot()
+    {
+        await using (var unrelated = await StoreFixture.CreateAsync())
+        {
+            await unrelated.SeedHorseAsync(OldHorseId);
+            await unrelated.SeedSerializedHorseEventAsync(OldHorseId);
+            await unrelated.ExecuteAsync(unrelated.EventStorePath, """
+                INSERT INTO SnapshotEntity (AggregateId, AggregateName, AggregateSequenceNumber, Data, Metadata)
+                VALUES ('jockey-00000000-0000-4000-8000-000000000401', 'JockeyAggregate', 1, '{}', '{}');
+                """);
+
+            var result = await unrelated.CreateEngineWithEventFlow().InspectAsync(Manifest(), CancellationToken.None);
+
+            Assert.IsNull(result.TypedReferenceFailure, result.TypedReferenceFailure);
+            Assert.IsFalse(result.CanWrite);
+        }
+
+        await using var affected = await StoreFixture.CreateAsync();
+        await affected.SeedHorseAsync(OldHorseId);
+        await affected.SeedSerializedHorseEventAsync(OldHorseId);
+        await affected.ExecuteAsync(affected.EventStorePath, $$"""
+            INSERT INTO SnapshotEntity (AggregateId, AggregateName, AggregateSequenceNumber, Data, Metadata)
+            VALUES ('{{OldHorseId}}', 'HorseAggregate', 1, '{}', '{}');
+            """);
+
+        var affectedResult = await affected.CreateEngineWithEventFlow().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual("snapshot-recipe-required", affectedResult.TypedReferenceFailure);
+        Assert.IsFalse(affectedResult.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task MemoHorseSubjectChangesWhileTicketMarkManualEntryRemainsByteStable()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        await fixture.SeedMemoAndTicketProjectionsAsync(OldHorseId);
+
+        var result = await fixture.CreateEngineWithEventFlow().InspectAsync(Manifest(), CancellationToken.None);
+
+        var memo = result.TypedReferenceEvidence.First(evidence => evidence.Table == "MemoSubjects"
+            && evidence.BeforeHash != evidence.ExpectedAfterHash);
+        var ticket = result.TypedReferenceEvidence.Single(evidence => evidence.Table == "PredictionTickets");
+        Assert.AreNotEqual(memo.ExpectedAfterHash, memo.BeforeHash);
+        Assert.AreEqual(ticket.ExpectedAfterHash, ticket.BeforeHash,
+            "Ticket marks have a manual entry key but no typed Horse reference and must remain unchanged.");
+        Assert.IsNull(result.TypedReferenceFailure);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task UnknownEventVersionStopsBoundReaderBeforeAnyCompletion()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.EventStorePath,
+            "UPDATE EventEntity SET Metadata = replace(Metadata, '\"event_version\":\"1\"', '\"event_version\":\"99\"');");
+
+        var result = await fixture.CreateEngineWithEventFlow().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual("registered-event-codec-rejected", result.TypedReferenceFailure);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task AggregateSequenceGapStopsBoundReaderBeforeCodecInference()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.EventStorePath, $"""
+            INSERT INTO EventEntity
+                (GlobalSequenceNumber, AggregateId, AggregateName, AggregateSequenceNumber, BatchId, Data, Metadata)
+            SELECT 2, AggregateId, AggregateName, 3, BatchId, Data, Metadata FROM EventEntity;
+            """);
+
+        var result = await fixture.CreateEngineWithEventFlow().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual(HorseIdentityStorePlanStatus.Incomplete, result.Status);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task NullHorseWithDerivedEntryIdStopsTypedProjectionClosure()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        await fixture.SeedRacePredictionContextAsync(OldHorseId,
+            HorseRacingPrediction.Contracts.Common.DeterministicIdGenerator
+                .BuildRaceEntryId("race-typed-reference", OldHorseId));
+        await fixture.ExecuteAsync(fixture.EventStorePath,
+            $"UPDATE RacePredictionContexts SET Entries = replace(Entries, '\"horseId\":\"{OldHorseId}\"', '\"horseId\":null');");
+
+        var result = await fixture.CreateEngineWithEventFlow().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual("null-horse-derived-entry", result.TypedReferenceFailure);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task NullHorseWithUnrelatedEntryTextDoesNotInferDerivedIdentity()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        await fixture.SeedRacePredictionContextAsync(OldHorseId, $"manual-{OldHorseId}-entry");
+        await fixture.ExecuteAsync(fixture.EventStorePath,
+            $"UPDATE RacePredictionContexts SET Entries = replace(Entries, '\"horseId\":\"{OldHorseId}\"', '\"horseId\":null');");
+
+        var result = await fixture.CreateEngineWithEventFlow().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.IsNull(result.TypedReferenceFailure, result.TypedReferenceFailure);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task UnknownAffectedProjectionFieldStopsTypedReferenceClosure()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        await fixture.SeedRacePredictionContextAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.EventStorePath,
+            $"UPDATE RacePredictionContexts SET Entries = replace(Entries, '\"horseId\":\"{OldHorseId}\"', '\"horseId\":\"{OldHorseId}\",\"futureHorseIdentity\":\"{OldHorseId}\"');");
+
+        var result = await fixture.CreateEngineWithEventFlow().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.AreEqual("read-model-json-transform-recipe-required", result.TypedReferenceFailure);
+        Assert.IsFalse(result.CanWrite);
     }
 
     [TestMethod]
@@ -119,6 +680,86 @@ public sealed class HorseIdentityMigrationStoreEngineTests
         Assert.AreEqual(HorseIdentityStorePlanReason.TypedReferenceClosurePending, result.Reason);
         Assert.IsTrue(result.Roots.Single().TargetFailureNotificationExists);
         Assert.IsFalse(result.Roots.Single().HasTargetCollision);
+        Assert.IsFalse(result.CanWrite);
+    }
+
+    [TestMethod]
+    public async Task CollectionRoleLedgerTransformsTypedMetadataAndHistoricalReferencesOnly()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        await fixture.SeedJraResourceAsync(OldHorseId);
+        var requestId = Guid.NewGuid();
+        var taskId = Guid.NewGuid();
+        var notificationId = Guid.NewGuid();
+        await fixture.ExecuteAsync(fixture.CollectionPath, $$"""
+            UPDATE collection_resources
+            SET AttributesJson = '{"requestedByHorseId":"{{OldHorseId}}","discoveredFromType":"Horse","discoveredFromProvider":"JRA","discoveredFromId":"{{OldHorseId}}","discoveryAncestors":"{{OldHorseId}}|horse-unrelated"}'
+            WHERE Type = 'Horse' AND Provider = 'JRA' AND ResourceId = '{{OldHorseId}}';
+            INSERT INTO collection_requests
+                (RequestId, ResourcePk, DefinitionId, RequestedRevision, Reason, Lane, Priority, MetadataJson, RequestedAt)
+            SELECT '{{requestId}}', ResourcePk, 'horse-profile', 1, 'Manual', 'Normal', 10,
+                   '{"requestedByHorseId":"{{OldHorseId}}","note":"keep"}', '2026-10-14 00:00:00'
+            FROM collection_resources WHERE Type = 'Horse' AND Provider = 'JRA' AND ResourceId = '{{OldHorseId}}';
+            INSERT INTO collection_tasks
+                (TaskId, RequestId, ResourcePk, DefinitionId, RequestedRevision, Status, Lane, Priority,
+                 AvailableAt, CreatedAt, UpdatedAt, DispatchGeneration, RaceHoldGeneration, AttemptCount, MetadataJson)
+            SELECT '{{taskId}}', '{{requestId}}', ResourcePk, 'horse-profile', 1, 'Queued', 'Normal', 10,
+                   '2026-10-14 00:00:00', '2026-10-14 00:00:00', '2026-10-14 00:00:00', 0, 0, 0,
+                   '{"requestedByHorseId":"{{OldHorseId}}","note":"preserve"}'
+            FROM collection_resources WHERE Type = 'Horse' AND Provider = 'JRA' AND ResourceId = '{{OldHorseId}}';
+            INSERT INTO collection_failure_notifications
+                (NotificationId, TaskId, Status, AttemptCount, FailedAt, AvailableAt,
+                 PublishAttemptCount, ResolutionStatus, CanonicalResourceType,
+                 CanonicalResourceProvider, CanonicalResourceId)
+            VALUES ('{{notificationId}}', '{{taskId}}', 'Failed', 1, '2026-10-14 00:00:00',
+                    '2026-10-14 00:00:00', 0, 'Open', 'Horse', 'JRA', '{{OldHorseId}}');
+            INSERT INTO collection_subject_identification_selections
+                (NotificationId, TaskId, SelectedName, SelectedUrl, ResourceType, Provider, ResourceId,
+                 DefinitionId, CanonicalTaskId, SelectedAt, CreatedTask, ReusedTask)
+            VALUES ('{{notificationId}}', '{{taskId}}', 'Fixture', 'https://example.invalid/horse',
+                    'Horse', 'JRA', '{{OldHorseId}}', 'horse-profile', '{{taskId}}',
+                    '2026-10-14 00:00:00', 0, 1);
+            """);
+
+        var result = await fixture.CreateEngineWithEventFlow().InspectAsync(Manifest(), CancellationToken.None);
+
+        Assert.IsNull(result.TypedReferenceFailure, result.TypedReferenceFailure);
+        Assert.IsFalse(result.CanWrite);
+        var collectionPages = result.TypedReferenceEvidence.Where(page =>
+            page.Surface == MigrationStoreSurface.CollectionPlatform).ToArray();
+        Assert.IsTrue(collectionPages.Select(page => page.Table).Distinct(StringComparer.Ordinal).Count() >= 25);
+        foreach (var table in new[] { "collection_resources", "collection_requests", "collection_tasks",
+                     "collection_failure_notifications", "collection_subject_identification_selections" })
+            Assert.IsTrue(collectionPages.Any(page => page.Table == table
+                && page.ExpectedAfterHash != page.BeforeHash), $"Expected exact typed changes in {table}.");
+        Assert.IsFalse(result.Roots.Single().HasTargetCollision,
+            "Historical failure/selection references must not be mistaken for target-key collisions.");
+    }
+
+    [TestMethod]
+    public async Task CollectionEvidenceUsesBoundedStableRowIdPages()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        await fixture.ExecuteAsync(fixture.CollectionPath, """
+            WITH RECURSIVE ids(value) AS (
+                SELECT 1 UNION ALL SELECT value + 1 FROM ids WHERE value < 130
+            )
+            INSERT INTO collection_resources (Type, Provider, ResourceId, AttributesJson, CreatedAt)
+            SELECT 'Horse', 'Other', 'unrelated-' || value, '{}', '2026-10-14 00:00:00' FROM ids;
+            """);
+
+        var result = await fixture.CreateEngineWithEventFlow().InspectAsync(Manifest(), CancellationToken.None);
+
+        var pages = result.TypedReferenceEvidence.Where(page => page.Table == "collection_resources").ToArray();
+        Assert.AreEqual(2, pages.Length);
+        CollectionAssert.AreEqual(new long[] { 128, 2 }, pages.Select(page => page.RowCount).ToArray());
+        Assert.IsTrue(pages.All(page => long.TryParse(page.FirstKey, out _) && long.TryParse(page.LastKey, out _)));
+        Assert.IsTrue(long.Parse(pages[0].LastKey!) < long.Parse(pages[1].FirstKey!),
+            "Rowid membership must remain stable even if text identity keys change.");
         Assert.IsFalse(result.CanWrite);
     }
 
@@ -1018,6 +1659,53 @@ public sealed class HorseIdentityMigrationStoreEngineTests
         return Convert.ToHexString(await SHA256.HashDataAsync(stream));
     }
 
+    private static string ComputeEvidenceHash(params string[] values)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var length = new byte[sizeof(int)];
+        foreach (var value in values)
+        {
+            var bytes = System.Text.Encoding.UTF8.GetBytes(value);
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(length, bytes.Length);
+            hash.AppendData(length);
+            hash.AppendData(bytes);
+        }
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
+
+    private static string ComputeEventEvidenceHash(
+        IEnumerable<(long RowId, string BatchId, TypedHorseIdentityEventRecord Source,
+            TypedHorseIdentityEventRecord Record)> rows)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var length = new byte[sizeof(int)];
+        foreach (var (rowId, batchId, _, record) in rows)
+        {
+            var key = rowId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var physicalFields = new[]
+            {
+                ("GlobalSequenceNumber", "integer:" + record.GlobalSequenceNumber.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture)),
+                ("AggregateId", "text:" + record.AggregateId),
+                ("AggregateName", "text:" + record.AggregateName),
+                ("AggregateSequenceNumber", "integer:" + record.AggregateSequenceNumber.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture)),
+                ("BatchId", "text:" + batchId),
+                ("Data", "text:" + record.Data),
+                ("Metadata", "text:" + record.Metadata),
+            };
+            foreach (var value in new[] { key }.Concat(physicalFields.SelectMany(field =>
+                         new[] { field.Item1, field.Item2 })))
+            {
+                var bytes = System.Text.Encoding.UTF8.GetBytes(value);
+                System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(length, bytes.Length);
+                hash.AppendData(length);
+                hash.AppendData(bytes);
+            }
+        }
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
+
     private static HorseIdentityMigrationManifest Manifest() => new(
     [
         new(OldHorseId, JraIdentity, HypothesisAccepted: true),
@@ -1035,27 +1723,36 @@ public sealed class HorseIdentityMigrationStoreEngineTests
         private static readonly string TemporaryParent = Path.Combine(Path.GetTempPath(), "hrp-horse-id-store-engine-tests");
         private readonly string _root;
         private readonly IWebHostEnvironment _environment;
+        private readonly ServiceProvider _eventFlowServices;
 
-        private StoreFixture(string root)
+        private StoreFixture(string root, ServiceProvider eventFlowServices)
         {
             _root = root;
             EventStorePath = Path.Combine(root, "eventstore.db");
             CollectionPath = Path.Combine(root, "collection", "collection-platform.db");
             SchedulePath = Path.Combine(root, "schedule", "prediction-executions.db");
             _environment = new FixtureEnvironment(root);
+            _eventFlowServices = eventFlowServices;
         }
 
         internal string EventStorePath { get; }
         internal string CollectionPath { get; }
         internal string QueuePath => Path.Combine(_root, "queue", "local-collection-queue.db");
         internal string SchedulePath { get; }
+        internal IServiceProvider EventFlowServices => _eventFlowServices;
 
         internal static async Task<StoreFixture> CreateAsync(bool createEventStore = true)
         {
             Directory.CreateDirectory(TemporaryParent);
             var root = Path.Combine(TemporaryParent, Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(root);
-            var fixture = new StoreFixture(root);
+            var eventFlowServices = new ServiceCollection()
+                .AddLogging(builder => builder.SetMinimumLevel(LogLevel.Warning))
+                .AddEventFlow(options => options
+                    .AddDefaults(typeof(HorseAggregate).Assembly)
+                    .AddDefaults(typeof(RaceAggregate).Assembly))
+                .BuildServiceProvider();
+            var fixture = new StoreFixture(root, eventFlowServices);
             if (createEventStore)
                 await fixture.CreateEventStoreAsync();
             await fixture.CreateCollectionStoreAsync();
@@ -1086,6 +1783,34 @@ public sealed class HorseIdentityMigrationStoreEngineTests
             });
             var readers = new TypedHorseIdentityStoreReaders(configuration, collectionOptions,
                 scheduleOptions, queueOptions, _environment);
+            return new(readers);
+        }
+
+        internal TypedHorseIdentityStoreEngine CreateEngineWithEventFlow(string queueProvider = "Sqs")
+        {
+            var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:EventStore"] = $"Data Source={EventStorePath};Pooling=False",
+            }).Build();
+            var collectionOptions = Options.Create(new CollectionPlatformOptions
+            {
+                StateDirectory = Path.GetDirectoryName(CollectionPath)!,
+                DatabaseFileName = Path.GetFileName(CollectionPath),
+            });
+            var scheduleOptions = Options.Create(new PredictionScheduleOptions
+            {
+                StateDirectory = Path.GetDirectoryName(SchedulePath)!,
+                StoreFileName = Path.GetFileName(SchedulePath),
+            });
+            var queueOptions = Options.Create(new CollectionQueueOptions
+            {
+                Provider = queueProvider,
+                LocalDatabasePath = QueuePath,
+            });
+            var readers = new TypedHorseIdentityStoreReaders(configuration, collectionOptions,
+                scheduleOptions, queueOptions, _environment,
+                _eventFlowServices.GetRequiredService<IEventJsonSerializer>(),
+                _eventFlowServices.GetRequiredService<IDomainEventFactory>());
             return new(readers);
         }
 
@@ -1133,6 +1858,308 @@ public sealed class HorseIdentityMigrationStoreEngineTests
                 """;
             command.Parameters.AddWithValue("$resource", resourceId);
             await command.ExecuteNonQueryAsync();
+        }
+
+        internal async Task SeedLocalQueueMessageAsync(string body)
+        {
+            _ = new LocalCollectionQueue(QueuePath);
+            await using var connection = new SqliteConnection($"Data Source={QueuePath};Pooling=False");
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO local_collection_messages
+                    (body, visible_at, receipt_handle, receive_count, dead_letter, created_at)
+                VALUES ($body, '2026-10-14 12:00:00.000', NULL, 0, 0, '2026-10-14 11:59:00.000');
+                """;
+            command.Parameters.AddWithValue("$body", body);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        internal async Task<(HorseIdentityStorePlan Result, TypedHorseIdentityPageEvidence Page)>
+            InspectLocalQueueHashAsync()
+        {
+            var result = await CreateEngineWithEventFlow("Local")
+                .InspectAsync(Manifest(), CancellationToken.None);
+            var page = result.TypedReferenceEvidence.Single(evidence =>
+                evidence.Table == "local_collection_messages");
+            return (result, page);
+        }
+
+        internal async Task<string> ComputeLocalQueueEvidenceHashAsync()
+        {
+            await using var connection = new SqliteConnection($"Data Source={QueuePath};Pooling=False");
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT rowid, message_id, body, visible_at, receipt_handle,
+                       receive_count, dead_letter, created_at
+                FROM local_collection_messages ORDER BY rowid;
+                """;
+            await using var reader = await command.ExecuteReaderAsync();
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            while (await reader.ReadAsync())
+            {
+                var rowId = reader.GetInt64(0).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var fields = new (string Name, string Value)[]
+                {
+                    ("message_id", "integer:" + reader.GetInt64(1).ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                    ("body", "text:" + reader.GetString(2)),
+                    ("visible_at", "text:" + reader.GetString(3)),
+                    ("receipt_handle", reader.IsDBNull(4) ? "<null>" : "text:" + reader.GetString(4)),
+                    ("receive_count", "integer:" + reader.GetInt64(5).ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                    ("dead_letter", "integer:" + reader.GetInt64(6).ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                    ("created_at", "text:" + reader.GetString(7)),
+                };
+                foreach (var value in new[] { rowId }.Concat(fields.SelectMany(field =>
+                             new[] { field.Name, field.Value })))
+                {
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(value);
+                    var length = new byte[sizeof(int)];
+                    System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(length, bytes.Length);
+                    hash.AppendData(length);
+                    hash.AppendData(bytes);
+                }
+            }
+            return Convert.ToHexString(hash.GetHashAndReset());
+        }
+
+        internal async Task SeedRacePredictionContextAsync(string horseId, string? entryId = null)
+        {
+            await using var connection = new SqliteConnection($"Data Source={EventStorePath};Pooling=False");
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO RacePredictionContexts
+                    (RaceId, Status, Entries, WeatherObservations, TrackConditionObservations, OddsSnapshots)
+                VALUES ('race-typed-reference', 0, $entries, '[]', '[]', '[]');
+                """;
+            command.Parameters.AddWithValue("$entries", $$"""
+                [{"entryId":"{{entryId ?? "manual-entry-001"}}","horseId":"{{horseId}}","horseNumber":1,"jockeyId":"jockey-1","trainerId":"trainer-1","gateNumber":1,"assignedWeight":55.0,"sexCode":"M","age":4,"declaredWeight":480.0,"declaredWeightDiff":0.0,"runningStyleCode":"Front","ownerName":"Owner","participationStatus":0}]
+                """);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        internal async Task<string[]> ReadRacePredictionContextAsync(string raceId)
+        {
+            await using var connection = new SqliteConnection($"Data Source={EventStorePath};Pooling=False");
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT RaceId, Entries, WeatherObservations, TrackConditionObservations, OddsSnapshots FROM RacePredictionContexts WHERE RaceId = $raceId;";
+            command.Parameters.AddWithValue("$raceId", raceId);
+            await using var reader = await command.ExecuteReaderAsync();
+            Assert.IsTrue(await reader.ReadAsync());
+            return Enumerable.Range(0, reader.FieldCount).Select(reader.GetString).ToArray();
+        }
+
+        internal async Task<string> ComputeRacePredictionContextExpectedAfterHashAsync(
+            string raceId, string expectedEntries)
+        {
+            await using var connection = new SqliteConnection($"Data Source={EventStorePath};Pooling=False");
+            await connection.OpenAsync();
+            var columns = new List<string>();
+            await using (var schema = connection.CreateCommand())
+            {
+                schema.CommandText = "PRAGMA table_info(\"RacePredictionContexts\");";
+                await using var schemaReader = await schema.ExecuteReaderAsync();
+                while (await schemaReader.ReadAsync()) columns.Add(schemaReader.GetString(1));
+            }
+
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT rowid,* FROM RacePredictionContexts WHERE RaceId = $raceId;";
+            command.Parameters.AddWithValue("$raceId", raceId);
+            await using var reader = await command.ExecuteReaderAsync();
+            Assert.IsTrue(await reader.ReadAsync());
+            var values = new List<string> { reader.GetInt64(0).ToString(System.Globalization.CultureInfo.InvariantCulture) };
+            for (var index = 0; index < columns.Count; index++)
+            {
+                values.Add(columns[index]);
+                var value = reader.GetValue(index + 1);
+                values.Add(columns[index] == "Entries" ? "text:" + expectedEntries : StableSqlEvidenceValue(value));
+            }
+            return ComputeEvidenceHash(values.ToArray());
+        }
+
+        private static string StableSqlEvidenceValue(object value) => value switch
+        {
+            DBNull => "<null>",
+            string text => "text:" + text,
+            byte[] bytes => "blob:" + Convert.ToBase64String(bytes),
+            long number => "integer:" + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            int number => "integer:" + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            double number => "real:" + number.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+            _ => value.GetType().FullName + ":" + Convert.ToString(value,
+                System.Globalization.CultureInfo.InvariantCulture),
+        };
+
+        internal async Task<string> ReadProjectionJsonAsync(
+            string table, string column, string keyColumn, string key)
+        {
+            await using var connection = new SqliteConnection($"Data Source={EventStorePath};Pooling=False");
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = $"SELECT \"{column}\" FROM \"{table}\" WHERE \"{keyColumn}\" = $key;";
+            command.Parameters.AddWithValue("$key", key);
+            var value = await command.ExecuteScalarAsync();
+            Assert.IsNotNull(value);
+            return (string)value;
+        }
+
+        internal async Task<(string AggregateId, string RaceId)> SeedSerializedTicketStreamAsync(string horseId)
+        {
+            var aggregateId = "predictionticket-00000000-0000-4000-8000-000000000201";
+            var raceId = "race-ticket-context-201";
+            IAggregateEvent[] aggregateEvents =
+            [
+                new PredictionTicketCreated(raceId, "fixture", "predictor-201", .75m,
+                    $"summary {horseId}", $"fingerprint {horseId}"),
+                new PredictionMarkAdded(
+                    HorseRacingPrediction.Contracts.Common.DeterministicIdGenerator
+                        .BuildRaceEntryId(raceId, horseId), "◎", 1, 0.9m, $"comment {horseId}"),
+            ];
+            var factory = _eventFlowServices.GetRequiredService<IDomainEventFactory>();
+            var serializer = _eventFlowServices.GetRequiredService<IEventJsonSerializer>();
+            await using var connection = new SqliteConnection($"Data Source={EventStorePath};Pooling=False");
+            await connection.OpenAsync();
+            for (var index = 0; index < aggregateEvents.Length; index++)
+            {
+                var sequence = index + 1;
+                var aggregateEvent = aggregateEvents[index];
+                var metadata = new Metadata(new Dictionary<string, string>
+                {
+                    ["aggregate_id"] = aggregateId,
+                    ["aggregate_name"] = nameof(PredictionTicketAggregate),
+                    ["aggregate_sequence_number"] = sequence.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["global_sequence_number"] = (index + 2).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["batch_id"] = "ticket-fixture-batch",
+                    ["event_name"] = aggregateEvent.GetType().Name,
+                    ["event_version"] = "1",
+                    ["event_id"] = $"event-{Guid.NewGuid():D}",
+                    ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
+                });
+                var domainEvent = factory.Create(aggregateEvent, metadata, aggregateId, sequence);
+                var serialized = serializer.Serialize(domainEvent);
+                await using var command = connection.CreateCommand();
+                command.CommandText = """
+                    INSERT INTO EventEntity
+                        (GlobalSequenceNumber, AggregateId, AggregateName, AggregateSequenceNumber, BatchId, Data, Metadata)
+                    VALUES ($global, $aggregate, $name, $sequence, $batch, $data, $metadata);
+                    """;
+                command.Parameters.AddWithValue("$global", index + 2);
+                command.Parameters.AddWithValue("$aggregate", aggregateId);
+                command.Parameters.AddWithValue("$name", nameof(PredictionTicketAggregate));
+                command.Parameters.AddWithValue("$sequence", sequence);
+                command.Parameters.AddWithValue("$batch", "ticket-fixture-batch");
+                command.Parameters.AddWithValue("$data", serialized.SerializedData);
+                command.Parameters.AddWithValue("$metadata", serialized.SerializedMetadata);
+                await command.ExecuteNonQueryAsync();
+            }
+            return (aggregateId, raceId);
+        }
+
+        internal async Task<IReadOnlyList<(long RowId, string BatchId, TypedHorseIdentityEventRecord Record)>> ReadEventRowsAsync()
+        {
+            await using var connection = new SqliteConnection($"Data Source={EventStorePath};Pooling=False");
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT rowid, GlobalSequenceNumber, AggregateId, AggregateName, AggregateSequenceNumber,
+                       BatchId, Data, Metadata
+                FROM EventEntity ORDER BY AggregateId, AggregateSequenceNumber, rowid;
+                """;
+            await using var reader = await command.ExecuteReaderAsync();
+            var rows = new List<(long, string, TypedHorseIdentityEventRecord)>();
+            while (await reader.ReadAsync())
+                rows.Add((reader.GetInt64(0), reader.GetString(5),
+                    new TypedHorseIdentityEventRecord(reader.GetInt64(1), reader.GetString(2),
+                        reader.GetString(3), reader.GetInt32(4), reader.GetString(6), reader.GetString(7))));
+            return rows;
+        }
+
+        internal async Task SeedSerializedHorseEventAsync(string horseId)
+        {
+            var metadata = new Metadata(new Dictionary<string, string>
+            {
+                ["aggregate_id"] = horseId,
+                ["aggregate_name"] = nameof(HorseAggregate),
+                ["aggregate_sequence_number"] = "1",
+                ["global_sequence_number"] = "1",
+                ["batch_id"] = "fixture-batch",
+                ["event_name"] = nameof(HorseRegistered),
+                ["event_version"] = "1",
+                ["event_id"] = $"event-{Guid.NewGuid():D}",
+                ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
+            });
+            var factory = _eventFlowServices.GetRequiredService<IDomainEventFactory>();
+            var serializer = _eventFlowServices.GetRequiredService<IEventJsonSerializer>();
+            var domainEvent = factory.Create(new HorseRegistered("Fixture", "Fixture"), metadata, horseId, 1);
+            var serialized = serializer.Serialize(domainEvent);
+            await ExecuteAsync(EventStorePath, $"""
+                DELETE FROM EventEntity;
+                INSERT INTO EventEntity
+                    (GlobalSequenceNumber, AggregateId, AggregateName, AggregateSequenceNumber, BatchId, Data, Metadata)
+                VALUES (1, '{horseId}', '{nameof(HorseAggregate)}', 1, 'fixture-batch',
+                    '{serialized.SerializedData.Replace("'", "''")}', '{serialized.SerializedMetadata.Replace("'", "''")}');
+                """);
+        }
+
+        internal async Task SeedSerializedJockeyTrainerEventsAsync()
+        {
+            var factory = _eventFlowServices.GetRequiredService<IDomainEventFactory>();
+            var serializer = _eventFlowServices.GetRequiredService<IEventJsonSerializer>();
+            var events = new (string Id, string Name, IAggregateEvent Event)[]
+            {
+                ("jockey-00000000-0000-4000-8000-000000000301", nameof(JockeyAggregate),
+                    new JockeyRegistered("Fixture Jockey", "fixture jockey")),
+                ("trainer-00000000-0000-4000-8000-000000000302", nameof(TrainerAggregate),
+                    new TrainerRegistered("Fixture Trainer", "fixture trainer")),
+            };
+            await using var connection = new SqliteConnection($"Data Source={EventStorePath};Pooling=False");
+            await connection.OpenAsync();
+            for (var index = 0; index < events.Length; index++)
+            {
+                var (aggregateId, aggregateName, aggregateEvent) = events[index];
+                var metadata = new Metadata(new Dictionary<string, string>
+                {
+                    ["aggregate_id"] = aggregateId,
+                    ["aggregate_name"] = aggregateName,
+                    ["aggregate_sequence_number"] = "1",
+                    ["global_sequence_number"] = (index + 2).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["batch_id"] = "subject-fixture-batch",
+                    ["event_name"] = aggregateEvent.GetType().Name,
+                    ["event_version"] = "1",
+                    ["event_id"] = $"event-{Guid.NewGuid():D}",
+                    ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
+                });
+                var domainEvent = factory.Create(aggregateEvent, metadata, aggregateId, 1);
+                var serialized = serializer.Serialize(domainEvent);
+                await using var command = connection.CreateCommand();
+                command.CommandText = """
+                    INSERT INTO EventEntity
+                        (GlobalSequenceNumber, AggregateId, AggregateName, AggregateSequenceNumber, BatchId, Data, Metadata)
+                    VALUES ($global, $aggregate, $name, 1, 'subject-fixture-batch', $data, $metadata);
+                    """;
+                command.Parameters.AddWithValue("$global", index + 2);
+                command.Parameters.AddWithValue("$aggregate", aggregateId);
+                command.Parameters.AddWithValue("$name", aggregateName);
+                command.Parameters.AddWithValue("$data", serialized.SerializedData);
+                command.Parameters.AddWithValue("$metadata", serialized.SerializedMetadata);
+                await command.ExecuteNonQueryAsync();
+            }
+        }
+
+        internal async Task SeedMemoAndTicketProjectionsAsync(string horseId)
+        {
+            await ExecuteAsync(EventStorePath, $$"""
+                INSERT INTO MemoSubjects (SubjectKey, Memos) VALUES
+                    ('Horse:{{horseId}}', '[{"memoId":"memo-001","authorId":"author-001","memoType":"Note","content":"keep","createdAt":"2026-10-14T00:00:00+09:00","subjects":[{"subjectType":"Horse","subjectId":"{{horseId}}"}],"links":[]}]' );
+                INSERT INTO PredictionTickets
+                    (PredictionTicketId, RaceId, PredictorType, PredictorId, ConfidenceScore, SummaryComment,
+                     PredictedAt, TicketStatus, Marks, Evaluations, EvaluationStatus)
+                VALUES ('ticket-001', 'race-001', 'fixture', 'predictor-001', 0.5, 'keep',
+                    '2026-10-14T00:00:00+09:00', 0,
+                    '[{"entryId":"manual-entry-001","markCode":"A","predictedRank":1,"score":0.9,"comment":"keep"}]',
+                    '[]', 0);
+                """);
         }
 
         internal async Task ExecuteAsync(string path, string sql)
@@ -1184,6 +2211,7 @@ public sealed class HorseIdentityMigrationStoreEngineTests
 
         public ValueTask DisposeAsync()
         {
+            _eventFlowServices.Dispose();
             if (!Path.GetFullPath(_root).StartsWith(Path.GetFullPath(TemporaryParent) + Path.DirectorySeparatorChar,
                     StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Refusing to delete a path outside the owned test root.");

@@ -28,12 +28,14 @@ internal sealed record HorseIdentityStorePlan(
     IReadOnlyList<MigrationStoreSchema> Stores,
     IReadOnlyList<MigrationRootProbe> Roots,
     int ManifestErrorCount,
-    bool CanWrite)
+    bool CanWrite,
+    IReadOnlyList<TypedHorseIdentityPageEvidence> TypedReferenceEvidence,
+    string? TypedReferenceFailure)
 {
     internal static HorseIdentityStorePlan Invalid(int errorCount) => new(
         HorseIdentityStorePlanStatus.InvalidManifest,
         HorseIdentityStorePlanReason.InvalidManifest,
-        [], [], errorCount, CanWrite: false);
+        [], [], errorCount, CanWrite: false, [], null);
 }
 
 /// <summary>
@@ -62,11 +64,18 @@ internal sealed class TypedHorseIdentityStoreEngine(TypedHorseIdentityStoreReade
             if (snapshot.Roots.Any(root => root.HasTargetCollision))
                 return new(HorseIdentityStorePlanStatus.DestinationCollision,
                     HorseIdentityStorePlanReason.DestinationCollision, snapshot.Schemas, snapshot.Roots,
-                    validation.Errors.Count, CanWrite: false);
+                    validation.Errors.Count, CanWrite: false, snapshot.TypedReferences?.Pages ?? [],
+                    snapshot.TypedReferences?.Failure);
             if (snapshot.Roots.Any(root => root.SourceStatus != MigrationRootStatus.Present))
                 return Incomplete(HorseIdentityStorePlanReason.SourceRootMissing, snapshot, validation.Errors.Count);
 
-            // The first engine slice has no typed-reference closure, immutable plan, journal, or writer.
+            if (snapshot.TypedReferences?.HasCollision == true)
+                return new(HorseIdentityStorePlanStatus.DestinationCollision,
+                    HorseIdentityStorePlanReason.DestinationCollision, snapshot.Schemas, snapshot.Roots,
+                    validation.Errors.Count, CanWrite: false, snapshot.TypedReferences.Pages,
+                    snapshot.TypedReferences.Failure);
+
+            // The typed closure is read-only evidence only; the physical writer remains a later release.
             return Incomplete(HorseIdentityStorePlanReason.TypedReferenceClosurePending, snapshot,
                 validation.Errors.Count);
         }
@@ -78,7 +87,7 @@ internal sealed class TypedHorseIdentityStoreEngine(TypedHorseIdentityStoreReade
         {
             // Do not echo file paths, SQL, source values, or provider exception details.
             return new(HorseIdentityStorePlanStatus.Incomplete, HorseIdentityStorePlanReason.ReadUnavailable,
-                [], [], validation.Errors.Count, CanWrite: false);
+                [], [], validation.Errors.Count, CanWrite: false, [], null);
         }
     }
 
@@ -89,5 +98,7 @@ internal sealed class TypedHorseIdentityStoreEngine(TypedHorseIdentityStoreReade
         snapshot.Schemas,
         snapshot.Roots,
         ManifestErrorCount: manifestErrorCount,
-        CanWrite: false);
+        CanWrite: false,
+        TypedReferenceEvidence: snapshot.TypedReferences?.Pages ?? [],
+        TypedReferenceFailure: snapshot.TypedReferences?.Failure);
 }

@@ -2,6 +2,8 @@ using System.Data;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using EventFlow.Aggregates;
+using EventFlow.EventStores;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Api.Identity;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
@@ -71,7 +73,8 @@ internal sealed record MigrationRootProbe(
 internal sealed record MigrationStoreReadSnapshot(
     IReadOnlyList<MigrationStoreSchema> Schemas,
     IReadOnlyList<MigrationRootProbe> Roots,
-    bool TypedReferenceClosureInspected);
+    bool TypedReferenceClosureInspected,
+    TypedHorseIdentityReferenceReadResult? TypedReferences);
 
 /// <summary>
 /// Reads configured SQLite surfaces without resolving normal store constructors or triggering schema setup.
@@ -82,7 +85,9 @@ internal sealed class TypedHorseIdentityStoreReaders(
     IOptions<CollectionPlatformOptions> collectionOptions,
     IOptions<PredictionScheduleOptions> scheduleOptions,
     IOptions<CollectionQueueOptions> queueOptions,
-    IWebHostEnvironment environment)
+    IWebHostEnvironment environment,
+    IEventJsonSerializer? eventJsonSerializer = null,
+    IDomainEventFactory? domainEventFactory = null)
 {
     private const int CommandTimeoutSeconds = 1;
     private const int SchemaObjectPageSize = 128;
@@ -139,16 +144,19 @@ internal sealed class TypedHorseIdentityStoreReaders(
 
         if (schemas.Any(schema => schema.Status is not (MigrationStoreReadStatus.Observed
                 or MigrationStoreReadStatus.NotConfigured)))
-            return new(schemas, [], TypedReferenceClosureInspected: false);
+            return new(schemas, [], TypedReferenceClosureInspected: false, TypedReferences: null);
 
         var eventStore = configured.Single(store => store.Surface == MigrationStoreSurface.EventStore);
         var collection = configured.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform);
         var roots = await InspectRootsAsync(eventStore.Path!, collection.Path!, mappings, cancellationToken)
             .ConfigureAwait(false);
 
-        // T7a does not inspect the typed read-model/event/reference closure. A successful root probe is
-        // still explicitly incomplete and cannot authorize a source write.
-        return new(schemas, roots, TypedReferenceClosureInspected: false);
+        var typedReferences = await new TypedHorseIdentityReferenceReader(eventJsonSerializer, domainEventFactory).InspectAsync(
+            eventStore.Path!, collection.Path!,
+            configured.Single(store => store.Surface == MigrationStoreSurface.PredictionSchedule).Path!,
+            configured.Single(store => store.Surface == MigrationStoreSurface.LocalCollectionQueue).Path,
+            mappings, cancellationToken).ConfigureAwait(false);
+        return new(schemas, roots, typedReferences.IsComplete, typedReferences);
     }
 
     private List<ConfiguredStore> ResolveConfiguredStores()
@@ -406,7 +414,7 @@ internal sealed class TypedHorseIdentityStoreReaders(
                         ["visible_at"] = new("TEXT", false, 0),
                         ["receipt_handle"] = new("TEXT", true, 0),
                         ["receive_count"] = new("INTEGER", false, 0, "0"),
-                        ["dead_letter"] = new("INTEGER", false, 0),
+                        ["dead_letter"] = new("INTEGER", false, 0, "0"),
                         ["created_at"] = new("TEXT", false, 0),
                     }, new Dictionary<string, ExpectedIndex>(StringComparer.OrdinalIgnoreCase)),
             };
@@ -636,6 +644,17 @@ internal sealed class TypedHorseIdentityStoreReaders(
                         ["applied_at"] = new("TEXT", false, 0),
                     }, new Dictionary<string, ExpectedIndex>(StringComparer.OrdinalIgnoreCase)),
             };
+        if (surface == MigrationStoreSurface.LocalCollectionQueue)
+            return new(StringComparer.OrdinalIgnoreCase)
+            {
+                // SQLite creates this internal table for the queue's AUTOINCREMENT primary key.
+                ["sqlite_sequence"] = new(
+                    new Dictionary<string, ExpectedColumn>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["name"] = new("TEXT", true, 0),
+                        ["seq"] = new("INTEGER", true, 0),
+                    }, new Dictionary<string, ExpectedIndex>(StringComparer.OrdinalIgnoreCase)),
+            };
         return new(StringComparer.OrdinalIgnoreCase);
     }
 
@@ -648,7 +667,10 @@ internal sealed class TypedHorseIdentityStoreReaders(
         bool allowCanonicalFairnessCheck,
         CancellationToken cancellationToken)
     {
-        if (!MatchesSupportedTableSyntax(tableName, tableSql, allowCanonicalFairnessCheck))
+        var sqliteInternalSequence = tableName.Equals("sqlite_sequence", StringComparison.OrdinalIgnoreCase)
+            && tableSql is null;
+        if (!sqliteInternalSequence && !MatchesSupportedTableSyntax(tableName, tableSql,
+                allowCanonicalFairnessCheck))
             return false;
 
         var actualColumns = new Dictionary<string, ActualColumn>(StringComparer.OrdinalIgnoreCase);
