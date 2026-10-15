@@ -173,6 +173,17 @@ builder.Services.AddSingleton<IdentityMigrationPreflightService>(services => new
     services.GetRequiredService<IdentityMigrationPreflightConfiguredSurfaceReader>(),
     services.GetRequiredService<IdentityMigrationPreflightCursorProtector>(),
     services.GetRequiredService<TimeProvider>()));
+builder.Services.AddSingleton<HorseIdentityMigrationJournal>(_ =>
+    HorseIdentityMigrationRuntimeMode.CreateJournal(builder));
+builder.Services.AddSingleton<TypedHorseIdentityStoreReaders>(services => new(
+    builder.Configuration,
+    services.GetRequiredService<IOptions<CollectionPlatformOptions>>(),
+    services.GetRequiredService<IOptions<PredictionScheduleOptions>>(),
+    services.GetRequiredService<IOptions<CollectionQueueOptions>>(),
+    services.GetRequiredService<IWebHostEnvironment>(),
+    services.GetRequiredService<EventFlow.EventStores.IEventJsonSerializer>(),
+    services.GetRequiredService<EventFlow.EventStores.IDomainEventFactory>()));
+builder.Services.AddSingleton<TypedHorseIdentityStoreEngine>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.Configure<CollectionMonitoringOptions>(
     builder.Configuration.GetSection(CollectionMonitoringOptions.SectionName));

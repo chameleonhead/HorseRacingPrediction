@@ -6,9 +6,14 @@ using HorseRacingPrediction.Contracts.Common;
 using HorseRacingPrediction.Api.Identity;
 using HorseRacingPrediction.Api.IdentityMigration;
 using HorseRacingPrediction.Contracts.Identity;
+using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Domain.Predictions;
 using HorseRacingPrediction.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -74,15 +79,34 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
             using var health = await client.GetAsync("/health");
             Assert.AreEqual(HttpStatusCode.OK, health.StatusCode);
 
-            using var denied = await client.GetAsync($"{HorseIdentityMigrationRuntimeMode.StatusRoute.Replace("{operationId:guid}", operationId.ToString("D"))}");
+            using var loginPage = await client.GetAsync($"/settings/horse-id-migration?operationId={operationId:D}");
+            Assert.AreEqual(HttpStatusCode.OK, loginPage.StatusCode,
+                "The cookie-protected journal status page should redirect anonymous users to the existing login page.");
+            StringAssert.Contains(await loginPage.Content.ReadAsStringAsync(), "ログイン");
+
+            using var login = await client.PostAsync("/login", new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["username"] = "user",
+                ["password"] = fixture.ApiKey,
+                ["ReturnUrl"] = $"/settings/horse-id-migration?operationId={operationId:D}",
+            }));
+            Assert.AreEqual(HttpStatusCode.OK, login.StatusCode,
+                "Successful cookie login should reach the journal-only status page after its redirect.");
+            var html = await login.Content.ReadAsStringAsync();
+            StringAssert.Contains(html, "Status: <strong>Partial</strong>");
+            StringAssert.Contains(html, operationId.ToString("D"));
+            Assert.AreEqual("no-store, no-cache, max-age=0", login.Headers.CacheControl?.ToString());
+
+            using var denied = await client.GetAsync($"/api/v2/admin/horse-id-migration-operations/{operationId:D}");
             Assert.AreEqual(HttpStatusCode.Unauthorized, denied.StatusCode,
-                "The API-key middleware must reject the request before journal-status routing.");
+                "A valid cookie must not bypass API-key protection for JSON status.");
 
             client.DefaultRequestHeaders.Add("X-Test-Horse-Key", fixture.ApiKey);
             using var status = await client.GetAsync($"/api/v2/admin/horse-id-migration-operations/{operationId:D}");
             Assert.AreEqual(HttpStatusCode.OK, status.StatusCode);
             var body = await status.Content.ReadAsStringAsync();
-            StringAssert.Contains(body, "PartialUnverified");
+            StringAssert.Contains(body, "\"status\":\"Partial\"");
+            Assert.AreEqual("no-store, no-cache, max-age=0", status.Headers.CacheControl?.ToString());
             Assert.IsFalse(File.Exists(fixture.EventStorePath));
             Assert.IsFalse(File.Exists(fixture.CollectionStorePath));
             Assert.IsFalse(File.Exists(fixture.ScheduleStorePath));
@@ -113,6 +137,33 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
             Assert.AreEqual(HttpStatusCode.OK, status.StatusCode);
             Assert.AreEqual(HorseIdentityMigrationOperationStatus.Running,
                 (await fixture.Journal.GetStatusAsync(operationId))!.Status);
+        }
+        finally
+        {
+            await RuntimeFixture.StopAsync(child);
+        }
+    }
+
+    [TestMethod]
+    public async Task NormalHostRegistersRealPreviewAndJournalServicesBehindTheAdminApiClient()
+    {
+        using var fixture = new RuntimeFixture();
+        using var child = fixture.StartApiProcess(maintenanceMode: true);
+        try
+        {
+            using var transport = await fixture.WaitForHealthAsync(child);
+            var client = new AdminApiClient(transport, new AdminApiBaseAddressResolver(new StubServer()),
+                Options.Create(new ApiKeyOptions { HeaderName = "X-Test-Horse-Key", Key = fixture.ApiKey }));
+            var preview = await client.PreviewHorseIdentityMigrationAsync(Manifest());
+            Assert.IsNotNull(preview,
+                "The normal Program registrations must resolve the configured reader, EventFlow codecs, and engine.");
+            Assert.IsFalse(preview.CanStage, "An empty configured source has no canonical horse root to admit.");
+            var repeatedPreview = await client.PreviewHorseIdentityMigrationAsync(Manifest());
+            Assert.IsNotNull(repeatedPreview);
+            Assert.AreEqual(preview.Fingerprint, repeatedPreview.Fingerprint,
+                "Repeated requests through the real host must read stable evidence without changing source state.");
+            Assert.IsNull(await client.GetHorseIdentityMigrationOperationAsync(Guid.NewGuid()),
+                "The actual Program journal registration should serve a missing status as not found.");
         }
         finally
         {
@@ -322,7 +373,7 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
         internal string ApiKey { get; }
         internal HorseIdentityMigrationJournal Journal { get; }
 
-        internal Process StartApiProcess()
+        internal Process StartApiProcess(bool maintenanceMode = false)
         {
             var apiAssembly = typeof(HorseIdentityMigrationRuntimeMode).Assembly.Location;
             var process = new Process
@@ -342,6 +393,7 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
             process.StartInfo.ArgumentList.Add("--urls");
             process.StartInfo.ArgumentList.Add($"http://127.0.0.1:{_port}");
             process.StartInfo.Environment["CollectionPlatform__StateDirectory"] = StateDirectory;
+            process.StartInfo.Environment["CollectionPlatform__MaintenanceMode"] = maintenanceMode ? "true" : "false";
             process.StartInfo.Environment["ConnectionStrings__EventStore"] = $"Data Source={EventStorePath}";
             process.StartInfo.Environment["PredictionScheduling__StateDirectory"] = Path.GetDirectoryName(ScheduleStorePath)!;
             process.StartInfo.Environment["PredictionScheduling__StoreFileName"] = Path.GetFileName(ScheduleStorePath);
@@ -401,5 +453,14 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
         {
             if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
         }
+    }
+
+    private sealed class StubServer : IServer
+    {
+        public IFeatureCollection Features { get; } = new FeatureCollection();
+        public Task StartAsync<TContext>(IHttpApplication<TContext> application, CancellationToken cancellationToken)
+            where TContext : notnull => Task.CompletedTask;
+        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public void Dispose() { }
     }
 }

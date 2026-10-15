@@ -1,0 +1,172 @@
+using System.Text.Json;
+using HorseRacingPrediction.Api.Identity;
+using HorseRacingPrediction.Api.IdentityMigration;
+using HorseRacingPrediction.Contracts.Identity;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.Sqlite;
+
+namespace HorseRacingPrediction.Api.Endpoints.IdentityMigration;
+
+internal static class HorseIdentityMigrationEndpoints
+{
+    private const int MaximumBodyBytes = HorseIdentityMigrationJournal.MaximumRequestBytes;
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private const string PreviewPath = "/v2/admin/horse-id-migration-previews";
+    private const string OperationsPath = "/v2/admin/horse-id-migration-operations";
+
+    internal static void Map(IEndpointRouteBuilder endpoints)
+    {
+        endpoints.MapPost(PreviewPath, PreviewAsync);
+        endpoints.MapPost(OperationsPath, StageAsync);
+        endpoints.MapGet(OperationsPath + "/{operationId}", GetStatusAsync);
+    }
+
+    private static async Task<IResult> PreviewAsync(
+        HttpRequest request, HttpResponse response, [FromServices] TypedHorseIdentityStoreEngine engine,
+        CancellationToken cancellationToken)
+    {
+        SetNoStore(response);
+        var parsed = await ReadBodyAsync<HorseIdentityMigrationManifest>(request, cancellationToken).ConfigureAwait(false);
+        if (!parsed.Success) return Error(parsed.StatusCode, parsed.ErrorCode!);
+        if (!HorseIdentityMigrationManifestPolicy.Validate(parsed.Value).IsValid)
+            return Error(StatusCodes.Status400BadRequest, "InvalidManifest");
+        var preview = await engine.InspectPreviewAsync(parsed.Value, cancellationToken).ConfigureAwait(false);
+        return Results.Ok(preview);
+    }
+
+    private static async Task<IResult> StageAsync(
+        HttpRequest request, HttpResponse response, [FromServices] TypedHorseIdentityStoreEngine engine,
+        [FromServices] HorseIdentityMigrationJournal journal, [FromServices] TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        SetNoStore(response);
+        var parsed = await ReadBodyAsync<HorseIdentityMigrationStageRequest>(request, cancellationToken).ConfigureAwait(false);
+        if (!parsed.Success) return Error(parsed.StatusCode, parsed.ErrorCode!);
+        var body = parsed.Value;
+        if (body?.Manifest is null || string.IsNullOrWhiteSpace(body.PreviewFingerprint)
+            || body.PreviewFingerprint.Length != 64
+            || !body.PreviewFingerprint.All(Uri.IsHexDigit))
+            return Error(StatusCodes.Status400BadRequest, "InvalidRequest");
+
+        var validation = HorseIdentityMigrationManifestPolicy.Validate(body.Manifest);
+        if (!validation.IsValid) return Error(StatusCodes.Status400BadRequest, "InvalidManifest");
+
+        try
+        {
+            var fresh = await engine.InspectPreviewAsync(body.Manifest, cancellationToken).ConfigureAwait(false);
+            if (!fresh.CanStage || fresh.Fingerprint is null
+                || !string.Equals(fresh.Fingerprint, body.PreviewFingerprint, StringComparison.Ordinal))
+            {
+                if (fresh.Blockers.Contains(HorseIdentityMigrationPreviewBlocker.ReadUnavailable)
+                    || fresh.Blockers.Contains(HorseIdentityMigrationPreviewBlocker.StoreUnavailable))
+                    return Error(StatusCodes.Status503ServiceUnavailable, "Unavailable");
+                if (fresh.Blockers.Contains(HorseIdentityMigrationPreviewBlocker.SummaryTooLarge))
+                    return Error(StatusCodes.Status429TooManyRequests, "CapacityExceeded");
+                if (fresh.Blockers.Contains(HorseIdentityMigrationPreviewBlocker.InvalidManifest))
+                    return Error(StatusCodes.Status400BadRequest, "InvalidManifest");
+                return Error(StatusCodes.Status409Conflict, "PreviewStale");
+            }
+
+            var operationId = Guid.NewGuid();
+            var outcome = await journal.StageAsync(operationId, body.Manifest, timeProvider.GetUtcNow(), cancellationToken)
+                .ConfigureAwait(false);
+            if (!outcome.Succeeded || outcome.Operation is null)
+                return Error(outcome.Reason switch
+                {
+                    HorseIdentityMigrationJournalReason.RequestConflict => StatusCodes.Status409Conflict,
+                    HorseIdentityMigrationJournalReason.CapacityExceeded or HorseIdentityMigrationJournalReason.OwnershipBusy
+                        => StatusCodes.Status429TooManyRequests,
+                    _ => StatusCodes.Status503ServiceUnavailable,
+                }, outcome.Reason switch
+                {
+                    HorseIdentityMigrationJournalReason.RequestConflict => "RequestConflict",
+                    HorseIdentityMigrationJournalReason.CapacityExceeded => "CapacityExceeded",
+                    HorseIdentityMigrationJournalReason.OwnershipBusy => "Busy",
+                    _ => "Unavailable",
+                });
+
+            return Results.Created($"/api/v2/admin/horse-id-migration-operations/{operationId:D}",
+                HorseIdentityMigrationPublicMapper.ToPublic(outcome.Operation));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (IsUnavailable(exception))
+        {
+            return Error(StatusCodes.Status503ServiceUnavailable, "Unavailable");
+        }
+    }
+
+    internal static async Task<IResult> GetStatusAsync(
+        string operationId, HttpResponse response, [FromServices] HorseIdentityMigrationJournal journal,
+        CancellationToken cancellationToken)
+    {
+        SetNoStore(response);
+        if (!Guid.TryParseExact(operationId, "D", out var parsed) || parsed == Guid.Empty)
+            return Results.NotFound();
+        try
+        {
+            var operation = await journal.GetStatusAsync(parsed, cancellationToken).ConfigureAwait(false);
+            return operation is null
+                ? Results.NotFound()
+                : Results.Ok(HorseIdentityMigrationPublicMapper.ToPublic(operation));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (IsUnavailable(exception))
+        {
+            return Error(StatusCodes.Status503ServiceUnavailable, "Unavailable");
+        }
+    }
+
+    private static async Task<BodyReadResult<T>> ReadBodyAsync<T>(HttpRequest request, CancellationToken token)
+    {
+        if (request.ContentLength is > MaximumBodyBytes)
+            return BodyReadResult<T>.Failure(StatusCodes.Status429TooManyRequests, "CapacityExceeded");
+
+        await using var buffer = new MemoryStream(Math.Min((int)(request.ContentLength ?? 0), MaximumBodyBytes));
+        var chunk = new byte[16 * 1024];
+        while (true)
+        {
+            var read = await request.Body.ReadAsync(chunk, token).ConfigureAwait(false);
+            if (read == 0) break;
+            if (buffer.Length + read > MaximumBodyBytes)
+                return BodyReadResult<T>.Failure(StatusCodes.Status429TooManyRequests, "CapacityExceeded");
+            await buffer.WriteAsync(chunk.AsMemory(0, read), token).ConfigureAwait(false);
+        }
+
+        try
+        {
+            var value = JsonSerializer.Deserialize<T>(buffer.GetBuffer().AsSpan(0, checked((int)buffer.Length)), JsonOptions);
+            return value is null
+                ? BodyReadResult<T>.Failure(StatusCodes.Status400BadRequest, "InvalidRequest")
+                : BodyReadResult<T>.Ok(value);
+        }
+        catch (JsonException)
+        {
+            return BodyReadResult<T>.Failure(StatusCodes.Status400BadRequest, "InvalidRequest");
+        }
+    }
+
+    private static IResult Error(int statusCode, string code) =>
+        Results.Json(new HorseIdentityMigrationOperationError(code), statusCode: statusCode);
+
+    private static void SetNoStore(HttpResponse response)
+    {
+        response.Headers.CacheControl = "no-store, no-cache, max-age=0";
+        response.Headers.Pragma = "no-cache";
+    }
+
+    private static bool IsUnavailable(Exception exception) => exception is IOException or UnauthorizedAccessException
+        or InvalidDataException or SqliteException;
+
+    private sealed record BodyReadResult<T>(bool Success, T? Value, int StatusCode, string? ErrorCode)
+    {
+        internal static BodyReadResult<T> Ok(T value) => new(true, value, 0, null);
+        internal static BodyReadResult<T> Failure(int statusCode, string code) => new(false, default, statusCode, code);
+    }
+}

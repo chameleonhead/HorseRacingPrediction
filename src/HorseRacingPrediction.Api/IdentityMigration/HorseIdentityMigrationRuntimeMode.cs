@@ -12,9 +12,12 @@ using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.PredictionScheduling;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using HorseRacingPrediction.Api.Web;
+using System.Net;
 
 namespace HorseRacingPrediction.Api.IdentityMigration;
 
@@ -33,7 +36,7 @@ internal sealed record HorseIdentityMigrationRuntimeModeSelection(
 internal static class HorseIdentityMigrationRuntimeMode
 {
     internal const string CommandName = "horse-id-migration";
-    internal const string StatusRoute = "/api/v2/admin/horse-id-migration-operations/{operationId:guid}";
+    internal const string StatusRoute = "/api/v2/admin/horse-id-migration-operations/{operationId}";
 
     internal static HorseIdentityMigrationRuntimeModeSelection Parse(IReadOnlyList<string> arguments)
     {
@@ -105,37 +108,65 @@ internal static class HorseIdentityMigrationRuntimeMode
                 ? Environment.GetEnvironmentVariable("HORSE_RACING_API_KEY")
                 : configuredKey;
         });
+        builder.Services.AddAdminAuthentication();
         var app = builder.Build();
         app.UseApiKeyProtection();
+        app.UseAuthentication();
+        app.UseAuthorization();
         app.MapGet("/health", () => Results.Ok(new { Status = "ok" }));
-        app.MapGet(StatusRoute, async (Guid operationId, CancellationToken cancellationToken) =>
+        app.MapAdminLoginEndpoints();
+        app.MapGet(StatusRoute, async (string operationId, HttpResponse response, CancellationToken cancellationToken) =>
         {
+            SetNoStore(response);
+            if (!Guid.TryParseExact(operationId, "D", out var parsed) || parsed == Guid.Empty)
+                return Results.NotFound();
             try
             {
-                var operation = await journal.GetStatusAsync(operationId, cancellationToken).ConfigureAwait(false);
+                var operation = await journal.GetStatusAsync(parsed, cancellationToken).ConfigureAwait(false);
                 return operation is null
                     ? Results.NotFound()
-                    : Results.Ok(new
-                    {
-                        operation.OperationId,
-                        Status = operation.Status.ToString(),
-                        Reason = operation.Reason.ToString(),
-                        operation.CreatedAt,
-                        operation.UpdatedAt,
-                        operation.Results,
-                    });
+                    : Results.Ok(HorseIdentityMigrationPublicMapper.ToPublic(operation));
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
                 or InvalidDataException or SqliteException)
             {
-                return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable,
-                    title: "Migration journal is unavailable.");
+                return Results.Json(new HorseIdentityMigrationOperationError("Unavailable"),
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
             }
         });
+        app.MapGet("/settings/horse-id-migration", async (
+            string? operationId, HttpResponse response, CancellationToken cancellationToken) =>
+        {
+            SetNoStore(response);
+            if (!Guid.TryParseExact(operationId, "D", out var parsed) || parsed == Guid.Empty)
+                return Results.NotFound();
+            try
+            {
+                var operation = await journal.GetStatusAsync(parsed, cancellationToken).ConfigureAwait(false);
+                if (operation is null) return Results.NotFound();
+                var safeStatus = HorseIdentityMigrationPublicMapper.Status(operation.Status);
+                var idHtml = WebUtility.HtmlEncode(operation.OperationId.ToString("D"));
+                var statusHtml = WebUtility.HtmlEncode(safeStatus);
+                return Results.Content($"<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"robots\" content=\"noindex\"><title>Horse identity migration status</title><main><h1>Horse identity migration</h1><p>Operation: <code>{idHtml}</code></p><p>Status: <strong>{statusHtml}</strong></p></main></html>",
+                    "text/html; charset=utf-8");
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+                or InvalidDataException or SqliteException)
+            {
+                return Results.Content("<!doctype html><html><meta charset=\"utf-8\"><title>Status unavailable</title><p>Migration status is unavailable.</p></html>",
+                    "text/html; charset=utf-8", statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+        }).RequireAuthorization();
         app.MapFallback(() => Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable,
             title: "Application startup is blocked by migration state."));
         await app.RunAsync().ConfigureAwait(false);
         return true;
+    }
+
+    private static void SetNoStore(HttpResponse response)
+    {
+        response.Headers.CacheControl = "no-store, no-cache, max-age=0";
+        response.Headers.Pragma = "no-cache";
     }
 
     internal static HorseIdentityMigrationJournal CreateJournal(WebApplicationBuilder builder)

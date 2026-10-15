@@ -11,6 +11,17 @@ public static class AdminEndpointExtensions
 {
     public static WebApplication MapAdminEndpoints(this WebApplication app)
     {
+        app.MapAdminLoginEndpoints();
+
+        app.MapRazorComponents<App>()
+            .AddInteractiveServerRenderMode()
+            .RequireAuthorization();
+
+        return app;
+    }
+
+    public static WebApplication MapAdminLoginEndpoints(this WebApplication app)
+    {
         app.MapGet("/login", (string? error, string? returnUrl) =>
                 Results.Content(BuildLoginHtml(error == "1", NormalizeReturnUrl(returnUrl)), "text/html; charset=utf-8"))
             .WithName("AdminLoginPage");
@@ -47,10 +58,6 @@ public static class AdminEndpointExtensions
         })
         .RequireAuthorization()
         .WithName("AdminLogout");
-
-        app.MapRazorComponents<App>()
-            .AddInteractiveServerRenderMode()
-            .RequireAuthorization();
 
         return app;
     }
