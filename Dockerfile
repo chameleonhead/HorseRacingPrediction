@@ -21,6 +21,8 @@ RUN dotnet publish src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.cspro
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
+LABEL com.horseracingprediction.identity-migration-guard="v1"
+
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 

@@ -15,23 +15,54 @@ API_KEY=test-only
 API_BASE_URL=https://example.test
 GITHUB_OUTPUT=/dev/null
 ORIGINAL_WAS_PAUSED=false
-if [ "$TEST_CASE" = paused ]; then ORIGINAL_WAS_PAUSED=true; fi
+HORSE_ID_MIGRATION_OPERATION_ID="${HORSE_ID_MIGRATION_OPERATION_ID:-}"
+if [ "$TEST_CASE" = paused ] || [ "$TEST_CASE" = migration-paused ]; then ORIGINAL_WAS_PAUSED=true; fi
 if [ "$TEST_CASE" = invalid-original ]; then ORIGINAL_WAS_PAUSED=unknown; fi
+if [ "$TEST_PHASE" = guard ]; then
+  MOCK_PAUSED=false
+  if [ "$TEST_CASE" = paused ] || [ "$TEST_CASE" = migration-paused ]; then MOCK_PAUSED=true; fi
+else
+  MOCK_PAUSED=true
+fi
+DATE_COUNTER=$(mktemp)
+DATE_LOG=$(mktemp)
+PUT_LOG=$(mktemp)
+printf '0\n' > "$DATE_COUNTER"
+if [[ "$TEST_CASE" == migration-* ]]; then
+  trap 'printf "DATE_LOG="; tr "\\n" "," < "$DATE_LOG"; printf "PUT_LOG="; cat "$PUT_LOG"; rm -f "$DATE_COUNTER" "$DATE_LOG" "$PUT_LOG"' EXIT
+else
+  trap 'rm -f "$DATE_COUNTER" "$DATE_LOG" "$PUT_LOG"' EXIT
+fi
 sleep() { :; }
+date() {
+  if [ "${1:-}" = +%s ]; then
+    local calls now
+    calls=$(cat "$DATE_COUNTER")
+    calls=$((calls + 1))
+    printf '%s\n' "$calls" > "$DATE_COUNTER"
+    if [ "$calls" -eq 1 ]; then now=10000; else now=10900; fi
+    printf '%s\n' "$now" >> "$DATE_LOG"
+    printf '%s\n' "$now"
+  else
+    command date "$@"
+  fi
+}
 curl() {
   local url="${@: -1}"
   case "$url" in
     */pipeline-state)
       if [ "$TEST_CASE" = get-failure ]; then return 22; fi
       if [ "$TEST_CASE" = invalid-state ]; then echo '{"pipeline":{"isPaused":"invalid"}}'
-      elif [ "$TEST_PHASE" = guard ] && [ "$TEST_CASE" != paused ]; then echo '{"pipeline":{"isPaused":false}}'
-      else echo '{"pipeline":{"isPaused":true}}'
+      elif [ "$MOCK_PAUSED" = true ]; then echo '{"pipeline":{"isPaused":true}}'
+      else echo '{"pipeline":{"isPaused":false}}'
       fi ;;
     */api/admin/collection/pipeline) if [ "$TEST_CASE" = get-failure ]; then return 22; fi; echo '{}' ;;
     */pipeline)
       if [[ " $* " != *" -X PUT "* ]]; then return 90; fi
       if [[ " $* " == *'"pipeline":{"paused":true'* ]]; then
+        printf '%s\n' "$*" >> "$PUT_LOG"
         if [ "$TEST_CASE" = pause-failure ]; then return 22; fi
+        MOCK_PAUSED=true
       elif [[ " $* " == *'"pipeline":{"paused":false'* ]]; then
         echo RESUMED >&2
       else
@@ -81,10 +112,11 @@ jq() {
 $cases = @('running', 'paused', 'get-failure', 'invalid-state', 'invalid-original', 'not-drained', 'new-failure')
 foreach ($case in $cases) {
     $payload = "export TEST_CASE='$case' TEST_PHASE='restore'`n$mocks`n$script"
-    $output = $payload | & $Bash --noprofile --norc -s 2>&1
+    $portablePayload = $payload.Replace("`r`n", "`n").Replace("`r", "`n")
+    $output = $portablePayload | & $Bash --noprofile --norc -s 2>&1
     $code = $LASTEXITCODE
     $resumed = ($output -join "`n") -match 'RESUMED'
-    if ($resumed -ne ($case -eq 'running')) { throw "Incorrect resume: $case" }
+    if ($resumed -ne ($case -eq 'running')) { throw "Incorrect resume: $case; output=$(($output -join "`n"))" }
     if (($code -eq 0) -ne ($case -in @('running', 'paused', 'new-failure'))) { throw "Incorrect exit: $case ($code)" }
     if ($case -eq 'new-failure' -and ($output -join "`n") -notmatch '::notice::Deployment succeeded; actionable collection failures remain, so the collection pipeline stays paused') {
         throw 'Actionable failures must be reported as a successful deployment with the collection pause stated.'
@@ -99,6 +131,30 @@ foreach ($case in @('running', 'paused', 'get-failure', 'invalid-state', 'pause-
     $code = $LASTEXITCODE
     if (($code -eq 0) -ne ($case -in @('running', 'paused'))) { throw "Incorrect guard exit: $case ($code)" }
     if (($output -join "`n") -match 'RESUMED') { throw 'Guard resumed collection' }
+    Write-Output "PASS guard-$case"
+}
+foreach ($case in @('migration-unpaused', 'migration-paused', 'migration-empty-guid')) {
+    $guid = if ($case -eq 'migration-empty-guid') { '00000000-0000-0000-0000-000000000000' } else { '00000000-0000-0000-0000-000000000001' }
+    $payload = "export TEST_CASE='$case' TEST_PHASE='guard' GITHUB_EVENT_NAME='workflow_dispatch' HORSE_ID_MIGRATION_OPERATION_ID='$guid'`n$mocks`n$guardScript`n" + @'
+printf 'DATE_LOG='
+tr '\n' ',' < "$DATE_LOG"
+printf 'PUT_LOG='
+cat "$PUT_LOG"
+'@
+    $portablePayload = $payload.Replace("`r`n", "`n").Replace("`r", "`n")
+    $output = $portablePayload | & $Bash --noprofile --norc -s 2>&1
+    $code = $LASTEXITCODE
+    $text = $output -join "`n"
+    $expectedCode = switch ($case) { 'migration-unpaused' { 1 } 'migration-empty-guid' { 2 } default { 0 } }
+    if ($code -ne $expectedCode) { throw "Migration pause guard had wrong exit for $case ($code, expected $expectedCode): $text" }
+    $putCount = ([regex]::Matches($text, '-X PUT')).Count
+    $expectedPutCount = 0
+    if ($putCount -ne $expectedPutCount) { throw "Unexpected pause writes for ${case}: count=$putCount expected=$expectedPutCount; $text" }
+    if ($case -eq 'migration-paused' -and $text -notmatch 'DATE_LOG=10000,10900,') { throw "Migration quiescence did not use the confirmed-pause timestamp + 900 seconds for ${case}: $text" }
+    if ($case -in @('migration-unpaused','migration-empty-guid') -and $text -notmatch 'DATE_LOG=PUT_LOG=') { throw "Invalid migration request must reject before pausing or starting the quiescence wait: $text" }
+    if ($text -match 'RESUMED' -or ($case -eq 'migration-paused' -and $text -match 'deployment version transition')) {
+        throw "Migration mode overwrote an existing operator pause or resumed collection: $text"
+    }
     Write-Output "PASS guard-$case"
 }
 if ($script -notmatch '/api/v2/admin/collection' -or
@@ -133,8 +189,12 @@ if (-not $workflow.Contains('/api/v2/admin/collection"') -or -not $workflow.Cont
 if ($workflow.Contains('stop api || true') -or -not $workflow.Contains('Uncheckpointed SQLite WAL remains')) {
     throw 'Missing fail-closed backup guard'
 }
-if ($workflow -notmatch 'script: \|\r?\n            set -eu\r?\n            mkdir -p "\$APP_DIRECTORY/data"') {
-    throw 'Remote restart must abort on failed commands'
+$bashStart = $workflow.IndexOf("bash -s <<'HORSE_ID_MIGRATION_REMOTE'", [StringComparison]::Ordinal)
+$helperSource = $workflow.IndexOf('. "$APP_DIRECTORY/horse-id-migration-deploy.sh"', $bashStart, [StringComparison]::Ordinal)
+$toolCheck = $workflow.IndexOf('horse_id_migration_require_tools', $helperSource, [StringComparison]::Ordinal)
+$firstMutation = $workflow.IndexOf('mkdir -p "$APP_DIRECTORY/data"', $toolCheck, [StringComparison]::Ordinal)
+if ($bashStart -lt 0 -or $helperSource -le $bashStart -or $toolCheck -le $helperSource -or $firstMutation -le $toolCheck) {
+    throw 'Remote restart must source the migration helper and validate dependencies before mutations'
 }
 # GitHub's pwsh wrapper propagates LASTEXITCODE; expected negative cases must not fail the step.
 exit 0

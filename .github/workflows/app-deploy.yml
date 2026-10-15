@@ -15,6 +15,11 @@ on:
       - infra/collector-lambda/**
       - .github/workflows/app-deploy.yml
   workflow_dispatch:
+    inputs:
+      horse_id_migration_operation_id:
+        description: Existing staged horse-identity migration GUID; leave empty for a normal deploy
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -34,9 +39,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Validate optional migration request before publishing or deployment
+        shell: bash
+        env:
+          HORSE_ID_MIGRATION_OPERATION_ID: ${{ inputs.horse_id_migration_operation_id || '' }}
+        run: |
+          if [ -n "$HORSE_ID_MIGRATION_OPERATION_ID" ] && \
+             { [ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ] || \
+               [[ ! "$HORSE_ID_MIGRATION_OPERATION_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || \
+               [ "$HORSE_ID_MIGRATION_OPERATION_ID" = "00000000-0000-0000-0000-000000000000" ]; }; then
+            echo "Migration mode requires a manual dispatch with exactly one operation GUID." >&2
+            exit 2
+          fi
+
       - name: Verify deployment pause and failure guards
         shell: pwsh
+        timeout-minutes: 3
         run: ./tests/scripts/test-deploy-pipeline-state.ps1 -Bash /bin/bash
+
+      - name: Verify horse identity migration deploy guard
+        shell: pwsh
+        timeout-minutes: 3
+        run: ./tests/scripts/test-deploy-migration-guard.ps1 -Bash /bin/bash
 
       - name: Verify collector temporary storage lifecycle
         shell: pwsh
@@ -146,6 +170,7 @@ jobs:
     needs: [build-and-push, deploy-collector-lambda]
     runs-on: ubuntu-24.04
     environment: production
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v7
 
@@ -168,11 +193,12 @@ jobs:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USERNAME }}
           key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
-          source: deploy/docker-compose.yml,deploy/Caddyfile,deploy/start-caddy.sh
+          source: deploy/docker-compose.yml,deploy/Caddyfile,deploy/start-caddy.sh,deploy/horse-id-migration-deploy.sh
           target: ${{ env.APP_DIRECTORY }}
           strip_components: 1
 
       - name: Restart remote stack
+        timeout-minutes: 40
         uses: appleboy/ssh-action@v1.2.5
         env:
           IMAGE_NAME: ${{ needs.build-and-push.outputs.image_name }}
@@ -184,13 +210,24 @@ jobs:
           HORSE_RACING_API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
           COLLECTION_QUEUE_ENABLED: "true"
           AWS_REGION: ${{ secrets.AWS_REGION }}
+          HORSE_ID_MIGRATION_OPERATION_ID: ${{ inputs.horse_id_migration_operation_id || '' }}
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USERNAME }}
           key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
-          envs: IMAGE_NAME,IMAGE_TAG,APP_DIRECTORY,DOMAIN_NAME,LIGHTSAIL_HOST,ACME_EMAIL,HORSE_RACING_API_KEY,COLLECTION_QUEUE_ENABLED,AWS_REGION
+          command_timeout: 38m
+          envs: IMAGE_NAME,IMAGE_TAG,APP_DIRECTORY,DOMAIN_NAME,LIGHTSAIL_HOST,ACME_EMAIL,HORSE_RACING_API_KEY,COLLECTION_QUEUE_ENABLED,AWS_REGION,HORSE_ID_MIGRATION_OPERATION_ID
           script: |
+            bash -s <<'HORSE_ID_MIGRATION_REMOTE'
             set -eu
+            . "$APP_DIRECTORY/horse-id-migration-deploy.sh"
+            horse_id_migration_require_tools
+            if [ -n "$HORSE_ID_MIGRATION_OPERATION_ID" ]; then
+              horse_id_migration_validate_guid "$HORSE_ID_MIGRATION_OPERATION_ID" || {
+                echo "Migration mode requires exactly one operation GUID." >&2
+                exit 2
+              }
+            fi
             mkdir -p "$APP_DIRECTORY/data"
             mkdir -p "$APP_DIRECTORY/data/backups"
             if [ ! -f "$APP_DIRECTORY/.env" ]; then
@@ -229,37 +266,64 @@ jobs:
             chmod 600 "$APP_DIRECTORY/.env"
             cd "$APP_DIRECTORY"
             docker compose --env-file .env pull
+            horse_id_migration_check_image_capability "$IMAGE_NAME:$IMAGE_TAG"
+            if [ -n "$HORSE_ID_MIGRATION_OPERATION_ID" ]; then
+              configured_store_paths="$(horse_id_migration_configured_store_paths "$APP_DIRECTORY/data")"
+              mapfile -t configured_stores <<< "$configured_store_paths"
+              for index in "${!configured_stores[@]}"; do configured_stores[$index]=${configured_stores[$index]%$'\r'}; done
+              horse_id_migration_assert_api_paused "https://$DOMAIN_NAME" "$HORSE_RACING_API_KEY"
+            fi
             docker compose --env-file .env stop api
             if [ -n "$(docker compose --env-file .env ps --status running -q api)" ]; then
               echo "API must be stopped before database backup" >&2
               exit 1
             fi
-            for state_db in eventstore collection-platform prediction-executions; do
-              if [ -s "$APP_DIRECTORY/data/${state_db}.db-wal" ]; then
-                echo "Uncheckpointed SQLite WAL remains; refusing incomplete backup" >&2
-                exit 1
-              fi
-            done
-            if [ -f "$APP_DIRECTORY/data/eventstore.db" ]; then
-              cp "$APP_DIRECTORY/data/eventstore.db" \
-                "$APP_DIRECTORY/data/backups/eventstore-predeploy-$(date -u +%Y%m%d-%H%M%S).db"
+            verified_success_guid=$(horse_id_migration_journal_preflight "$APP_DIRECTORY/data" "$HORSE_ID_MIGRATION_OPERATION_ID")
+            if [ -n "$verified_success_guid" ]; then
+              horse_id_migration_run_fixed_command "$verified_success_guid" "$IMAGE_NAME:$IMAGE_TAG" "$APP_DIRECTORY/.env"
             fi
-            for state_db in collection-platform prediction-executions; do
-              if [ -f "$APP_DIRECTORY/data/${state_db}.db" ]; then
-                cp "$APP_DIRECTORY/data/${state_db}.db" \
-                  "$APP_DIRECTORY/data/backups/${state_db}-predeploy-$(date -u +%Y%m%d-%H%M%S).db"
-              fi
-            done
-            find "$APP_DIRECTORY/data/backups" -type f -name 'eventstore-predeploy-*.db' \
-              -printf '%T@ %p\n' | sort -nr | tail -n +8 | cut -d' ' -f2- | xargs -r rm --
-            for state_db in collection-platform prediction-executions; do
-              find "$APP_DIRECTORY/data/backups" -type f -name "${state_db}-predeploy-*.db" \
+            if [ -n "$HORSE_ID_MIGRATION_OPERATION_ID" ]; then
+              backup_directory="$APP_DIRECTORY/data/backups/horse-id-migration-$HORSE_ID_MIGRATION_OPERATION_ID"
+              backup_paths=("${configured_stores[@]}" horse-identity-migration-initialized.marker)
+              horse_id_migration_copy_store_set "$APP_DIRECTORY/data" "$backup_directory" yes "${backup_paths[@]}"
+              horse_id_migration_assert_quiescent_stores "$APP_DIRECTORY/data" "${configured_stores[@]}"
+            else
+              backup_timestamp="$(date -u +%Y%m%d-%H%M%S)"
+              for state_db in eventstore collection-platform prediction-executions; do
+                if [ -s "$APP_DIRECTORY/data/${state_db}.db-wal" ]; then
+                  echo "Uncheckpointed SQLite WAL remains; refusing incomplete backup" >&2
+                  exit 1
+                fi
+              done
+              for state_db in eventstore collection-platform prediction-executions; do
+                if [ -f "$APP_DIRECTORY/data/${state_db}.db" ]; then
+                  cp "$APP_DIRECTORY/data/${state_db}.db" \
+                    "$APP_DIRECTORY/data/backups/${state_db}-predeploy-${backup_timestamp}.db"
+                  for sidecar in -wal -shm -journal; do
+                    if [ -f "$APP_DIRECTORY/data/${state_db}.db${sidecar}" ]; then
+                      cp "$APP_DIRECTORY/data/${state_db}.db${sidecar}" \
+                        "$APP_DIRECTORY/data/backups/${state_db}-predeploy-${backup_timestamp}.db${sidecar}"
+                    fi
+                  done
+                fi
+              done
+              find "$APP_DIRECTORY/data/backups" -type f -name 'eventstore-predeploy-*.db' \
                 -printf '%T@ %p\n' | sort -nr | tail -n +8 | cut -d' ' -f2- | xargs -r rm --
-            done
+              for state_db in collection-platform prediction-executions; do
+                find "$APP_DIRECTORY/data/backups" -type f -name "${state_db}-predeploy-*.db" \
+                  -printf '%T@ %p\n' | sort -nr | tail -n +8 | cut -d' ' -f2- | xargs -r rm --
+              done
+            fi
+            if [ -n "$HORSE_ID_MIGRATION_OPERATION_ID" ]; then
+              horse_id_migration_run_fixed_command "$HORSE_ID_MIGRATION_OPERATION_ID" "$IMAGE_NAME:$IMAGE_TAG" "$APP_DIRECTORY/.env"
+              horse_id_migration_assert_quiescent_stores "$APP_DIRECTORY/data" "${configured_stores[@]}"
+            fi
             docker compose --env-file .env up -d --force-recreate --remove-orphans
-            docker image prune -f
+            if [ -z "$HORSE_ID_MIGRATION_OPERATION_ID" ]; then docker image prune -f; fi
+            HORSE_ID_MIGRATION_REMOTE
 
       - name: Verify deployment health
+        timeout-minutes: 5
         env:
           DOMAIN_NAME: ${{ secrets.LIGHTSAIL_DOMAIN_NAME }}
           LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
@@ -277,17 +341,74 @@ jobs:
           echo "API did not become healthy after deploy" >&2
           exit 1
 
+      - name: Verify migration receipt and running image after restart
+        if: inputs.horse_id_migration_operation_id != ''
+        timeout-minutes: 3
+        uses: appleboy/ssh-action@v1.2.5
+        env:
+          APP_DIRECTORY: ${{ env.APP_DIRECTORY }}
+          IMAGE_NAME: ${{ needs.build-and-push.outputs.image_name }}
+          IMAGE_TAG: sha-${{ github.sha }}
+          HORSE_ID_MIGRATION_OPERATION_ID: ${{ inputs.horse_id_migration_operation_id || '' }}
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USERNAME }}
+          key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
+          command_timeout: 2m
+          envs: APP_DIRECTORY,IMAGE_NAME,IMAGE_TAG,HORSE_ID_MIGRATION_OPERATION_ID
+          script: |
+            bash -s <<'HORSE_ID_MIGRATION_RECEIPT'
+            set -eu
+            cd "$APP_DIRECTORY"
+            . "$APP_DIRECTORY/horse-id-migration-deploy.sh"
+            horse_id_migration_require_tools
+            horse_id_migration_check_image_capability "$IMAGE_NAME:$IMAGE_TAG"
+            container="$(docker compose --env-file .env ps --status running -q api)"
+            [ -n "$container" ]
+            image="$(docker inspect --format '{{.Config.Image}}' "$container")"
+            [ "$image" = "$IMAGE_NAME:$IMAGE_TAG" ] || {
+              echo "Running API image differs from the migration target." >&2
+              exit 1
+            }
+            horse_id_migration_run_fixed_command "$HORSE_ID_MIGRATION_OPERATION_ID" "$IMAGE_NAME:$IMAGE_TAG" "$APP_DIRECTORY/.env"
+            HORSE_ID_MIGRATION_RECEIPT
+
+      - name: Keep API stopped after failed migration deployment
+        if: failure() && inputs.horse_id_migration_operation_id != ''
+        uses: appleboy/ssh-action@v1.2.5
+        env:
+          APP_DIRECTORY: ${{ env.APP_DIRECTORY }}
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USERNAME }}
+          key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
+          envs: APP_DIRECTORY
+          command_timeout: 2m
+          script: |
+            set -eu
+            cd "$APP_DIRECTORY"
+            docker compose --env-file .env stop api
+            if [ -n "$(docker compose --env-file .env ps --status running -q api)" ]; then
+              echo "API could not be held stopped after migration failure." >&2
+              exit 1
+            fi
+
       - name: Restore collection pipeline state after deployment
         env:
           ORIGINAL_WAS_PAUSED: ${{ needs.deploy-collector-lambda.outputs.was_paused }}
           DOMAIN_NAME: ${{ secrets.LIGHTSAIL_DOMAIN_NAME }}
           LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
           API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
+          HORSE_ID_MIGRATION_OPERATION_ID: ${{ inputs.horse_id_migration_operation_id || '' }}
         run: |
           base="https://${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}/api/v2/admin/collection"
           # Preserve an operator/incident pause; resume only after successful deployment checks.
           pipeline="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/pipeline-state")"
           jq -e '.pipeline.isPaused == true' <<<"$pipeline" >/dev/null
+          if [ -n "$HORSE_ID_MIGRATION_OPERATION_ID" ]; then
+            echo "Migration completed; the collection pipeline remains paused for explicit verification and resume."
+            exit 0
+          fi
           case "$ORIGINAL_WAS_PAUSED" in true|false) ;; *) exit 1 ;; esac
           # Re-assert the pause through the newly deployed API. When SQS is empty this safely
           # releases Ready dispatch rows whose wake disappeared during the version transition.
@@ -314,6 +435,7 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-24.04
     environment: production
+    timeout-minutes: 60
     outputs:
       was_paused: ${{ steps.collection-guard.outputs.was_paused }}
     defaults:
@@ -321,6 +443,19 @@ jobs:
         working-directory: infra/collector-lambda
     steps:
       - uses: actions/checkout@v7
+
+      - name: Validate optional migration request before AWS or infrastructure changes
+        shell: bash
+        env:
+          HORSE_ID_MIGRATION_OPERATION_ID: ${{ inputs.horse_id_migration_operation_id || '' }}
+        run: |
+          if [ -n "$HORSE_ID_MIGRATION_OPERATION_ID" ] && \
+             { [ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ] || \
+               [[ ! "$HORSE_ID_MIGRATION_OPERATION_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || \
+               [ "$HORSE_ID_MIGRATION_OPERATION_ID" = "00000000-0000-0000-0000-000000000000" ]; }; then
+            echo "Migration mode requires a manual dispatch with exactly one operation GUID." >&2
+            exit 2
+          fi
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -343,19 +478,34 @@ jobs:
       - id: collection-guard
         name: Pause and drain collection before changing deployed versions
         shell: bash
+        timeout-minutes: 27
         env:
           API_BASE_URL: ${{ steps.api-url.outputs.value }}
           API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
+          HORSE_ID_MIGRATION_OPERATION_ID: ${{ inputs.horse_id_migration_operation_id || '' }}
         run: |
+          if [ -n "$HORSE_ID_MIGRATION_OPERATION_ID" ]; then
+            if [ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ] || [[ ! "$HORSE_ID_MIGRATION_OPERATION_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || [ "$HORSE_ID_MIGRATION_OPERATION_ID" = "00000000-0000-0000-0000-000000000000" ]; then
+              echo "Migration mode requires a manual dispatch with exactly one operation GUID." >&2
+              exit 2
+            fi
+          fi
           base="$API_BASE_URL/api/v2/admin/collection"
           pipeline="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/pipeline-state")"
           was_paused="$(jq -er '.pipeline.isPaused | if type == "boolean" then tostring else error("Invalid pipeline state") end' <<<"$pipeline")"
           echo "was_paused=$was_paused" >> "$GITHUB_OUTPUT"
+          if [ -n "$HORSE_ID_MIGRATION_OPERATION_ID" ] && [ "$was_paused" != "true" ]; then
+            echo "Migration mode requires the collection pipeline to be paused by the operator; no pause was changed." >&2
+            exit 1
+          fi
           if [ "$was_paused" = "false" ]; then
             curl --fail --silent --show-error -X PUT \
               -H "X-Api-Key: $API_KEY" -H 'Content-Type: application/json' \
               --data '{"pipeline":{"paused":true,"reason":"deployment version transition"}}' "$base/pipeline" >/dev/null
           fi
+          pause_confirmed_at=$(date +%s)
+          pause_state="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/pipeline-state")"
+          jq -e '.pipeline.isPaused == true' <<<"$pause_state" >/dev/null
           drained=false
           for attempt in $(seq 1 60); do
             running="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/tasks?statuses=Running&pageSize=1")"
@@ -370,9 +520,21 @@ jobs:
             echo "Collection drain timed out; pipeline remains paused" >&2
             exit 1
           fi
-          curl --fail --silent --show-error -X PUT \
-            -H "X-Api-Key: $API_KEY" -H 'Content-Type: application/json' \
-            --data '{"pipeline":{"paused":true,"reason":"deployment version transition"}}' "$base/pipeline" >/dev/null
+          if [ -n "$HORSE_ID_MIGRATION_OPERATION_ID" ]; then
+            quiescent_at=$((pause_confirmed_at + 900))
+            while [ "$(date +%s)" -lt "$quiescent_at" ]; do
+              remaining=$((quiescent_at - $(date +%s)))
+              if [ "$remaining" -gt 10 ]; then sleep 10; else sleep "$remaining"; fi
+            done
+            final_pause_state="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/pipeline-state")"
+            jq -e '.pipeline.isPaused == true' <<<"$final_pause_state" >/dev/null
+            final_running="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/tasks?statuses=Running&pageSize=1")"
+            jq -e '.page.items | type == "array" and length == 0' <<<"$final_running" >/dev/null
+          else
+            curl --fail --silent --show-error -X PUT \
+              -H "X-Api-Key: $API_KEY" -H 'Content-Type: application/json' \
+              --data '{"pipeline":{"paused":true,"reason":"deployment version transition"}}' "$base/pipeline" >/dev/null
+          fi
 
       - name: Initialize collector infrastructure
         run: |
@@ -431,6 +593,25 @@ jobs:
             -var="api_key=${{ secrets.LIGHTSAIL_API_KEY }}" \
             -var="alert_phone_number=${{ secrets.ALERT_PHONE_NUMBER }}" \
             -var="image_uri=${{ steps.ecr.outputs.repository }}:sha-${{ github.sha }}"
+
+      - name: Verify deployed collector Lambda is active and updated
+        if: inputs.horse_id_migration_operation_id != ''
+        timeout-minutes: 16
+        env:
+          EXPECTED_COLLECTOR_IMAGE: ${{ steps.ecr.outputs.repository }}:sha-${{ github.sha }}
+        run: |
+          for attempt in $(seq 1 90); do
+            state="$(aws lambda get-function --function-name horse-racing-prediction-collector --query 'Configuration.State' --output text 2>/dev/null || true)"
+            update="$(aws lambda get-function --function-name horse-racing-prediction-collector --query 'Configuration.LastUpdateStatus' --output text 2>/dev/null || true)"
+            image="$(aws lambda get-function --function-name horse-racing-prediction-collector --query 'Code.ImageUri' --output text 2>/dev/null || true)"
+            if [ "$state" = "Active" ] && [ "$update" = "Successful" ] && [ "$image" = "$EXPECTED_COLLECTOR_IMAGE" ]; then
+              echo "Collector Lambda is active with the expected image and successful update."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Collector Lambda did not become Active with a Successful update and the expected image." >&2
+          exit 1
 
       - name: Load Lightsail API queue credentials
         run: |
