@@ -124,8 +124,12 @@ else
         <UiState Kind="error" Title="操作を完了できませんでした" Message="@string.Join(" ", operationErrors)" />
     }
 
+    @if (!interactiveReady)
+    {
+        <UiState Kind="loading" Title="画面を準備しています" />
+    }
     <RaceOpsDetailTabs ActiveTabId="@activeTab" ActiveTabIdChanged="OnTabChanged">
-        <FluentTab Label="運用状況" Id="monitoring">
+        <FluentTab Label="運用状況" Id="monitoring" Disabled="@(!interactiveReady)">
             <section class="entity-section detail-section">
                 <h2>処理区分ごとの待機状況</h2>
                 <div class="operations-metrics">
@@ -144,7 +148,7 @@ else
             </section>
         </FluentTab>
 
-        <FluentTab Label="@($"障害対応 ({failures.Count}原因)")" Id="failures">
+        <FluentTab Label="@($"障害対応 ({failures.Count}原因)")" Id="failures" Disabled="@(!interactiveReady)">
             <section class="entity-section detail-section">
                 <h2>原因別の障害</h2>
                 <p class="hint">同じ収集内容とエラーをまとめています。件数の多い原因から確認してください。</p>
@@ -165,7 +169,7 @@ else
             </section>
         </FluentTab>
 
-        <FluentTab Label="@($"過去データ収集 ({backfills.Count})")" Id="backfills">
+        <FluentTab Label="@($"過去データ収集 ({backfills.Count})")" Id="backfills" Disabled="@(!interactiveReady)">
             <section class="detail-card detail-section">
                 <h2>月単位で収集を開始</h2>
                 <p>存在するレースを日ごとに探索します。途中で失敗しても、成功済みの範囲を保ったまま再開できます。</p>
@@ -205,7 +209,7 @@ else
             </section>
         </FluentTab>
 
-        <FluentTab Label="抽出仕様の再取得" Id="revisions">
+        <FluentTab Label="抽出仕様の再取得" Id="revisions" Disabled="@(!interactiveReady)">
             <section class="detail-card detail-section">
                 <h2>新しい抽出仕様を登録</h2>
                 <p>影響範囲を先に確認し、表示された対象だけに新しい版を適用します。</p>
@@ -246,6 +250,7 @@ else
 
 @code {
     private bool loading = true, busy;
+    private bool interactiveReady;
     private CollectionProgressSnapshot? progress;
     private CollectionRuntimeStatusDto? runtime;
     private bool runtimeLoading = true, runtimeUnavailable, runtimeRefreshFailed;
@@ -266,6 +271,16 @@ else
     private CancellationTokenSource runtimeTabCancellation = new();
 
     private IReadOnlyList<CollectionFailureGroup> FailureGroups => failures.OrderByDescending(x => x.Count).ToList();
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !interactiveReady)
+        {
+            interactiveReady = true;
+            StateHasChanged();
+        }
+        return Task.CompletedTask;
+    }
 
     protected override async Task OnInitializedAsync()
     {

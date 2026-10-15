@@ -13,8 +13,33 @@ public sealed class CollectionRuntimeStatusBrowserTests
     private static readonly TimeSpan StartupTimeout = TimeSpan.FromSeconds(90);
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
     private const string RuntimePath = "/api/v2/admin/collection/operations/runtime-status";
+    private const int MaximumRecordedResponseStatuses = 16;
 
     public TestContext TestContext { get; set; } = null!;
+
+    [TestMethod]
+    public void BrowserFailureDiagnostics_OnlyEmitBoundedAllowlistedValues()
+    {
+        const string canary = "synthetic-browser-diagnostic-canary";
+        var diagnostics = new SanitizedBrowserDiagnostics();
+        diagnostics.ObserveNavigation("http://localhost/jobs/operations?tab=failures");
+        diagnostics.ObserveConsole("error", $"{canary}; header={canary}; body={canary}");
+        diagnostics.ObservePageError($"{canary}; header={canary}; body={canary}");
+        diagnostics.ObserveRequest($"https://example.invalid/{canary}");
+        diagnostics.ObserveRequestFailure($"https://example.invalid/{canary}?token={canary}");
+        for (var index = 0; index < MaximumRecordedResponseStatuses + 5; index++)
+            diagnostics.ObserveResponse($"https://example.invalid/{canary}?body={canary}", 503);
+
+        var snapshot = diagnostics.ToSafeSnapshot();
+
+        Assert.IsFalse(snapshot.Contains(canary, StringComparison.Ordinal));
+        Assert.IsTrue(snapshot.Contains("path=Operations", StringComparison.Ordinal));
+        Assert.IsTrue(snapshot.Contains("tab=Failures", StringComparison.Ordinal));
+        Assert.IsTrue(snapshot.Contains("requestFailedOtherCount=1", StringComparison.Ordinal));
+        Assert.IsTrue(snapshot.Contains("blazorTransportRequestCount=0", StringComparison.Ordinal));
+        Assert.IsTrue(snapshot.Contains("responseStatusesRecorded=16", StringComparison.Ordinal));
+        Assert.IsTrue(snapshot.Contains("responseStatusesOmitted=5", StringComparison.Ordinal));
+    }
 
     [TestMethod]
     [Timeout(180_000)]
@@ -75,9 +100,11 @@ public sealed class CollectionRuntimeStatusBrowserTests
                 {
                     ViewportSize = new ViewportSize { Width = 1280, Height = 900 },
                 });
+                var diagnostics = new SanitizedBrowserDiagnostics();
                 try
                 {
                     var page = await browserContext.NewPageAsync();
+                    diagnostics.Attach(page);
                     var loginUrl = new Uri(baseAddress,
                         $"/login?returnUrl={Uri.EscapeDataString("/jobs/operations?tab=failures")}");
                     await page.GotoAsync(loginUrl.ToString(), new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
@@ -93,7 +120,54 @@ public sealed class CollectionRuntimeStatusBrowserTests
                     Assert.AreEqual(0, Volatile.Read(ref runtimeStatusRequestCount),
                         "The runtime endpoint must not be requested while a non-monitoring tab is active.");
 
-                    await page.GetByRole(AriaRole.Tab, new() { Name = "運用状況" }).ClickAsync();
+                    var staticPage = await browserContext.NewPageAsync();
+                    diagnostics.Attach(staticPage);
+                    try
+                    {
+                        Assert.IsTrue(diagnostics.BlazorTransportRequestCount > 0,
+                            "The interactive page must first demonstrate its real Blazor transport request.");
+                        var transportIntercepted = new TaskCompletionSource<bool>(
+                            TaskCreationOptions.RunContinuationsAsynchronously);
+                        await staticPage.RouteAsync("**/_blazor**", async route =>
+                        {
+                            diagnostics.MarkBlazorTransportIntercepted();
+                            transportIntercepted.TrySetResult(true);
+                            await route.AbortAsync();
+                        });
+                        await staticPage.GotoAsync(new Uri(baseAddress, "/jobs/operations?tab=failures").ToString(),
+                            new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+                        await transportIntercepted.Task.WaitAsync(RequestTimeout);
+                        Assert.IsTrue(diagnostics.TransportWasIntercepted,
+                            "The observed Blazor transport must be intercepted without blocking the boot script.");
+
+                        var staticMonitoringTab = staticPage.GetByRole(AriaRole.Tab, new() { Name = "運用状況" });
+                        var staticMonitoringTabCount = await staticMonitoringTab.CountAsync();
+                        Assert.AreEqual(1, staticMonitoringTabCount,
+                            "The naturally prerendered Monitoring role must remain present for this controlled comparison.");
+                        bool? staticMonitoringTabDisabled = staticMonitoringTabCount > 0
+                            ? await staticMonitoringTab.IsDisabledAsync()
+                            : null;
+                        diagnostics.RecordStaticMonitoringTabState(staticMonitoringTabCount, staticMonitoringTabDisabled);
+                        Assert.IsTrue(staticMonitoringTabDisabled,
+                            "A statically rendered tab must not be actionable before transport readiness.");
+                        Assert.AreEqual(0, Volatile.Read(ref runtimeStatusRequestCount),
+                            "The controlled pre-interactivity page must not issue a monitoring request.");
+                    }
+                    finally
+                    {
+                        await staticPage.CloseAsync();
+                    }
+
+                    var interactiveMonitoringTab = page.GetByRole(AriaRole.Tab, new() { Name = "運用状況" });
+                    Assert.IsFalse(await interactiveMonitoringTab.IsDisabledAsync(),
+                        "The monitoring tab must be enabled only after Blazor interactivity is ready.");
+                    diagnostics.MarkInteractiveTabObserved();
+                    // The explicit bounded URL wait below is the navigation assertion; the click must not also await full document Load.
+#pragma warning disable CS0612 // Playwright 1.62 documents this exception; NoWaitAfter is slated to default true.
+                    await interactiveMonitoringTab.ClickAsync(new() { NoWaitAfter = true });
+#pragma warning restore CS0612
+                    await page.WaitForURLAsync(new Regex(@"/jobs/operations\?tab=monitoring$"),
+                        new PageWaitForURLOptions { Timeout = (float)RequestTimeout.TotalMilliseconds });
                     await WaitForRuntimeRequestCountAsync(process, () => Volatile.Read(ref runtimeStatusRequestCount), 1);
                     await page.GetByRole(AriaRole.Heading, new() { Name = "バックグラウンド処理の稼働状況" })
                         .WaitForAsync();
@@ -192,6 +266,12 @@ public sealed class CollectionRuntimeStatusBrowserTests
                     await page.ScreenshotAsync(new PageScreenshotOptions { Path = mobileScreenshot, FullPage = true });
                     TestContext.AddResultFile(mobileScreenshot);
                     Assert.AreEqual(3, Volatile.Read(ref runtimeStatusRequestCount));
+                    TestContext.WriteLine(diagnostics.ToSafeSnapshot());
+                }
+                catch
+                {
+                    TestContext.WriteLine(diagnostics.ToSafeSnapshot());
+                    throw;
                 }
                 finally
                 {
@@ -357,5 +437,182 @@ public sealed class CollectionRuntimeStatusBrowserTests
         if (!normalized.StartsWith(temporaryRoot, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Refusing to clean a browser-test path outside its dedicated temporary root.");
         if (Directory.Exists(normalized)) Directory.Delete(normalized, recursive: true);
+    }
+
+    private enum BrowserPathCategory { Login, Operations, Other }
+    private enum BrowserTabCategory { Monitoring, Failures, Backfills, Revisions, Unknown }
+    private enum BrowserRequestCategory { BlazorScript, BlazorTransport, RuntimeStatus, Other }
+
+    private sealed class SanitizedBrowserDiagnostics
+    {
+        private readonly object _gate = new();
+        private readonly List<(BrowserRequestCategory Category, int Status)> _responseStatuses = [];
+        private bool _interactiveTabObserved, _navigationReached;
+        private bool _transportWasIntercepted;
+        private int _staticMonitoringTabCount = -1;
+        private bool? _staticMonitoringTabDisabled;
+        private int _blazorTransportRequestCount;
+        private BrowserPathCategory _path = BrowserPathCategory.Other;
+        private BrowserTabCategory _tab = BrowserTabCategory.Unknown;
+        private int _consoleErrorCount, _consoleWarningCount, _consoleOtherCount, _pageErrorCount;
+        private int _requestFailedBlazorScriptCount, _requestFailedRuntimeStatusCount, _requestFailedOtherCount;
+        private int _responseStatusesOmitted;
+
+        internal bool TransportWasIntercepted
+        {
+            get { lock (_gate) return _transportWasIntercepted; }
+        }
+
+        internal int BlazorTransportRequestCount
+        {
+            get { lock (_gate) return _blazorTransportRequestCount; }
+        }
+
+        internal void Attach(IPage page)
+        {
+            page.Console += (_, message) => ObserveConsole(message.Type, message.Text);
+            page.PageError += (_, message) => ObservePageError(message);
+            page.Request += (_, request) => ObserveRequest(request.Url);
+            page.RequestFailed += (_, request) => ObserveRequestFailure(request.Url);
+            page.Response += (_, response) => ObserveResponse(response.Url, response.Status);
+            page.FrameNavigated += (_, frame) =>
+            {
+                if (frame == page.MainFrame) ObserveNavigation(frame.Url);
+            };
+        }
+
+        internal void MarkBlazorTransportIntercepted()
+        {
+            lock (_gate) _transportWasIntercepted = true;
+        }
+
+        internal void ObserveRequest(string url)
+        {
+            if (CategorizeRequest(url) != BrowserRequestCategory.BlazorTransport) return;
+            lock (_gate) _blazorTransportRequestCount++;
+        }
+
+        internal void RecordStaticMonitoringTabState(int count, bool? disabled)
+        {
+            lock (_gate)
+            {
+                _staticMonitoringTabCount = Math.Max(0, count);
+                _staticMonitoringTabDisabled = disabled;
+            }
+        }
+
+        internal void MarkInteractiveTabObserved()
+        {
+            lock (_gate) _interactiveTabObserved = true;
+        }
+
+        internal void ObserveConsole(string type, string message)
+        {
+            lock (_gate)
+            {
+                switch (type)
+                {
+                    case "error": _consoleErrorCount++; break;
+                    case "warning": _consoleWarningCount++; break;
+                    default: _consoleOtherCount++; break;
+                }
+            }
+        }
+
+        internal void ObservePageError(string message)
+        {
+            lock (_gate) _pageErrorCount++;
+        }
+
+        internal void ObserveRequestFailure(string url)
+        {
+            var category = CategorizeRequest(url);
+            lock (_gate)
+            {
+                switch (category)
+                {
+                    case BrowserRequestCategory.BlazorScript: _requestFailedBlazorScriptCount++; break;
+                    case BrowserRequestCategory.RuntimeStatus: _requestFailedRuntimeStatusCount++; break;
+                    default: _requestFailedOtherCount++; break;
+                }
+            }
+        }
+
+        internal void ObserveResponse(string url, int status)
+        {
+            var category = CategorizeRequest(url);
+            lock (_gate)
+            {
+                if (_responseStatuses.Count < MaximumRecordedResponseStatuses)
+                    _responseStatuses.Add((category, status));
+                else
+                    _responseStatusesOmitted++;
+            }
+        }
+
+        internal void ObserveNavigation(string url)
+        {
+            var path = BrowserPathCategory.Other;
+            var tab = BrowserTabCategory.Unknown;
+            if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            {
+                path = uri.AbsolutePath switch
+                {
+                    "/login" => BrowserPathCategory.Login,
+                    "/jobs/operations" => BrowserPathCategory.Operations,
+                    _ => BrowserPathCategory.Other,
+                };
+                if (path == BrowserPathCategory.Operations && uri.Query.Length <= 256)
+                {
+                    var match = Regex.Match(uri.Query, @"(?:[?&])tab=(monitoring|failures|backfills|revisions)(?:&|$)");
+                    tab = match.Success ? match.Groups[1].Value switch
+                    {
+                        "monitoring" => BrowserTabCategory.Monitoring,
+                        "failures" => BrowserTabCategory.Failures,
+                        "backfills" => BrowserTabCategory.Backfills,
+                        "revisions" => BrowserTabCategory.Revisions,
+                        _ => BrowserTabCategory.Unknown,
+                    } : BrowserTabCategory.Unknown;
+                }
+            }
+
+            lock (_gate)
+            {
+                _path = path;
+                _tab = tab;
+                _navigationReached |= path == BrowserPathCategory.Operations;
+            }
+        }
+
+        internal string ToSafeSnapshot()
+        {
+            lock (_gate)
+            {
+                var statuses = string.Join(",", _responseStatuses.Select(x => $"{x.Category}:{x.Status}"));
+                return $"transportWasIntercepted={_transportWasIntercepted}; blazorTransportRequestCount={_blazorTransportRequestCount}; " +
+                    $"staticMonitoringTabCount={_staticMonitoringTabCount}; staticMonitoringTabDisabled={_staticMonitoringTabDisabled?.ToString() ?? "unknown"}; " +
+                    $"interactiveTabObserved={_interactiveTabObserved}; " +
+                    $"navigationReached={_navigationReached}; path={_path}; tab={_tab}; " +
+                    $"consoleErrorCount={_consoleErrorCount}; consoleWarningCount={_consoleWarningCount}; " +
+                    $"consoleOtherCount={_consoleOtherCount}; pageErrorCount={_pageErrorCount}; " +
+                    $"requestFailedBlazorScriptCount={_requestFailedBlazorScriptCount}; " +
+                    $"requestFailedRuntimeStatusCount={_requestFailedRuntimeStatusCount}; " +
+                    $"requestFailedOtherCount={_requestFailedOtherCount}; responseStatusesRecorded={_responseStatuses.Count}; " +
+                    $"responseStatusesOmitted={_responseStatusesOmitted}; responseStatuses=[{statuses}]";
+            }
+        }
+
+        private static BrowserRequestCategory CategorizeRequest(string url)
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return BrowserRequestCategory.Other;
+            return uri.AbsolutePath switch
+            {
+                "/_framework/blazor.web.js" => BrowserRequestCategory.BlazorScript,
+                RuntimePath => BrowserRequestCategory.RuntimeStatus,
+                _ when uri.AbsolutePath == "/_blazor" || uri.AbsolutePath.StartsWith("/_blazor/", StringComparison.Ordinal)
+                    => BrowserRequestCategory.BlazorTransport,
+                _ => BrowserRequestCategory.Other,
+            };
+        }
     }
 }
