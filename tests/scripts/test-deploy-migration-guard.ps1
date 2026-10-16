@@ -86,7 +86,7 @@ deploy = workflow.dig('jobs','deploy')
 raise 'deploy must wait for the collector Lambda transition' unless Array(deploy['needs']).include?('deploy-collector-lambda')
 steps = deploy['steps']
 idx = ->(name) { steps.index { |s| s['name'] == name } }
-remote_i, health_i, receipt_i, failure_i, restore_i = %w[Restart remote stack Verify deployment health Verify migration receipt and running image after restart Keep API stopped after failed migration deployment Restore collection pipeline state after deployment].map { |n| idx.call(n) }
+remote_i, health_i, receipt_i, failure_i, restore_i = ['Restart remote stack', 'Verify deployment health', 'Verify migration receipt and running image after restart', 'Keep API stopped after failed migration deployment', 'Restore collection pipeline state after deployment'].map { |n| idx.call(n) }
 raise 'deploy failure/success steps are out of order' unless remote_i && health_i && receipt_i && failure_i && restore_i && remote_i < health_i && health_i < receipt_i && receipt_i < failure_i && failure_i < restore_i
 raise 'deploy job/remote deadlines are missing' unless deploy['timeout-minutes'] == 50 && steps[remote_i]['timeout-minutes'] == 40 && steps[remote_i].dig('with','command_timeout') == '38m'
 remote = steps[remote_i].dig('with','script')
