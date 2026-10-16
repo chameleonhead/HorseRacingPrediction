@@ -1,0 +1,54 @@
+.migration-intro,
+.migration-candidates,
+.migration-operation { display: grid; gap: 12px; }
+.migration-intro h2,
+.migration-candidates h2,
+.migration-operation h2,
+.migration-preview h3,
+.migration-preview h4,
+.migration-operation-result h3,
+.migration-operation-result h4 { margin: 0; }
+.migration-grid { min-width: 0; overflow-wrap: anywhere; }
+.migration-grid small { color: var(--neutral-foreground-hint); display: block; margin-top: 4px; overflow-wrap: anywhere; }
+.migration-cards { display: none; }
+.migration-card { border-top: 1px solid var(--neutral-stroke-rest); padding-top: 12px; min-width: 0; }
+.migration-card-selection { align-items: center; display: flex; gap: 8px; }
+.migration-card dl,
+.migration-operation-result dl,
+.migration-preview-summary { display: grid; gap: 8px 12px; grid-template-columns: minmax(120px, 220px) minmax(0, 1fr); margin: 0; }
+.migration-card dt,
+.migration-operation-result dt,
+.migration-preview-summary dt { color: var(--neutral-foreground-hint); }
+.migration-card dd,
+.migration-operation-result dd,
+.migration-preview-summary dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.migration-actions,
+.migration-status-form { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; }
+.migration-selection-count { margin-right: auto; }
+.migration-status-form fluent-text-field { flex: 1 1 320px; min-width: 0; }
+.migration-preview,
+.migration-operation-result { border-top: 1px solid var(--neutral-stroke-rest); display: grid; gap: 12px; padding-top: 16px; }
+.migration-preview-ready,
+.migration-success { border-inline-start: 3px solid var(--status-success-foreground-1); margin: 0; padding: 10px 12px; }
+.migration-preview-blocked,
+.migration-error,
+.migration-warning { background: var(--neutral-fill-secondary-rest); border-inline-start: 3px solid var(--status-warning-foreground-1); margin: 0; overflow-wrap: anywhere; padding: 10px 12px; }
+.migration-warning p { margin-bottom: 8px; }
+.migration-blockers,
+.migration-mappings,
+.migration-roots { margin: 0; overflow-wrap: anywhere; padding-inline-start: 24px; }
+.migration-preview code,
+.migration-operation code { overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+    .migration-grid { display: none; }
+    .migration-cards { display: grid; gap: 12px; }
+    .migration-actions,
+    .migration-status-form { align-items: stretch; flex-direction: column; }
+    .migration-actions fluent-button,
+    .migration-status-form fluent-button,
+    .migration-status-form fluent-text-field { width: 100%; }
+    .migration-selection-count { margin-right: 0; }
+    .migration-card dl,
+    .migration-operation-result dl,
+    .migration-preview-summary { grid-template-columns: minmax(100px, 34%) minmax(0, 1fr); }
+}
