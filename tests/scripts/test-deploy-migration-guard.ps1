@@ -94,6 +94,11 @@ ordered = ['horse_id_migration_require_tools','docker compose --env-file .env pu
 positions = ordered.map { |needle| remote.index(needle) }
 raise 'remote migration operations are missing or out of order' unless positions.all? && positions.each_cons(2).all? { |a,b| a < b }
 raise 'receipt check must be migration-only and bounded' unless steps[receipt_i]['if'].to_s.include?('horse_id_migration_operation_id') && steps[receipt_i]['timeout-minutes'] == 3
+receipt_script = steps[receipt_i].dig('with','script')
+fixed_receipt = receipt_script.index('horse_id_migration_run_fixed_command "$HORSE_ID_MIGRATION_OPERATION_ID"')
+integrity_check = receipt_script.index('horse_id_migration_check_configured_store_integrity "$APP_DIRECTORY/data"')
+raise 'postrestart integrity must follow the successful fixed receipt exactly once' unless fixed_receipt && integrity_check && fixed_receipt < integrity_check && receipt_script.scan('horse_id_migration_check_configured_store_integrity').length == 1
+raise 'integrity helper must only be called from the migration-only receipt step' unless workflow.to_s.scan('horse_id_migration_check_configured_store_integrity').length == 1
 raise 'failure stop must be migration-only' unless steps[failure_i]['if'].to_s.include?('failure()') && steps[failure_i]['if'].to_s.include?('horse_id_migration_operation_id')
 collector = workflow.dig('jobs','deploy-collector-lambda')
 guard = collector['steps'].find { |s| s['id'] == 'collection-guard' }
@@ -133,6 +138,9 @@ indexes=[names.index(n) for n in ('Restart remote stack','Verify deployment heal
 assert indexes==sorted(indexes) and steps[indexes[0]]['timeout-minutes']==40 and steps[indexes[0]]['with']['command_timeout']=='38m'
 script=steps[indexes[0]]['with']['script']; needles=('horse_id_migration_require_tools','docker compose --env-file .env pull','horse_id_migration_check_image_capability','horse_id_migration_configured_store_paths','horse_id_migration_assert_api_paused','docker compose --env-file .env stop api','horse_id_migration_journal_preflight','horse_id_migration_run_fixed_command "$verified_success_guid"','horse_id_migration_copy_store_set','horse_id_migration_run_fixed_command "$HORSE_ID_MIGRATION_OPERATION_ID"','docker compose --env-file .env up')
 positions=[script.index(n) for n in needles]; assert positions==sorted(positions)
+receipt_script=steps[indexes[2]]['with']['script']; fixed_receipt=receipt_script.index('horse_id_migration_run_fixed_command "$HORSE_ID_MIGRATION_OPERATION_ID"'); integrity_check=receipt_script.index('horse_id_migration_check_configured_store_integrity "$APP_DIRECTORY/data"')
+assert fixed_receipt<integrity_check and receipt_script.count('horse_id_migration_check_configured_store_integrity')==1 and w['jobs']['deploy']['steps'][indexes[2]]['if'].find('horse_id_migration_operation_id')>=0
+assert sum(s.get('with',{}).get('script','').count('horse_id_migration_check_configured_store_integrity') for s in steps)==1
 assert 'horse_id_migration_operation_id' in steps[indexes[2]]['if'] and steps[indexes[2]]['timeout-minutes']==3
 assert 'failure()' in steps[indexes[3]]['if'] and 'horse_id_migration_operation_id' in steps[indexes[3]]['if']
 collector=w['jobs']['deploy-collector-lambda']; guard=next(s for s in collector['steps'] if s.get('id')=='collection-guard'); text=guard['run']
@@ -372,6 +380,23 @@ horse_id_migration_check_image_capability example/api:old
         $databasePath = Join-Path $configuredData $database
         [void](New-Item -ItemType File -Path $databasePath -Force)
     }
+    $seedConfiguredStores = @'
+import sqlite3,sys
+for path in sys.argv[1:]:
+ db=sqlite3.connect(path)
+ db.execute('CREATE TABLE IF NOT EXISTS integrity_fixture (value TEXT NOT NULL)')
+ db.execute('INSERT INTO integrity_fixture(value) VALUES (?)',('fixture',))
+ db.commit(); db.close()
+'@
+    $configuredPaths = @(
+        (Join-Path $configuredData 'race-store/event-store.db'),
+        (Join-Path $configuredData 'collection-state/current.db'),
+        (Join-Path $configuredData 'prediction-state/exec.db'),
+        (Join-Path $configuredData 'horse-identity-migration-journal.db'),
+        (Join-Path $configuredData 'local-collection-queue.db')
+    )
+    & $pythonCommand -c $seedConfiguredStores @configuredPaths
+    if ($LASTEXITCODE -ne 0) { throw 'Could not seed configured application SQLite fixtures.' }
     $configuredDataBash = ConvertTo-BashPath $configuredData
     $composeFixturePath = Join-Path $tempRoot 'rendered-compose.json'
     $composeFixture = @{
@@ -404,6 +429,44 @@ horse_id_migration_copy_store_set $(Quote-Bash $configuredDataBash) $(Quote-Bash
 "@
     Assert-Case ($renderedStores.ExitCode -eq 0) "Rendered Compose database paths must resolve and copy. $($renderedStores.Output)"
     Assert-Case ($renderedStores.Output -match 'STORE_PATHS=race-store/event-store\.db\r?\ncollection-state/current\.db\r?\nprediction-state/exec\.db\r?\nhorse-identity-migration-journal\.db') 'Store paths must come from the rendered Compose environment, not hard-coded basenames.'
+    $integrityOk = Invoke-Bash @"
+set -euo pipefail
+export PATH=$(Quote-Bash $stubBinBash):"`$PATH"
+export TEST_COMPOSE_CONFIG=$(Quote-Bash $composeFixtureBash) HRP_PYTHON3=$(Quote-Bash $pythonBashPath)
+. $(Quote-Bash $helperBashPath)
+horse_id_migration_check_configured_store_integrity $(Quote-Bash $configuredDataBash)
+"@
+    $integrityOkRows = [regex]::Matches($integrityOk.Output, '(?m)^ok\r?$').Count
+    Assert-Case ($integrityOk.ExitCode -eq 0 -and $integrityOkRows -eq 3 -and $integrityOk.Output -match 'PASS code=INTEGRITY_CHECK checked=3') "SQS integrity must emit exactly one ok per configured application DB and exclude the journal/optional local queue. $($integrityOk.Output)"
+
+    $corruptStorePath = Join-Path $configuredData 'race-store/event-store.db'
+    [IO.File]::WriteAllText($corruptStorePath, 'corrupt-private-fixture-marker')
+    $integrityCorrupt = Invoke-Bash @"
+set -euo pipefail
+export PATH=$(Quote-Bash $stubBinBash):"`$PATH"
+export TEST_COMPOSE_CONFIG=$(Quote-Bash $composeFixtureBash) HRP_PYTHON3=$(Quote-Bash $pythonBashPath)
+. $(Quote-Bash $helperBashPath)
+if horse_id_migration_check_configured_store_integrity $(Quote-Bash $configuredDataBash); then exit 80; fi
+"@
+    Assert-Case ($integrityCorrupt.ExitCode -eq 0 -and $integrityCorrupt.Output -match 'FAIL code=INTEGRITY_(RESULT|QUERY) checked=0') "Corrupt SQLite must fail with a fixed result code and count. $($integrityCorrupt.Output)"
+    Assert-Case ($integrityCorrupt.Output -notmatch [regex]::Escape($configuredData) -and $integrityCorrupt.Output -notmatch 'corrupt-private-fixture-marker|Traceback|sqlite3\.') 'Integrity failure output must not expose raw paths, SQLite details, or fixture data.'
+    Remove-Item -LiteralPath $corruptStorePath
+    & $pythonCommand -c $seedConfiguredStores @configuredPaths
+    if ($LASTEXITCODE -ne 0) { throw 'Could not restore the valid configured SQLite fixtures.' }
+
+    $missingStorePath = Join-Path $configuredData 'prediction-state/exec.db'
+    Remove-Item -LiteralPath $missingStorePath
+    $missingIntegrityStore = Invoke-Bash @"
+set -euo pipefail
+export PATH=$(Quote-Bash $stubBinBash):"`$PATH"
+export TEST_COMPOSE_CONFIG=$(Quote-Bash $composeFixtureBash) HRP_PYTHON3=$(Quote-Bash $pythonBashPath)
+. $(Quote-Bash $helperBashPath)
+if horse_id_migration_check_configured_store_integrity $(Quote-Bash $configuredDataBash); then exit 80; fi
+"@
+    Assert-Case ($missingIntegrityStore.ExitCode -eq 0 -and $missingIntegrityStore.Output -match 'FAIL code=STORE_SET checked=0') 'A missing required configured store must fail before SQLite inspection.'
+    & $pythonCommand -c $seedConfiguredStores @configuredPaths
+    if ($LASTEXITCODE -ne 0) { throw 'Could not restore the missing configured SQLite fixture.' }
+
     $manifestJson = & $pythonCommand -c "import json,pathlib,sys; print(json.dumps([line.split('  ',1)[1] for line in pathlib.Path(sys.argv[1],'SHA256SUMS').read_text().splitlines()]))" (Join-Path $tempRoot 'rendered-backup')
     if ($LASTEXITCODE -ne 0) { throw 'Could not read rendered-config backup membership.' }
     $manifestNames = @($manifestJson | ConvertFrom-Json)
@@ -414,7 +477,8 @@ horse_id_migration_copy_store_set $(Quote-Bash $configuredDataBash) $(Quote-Bash
 
     $localQueuePath = Join-Path $configuredData 'localq/queue.db'
     [void](New-Item -ItemType Directory -Path (Split-Path $localQueuePath) -Force)
-    [void](New-Item -ItemType File -Path $localQueuePath -Force)
+    & $pythonCommand -c $seedConfiguredStores $localQueuePath
+    if ($LASTEXITCODE -ne 0) { throw 'Could not seed the configured Local queue SQLite fixture.' }
     $localCompose = $composeFixture -replace '"PredictionScheduling__StoreFileName":"exec.db"', '"PredictionScheduling__StoreFileName":"exec.db","CollectionQueue__Provider":"Local","CollectionQueue__LocalDatabasePath":"/data/localq/queue.db"'
     $localComposePath = Join-Path $tempRoot 'rendered-local-compose.json'
     [IO.File]::WriteAllText($localComposePath, $localCompose)
@@ -426,7 +490,18 @@ export TEST_COMPOSE_CONFIG=$(Quote-Bash $localComposeBash) HRP_PYTHON3=$(Quote-B
 . $(Quote-Bash $helperBashPath)
 horse_id_migration_configured_store_paths $(Quote-Bash $configuredDataBash)
 "@
-    Assert-Case ($localQueue.ExitCode -eq 0 -and $localQueue.Output -match 'localq/queue\.db') 'Configured local queue must be part of the derived required store set.'
+    $expectedLocalStores = @('race-store/event-store.db','collection-state/current.db','prediction-state/exec.db','localq/queue.db','horse-identity-migration-journal.db') | Sort-Object
+    $actualLocalStores = @($localQueue.Output -split '\r?\n' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object)
+    Assert-Case ($localQueue.ExitCode -eq 0 -and ($actualLocalStores -join "`n") -eq ($expectedLocalStores -join "`n")) 'Local provider must resolve exactly the three app stores, configured Local queue, and journal.'
+    $localIntegrity = Invoke-Bash @"
+set -euo pipefail
+export PATH=$(Quote-Bash $stubBinBash):"`$PATH"
+export TEST_COMPOSE_CONFIG=$(Quote-Bash $localComposeBash) HRP_PYTHON3=$(Quote-Bash $pythonBashPath)
+. $(Quote-Bash $helperBashPath)
+horse_id_migration_check_configured_store_integrity $(Quote-Bash $configuredDataBash)
+"@
+    $localIntegrityRows = [regex]::Matches($localIntegrity.Output, '(?m)^ok\r?$').Count
+    Assert-Case ($localIntegrity.ExitCode -eq 0 -and $localIntegrityRows -eq 4 -and $localIntegrity.Output -match 'PASS code=INTEGRITY_CHECK checked=4') 'Local provider integrity must add exactly the configured persistent queue database.'
     Remove-Item -LiteralPath $localQueuePath
     $missingLocalQueue = Invoke-Bash @"
 set -euo pipefail
@@ -436,6 +511,47 @@ export TEST_COMPOSE_CONFIG=$(Quote-Bash $localComposeBash) HRP_PYTHON3=$(Quote-B
 horse_id_migration_configured_store_paths $(Quote-Bash $configuredDataBash)
 "@
     Assert-Case ($missingLocalQueue.ExitCode -ne 0) 'Missing configured local queue must block migration backup.'
+
+    $stallPythonPath = Join-Path $tempRoot 'python-integrity-stall'
+    $stallParentFile = Join-Path $tempRoot 'integrity-stall-parent.pid'
+    $stallChildFile = Join-Path $tempRoot 'integrity-stall-child.pid'
+    $stallPython = @'
+#!/usr/bin/env bash
+set -eu
+if [[ "${1-}" == "-c" ]]; then exec "$TEST_REAL_PYTHON" "$@"; fi
+if [[ "${1-}" == "-" ]]; then
+  echo "$$" > "$TEST_INTEGRITY_PARENT_FILE"
+  sleep 120 &
+  echo "$!" > "$TEST_INTEGRITY_CHILD_FILE"
+  wait
+fi
+exit 98
+'@
+    [IO.File]::WriteAllText($stallPythonPath, $stallPython)
+    $stallPythonBash = ConvertTo-BashPath $stallPythonPath
+    $stallParentBash = ConvertTo-BashPath $stallParentFile
+    $stallChildBash = ConvertTo-BashPath $stallChildFile
+    $stallChmod = Invoke-Bash "chmod +x $(Quote-Bash $stallPythonBash)"
+    Assert-Case ($stallChmod.ExitCode -eq 0) 'Could not make the integrity stall child executable.'
+    $integrityStall = Invoke-Bash @"
+set -euo pipefail
+export PATH=$(Quote-Bash $stubBinBash):"`$PATH"
+export TEST_COMPOSE_CONFIG=$(Quote-Bash $composeFixtureBash) TEST_REAL_PYTHON=$(Quote-Bash $pythonBashPath)
+export TEST_INTEGRITY_PARENT_FILE=$(Quote-Bash $stallParentBash) TEST_INTEGRITY_CHILD_FILE=$(Quote-Bash $stallChildBash)
+export HRP_PYTHON3=$(Quote-Bash $stallPythonBash)
+. $(Quote-Bash $helperBashPath)
+if horse_id_migration_check_configured_store_integrity $(Quote-Bash $configuredDataBash); then exit 80; fi
+"@ 110000
+    Assert-Case ($integrityStall.ExitCode -eq 0 -and $integrityStall.Output -match 'FAIL code=INTEGRITY_DEADLINE checked=0') "Stalled integrity child must hit the fixed outer deadline. $($integrityStall.Output)"
+    Assert-Case ($integrityStall.Output -notmatch [regex]::Escape($configuredData) -and $integrityStall.Output -notmatch 'Traceback|sqlite3\.') 'Deadline output must not expose raw paths or child errors.'
+    if (Test-Path -LiteralPath $stallChildFile) {
+        $stallChildPid = Get-Content -LiteralPath $stallChildFile -Raw
+        if (-not $IsWindows -and $stallChildPid -match '^\d+$') {
+            Start-Sleep -Milliseconds 300
+            $stallChildState = & /bin/bash -c "ps -o stat= -p $stallChildPid 2>/dev/null || true"
+            Assert-Case ([string]::IsNullOrWhiteSpace(($stallChildState -join '').Trim()) -or (($stallChildState -join '').Trim().StartsWith('Z'))) 'Timed-out integrity child process tree must be terminated.'
+        }
+    }
 
     $timeoutTest = Invoke-Bash @"
 set -euo pipefail
@@ -497,7 +613,7 @@ if horse_id_migration_run_fixed_command $(Quote-Bash $guid) example/api:sha-test
     Assert-Case ($dockerfile -match 'LABEL com\.horseracingprediction\.identity-migration-guard="v1"') 'Target Docker image must declare the guarded-runtime capability.'
     Assert-Case ($workflow -match 'source: [^\r\n]*horse-id-migration-deploy\.sh') 'Sourceable helper must be distributed through the existing SCP bundle.'
 
-    Write-Output 'PASS T4 deploy guard fixtures, bounds, backup sidecars, capability, child timeout and workflow order'
+    Write-Output 'PASS T4 deploy guard fixtures, all-store integrity, bounds, backup sidecars, capability, child timeout and workflow order'
 }
 finally {
     if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force }

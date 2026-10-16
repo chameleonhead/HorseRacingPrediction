@@ -183,6 +183,100 @@ PY
   return "$status"
 }
 
+# Run a read-only integrity check over the configured application stores after
+# the API has restarted. The migration journal has its own preflight and is not
+# an application store. Do not require quiescent sidecars here: the live API
+# may legitimately have an open WAL after restart.
+horse_id_migration_check_configured_store_integrity() {
+  local data_directory=${1:?data directory is required}
+  local python_command=${HRP_PYTHON3:-python3}
+  local store_set store status checked expected
+  local -a configured_stores=() application_stores=()
+
+  if ! store_set=$(horse_id_migration_configured_store_paths "$data_directory" 2>/dev/null); then
+    echo "FAIL code=STORE_SET checked=0" >&2
+    return 1
+  fi
+  mapfile -t configured_stores <<< "$store_set"
+  for store in "${configured_stores[@]}"; do
+    [[ "$store" == "horse-identity-migration-journal.db" ]] && continue
+    application_stores+=("$store")
+  done
+  expected=${#application_stores[@]}
+  if (( expected < 3 )); then
+    echo "FAIL code=STORE_SET checked=0" >&2
+    return 1
+  fi
+
+  local output
+  if output=$(timeout --signal=TERM --kill-after=5s 90s \
+      "$python_command" - "$data_directory" "${application_stores[@]}" 2>/dev/null <<'PY'
+import sqlite3
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+stores = sys.argv[2:]
+checked = 0
+
+def fail(code):
+    raise SystemExit(code)
+
+try:
+    if root.is_symlink() or not root.is_dir() or len(stores) < 3:
+        fail(10)
+    root = root.resolve(strict=True)
+    for relative in stores:
+        candidate = Path(relative)
+        if candidate.is_absolute() or ".." in candidate.parts or candidate.suffix.lower() != ".db":
+            fail(10)
+        database = root / candidate
+        if database.is_symlink() or not database.is_file():
+            fail(10)
+        database.resolve(strict=True).relative_to(root)
+        connection = sqlite3.connect(database.resolve(strict=True).as_uri() + "?mode=ro",
+                                     uri=True, timeout=5)
+        try:
+            connection.execute("PRAGMA query_only=ON")
+            rows = connection.execute("PRAGMA integrity_check")
+            first = rows.fetchone()
+            second = rows.fetchone()
+            checked += 1
+            if first != ("ok",) or second is not None:
+                fail(11)
+        except sqlite3.Error:
+            fail(12)
+        finally:
+            connection.close()
+        print("ok", flush=True)
+except SystemExit:
+    raise
+except (OSError, sqlite3.Error, ValueError, RuntimeError):
+    fail(12)
+PY
+  ); then
+    checked=$(printf '%s\n' "$output" | awk '$0 == "ok" { count++ } END { print count+0 }')
+    if [[ "$checked" != "$expected" ]]; then
+      echo "FAIL code=STORE_COUNT checked=$checked" >&2
+      return 1
+    fi
+    printf '%s\n' "$output"
+    echo "PASS code=INTEGRITY_CHECK checked=$checked"
+    return 0
+  else
+    status=$?
+    checked=$(printf '%s\n' "$output" | awk '$0 == "ok" { count++ } END { print count+0 }')
+    case "$status" in
+      10) echo "FAIL code=STORE_OPEN checked=$checked" >&2 ;;
+      11) echo "FAIL code=INTEGRITY_RESULT checked=$checked" >&2 ;;
+      12) echo "FAIL code=INTEGRITY_QUERY checked=$checked" >&2 ;;
+      124|137|143) echo "FAIL code=INTEGRITY_DEADLINE checked=$checked" >&2 ;;
+      *) echo "FAIL code=INTEGRITY_QUERY checked=$checked" >&2 ;;
+    esac
+    return 1
+  fi
+}
+
 # Returns one verified Succeeded GUID, if present. SQL here is a bounded,
 # read-only blocker; the API's fixed GUID command remains the canonical receipt
 # validator and is always run before a compose-up over an initialized journal.

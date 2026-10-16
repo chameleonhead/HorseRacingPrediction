@@ -371,6 +371,7 @@ jobs:
               exit 1
             }
             horse_id_migration_run_fixed_command "$HORSE_ID_MIGRATION_OPERATION_ID" "$IMAGE_NAME:$IMAGE_TAG" "$APP_DIRECTORY/.env"
+            horse_id_migration_check_configured_store_integrity "$APP_DIRECTORY/data"
             HORSE_ID_MIGRATION_RECEIPT
 
       - name: Keep API stopped after failed migration deployment
