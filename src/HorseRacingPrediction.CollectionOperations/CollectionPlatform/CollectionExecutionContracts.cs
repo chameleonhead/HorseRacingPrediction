@@ -127,6 +127,9 @@ public static class CollectionAttemptFailureClassifier
 {
     public static CollectionAttemptCompletion FromException(Exception exception)
     {
+        if (exception is StaleCollectionTaskLeaseException)
+            return new(CollectionAttemptResult.TransientFailure, "StaleSubjectProfileLease", exception.Message,
+                FailureImpact: CollectionFailureImpact.Isolated);
         if (exception is HorseRacingPrediction.Contracts.Identity.SubjectIdentityResolutionException identity)
             return new(CollectionAttemptResult.PermanentFailure, identity.Code, identity.Message,
                 HttpStatusCode: (int)identity.StatusCode, FailureImpact: CollectionFailureImpact.Isolated);

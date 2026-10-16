@@ -63,6 +63,7 @@ builder.Services.AddHttpClient<JraSubjectProfileApiClient>((services, client) =>
         client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
     })
     .AddHttpMessageHandler<CollectionRuntimeTimingHandler>()
+    .AddHttpMessageHandler<CollectionWorkerLeaseHandler>()
     .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
 builder.Services.AddSingleton<IJraSubjectProfileSink>(services =>
     services.GetRequiredService<JraSubjectProfileApiClient>());

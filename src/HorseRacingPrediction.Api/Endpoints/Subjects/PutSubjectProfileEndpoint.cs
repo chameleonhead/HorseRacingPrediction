@@ -2,6 +2,7 @@ using EventFlow;
 using EventFlow.Commands;
 using EventFlow.Queries;
 using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Application.Commands.Horses;
 using HorseRacingPrediction.Application.Commands.Jockeys;
 using HorseRacingPrediction.Application.Commands.Trainers;
@@ -24,8 +25,31 @@ internal static class PutSubjectProfileEndpoint
     {
         endpoints.MapPut("/api/v2/admin/subjects/{kind}/{subjectId}/profile",
             async (string kind, string subjectId, PutSubjectProfileRequest request, [FromServices] IQueryProcessor queries,
-                [FromServices] ICommandBus commands, CancellationToken token) =>
+                [FromServices] ICommandBus commands, [FromServices] CollectionPlatformStore collectionStore,
+                HttpRequest httpRequest, CancellationToken token) =>
             {
+                var hasTaskId = httpRequest.Headers.TryGetValue("X-Collection-Task-Id", out var taskIdValues);
+                var hasLeaseToken = httpRequest.Headers.TryGetValue("X-Collection-Lease-Token", out var leaseTokenValues);
+                if (hasTaskId != hasLeaseToken) return Results.BadRequest(new[] { "コレクションリース情報が不正です。" });
+                if (hasTaskId)
+                {
+                    if (taskIdValues.Count != 1 || leaseTokenValues.Count != 1
+                        || !Guid.TryParseExact(taskIdValues[0], "D", out var taskId) || taskId == Guid.Empty
+                        || string.IsNullOrWhiteSpace(leaseTokenValues[0]))
+                        return Results.BadRequest(new[] { "コレクションリース情報が不正です。" });
+
+                    var resourceType = kind switch
+                    {
+                        "Horse" => CollectionResourceType.Horse,
+                        "Jockey" => CollectionResourceType.Jockey,
+                        "Trainer" => CollectionResourceType.Trainer,
+                        _ => (CollectionResourceType?)null,
+                    };
+                    if (resourceType is null || !await collectionStore.IsValidActiveSubjectProfileLeaseAsync(
+                            taskId, leaseTokenValues[0]!, resourceType.Value, "JRA", subjectId, token))
+                        return Results.Conflict(new { Code = "StaleSubjectProfileLease" });
+                }
+
                 var subject = await SubjectCollectionEndpointMappings.ResolveAsync(kind, subjectId, queries, token);
                 if (subject is null) return Results.NotFound();
                 var profile = request.Profile;

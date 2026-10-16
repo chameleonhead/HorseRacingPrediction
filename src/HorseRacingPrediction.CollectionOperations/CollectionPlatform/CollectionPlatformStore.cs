@@ -1203,6 +1203,38 @@ public sealed partial class CollectionPlatformStore
         return RaceResourceMatches(row.ResourceId, row.AttributesJson, raceId);
     }
 
+    public async Task<bool> IsValidActiveSubjectProfileLeaseAsync(Guid taskId, string leaseToken,
+        CollectionResourceType resourceType, string provider, string resourceId,
+        CancellationToken cancellationToken = default)
+    {
+        var definitionId = resourceType switch
+        {
+            CollectionResourceType.Horse => "horse-profile",
+            CollectionResourceType.Jockey => "jockey-profile",
+            CollectionResourceType.Trainer => "trainer-profile",
+            _ => null,
+        };
+        if (taskId == Guid.Empty || string.IsNullOrWhiteSpace(leaseToken) || definitionId is null
+            || string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(resourceId))
+            return false;
+
+        await using var db = CreateDbContext();
+        var now = HorseRacingPrediction.Contracts.Common.Time.JstTime.Now();
+        return await (from task in db.Tasks.AsNoTracking()
+                      join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+                      join definition in db.Definitions.AsNoTracking() on task.DefinitionId equals definition.DefinitionId
+                      where task.TaskId == taskId
+                          && task.Status == CollectionTaskStatus.Running
+                          && task.LeaseToken == leaseToken
+                          && task.LeaseExpiresAt > now
+                          && task.DefinitionId == definitionId
+                          && definition.ResourceType == resourceType
+                          && resource.Type == resourceType
+                          && resource.Provider == provider
+                          && resource.ResourceId == resourceId
+                      select task.TaskId).AnyAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private bool RaceResourceMatches(string resourceId, string attributesJson, string raceId, bool conservative = false)
     {
         if (_raceIdentityResolver is not null)

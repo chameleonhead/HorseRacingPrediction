@@ -968,6 +968,58 @@ public sealed class CollectionPlatformStoreTests
     private static readonly ResourceKey Horse = new(CollectionResourceType.Horse, "jra", "H123");
 
     [TestMethod]
+    public async Task SubjectProfileLease_RequiresExactRunningLiveTaskAndResourceTuple()
+    {
+        var store = CreateStore();
+        var horseProfile = new CollectionDefinitionId("horse-profile");
+        var otherHorseProfile = new CollectionDefinitionId("other-horse-profile");
+        var jockeyProfile = new CollectionDefinitionId("jockey-profile");
+        await store.RegisterDefinitionAsync(horseProfile, "Horse profile", CollectionResourceType.Horse, 1, "test", false);
+        await store.RegisterDefinitionAsync(otherHorseProfile, "Other horse profile", CollectionResourceType.Horse, 1, "test", false);
+        await store.RegisterDefinitionAsync(jockeyProfile, "Jockey profile", CollectionResourceType.Jockey, 1, "test", false);
+        var now = DateTimeOffset.UtcNow;
+        async Task<(Guid TaskId, string Token)> Lease(ResourceKey resource, CollectionDefinitionId definition)
+        {
+            var request = await store.RequestAsync(resource, definition, 1, CollectionReason.Initial, now);
+            var lease = await store.AcquireAsync(request.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
+            Assert.IsNotNull(lease);
+            return (lease.TaskId, lease.LeaseToken);
+        }
+
+        var valid = await Lease(new(CollectionResourceType.Horse, "JRA", "HP-VALID"), horseProfile);
+        Assert.IsTrue(await store.IsValidActiveSubjectProfileLeaseAsync(valid.TaskId, valid.Token,
+            CollectionResourceType.Horse, "JRA", "HP-VALID"));
+        Assert.IsFalse(await store.IsValidActiveSubjectProfileLeaseAsync(Guid.NewGuid(), valid.Token,
+            CollectionResourceType.Horse, "JRA", "HP-VALID"));
+        Assert.IsFalse(await store.IsValidActiveSubjectProfileLeaseAsync(valid.TaskId, "wrong-token",
+            CollectionResourceType.Horse, "JRA", "HP-VALID"));
+        Assert.IsFalse(await store.IsValidActiveSubjectProfileLeaseAsync(valid.TaskId, valid.Token,
+            CollectionResourceType.Horse, "OTHER", "HP-VALID"));
+        Assert.IsFalse(await store.IsValidActiveSubjectProfileLeaseAsync(valid.TaskId, valid.Token,
+            CollectionResourceType.Horse, "JRA", "HP-OTHER"));
+        Assert.IsFalse(await store.IsValidActiveSubjectProfileLeaseAsync(valid.TaskId, valid.Token,
+            CollectionResourceType.Jockey, "JRA", "HP-VALID"));
+
+        var wrongDefinition = await Lease(new(CollectionResourceType.Horse, "JRA", "HP-WRONG-DEFINITION"), otherHorseProfile);
+        Assert.IsFalse(await store.IsValidActiveSubjectProfileLeaseAsync(wrongDefinition.TaskId, wrongDefinition.Token,
+            CollectionResourceType.Horse, "JRA", "HP-WRONG-DEFINITION"));
+
+        var expiredRequest = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "HP-EXPIRED"),
+            horseProfile, 1, CollectionReason.Initial, now.AddSeconds(1));
+        var expired = await store.AcquireAsync(expiredRequest.TaskId!.Value, 1, now.AddSeconds(1), TimeSpan.FromSeconds(1));
+        Assert.IsNotNull(expired);
+        await store.ReclaimExpiredLeasesAsync(now.AddSeconds(3));
+        Assert.IsFalse(await store.IsValidActiveSubjectProfileLeaseAsync(expired.TaskId, expired.LeaseToken,
+            CollectionResourceType.Horse, "JRA", "HP-EXPIRED"));
+
+        var revoked = await Lease(new(CollectionResourceType.Jockey, "JRA", "JP-REVOKED"), jockeyProfile);
+        Assert.IsTrue(await store.CompleteAttemptAsync(revoked.TaskId, revoked.Token, now.AddSeconds(2),
+            new(CollectionAttemptResult.Succeeded)));
+        Assert.IsFalse(await store.IsValidActiveSubjectProfileLeaseAsync(revoked.TaskId, revoked.Token,
+            CollectionResourceType.Jockey, "JRA", "JP-REVOKED"));
+    }
+
+    [TestMethod]
     [DataRow("Succeeded")]
     [DataRow("Failed")]
     [DataRow("Cancelled")]

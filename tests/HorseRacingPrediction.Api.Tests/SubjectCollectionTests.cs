@@ -1,17 +1,116 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.Extensions.DependencyInjection;
 
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Collector.Http;
 using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Collection;
 using HorseRacingPrediction.Contracts.Horses;
 using HorseRacingPrediction.Contracts.Races;
 using HorseRacingPrediction.Contracts.Subjects;
 using HorseRacingPrediction.Contracts.Trainers;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.TestHost;
 
 namespace HorseRacingPrediction.Api.Tests;
 
 [TestClass]
 public sealed class SubjectCollectionTests
 {
+    [TestMethod]
+    public async Task ProfileLeasePair_RequiresLiveOwnershipAndAllowsHeaderlessManualSave()
+    {
+        var (app, http) = await TestApplicationFactory.CreateAsync();
+        await using var disposable = app; using var client = http;
+        client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var store = app.Services.GetRequiredService<CollectionPlatformStore>();
+        var horseId = "horse-" + Guid.NewGuid().ToString("D").ToLowerInvariant();
+        (await client.PostAsJsonAsync("/api/horses", SubjectRequestFactory.RegisterHorse("リース馬", "リース馬", "F", null, horseId, null))).EnsureSuccessStatusCode();
+        var definition = new CollectionDefinitionId("horse-profile");
+        await store.RegisterDefinitionAsync(definition, "Horse profile", CollectionResourceType.Horse, 3, "test", true);
+        var now = DateTimeOffset.UtcNow;
+        var requested = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", horseId), definition, 3,
+            CollectionReason.Initial, now);
+        var lease = await store.AcquireAsync(requested.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        var sourceUrl = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=profile-lease";
+        var profile = new JraSubjectProfileDto("Horse", "リース馬", sourceUrl,
+            sourceUrl,
+            new() { ["生年月日"] = "2024年4月11日", ["毛色"] = "鹿毛" }, now);
+        var path = $"/api/v2/admin/subjects/Horse/{horseId}/profile";
+        using var leasedRequest = new HttpRequestMessage(HttpMethod.Put, path)
+        {
+            Content = JsonContent.Create(new PutSubjectProfileRequest("Horse", horseId, profile)),
+        };
+        leasedRequest.Headers.Add("X-Collection-Task-Id", lease.TaskId.ToString("D"));
+        leasedRequest.Headers.Add("X-Collection-Lease-Token", lease.LeaseToken);
+        (await client.SendAsync(leasedRequest)).EnsureSuccessStatusCode();
+        Assert.IsNotNull(await client.GetFromJsonAsync<GetSubjectProfileResponse>(
+            $"/api/v2/admin/subjects/Horse/{horseId}/profiles/current"));
+
+        var manualId = "horse-" + Guid.NewGuid().ToString("D").ToLowerInvariant();
+        (await client.PostAsJsonAsync("/api/horses", SubjectRequestFactory.RegisterHorse("手動馬", "手動馬", "F", null, manualId, null))).EnsureSuccessStatusCode();
+        var manualProfile = profile with { Name = "手動馬", SourceIdentity = sourceUrl };
+        (await client.PutAsJsonAsync($"/api/v2/admin/subjects/Horse/{manualId}/profile",
+            new PutSubjectProfileRequest("Horse", manualId, manualProfile))).EnsureSuccessStatusCode();
+    }
+
+    [TestMethod]
+    public async Task ProfileLeasePair_InvalidOrCrossResourceHeadersRejectBeforeProfileWrite()
+    {
+        var (app, http) = await TestApplicationFactory.CreateAsync();
+        await using var disposable = app; using var client = http;
+        client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var store = app.Services.GetRequiredService<CollectionPlatformStore>();
+        var firstHorse = "horse-" + Guid.NewGuid().ToString("D").ToLowerInvariant();
+        var targetHorse = "horse-" + Guid.NewGuid().ToString("D").ToLowerInvariant();
+        foreach (var id in new[] { firstHorse, targetHorse })
+            (await client.PostAsJsonAsync("/api/horses", SubjectRequestFactory.RegisterHorse("対象馬", "対象馬", "F", null, id, null))).EnsureSuccessStatusCode();
+        var definition = new CollectionDefinitionId("horse-profile");
+        await store.RegisterDefinitionAsync(definition, "Horse profile", CollectionResourceType.Horse, 3, "test", true);
+        var now = DateTimeOffset.UtcNow;
+        var requested = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", firstHorse), definition, 3,
+            CollectionReason.Initial, now);
+        var lease = await store.AcquireAsync(requested.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        var profile = new JraSubjectProfileDto("Horse", "対象馬", "source-lease", "https://www.jra.go.jp/JRADB/accessU.html",
+            new() { ["生年月日"] = "2024年4月11日" }, now);
+
+        using var partial = new HttpRequestMessage(HttpMethod.Put, $"/api/v2/admin/subjects/Horse/{firstHorse}/profile")
+        { Content = JsonContent.Create(new PutSubjectProfileRequest("Horse", firstHorse, profile)) };
+        partial.Headers.Add("X-Collection-Task-Id", lease.TaskId.ToString("D"));
+        Assert.AreEqual(HttpStatusCode.BadRequest, (await client.SendAsync(partial)).StatusCode);
+
+        using var malformed = new HttpRequestMessage(HttpMethod.Put, $"/api/v2/admin/subjects/Horse/{firstHorse}/profile")
+        { Content = JsonContent.Create(new PutSubjectProfileRequest("Horse", firstHorse, profile)) };
+        malformed.Headers.Add("X-Collection-Task-Id", "not-a-guid");
+        malformed.Headers.Add("X-Collection-Lease-Token", lease.LeaseToken);
+        Assert.AreEqual(HttpStatusCode.BadRequest, (await client.SendAsync(malformed)).StatusCode);
+
+        using var crossResource = new HttpRequestMessage(HttpMethod.Put, $"/api/v2/admin/subjects/Horse/{targetHorse}/profile")
+        { Content = JsonContent.Create(new PutSubjectProfileRequest("Horse", targetHorse, profile)) };
+        crossResource.Headers.Add("X-Collection-Task-Id", lease.TaskId.ToString("D"));
+        crossResource.Headers.Add("X-Collection-Lease-Token", lease.LeaseToken);
+        var server = (TestServer)app.Services.GetRequiredService<IServer>();
+        using var leaseAwareClient = new HttpClient(new CollectionWorkerLeaseHandler { InnerHandler = server.CreateHandler() })
+        { BaseAddress = client.BaseAddress };
+        leaseAwareClient.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var stale = await Assert.ThrowsExactlyAsync<StaleCollectionTaskLeaseException>(async () =>
+        {
+            using var response = await leaseAwareClient.SendAsync(crossResource);
+        });
+        var classified = CollectionAttemptFailureClassifier.FromException(stale);
+        Assert.AreEqual(CollectionAttemptResult.TransientFailure, classified.Result);
+        Assert.AreEqual("StaleSubjectProfileLease", classified.ErrorCode);
+        Assert.AreEqual(CollectionFailureImpact.Isolated, classified.FailureImpact);
+
+        Assert.AreEqual(HttpStatusCode.NotFound, (await client.GetAsync(
+            $"/api/v2/admin/subjects/Horse/{firstHorse}/profiles/current")).StatusCode);
+        Assert.AreEqual(HttpStatusCode.NotFound, (await client.GetAsync(
+            $"/api/v2/admin/subjects/Horse/{targetHorse}/profiles/current")).StatusCode);
+    }
+
     [TestMethod]
     public async Task ProfileRefresh_PreservesIdentityAndMissingFieldsAndRejectsDifferentSubject()
     {

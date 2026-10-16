@@ -1,10 +1,12 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
+using HorseRacingPrediction.Collector.Http;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using Microsoft.Extensions.Options;
 using System.Net;
 
 using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Subjects;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -140,6 +142,91 @@ public sealed class CollectionExecutionContractsTests
     }
 
     [TestMethod]
+    public async Task StaleProfileLease_IsolatedThroughCompletionWhileUnknownConflictStillPauses()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"profile-lease-classifier-{Guid.NewGuid():N}");
+        try
+        {
+            var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
+            { StateDirectory = directory }));
+            var definition = new CollectionDefinitionId("horse-profile");
+            await store.RegisterDefinitionAsync(definition, "Horse", CollectionResourceType.Horse, 1, "test", false);
+            var stale = CollectionAttemptFailureClassifier.FromException(new StaleCollectionTaskLeaseException());
+            Assert.AreEqual(CollectionAttemptResult.TransientFailure, stale.Result);
+            Assert.AreEqual("StaleSubjectProfileLease", stale.ErrorCode);
+            Assert.AreEqual(CollectionFailureImpact.Isolated, stale.FailureImpact);
+
+            var now = DateTimeOffset.UtcNow;
+            var staleTask = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "PROFILE-STALE"),
+                definition, 1, CollectionReason.Initial, now);
+            var executor = new CollectionTaskExecutor(store, new CollectionDefinitionHandlerRegistry(
+                [new ThrowingHandler(new StaleCollectionTaskLeaseException())]));
+            Assert.IsTrue(await executor.ExecuteAsync(new(staleTask.TaskId!.Value, 1), now, TimeSpan.FromMinutes(5)));
+            Assert.IsFalse((await store.GetPipelineStateAsync()).IsPaused);
+            Assert.AreEqual(CollectionAttemptResult.TransientFailure,
+                (await store.GetAttemptsAsync(staleTask.TaskId.Value)).Single().Result);
+
+            var integrityTask = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "PROFILE-INTEGRITY"),
+                definition, 1, CollectionReason.Initial, now.AddSeconds(1));
+            executor = new CollectionTaskExecutor(store, new CollectionDefinitionHandlerRegistry(
+                [new ThrowingHandler(new HttpRequestException("identity conflict", null, HttpStatusCode.Conflict))]));
+            Assert.IsTrue(await executor.ExecuteAsync(new(integrityTask.TaskId!.Value, 1), now.AddSeconds(1),
+                TimeSpan.FromMinutes(5)));
+            Assert.IsTrue((await store.GetPipelineStateAsync()).IsPaused);
+            var integrityAttempt = (await store.GetAttemptsAsync(integrityTask.TaskId.Value)).Single();
+            Assert.AreEqual(CollectionAttemptResult.PermanentFailure, integrityAttempt.Result);
+            Assert.AreEqual(409, integrityAttempt.HttpStatusCode);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
+
+    [TestMethod]
+    public async Task ProfileClientUnknownLengthConflictFlowsThroughExecutorAndCompletion()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"profile-lease-http-executor-{Guid.NewGuid():N}");
+        try
+        {
+            var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
+            { StateDirectory = directory }));
+            var definition = new CollectionDefinitionId("horse-profile");
+            await store.RegisterDefinitionAsync(definition, "Horse", CollectionResourceType.Horse, 1, "test", false);
+            using var http = new HttpClient(new CollectionWorkerLeaseHandler
+            {
+                InnerHandler = new ProfileConflictHandler(),
+            })
+            { BaseAddress = new Uri("https://api.test/") };
+            var client = new JraSubjectProfileApiClient(http);
+            var executor = new CollectionTaskExecutor(store, new CollectionDefinitionHandlerRegistry(
+                [new ProfileSaveHandler(client)]));
+            var now = DateTimeOffset.UtcNow;
+
+            var staleTask = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "PROFILE-STALE-HTTP"),
+                definition, 1, CollectionReason.Initial, now);
+            Assert.IsTrue(await executor.ExecuteAsync(new(staleTask.TaskId!.Value, 1), now, TimeSpan.FromMinutes(5)));
+            var staleAttempt = (await store.GetAttemptsAsync(staleTask.TaskId.Value)).Single();
+            Assert.AreEqual(CollectionAttemptResult.TransientFailure, staleAttempt.Result);
+            Assert.AreEqual("StaleSubjectProfileLease", staleAttempt.ErrorCode);
+            Assert.IsFalse((await store.GetPipelineStateAsync()).IsPaused);
+
+            var identityTask = await store.RequestAsync(new(CollectionResourceType.Horse, "JRA", "PROFILE-IDENTITY-HTTP"),
+                definition, 1, CollectionReason.Initial, now.AddSeconds(1));
+            Assert.IsTrue(await executor.ExecuteAsync(new(identityTask.TaskId!.Value, 1), now.AddSeconds(1),
+                TimeSpan.FromMinutes(5)));
+            var identityAttempt = (await store.GetAttemptsAsync(identityTask.TaskId.Value)).Single();
+            Assert.AreEqual(CollectionAttemptResult.PermanentFailure, identityAttempt.Result);
+            Assert.AreEqual(409, identityAttempt.HttpStatusCode);
+            Assert.IsTrue((await store.GetPipelineStateAsync()).IsPaused);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
+
+    [TestMethod]
     public void CalendarReadinessTimeout_RemainsTransientAcrossCollectionClassifiers()
     {
         var exception = new TimeoutException("Calendar readiness timed out.");
@@ -259,6 +346,54 @@ public sealed class CollectionExecutionContractsTests
         public CollectionResourceType ResourceType => type;
         public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken cancellationToken)
             => Task.FromResult(new CollectionAttemptCompletion(CollectionAttemptResult.Succeeded));
+    }
+
+    private sealed class ThrowingHandler(Exception exception) : ICollectionDefinitionHandler
+    {
+        public CollectionDefinitionId DefinitionId => new("horse-profile");
+        public CollectionResourceType ResourceType => CollectionResourceType.Horse;
+        public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken cancellationToken)
+            => throw exception;
+    }
+
+    private sealed class ProfileSaveHandler(JraSubjectProfileApiClient client) : ICollectionDefinitionHandler
+    {
+        public CollectionDefinitionId DefinitionId => new("horse-profile");
+        public CollectionResourceType ResourceType => CollectionResourceType.Horse;
+        public async Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task,
+            CancellationToken cancellationToken)
+        {
+            using var lease = CollectionWorkerLeaseContext.Push(task.TaskId, task.LeaseToken);
+            var url = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=lease-test";
+            var profile = new JraSubjectProfileDto("Horse", "テスト馬", url, url,
+                new Dictionary<string, string>(), DateTimeOffset.UtcNow);
+            await client.SaveAsync("Horse", task.Resource.Id, profile, cancellationToken);
+            return new(CollectionAttemptResult.Succeeded);
+        }
+    }
+
+    private sealed class ProfileConflictHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Assert.IsTrue(request.Headers.Contains("X-Collection-Task-Id"));
+            Assert.IsTrue(request.Headers.Contains("X-Collection-Lease-Token"));
+            var body = request.RequestUri!.AbsolutePath.Contains("PROFILE-IDENTITY-HTTP", StringComparison.Ordinal)
+                ? "[\"同定不能: 保存済みの対象とプロフィールが一致しません。\"]"
+                : "{\"code\":\"StaleSubjectProfileLease\"}";
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Conflict)
+            { Content = new UnknownLengthContent(body) });
+        }
+    }
+
+    private sealed class UnknownLengthContent(string body) : HttpContent
+    {
+        private readonly byte[] _bytes = System.Text.Encoding.UTF8.GetBytes(body);
+        protected override bool TryComputeLength(out long length) { length = 0; return false; }
+        protected override Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context) =>
+            stream.WriteAsync(_bytes).AsTask();
+        protected override Task<Stream> CreateContentReadStreamAsync() => Task.FromResult<Stream>(new MemoryStream(_bytes));
     }
 
     private sealed class CancellingHandler(CancellationTokenSource cancellation) : ICollectionDefinitionHandler
