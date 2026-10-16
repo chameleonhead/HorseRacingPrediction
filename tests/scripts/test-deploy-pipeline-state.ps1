@@ -127,7 +127,9 @@ $guard = [regex]::Match($workflow, '(?s)- id: collection-guard.*?        run: \|
 if (-not $guard.Success) { throw 'Guard step not found' }
 $guardScript = ($guard.Groups['script'].Value -split '\r?\n' | ForEach-Object { $_ -replace '^          ', '' }) -join "`n"
 foreach ($case in @('running', 'paused', 'get-failure', 'invalid-state', 'pause-failure', 'invalid-tasks', 'not-drained')) {
-    $output = "export TEST_CASE='$case' TEST_PHASE='guard'`n$mocks`n$guardScript" | & $Bash --noprofile --norc -s 2>&1
+    $payload = "export TEST_CASE='$case' TEST_PHASE='guard'`n$mocks`n$guardScript"
+    $portablePayload = $payload.Replace("`r`n", "`n").Replace("`r", "`n")
+    $output = $portablePayload | & $Bash --noprofile --norc -s 2>&1
     $code = $LASTEXITCODE
     if (($code -eq 0) -ne ($case -in @('running', 'paused'))) { throw "Incorrect guard exit: $case ($code)" }
     if (($output -join "`n") -match 'RESUMED') { throw 'Guard resumed collection' }
