@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Buffers.Binary;
@@ -19,6 +20,7 @@ public sealed class HorseIdentityMigrationJournalTests
     private const string ChildDirectoryVariable = "HRP_HORSE_IDENTITY_JOURNAL_CHILD_DIRECTORY";
     private const string ChildOperationVariable = "HRP_HORSE_IDENTITY_JOURNAL_CHILD_OPERATION";
     private const string ChildReadyVariable = "HRP_HORSE_IDENTITY_JOURNAL_CHILD_READY";
+    private static readonly ConditionalWeakTable<Process, BoundedProcessOutput> ChildOutput = new();
 
     [TestMethod]
     public async Task SameGuidAndValidatedManifestIsIdempotentButChangedManifestConflicts()
@@ -374,8 +376,10 @@ public sealed class HorseIdentityMigrationJournalTests
         var linkPath = fixture.Directory + "-link";
         try
         {
-            if (!await TryCreateJunctionAsync(linkPath, fixture.Directory))
-                Assert.Inconclusive("This Windows environment does not permit creating a directory junction; Linux CI must run the symlink rejection fixture.");
+            if (OperatingSystem.IsLinux())
+                Directory.CreateSymbolicLink(linkPath, fixture.Directory);
+            else if (!await TryCreateJunctionAsync(linkPath, fixture.Directory))
+                Assert.Inconclusive("This Windows environment does not permit creating a directory junction.");
             var linked = new HorseIdentityMigrationJournal(linkPath, [sourcePath]);
             await ExpectExceptionAsync<InvalidOperationException>(() => linked.StageAsync(Guid.NewGuid(), Manifest(1), Now));
         }
@@ -464,6 +468,31 @@ public sealed class HorseIdentityMigrationJournalTests
     }
 
     [TestMethod]
+    public async Task TermIgnoringChildIsKilledAndReapedWithItsOwnedProcessGroup()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+
+        using var fixture = new Fixture();
+        var readyPath = Path.Combine(fixture.Directory, "term-ignored");
+        using var stubborn = StartChild("ignore-term", fixture.Directory, Guid.NewGuid(), readyPath);
+        var escalatedToKill = false;
+        try
+        {
+            await WaitForMarkerAsync(stubborn, readyPath, TimeSpan.FromSeconds(30));
+            escalatedToKill = await StopOwnedProcessAsync(stubborn);
+        }
+        finally
+        {
+            await StopOwnedProcessAsync(stubborn);
+        }
+
+        Assert.IsTrue(escalatedToKill, $"The TERM-ignoring child must force KILL escalation. {GetChildOutput(stubborn)}");
+        Assert.IsTrue(stubborn.HasExited, $"The outer child must be reaped. {GetChildOutput(stubborn)}");
+        Assert.IsFalse(await IsProcessGroupAliveAsync(stubborn.Id),
+            $"TERM escalation must leave no process in the owned group. {GetChildOutput(stubborn)}");
+    }
+
+    [TestMethod]
     public async Task ChildProcessEntryPointRunsOnlyWhenExplicitlySelectedByParent()
     {
         var mode = Environment.GetEnvironmentVariable(ChildModeVariable);
@@ -475,6 +504,30 @@ public sealed class HorseIdentityMigrationJournalTests
             ?? throw new InvalidOperationException("Missing child operation id."));
         var marker = Environment.GetEnvironmentVariable(ChildReadyVariable)
             ?? throw new InvalidOperationException("Missing child marker path.");
+
+        if (mode == "ignore-term")
+        {
+            var stubbornChild = new Process
+            {
+                StartInfo = new ProcessStartInfo("/bin/sh")
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    ArgumentList =
+                    {
+                        "-c",
+                        "trap '' TERM; printf ready > \"$1\"; while :; do sleep 1; done",
+                        "hrp-owned-term-ignorer",
+                        marker,
+                    },
+                },
+                EnableRaisingEvents = true,
+            };
+            if (!stubbornChild.Start()) throw new InvalidOperationException("The TERM-ignoring helper did not start.");
+            await stubbornChild.WaitForExitAsync();
+            return;
+        }
+
         var journal = new HorseIdentityMigrationJournal(directory, []);
 
         if (mode == "stall")
@@ -594,18 +647,28 @@ public sealed class HorseIdentityMigrationJournalTests
         startInfo.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
         startInfo.Environment["DOTNET_NOLOGO"] = "1";
 
-        var outputLimit = 32 * 1024;
-        var output = new StringBuilder(outputLimit);
-        void Capture(string? line)
+        if (OperatingSystem.IsLinux())
         {
-            if (line is null || output.Length >= outputLimit) return;
-            var remaining = outputLimit - output.Length;
-            output.Append(line.AsSpan(0, Math.Min(line.Length, remaining))).AppendLine();
+            var groupedStartInfo = new ProcessStartInfo("setsid")
+            {
+                WorkingDirectory = startInfo.WorkingDirectory,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            foreach (var argument in new[] { startInfo.FileName }.Concat(startInfo.ArgumentList))
+                groupedStartInfo.ArgumentList.Add(argument);
+            foreach (var (name, value) in startInfo.Environment) groupedStartInfo.Environment[name] = value;
+            startInfo = groupedStartInfo;
         }
 
         var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
-        process.OutputDataReceived += (_, args) => Capture(args.Data);
-        process.ErrorDataReceived += (_, args) => Capture(args.Data);
+        var capturedOutput = new BoundedProcessOutput(32 * 1024);
+        ChildOutput.Add(process, capturedOutput);
+        process.OutputDataReceived += (_, args) => capturedOutput.Append(args.Data);
+        process.ErrorDataReceived += (_, args) => capturedOutput.Append(args.Data);
         if (!process.Start()) throw new InvalidOperationException("The filtered journal child did not start.");
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
@@ -664,7 +727,7 @@ public sealed class HorseIdentityMigrationJournalTests
         {
             if (File.Exists(markerPath)) return;
             if (process.HasExited)
-                throw new InvalidOperationException("The filtered journal child exited before its readiness marker.");
+                throw new InvalidOperationException($"The filtered journal child exited before its readiness marker ({process.ExitCode}).\n{GetChildOutput(process)}");
             try
             {
                 await Task.Delay(50, deadline.Token).ConfigureAwait(false);
@@ -682,16 +745,119 @@ public sealed class HorseIdentityMigrationJournalTests
         using var cancellation = new CancellationTokenSource(timeout);
         await process.WaitForExitAsync(cancellation.Token).ConfigureAwait(false);
         if (process.ExitCode != 0)
-            throw new InvalidOperationException($"The filtered journal child failed with exit code {process.ExitCode}.");
+            throw new InvalidOperationException($"The filtered journal child failed with exit code {process.ExitCode}.\n{GetChildOutput(process)}");
     }
 
-    private static async Task StopOwnedProcessAsync(Process process)
+    private static async Task<bool> StopOwnedProcessAsync(Process process)
     {
+        if (OperatingSystem.IsLinux())
+        {
+            await SignalProcessGroupAsync(process.Id, "TERM").ConfigureAwait(false);
+            var escalatedToKill = false;
+            if (!await WaitForProcessGroupExitAsync(process.Id, TimeSpan.FromSeconds(2)).ConfigureAwait(false))
+            {
+                escalatedToKill = true;
+                await SignalProcessGroupAsync(process.Id, "KILL").ConfigureAwait(false);
+                if (!await WaitForProcessGroupExitAsync(process.Id, TimeSpan.FromSeconds(10)).ConfigureAwait(false))
+                    throw new TimeoutException($"Owned Linux process group {process.Id} remained alive after KILL. {GetChildOutput(process)}");
+            }
+            if (!process.HasExited)
+            {
+                using var outerTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await process.WaitForExitAsync(outerTimeout.Token).ConfigureAwait(false);
+            }
+            return escalatedToKill;
+        }
         if (!process.HasExited)
         {
             process.Kill(entireProcessTree: true);
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+        }
+        return false;
+    }
+
+    private static string GetChildOutput(Process process) =>
+        ChildOutput.TryGetValue(process, out var output) ? output.ToString() : "(no child output captured)";
+
+    private static async Task SignalProcessGroupAsync(int processGroupId, string signal)
+    {
+        using var helper = Process.Start(new ProcessStartInfo("/bin/kill")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            ArgumentList = { $"-{signal}", "--", $"-{processGroupId}" },
+        }) ?? throw new InvalidOperationException("Could not start the Linux process-group signal helper.");
+        helper.BeginOutputReadLine();
+        helper.BeginErrorReadLine();
+        await WaitForHelperAsync(helper).ConfigureAwait(false);
+        if (helper.ExitCode != 0 && await IsProcessGroupAliveAsync(processGroupId).ConfigureAwait(false))
+            throw new InvalidOperationException($"Could not send {signal} to owned process group {processGroupId}.");
+    }
+
+    private static async Task<bool> WaitForProcessGroupExitAsync(int processGroupId, TimeSpan timeout)
+    {
+        using var deadline = new CancellationTokenSource(timeout);
+        while (!deadline.IsCancellationRequested && await IsProcessGroupAliveAsync(processGroupId).ConfigureAwait(false))
+        {
+            try { await Task.Delay(50, deadline.Token).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested) { break; }
+        }
+        return !await IsProcessGroupAliveAsync(processGroupId).ConfigureAwait(false);
+    }
+
+    private static async Task<bool> IsProcessGroupAliveAsync(int processGroupId)
+    {
+        using var helper = Process.Start(new ProcessStartInfo("/bin/kill")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            ArgumentList = { "-0", "--", $"-{processGroupId}" },
+        }) ?? throw new InvalidOperationException("Could not start the Linux process-group check helper.");
+        helper.BeginOutputReadLine();
+        helper.BeginErrorReadLine();
+        await WaitForHelperAsync(helper).ConfigureAwait(false);
+        return helper.ExitCode == 0;
+    }
+
+    private static async Task WaitForHelperAsync(Process helper)
+    {
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await helper.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            if (!helper.HasExited) helper.Kill(entireProcessTree: true);
+            using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await helper.WaitForExitAsync(cleanup.Token).ConfigureAwait(false);
+            throw new TimeoutException("The bounded Linux process-group helper exceeded five seconds and was terminated.");
+        }
+    }
+
+    private sealed class BoundedProcessOutput(int maximumLength)
+    {
+        private readonly StringBuilder _text = new(maximumLength);
+        private readonly object _sync = new();
+
+        internal void Append(string? line)
+        {
+            if (line is null) return;
+            lock (_sync)
+            {
+                if (_text.Length >= maximumLength) return;
+                _text.Append(line.AsSpan(0, Math.Min(line.Length, maximumLength - _text.Length))).AppendLine();
+            }
+        }
+
+        public override string ToString()
+        {
+            lock (_sync) return _text.ToString();
         }
     }
 

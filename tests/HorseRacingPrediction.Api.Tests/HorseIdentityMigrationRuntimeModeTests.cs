@@ -46,10 +46,12 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
         await using var stores = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
 
         var result = await RunMigrationCommandAsync(stores,
-            ["--urls", "http://127.0.0.1:0"], TimeSpan.FromSeconds(5));
+            ["--urls", "http://127.0.0.1:0"], TimeSpan.FromSeconds(5), configureIsolatedAws: true);
 
-        Assert.IsTrue(result.TimedOut, "The normal host should remain alive until the bounded child wait expires.");
-        Assert.IsTrue(result.ExitedAfterCleanup, "The child process should be reaped by the timeout cleanup.");
+        Assert.IsTrue(result.TimedOut,
+            $"The normal host should remain alive until the bounded child wait expires. Child output: {result.Output}");
+        Assert.IsTrue(result.ExitedAfterCleanup,
+            $"The child process should be reaped by the timeout cleanup. Child output: {result.Output}");
         try
         {
             using var child = Process.GetProcessById(result.ProcessId);
@@ -268,7 +270,7 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
 
     private static async Task<CliResult> RunMigrationCommandAsync(
         HorseIdentityMigrationStoreEngineTests.StoreFixture stores, IReadOnlyList<string> arguments,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null, bool configureIsolatedAws = false)
     {
         var process = new Process
         {
@@ -291,6 +293,11 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
         process.StartInfo.Environment["PredictionScheduling__StateDirectory"] = Path.GetDirectoryName(stores.SchedulePath)!;
         process.StartInfo.Environment["PredictionScheduling__StoreFileName"] = Path.GetFileName(stores.SchedulePath);
         process.StartInfo.Environment["CollectionQueue__Provider"] = "Sqs";
+        if (configureIsolatedAws)
+        {
+            process.StartInfo.Environment["AWS_REGION"] = "ap-northeast-1";
+            process.StartInfo.Environment["AWS_EC2_METADATA_DISABLED"] = "true";
+        }
         process.StartInfo.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
         process.StartInfo.Environment["DOTNET_NOLOGO"] = "1";
 
