@@ -777,6 +777,13 @@ public sealed class HorseIdentityMigrationStoreEngineTests
         Assert.IsTrue(result.Stores.Single(store => store.Surface == MigrationStoreSurface.EventStore).UnknownObjectCount > 0);
         Assert.AreEqual(0, result.Roots.Count, "Unknown schema must prevent source/target row interpretation.");
         Assert.IsFalse(result.CanWrite);
+        var diagnostics = await fixture.CreateEngine().InspectSchemaDiagnosticsAsync(CancellationToken.None);
+        var eventStore = diagnostics.Surfaces.Single(surface =>
+            surface.Surface == HorseIdentityMigrationSchemaSurface.EventStore);
+        Assert.IsTrue(eventStore.Differences.Any(item =>
+            item.Kind == HorseIdentityMigrationSchemaDifferenceKind.UnknownObject));
+        Assert.DoesNotContain("unexpected_identity_table", JsonSerializer.Serialize(diagnostics),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [TestMethod]
@@ -794,6 +801,51 @@ public sealed class HorseIdentityMigrationStoreEngineTests
             result.Stores.Single(store => store.Surface == MigrationStoreSurface.EventStore).Status);
         Assert.IsEmpty(result.Roots);
         Assert.IsFalse(result.CanWrite);
+        var diagnostics = await fixture.CreateEngine().InspectSchemaDiagnosticsAsync(CancellationToken.None);
+        Assert.IsTrue(diagnostics.Surfaces.Single(surface =>
+            surface.Surface == HorseIdentityMigrationSchemaSurface.EventStore).Differences.Any(item =>
+                item.Kind == HorseIdentityMigrationSchemaDifferenceKind.ColumnShape));
+    }
+
+    [TestMethod]
+    public async Task SameTableCountAndValidHistoryStillReportChangedKnownColumnType()
+    {
+        await using var fixture = await StoreFixture.CreateAsync();
+        var baseline = await fixture.CreateEngine().InspectSchemaDiagnosticsAsync(CancellationToken.None);
+        var baselineCollection = baseline.Surfaces.Single(surface =>
+            surface.Surface == HorseIdentityMigrationSchemaSurface.CollectionPlatform);
+        Assert.AreEqual(HorseIdentityMigrationSchemaStatus.Observed, baselineCollection.Status,
+            JsonSerializer.Serialize(baselineCollection));
+        Assert.AreEqual(26, baselineCollection.TableCount);
+        Assert.AreEqual(0, baselineCollection.UnknownObjectCount);
+        Assert.Contains(25, baselineCollection.MigrationHistoryVersions);
+
+        await fixture.ExecuteAsync(fixture.CollectionPath, """
+            DROP TABLE collection_schema_history;
+            CREATE TABLE collection_schema_history (version TEXT NOT NULL PRIMARY KEY, applied_at TEXT NOT NULL);
+            INSERT INTO collection_schema_history (version, applied_at)
+            VALUES ('25', 'fixture');
+            """);
+
+        var plan = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+        var diagnostics = await fixture.CreateEngine().InspectSchemaDiagnosticsAsync(CancellationToken.None);
+        var collection = diagnostics.Surfaces.Single(surface =>
+            surface.Surface == HorseIdentityMigrationSchemaSurface.CollectionPlatform);
+        var typeDifference = collection.Differences.FirstOrDefault(item =>
+            item.Kind == HorseIdentityMigrationSchemaDifferenceKind.ColumnShape
+            && item.KnownIdentifier is not null
+            && item.Expected?.DeclaredType != item.Observed?.DeclaredType);
+
+        Assert.IsNotNull(typeDifference, JsonSerializer.Serialize(collection));
+        Assert.AreEqual("collection_schema_history.version", typeDifference.KnownIdentifier);
+        Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, plan.Reason);
+        Assert.AreEqual(baselineCollection.TableCount, collection.TableCount);
+        Assert.AreEqual(0, collection.UnknownObjectCount);
+        Assert.Contains(25, collection.MigrationHistoryVersions);
+        Assert.AreEqual(HorseIdentityMigrationSchemaDeclaredType.Integer, typeDifference.Expected?.DeclaredType);
+        Assert.AreEqual(HorseIdentityMigrationSchemaDeclaredType.Text, typeDifference.Observed?.DeclaredType);
+        Assert.IsFalse(plan.CanWrite);
+        Assert.IsEmpty(plan.Roots);
     }
 
     [TestMethod]
@@ -823,6 +875,11 @@ public sealed class HorseIdentityMigrationStoreEngineTests
             result.Stores.Single(store => store.Surface == MigrationStoreSurface.EventStore).Status);
         Assert.IsEmpty(result.Roots);
         Assert.IsFalse(result.CanWrite);
+        var diagnostics = await fixture.CreateEngine().InspectSchemaDiagnosticsAsync(CancellationToken.None);
+        Assert.IsTrue(diagnostics.Surfaces.Single(surface =>
+            surface.Surface == HorseIdentityMigrationSchemaSurface.EventStore).Differences.Any(item =>
+                item.Kind == HorseIdentityMigrationSchemaDifferenceKind.DefaultMismatch),
+            JsonSerializer.Serialize(diagnostics));
     }
 
     [TestMethod]
@@ -840,6 +897,10 @@ public sealed class HorseIdentityMigrationStoreEngineTests
             result.Stores.Single(store => store.Surface == MigrationStoreSurface.EventStore).Status);
         Assert.IsEmpty(result.Roots);
         Assert.IsFalse(result.CanWrite);
+        var diagnostics = await fixture.CreateEngine().InspectSchemaDiagnosticsAsync(CancellationToken.None);
+        Assert.IsTrue(diagnostics.Surfaces.Single(surface =>
+            surface.Surface == HorseIdentityMigrationSchemaSurface.EventStore).Differences.Any(item =>
+                item.Kind == HorseIdentityMigrationSchemaDifferenceKind.IndexShape));
     }
 
     [TestMethod]
@@ -1019,6 +1080,10 @@ public sealed class HorseIdentityMigrationStoreEngineTests
             result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
         Assert.IsEmpty(result.Roots);
         Assert.IsFalse(result.CanWrite);
+        var diagnostics = await fixture.CreateEngine().InspectSchemaDiagnosticsAsync(CancellationToken.None);
+        Assert.IsTrue(diagnostics.Surfaces.Single(surface =>
+            surface.Surface == HorseIdentityMigrationSchemaSurface.CollectionPlatform).Differences.Any(item =>
+                item.Kind == HorseIdentityMigrationSchemaDifferenceKind.SqlShapeUnsupported));
     }
 
     [TestMethod]
@@ -1125,6 +1190,14 @@ public sealed class HorseIdentityMigrationStoreEngineTests
             result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
         Assert.IsEmpty(result.Roots);
         Assert.IsFalse(result.CanWrite);
+        var diagnostics = await fixture.CreateEngine().InspectSchemaDiagnosticsAsync(CancellationToken.None);
+        var collection = diagnostics.Surfaces.Single(surface =>
+            surface.Surface == HorseIdentityMigrationSchemaSurface.CollectionPlatform);
+        Assert.AreEqual(26, collection.TableCount);
+        Assert.AreEqual(0, collection.UnknownObjectCount);
+        CollectionAssert.Contains(collection.MigrationHistoryVersions.ToArray(), 26);
+        Assert.IsTrue(collection.Differences.Any(item =>
+            item.Kind == HorseIdentityMigrationSchemaDifferenceKind.MigrationHistory));
     }
 
     [TestMethod]
@@ -1269,6 +1342,10 @@ public sealed class HorseIdentityMigrationStoreEngineTests
             result.Stores.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform).Status);
         Assert.IsEmpty(result.Roots);
         Assert.IsFalse(result.CanWrite);
+        var diagnostics = await fixture.CreateEngine().InspectSchemaDiagnosticsAsync(CancellationToken.None);
+        Assert.IsTrue(diagnostics.Surfaces.Single(surface =>
+            surface.Surface == HorseIdentityMigrationSchemaSurface.CollectionPlatform).Differences.Any(item =>
+                item.Kind == HorseIdentityMigrationSchemaDifferenceKind.ForeignKeyMismatch));
     }
 
     [TestMethod]

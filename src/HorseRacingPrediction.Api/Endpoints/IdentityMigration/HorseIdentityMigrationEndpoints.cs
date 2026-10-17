@@ -11,13 +11,16 @@ namespace HorseRacingPrediction.Api.Endpoints.IdentityMigration;
 internal static class HorseIdentityMigrationEndpoints
 {
     private const int MaximumBodyBytes = HorseIdentityMigrationJournal.MaximumRequestBytes;
+    private static readonly TimeSpan MaximumDiagnosticDuration = TimeSpan.FromSeconds(30);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private const string PreviewPath = "/v2/admin/horse-id-migration-previews";
     private const string OperationsPath = "/v2/admin/horse-id-migration-operations";
+    private const string SchemaDiagnosticsPath = "/v2/admin/horse-id-migration-schema-diagnostics";
 
     internal static void Map(IEndpointRouteBuilder endpoints)
     {
         endpoints.MapPost(PreviewPath, PreviewAsync);
+        endpoints.MapGet(SchemaDiagnosticsPath, GetSchemaDiagnosticsAsync);
         endpoints.MapPost(OperationsPath, StageAsync);
         endpoints.MapGet(OperationsPath + "/{operationId}", GetStatusAsync);
     }
@@ -27,12 +30,73 @@ internal static class HorseIdentityMigrationEndpoints
         CancellationToken cancellationToken)
     {
         SetNoStore(response);
-        var parsed = await ReadBodyAsync<HorseIdentityMigrationManifest>(request, cancellationToken).ConfigureAwait(false);
-        if (!parsed.Success) return Error(parsed.StatusCode, parsed.ErrorCode!);
-        if (!HorseIdentityMigrationManifestPolicy.Validate(parsed.Value).IsValid)
-            return Error(StatusCodes.Status400BadRequest, "InvalidManifest");
-        var preview = await engine.InspectPreviewAsync(parsed.Value, cancellationToken).ConfigureAwait(false);
-        return Results.Ok(preview);
+        using var deadline = CreateDeadline(cancellationToken);
+        try
+        {
+            var parsed = await ReadBodyAsync<HorseIdentityMigrationManifest>(request, deadline.Token).ConfigureAwait(false);
+            if (!parsed.Success) return Error(parsed.StatusCode, parsed.ErrorCode!);
+            if (!HorseIdentityMigrationManifestPolicy.Validate(parsed.Value).IsValid)
+                return Error(StatusCodes.Status400BadRequest, "InvalidManifest");
+            var preview = await engine.InspectPreviewAsync(parsed.Value, deadline.Token).ConfigureAwait(false);
+            if (deadline.IsCancellationRequested)
+                preview = TypedHorseIdentityStoreEngine.CreateIncompletePreview();
+            var bytes = JsonSerializer.SerializeToUtf8Bytes(preview, JsonOptions);
+            if (bytes.Length > HorseIdentityMigrationPreview.MaximumSummaryBytes)
+                preview = TypedHorseIdentityStoreEngine.BoundPreviewSummary(preview with
+                {
+                    SchemaDiagnostics = preview.SchemaDiagnostics is null
+                        ? null
+                        : TypedHorseIdentityStoreReaders.IncompleteSchemaDiagnostics(preview.SchemaDiagnostics),
+                });
+            if (deadline.IsCancellationRequested)
+                preview = TypedHorseIdentityStoreEngine.CreateIncompletePreview();
+            return Results.Ok(preview);
+        }
+        catch (OperationCanceledException) when (deadline.IsCancellationRequested
+            && !cancellationToken.IsCancellationRequested)
+        {
+            return Results.Ok(TypedHorseIdentityStoreEngine.CreateIncompletePreview());
+        }
+    }
+
+    private static async Task<IResult> GetSchemaDiagnosticsAsync(
+        HttpResponse response, [FromServices] TypedHorseIdentityStoreEngine engine,
+        CancellationToken cancellationToken)
+    {
+        SetNoStore(response);
+        using var deadline = CreateDeadline(cancellationToken);
+        HorseIdentityMigrationSchemaDiagnostics report;
+        try
+        {
+            report = await engine.InspectSchemaDiagnosticsAsync(deadline.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (deadline.IsCancellationRequested
+            && !cancellationToken.IsCancellationRequested)
+        {
+            report = TypedHorseIdentityStoreEngine.CreateIncompleteSchemaDiagnostics();
+        }
+
+        if (deadline.IsCancellationRequested)
+            report = TypedHorseIdentityStoreEngine.CreateIncompleteSchemaDiagnostics();
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(report, JsonOptions);
+        if (bytes.Length > HorseIdentityMigrationSchemaDiagnostics.MaximumReportBytes)
+        {
+            report = TypedHorseIdentityStoreReaders.IncompleteSchemaDiagnostics(report);
+            bytes = JsonSerializer.SerializeToUtf8Bytes(report, JsonOptions);
+        }
+        if (deadline.IsCancellationRequested)
+        {
+            report = TypedHorseIdentityStoreEngine.CreateIncompleteSchemaDiagnostics();
+            bytes = JsonSerializer.SerializeToUtf8Bytes(report, JsonOptions);
+        }
+        return Results.Bytes(bytes, "application/json");
+    }
+
+    private static CancellationTokenSource CreateDeadline(CancellationToken requestToken)
+    {
+        var source = CancellationTokenSource.CreateLinkedTokenSource(requestToken);
+        source.CancelAfter(MaximumDiagnosticDuration);
+        return source;
     }
 
     private static async Task<IResult> StageAsync(

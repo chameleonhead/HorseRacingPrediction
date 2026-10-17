@@ -48,6 +48,18 @@ internal sealed record HorseIdentityStorePlan(
 /// </summary>
 internal sealed class TypedHorseIdentityStoreEngine(TypedHorseIdentityStoreReaders readers)
 {
+    internal Task<HorseIdentityMigrationSchemaDiagnostics> InspectSchemaDiagnosticsAsync(
+        CancellationToken cancellationToken) => readers.InspectSchemaDiagnosticsAsync(cancellationToken);
+
+    internal static HorseIdentityMigrationSchemaDiagnostics CreateIncompleteSchemaDiagnostics() =>
+        new(DateTimeOffset.UtcNow, false, []);
+
+    internal static HorseIdentityMigrationPreview CreateIncompletePreview() =>
+        new(false, null, [HorseIdentityMigrationPreviewBlocker.IncompleteEvidence], [], [], [], [], 0, 0)
+        {
+            SchemaDiagnostics = CreateIncompleteSchemaDiagnostics(),
+        };
+
     internal Task<MigrationStoreReadSnapshot> InspectExecutionInputsAsync(
         HorseIdentityMigrationManifest? manifest, CancellationToken cancellationToken)
     {
@@ -108,7 +120,10 @@ internal sealed class TypedHorseIdentityStoreEngine(TypedHorseIdentityStoreReade
         var canStage = blockers.Count == 0 && fingerprint is not null;
         var preview = new HorseIdentityMigrationPreview(canStage, fingerprint,
             blockers.ToArray(), mappings, stores, roots, pages,
-            typed?.InspectedRows ?? 0, typed?.InspectedBytes ?? 0);
+            typed?.InspectedRows ?? 0, typed?.InspectedBytes ?? 0)
+        {
+            SchemaDiagnostics = TypedHorseIdentityStoreReaders.ToSchemaDiagnostics(snapshot.Schemas),
+        };
         return BoundPreviewSummary(preview);
     }
 
@@ -117,8 +132,18 @@ internal sealed class TypedHorseIdentityStoreEngine(TypedHorseIdentityStoreReade
         if (JsonSerializer.SerializeToUtf8Bytes(preview, new JsonSerializerOptions(JsonSerializerDefaults.Web)).Length
             <= HorseIdentityMigrationPreview.MaximumSummaryBytes)
             return preview;
-        return new(false, null, [HorseIdentityMigrationPreviewBlocker.SummaryTooLarge],
-            preview.Mappings, [], [], [], 0, 0);
+        var bounded = new HorseIdentityMigrationPreview(false, null,
+            [HorseIdentityMigrationPreviewBlocker.SummaryTooLarge], preview.Mappings, [], [], [], 0, 0)
+        {
+            SchemaDiagnostics = preview.SchemaDiagnostics is null
+                ? null
+                : TypedHorseIdentityStoreReaders.IncompleteSchemaDiagnostics(preview.SchemaDiagnostics),
+        };
+        return JsonSerializer.SerializeToUtf8Bytes(bounded,
+                   new JsonSerializerOptions(JsonSerializerDefaults.Web)).Length
+               <= HorseIdentityMigrationPreview.MaximumSummaryBytes
+            ? bounded
+            : new(false, null, [HorseIdentityMigrationPreviewBlocker.SummaryTooLarge], [], [], [], [], 0, 0);
     }
 
     internal static string BuildPreviewFingerprint(

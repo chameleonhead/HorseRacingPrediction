@@ -13,6 +13,8 @@ public sealed record HorseIdentityMigrationPreview(
     long InspectedBytes)
 {
     public const int MaximumSummaryBytes = 1024 * 1024;
+
+    public HorseIdentityMigrationSchemaDiagnostics? SchemaDiagnostics { get; init; }
 }
 
 public enum HorseIdentityMigrationPreviewBlocker

@@ -2,6 +2,7 @@ using System.Data;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using EventFlow.Aggregates;
 using EventFlow.EventStores;
 using HorseRacingPrediction.Api.CollectionController;
@@ -50,7 +51,9 @@ internal sealed record MigrationStoreSchema(
     MigrationStoreReadStatus Status,
     int TableCount,
     int UnknownObjectCount,
-    string? Fingerprint);
+    string? Fingerprint,
+    IReadOnlyList<int>? MigrationHistoryVersions = null,
+    IReadOnlyList<HorseIdentityMigrationSchemaDifference>? Differences = null);
 
 internal sealed record MigrationRootProbe(
     string OldHorseId,
@@ -158,6 +161,72 @@ internal sealed class TypedHorseIdentityStoreReaders(
             mappings, cancellationToken).ConfigureAwait(false);
         return new(schemas, roots, typedReferences.IsComplete, typedReferences);
     }
+
+    internal async Task<HorseIdentityMigrationSchemaDiagnostics> InspectSchemaDiagnosticsAsync(
+        CancellationToken cancellationToken)
+    {
+        var configured = ResolveConfiguredStores();
+        var schemas = new List<MigrationStoreSchema>(configured.Count);
+        foreach (var store in configured)
+            schemas.Add(await InspectSchemaAsync(store, cancellationToken).ConfigureAwait(false));
+        return ToSchemaDiagnostics(schemas);
+    }
+
+    internal static HorseIdentityMigrationSchemaDiagnostics ToSchemaDiagnostics(
+        IReadOnlyList<MigrationStoreSchema> schemas)
+    {
+        var observations = schemas.OrderBy(schema => schema.Surface)
+            .Select(schema => new HorseIdentityMigrationSchemaSurfaceDiagnostic(
+                MapSurface(schema.Surface), MapStatus(schema.Status), schema.TableCount, schema.UnknownObjectCount,
+                schema.Fingerprint, schema.MigrationHistoryVersions ?? [], schema.Differences ?? []))
+            .ToArray();
+        var report = new HorseIdentityMigrationSchemaDiagnostics(DateTimeOffset.UtcNow,
+            observations.All(observation => observation.Status is HorseIdentityMigrationSchemaStatus.Observed
+                or HorseIdentityMigrationSchemaStatus.NotConfigured), observations);
+        return BoundSchemaDiagnostics(report);
+    }
+
+    internal static HorseIdentityMigrationSchemaDiagnostics BoundSchemaDiagnostics(
+        HorseIdentityMigrationSchemaDiagnostics report)
+    {
+        if (JsonSerializer.SerializeToUtf8Bytes(report,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web)).Length
+            <= HorseIdentityMigrationSchemaDiagnostics.MaximumReportBytes)
+            return report;
+
+        return IncompleteSchemaDiagnostics(report);
+    }
+
+    internal static HorseIdentityMigrationSchemaDiagnostics IncompleteSchemaDiagnostics(
+        HorseIdentityMigrationSchemaDiagnostics report) =>
+        new(report.ObservedAtUtc, false, report.Surfaces.Select(observation => observation with
+        {
+            Status = HorseIdentityMigrationSchemaStatus.Incomplete,
+            Fingerprint = null,
+            MigrationHistoryVersions = [],
+            Differences = [new(HorseIdentityMigrationSchemaDifferenceKind.IncompleteScan,
+                HorseIdentityMigrationSchemaObjectKind.Other)],
+        }).ToArray());
+
+    private static HorseIdentityMigrationSchemaSurface MapSurface(MigrationStoreSurface surface) => surface switch
+    {
+        MigrationStoreSurface.EventStore => HorseIdentityMigrationSchemaSurface.EventStore,
+        MigrationStoreSurface.CollectionPlatform => HorseIdentityMigrationSchemaSurface.CollectionPlatform,
+        MigrationStoreSurface.PredictionSchedule => HorseIdentityMigrationSchemaSurface.PredictionSchedule,
+        MigrationStoreSurface.LocalCollectionQueue => HorseIdentityMigrationSchemaSurface.LocalCollectionQueue,
+        _ => throw new ArgumentOutOfRangeException(nameof(surface)),
+    };
+
+    private static HorseIdentityMigrationSchemaStatus MapStatus(MigrationStoreReadStatus status) => status switch
+    {
+        MigrationStoreReadStatus.Observed => HorseIdentityMigrationSchemaStatus.Observed,
+        MigrationStoreReadStatus.NotConfigured => HorseIdentityMigrationSchemaStatus.NotConfigured,
+        MigrationStoreReadStatus.Unavailable => HorseIdentityMigrationSchemaStatus.Unavailable,
+        MigrationStoreReadStatus.UnknownShape => HorseIdentityMigrationSchemaStatus.UnknownShape,
+        MigrationStoreReadStatus.Unsupported => HorseIdentityMigrationSchemaStatus.Unsupported,
+        MigrationStoreReadStatus.Truncated => HorseIdentityMigrationSchemaStatus.Incomplete,
+        _ => HorseIdentityMigrationSchemaStatus.Incomplete,
+    };
 
     internal TypedHorseIdentityReferenceReader CreateReferenceReaderForExecution() =>
         new(eventJsonSerializer, domainEventFactory);
@@ -461,7 +530,9 @@ internal sealed class TypedHorseIdentityStoreReaders(
         if (!store.Required)
             return new(store.Surface, MigrationStoreReadStatus.NotConfigured, 0, 0, null);
         if (store.Path is null || !File.Exists(store.Path))
-            return new(store.Surface, MigrationStoreReadStatus.Unavailable, 0, 0, null);
+            return new(store.Surface, MigrationStoreReadStatus.Unavailable, 0, 0, null,
+                Differences: [Difference(HorseIdentityMigrationSchemaDifferenceKind.StoreUnavailable,
+                    HorseIdentityMigrationSchemaObjectKind.Other)]);
 
         try
         {
@@ -470,7 +541,9 @@ internal sealed class TypedHorseIdentityStoreReaders(
             var schemaScan = await ReadSchemaObjectsAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
             var objects = schemaScan.Objects;
             if (schemaScan.Truncated)
-                return new(store.Surface, MigrationStoreReadStatus.Truncated, 0, 0, null);
+                return new(store.Surface, MigrationStoreReadStatus.Truncated, 0, 0, null,
+                    Differences: [Difference(HorseIdentityMigrationSchemaDifferenceKind.IncompleteScan,
+                        HorseIdentityMigrationSchemaObjectKind.Other)]);
 
             var acceptedMetadataTables = MetadataTableShapes(store.Surface);
             var tableObjects = objects.Where(item => item.Type == "table")
@@ -478,14 +551,17 @@ internal sealed class TypedHorseIdentityStoreReaders(
             var tables = tableObjects.Keys
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var collectionHistoryLayout = CollectionSchemaHistoryLayout.Unknown;
+            IReadOnlyList<int> collectionHistoryVersions = [];
             var expectedShapes = GetExpectedTables(store.Surface);
             IReadOnlyList<IReadOnlyDictionary<string, ExpectedTable>> shapeCandidates = [expectedShapes];
             var malformedSchema = false;
             if (store.Surface == MigrationStoreSurface.CollectionPlatform
                 && tables.Contains("collection_schema_history", StringComparer.OrdinalIgnoreCase))
             {
-                collectionHistoryLayout = await ReadCollectionSchemaHistoryLayoutAsync(
+                var history = await ReadCollectionSchemaHistoryLayoutAsync(
                     connection, transaction, cancellationToken).ConfigureAwait(false);
+                collectionHistoryLayout = history.Layout;
+                collectionHistoryVersions = history.Versions;
                 if (collectionHistoryLayout == CollectionSchemaHistoryLayout.Unknown)
                     malformedSchema = true;
                 if (collectionHistoryLayout == CollectionSchemaHistoryLayout.Upgrade)
@@ -528,9 +604,11 @@ internal sealed class TypedHorseIdentityStoreReaders(
             malformedSchema |= unknownObjects > 0
                 || store.MetadataTables.Any(table => !tables.Contains(table));
             var matchedShape = false;
+            var shapeDifferences = new List<HorseIdentityMigrationSchemaDifference>();
             foreach (var candidate in shapeCandidates)
             {
                 var candidateMatches = true;
+                var candidateDifferences = new List<HorseIdentityMigrationSchemaDifference>();
                 var requireCanonicalFairnessCheck = ReferenceEquals(candidate,
                     CollectionPlatformCurrentUpgradeModel.Value)
                     || ReferenceEquals(candidate, CollectionPlatformV6UpgradeModel.Value);
@@ -539,13 +617,24 @@ internal sealed class TypedHorseIdentityStoreReaders(
                     var expected = candidate.TryGetValue(tableName, out var modelShape)
                         ? modelShape
                         : acceptedMetadataTables.GetValueOrDefault(tableName);
-                    if (expected is null || !await MatchesTableShapeAsync(connection, transaction,
-                            tableName, expected, tableObjects[tableName].Sql,
-                            requireCanonicalFairnessCheck,
-                            cancellationToken).ConfigureAwait(false))
+                    if (expected is null)
                     {
                         candidateMatches = false;
-                        break;
+                        continue;
+                    }
+                    try
+                    {
+                        if (!await MatchesTableShapeAsync(connection, transaction, tableName, expected,
+                                tableObjects[tableName].Sql, requireCanonicalFairnessCheck,
+                                candidateDifferences, cancellationToken).ConfigureAwait(false))
+                            candidateMatches = false;
+                    }
+                    catch (Exception exception) when (!candidateMatches
+                        && exception is (SqliteException or IOException))
+                    {
+                        // Continue only to collect bounded reasons after the original match is already false.
+                        candidateDifferences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.IncompleteScan,
+                            HorseIdentityMigrationSchemaObjectKind.Table, tableName));
                     }
                 }
                 if (candidateMatches)
@@ -553,14 +642,32 @@ internal sealed class TypedHorseIdentityStoreReaders(
                     matchedShape = true;
                     break;
                 }
+                shapeDifferences.AddRange(candidateDifferences);
             }
             malformedSchema |= !matchedShape;
+            var differences = new List<HorseIdentityMigrationSchemaDifference>();
+            if (store.Surface == MigrationStoreSurface.CollectionPlatform
+                && collectionHistoryLayout == CollectionSchemaHistoryLayout.Unknown)
+                differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.MigrationHistory,
+                    HorseIdentityMigrationSchemaObjectKind.Table, "collection_schema_history"));
+
+            foreach (var missingTable in expectedTables.Where(table => !tables.Contains(table)))
+                differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.MissingTable,
+                    HorseIdentityMigrationSchemaObjectKind.Table, missingTable));
+
+            if (unknownObjects > 0)
+                differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.UnknownObject,
+                    HorseIdentityMigrationSchemaObjectKind.Other));
+            if (!matchedShape)
+                differences.AddRange(shapeDifferences);
             if (store.Surface == MigrationStoreSurface.EventStore
                 && tables.Contains("__EFMigrationsHistory", StringComparer.OrdinalIgnoreCase)
                 && !await MatchesEventStoreMigrationHistoryAsync(connection, transaction, cancellationToken)
                     .ConfigureAwait(false))
             {
                 malformedSchema = true;
+                differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.MigrationHistory,
+                    HorseIdentityMigrationSchemaObjectKind.Table, "__EFMigrationsHistory"));
             }
             var fingerprint = Fingerprint(objects);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -572,7 +679,11 @@ internal sealed class TypedHorseIdentityStoreReaders(
                     : missingTables
                         ? MigrationStoreReadStatus.Unsupported
                         : MigrationStoreReadStatus.Observed;
-            return new(store.Surface, status, tables.Count, unknownObjects, fingerprint);
+            if (status == MigrationStoreReadStatus.Truncated)
+                differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.IncompleteScan,
+                    HorseIdentityMigrationSchemaObjectKind.Other));
+            return new(store.Surface, status, tables.Count, unknownObjects, fingerprint,
+                collectionHistoryVersions, NormalizeDifferences(differences));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -580,13 +691,64 @@ internal sealed class TypedHorseIdentityStoreReaders(
         }
         catch (SqliteException)
         {
-            return new(store.Surface, MigrationStoreReadStatus.Unavailable, 0, 0, null);
+            return new(store.Surface, MigrationStoreReadStatus.Unavailable, 0, 0, null,
+                Differences: [Difference(HorseIdentityMigrationSchemaDifferenceKind.StoreUnavailable,
+                    HorseIdentityMigrationSchemaObjectKind.Other)]);
         }
         catch (IOException)
         {
-            return new(store.Surface, MigrationStoreReadStatus.Unavailable, 0, 0, null);
+            return new(store.Surface, MigrationStoreReadStatus.Unavailable, 0, 0, null,
+                Differences: [Difference(HorseIdentityMigrationSchemaDifferenceKind.StoreUnavailable,
+                    HorseIdentityMigrationSchemaObjectKind.Other)]);
         }
     }
+
+    private static HorseIdentityMigrationSchemaDifference Difference(
+        HorseIdentityMigrationSchemaDifferenceKind kind,
+        HorseIdentityMigrationSchemaObjectKind objectKind,
+        string? knownIdentifier = null,
+        HorseIdentityMigrationSchemaShapeDescriptor? expected = null,
+        HorseIdentityMigrationSchemaShapeDescriptor? observed = null)
+    {
+        var identifier = knownIdentifier is not null
+            && System.Text.Encoding.UTF8.GetByteCount(knownIdentifier)
+                <= HorseIdentityMigrationSchemaDiagnostics.MaximumIdentifierBytes
+            ? knownIdentifier
+            : null;
+        return new(kind, objectKind, identifier, expected, observed);
+    }
+
+    private static IReadOnlyList<HorseIdentityMigrationSchemaDifference> NormalizeDifferences(
+        IEnumerable<HorseIdentityMigrationSchemaDifference> differences) => differences
+        .Distinct()
+        .OrderBy(item => item.Kind)
+        .ThenBy(item => item.ObjectKind)
+        .ThenBy(item => item.KnownIdentifier, StringComparer.Ordinal)
+        .Take(MaximumSchemaObjects)
+        .ToArray();
+
+    private static HorseIdentityMigrationSchemaShapeDescriptor ColumnDescriptor(
+        string type, bool nullable, int primaryKeyOrdinal) => new(
+        DeclaredType: ToDeclaredType(type), Nullable: nullable, PrimaryKeyOrdinal: primaryKeyOrdinal);
+
+    private static HorseIdentityMigrationSchemaShapeDescriptor DefaultDescriptor(string? expression) => new(
+        Fingerprint: FingerprintText(NormalizeSqlExpression(expression) ?? "<none>"));
+
+    private static HorseIdentityMigrationSchemaDeclaredType ToDeclaredType(string type) =>
+        type.Trim().ToUpperInvariant() switch
+        {
+            "INTEGER" or "INT" or "BIGINT" or "SMALLINT" =>
+                HorseIdentityMigrationSchemaDeclaredType.Integer,
+            "TEXT" or "CHAR" or "VARCHAR" or "CLOB" => HorseIdentityMigrationSchemaDeclaredType.Text,
+            "REAL" or "FLOAT" or "DOUBLE" => HorseIdentityMigrationSchemaDeclaredType.Real,
+            "BLOB" => HorseIdentityMigrationSchemaDeclaredType.Blob,
+            "NUMERIC" or "DECIMAL" or "BOOLEAN" or "DATE" or "DATETIME" =>
+                HorseIdentityMigrationSchemaDeclaredType.Numeric,
+            _ => HorseIdentityMigrationSchemaDeclaredType.Other,
+        };
+
+    private static string FingerprintText(string value) => Convert.ToHexString(
+        SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 
     private static async Task<SchemaScan> ReadSchemaObjectsAsync(
         SqliteConnection connection, SqliteTransaction transaction, CancellationToken cancellationToken)
@@ -698,13 +860,20 @@ internal sealed class TypedHorseIdentityStoreReaders(
         ExpectedTable expected,
         string? tableSql,
         bool allowCanonicalFairnessCheck,
+        List<HorseIdentityMigrationSchemaDifference> differences,
         CancellationToken cancellationToken)
     {
         var sqliteInternalSequence = tableName.Equals("sqlite_sequence", StringComparison.OrdinalIgnoreCase)
             && tableSql is null;
         if (!sqliteInternalSequence && !MatchesSupportedTableSyntax(tableName, tableSql,
                 allowCanonicalFairnessCheck))
+        {
+            differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.SqlShapeUnsupported,
+                HorseIdentityMigrationSchemaObjectKind.Table, tableName,
+                expected: new(Fingerprint: ExpectedTableFingerprint(expected)),
+                observed: new(Fingerprint: tableSql is null ? null : FingerprintText(tableSql))));
             return false;
+        }
 
         var actualColumns = new Dictionary<string, ActualColumn>(StringComparer.OrdinalIgnoreCase);
         await using (var command = connection.CreateCommand())
@@ -714,11 +883,19 @@ internal sealed class TypedHorseIdentityStoreReaders(
             command.CommandText = $"PRAGMA table_xinfo({QuoteIdentifier(tableName)});";
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             if (reader.FieldCount < 7)
+            {
+                differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.IncompleteScan,
+                    HorseIdentityMigrationSchemaObjectKind.Table, tableName));
                 return false;
+            }
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
                 if (actualColumns.Count >= 512)
+                {
+                    differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.IncompleteScan,
+                        HorseIdentityMigrationSchemaObjectKind.Table, tableName));
                     return false;
+                }
                 if (reader.GetInt32(6) != 0)
                     return false;
                 actualColumns[reader.GetString(1)] = new(
@@ -729,17 +906,45 @@ internal sealed class TypedHorseIdentityStoreReaders(
 
         if (actualColumns.Count != expected.Columns.Count)
         {
+            foreach (var (name, expectedColumn) in expected.Columns)
+            {
+                if (actualColumns.TryGetValue(name, out var actual)
+                    && !string.Equals(NormalizeSqlExpression(actual.DefaultValue),
+                        NormalizeSqlExpression(expectedColumn.DefaultExpression), StringComparison.Ordinal))
+                {
+                    differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.DefaultMismatch,
+                        HorseIdentityMigrationSchemaObjectKind.Table, $"{tableName}.{name}",
+                        DefaultDescriptor(expectedColumn.DefaultExpression), DefaultDescriptor(actual.DefaultValue)));
+                }
+            }
+            differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.ColumnShape,
+                HorseIdentityMigrationSchemaObjectKind.Table, tableName));
             return false;
         }
         foreach (var (name, expectedColumn) in expected.Columns)
         {
-            if (!actualColumns.TryGetValue(name, out var actual)
-                || !string.Equals(actual.Type, expectedColumn.Type, StringComparison.OrdinalIgnoreCase)
+            if (!actualColumns.TryGetValue(name, out var actual))
+            {
+                differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.ColumnShape,
+                    HorseIdentityMigrationSchemaObjectKind.Table, $"{tableName}.{name}"));
+                return false;
+            }
+            if (!string.Equals(actual.Type, expectedColumn.Type, StringComparison.OrdinalIgnoreCase)
                 || actual.PrimaryKeyOrdinal != expectedColumn.PrimaryKeyOrdinal
-                || IsActualColumnNullable(actualColumns, actual) != expectedColumn.Nullable
-                || !string.Equals(NormalizeSqlExpression(actual.DefaultValue),
+                || IsActualColumnNullable(actualColumns, actual) != expectedColumn.Nullable)
+            {
+                differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.ColumnShape,
+                    HorseIdentityMigrationSchemaObjectKind.Table, $"{tableName}.{name}",
+                    ColumnDescriptor(expectedColumn.Type, expectedColumn.Nullable, expectedColumn.PrimaryKeyOrdinal),
+                    ColumnDescriptor(actual.Type, IsActualColumnNullable(actualColumns, actual), actual.PrimaryKeyOrdinal)));
+                return false;
+            }
+            if (!string.Equals(NormalizeSqlExpression(actual.DefaultValue),
                     NormalizeSqlExpression(expectedColumn.DefaultExpression), StringComparison.Ordinal))
             {
+                differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.DefaultMismatch,
+                    HorseIdentityMigrationSchemaObjectKind.Table, $"{tableName}.{name}",
+                    DefaultDescriptor(expectedColumn.DefaultExpression), DefaultDescriptor(actual.DefaultValue)));
                 return false;
             }
         }
@@ -764,6 +969,12 @@ internal sealed class TypedHorseIdentityStoreReaders(
                 && string.Equals(pair.First.OnUpdate, pair.Second.OnUpdate, StringComparison.Ordinal)
                 && string.Equals(pair.First.Match, "NONE", StringComparison.Ordinal)))
         {
+            differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.ForeignKeyMismatch,
+                HorseIdentityMigrationSchemaObjectKind.Table, tableName,
+                expected: new(ObjectCount: expectedForeignKeys.Length,
+                    Fingerprint: ExpectedForeignKeyFingerprint(expectedForeignKeys)),
+                observed: new(ObjectCount: actualForeignKeys?.Count,
+                    Fingerprint: actualForeignKeys is null ? null : ActualForeignKeyFingerprint(actualForeignKeys))));
             return false;
         }
 
@@ -777,13 +988,25 @@ internal sealed class TypedHorseIdentityStoreReaders(
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
                 if (reader.IsDBNull(1) || reader.IsDBNull(2) || reader.IsDBNull(3) || reader.IsDBNull(4))
+                {
+                    differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.IncompleteScan,
+                        HorseIdentityMigrationSchemaObjectKind.Table, tableName));
                     return false;
+                }
                 var name = reader.GetString(1);
                 if (actualIndexes.Count >= 128)
+                {
+                    differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.IncompleteScan,
+                        HorseIdentityMigrationSchemaObjectKind.Table, tableName));
                     return false;
+                }
                 var origin = reader.GetString(3).ToLowerInvariant();
                 if (origin is not ("c" or "pk" or "u"))
+                {
+                    differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.IndexShape,
+                        HorseIdentityMigrationSchemaObjectKind.Table, tableName));
                     return false;
+                }
                 actualIndexes[name] = new(reader.GetInt32(2) != 0, reader.GetInt32(4) != 0, origin,
                     await ReadIndexPredicateAsync(connection, transaction, name, cancellationToken)
                         .ConfigureAwait(false));
@@ -803,7 +1026,14 @@ internal sealed class TypedHorseIdentityStoreReaders(
                 && primaryKeyIndexes.Length != 1)
             || (IsImplicitIntegerRowId(expected.Columns, expectedPrimaryKey)
                 && primaryKeyIndexes.Length != 0))
+        {
+            differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.IndexShape,
+                HorseIdentityMigrationSchemaObjectKind.Table, tableName,
+                expected: new(ObjectCount: expected.Indexes.Count,
+                    Fingerprint: ExpectedIndexFingerprint(expected.Indexes)),
+                observed: new(ObjectCount: actualIndexes.Count, Fingerprint: ActualIndexFingerprint(actualIndexes))));
             return false;
+        }
         if (primaryKeyIndexes.Length == 1)
         {
             var primaryKeyColumns = await ReadIndexColumnsAsync(connection, transaction,
@@ -813,7 +1043,16 @@ internal sealed class TypedHorseIdentityStoreReaders(
                     .SequenceEqual(expectedPrimaryKey, StringComparer.OrdinalIgnoreCase)
                 || primaryKeyColumns.Any(column => column.Descending
                     || !string.Equals(column.Collation, "BINARY", StringComparison.OrdinalIgnoreCase)))
+            {
+                differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.IndexShape,
+                    HorseIdentityMigrationSchemaObjectKind.Table, tableName,
+                    expected: new(ObjectCount: expectedPrimaryKey.Length,
+                        Fingerprint: FingerprintText(string.Join("|", expectedPrimaryKey))),
+                    observed: new(ObjectCount: primaryKeyColumns.Count,
+                        Fingerprint: FingerprintText(string.Join("|", primaryKeyColumns.Select(column =>
+                            $"{column.Name}:{column.Descending}:{column.Collation}"))))));
                 return false;
+            }
         }
 
         var userIndexes = actualIndexes.Where(pair => pair.Value.Origin == "c")
@@ -822,18 +1061,35 @@ internal sealed class TypedHorseIdentityStoreReaders(
             || !userIndexes.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
                 .SetEquals(expected.Indexes.Keys))
         {
+            differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.IndexShape,
+                HorseIdentityMigrationSchemaObjectKind.Table, tableName,
+                expected: new(ObjectCount: expected.Indexes.Count,
+                    Fingerprint: ExpectedIndexFingerprint(expected.Indexes)),
+                observed: new(ObjectCount: userIndexes.Count, Fingerprint: ActualIndexFingerprint(userIndexes))));
             return false;
         }
 
         foreach (var (indexName, expectedIndex) in expected.Indexes)
         {
             if (!userIndexes.TryGetValue(indexName, out var actualIndex))
+            {
+                differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.IndexShape,
+                    HorseIdentityMigrationSchemaObjectKind.Index, indexName,
+                    expected: new(ObjectCount: expected.Indexes.Count,
+                        Fingerprint: ExpectedIndexFingerprint(expected.Indexes)),
+                    observed: new(ObjectCount: userIndexes.Count, Fingerprint: ActualIndexFingerprint(userIndexes))));
                 return false;
+            }
             if (actualIndex.Unique != expectedIndex.Unique
                 || actualIndex.Partial != (expectedIndex.Predicate is not null)
                 || !string.Equals(actualIndex.Predicate, NormalizeSqlExpression(expectedIndex.Predicate),
                     StringComparison.OrdinalIgnoreCase))
             {
+                differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.IndexShape,
+                    HorseIdentityMigrationSchemaObjectKind.Index, indexName,
+                    expected: new(ObjectCount: expected.Indexes.Count,
+                        Fingerprint: ExpectedIndexFingerprint(expected.Indexes)),
+                    observed: new(ObjectCount: userIndexes.Count, Fingerprint: ActualIndexFingerprint(userIndexes))));
                 return false;
             }
             var actualIndexColumns = await ReadIndexColumnsAsync(connection, transaction, indexName, cancellationToken)
@@ -843,7 +1099,16 @@ internal sealed class TypedHorseIdentityStoreReaders(
                     .SequenceEqual(expectedIndex.Columns, StringComparer.OrdinalIgnoreCase)
                 || actualIndexColumns.Any(column => column.Descending
                     || !string.Equals(column.Collation, "BINARY", StringComparison.OrdinalIgnoreCase)))
+            {
+                differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.IndexShape,
+                    HorseIdentityMigrationSchemaObjectKind.Index, indexName,
+                    expected: new(ObjectCount: expectedIndex.Columns.Count,
+                        Fingerprint: FingerprintText(string.Join("|", expectedIndex.Columns))),
+                    observed: new(ObjectCount: actualIndexColumns.Count,
+                        Fingerprint: FingerprintText(string.Join("|", actualIndexColumns.Select(column =>
+                            $"{column.Name}:{column.Descending}:{column.Collation}"))))));
                 return false;
+            }
         }
         return true;
     }
@@ -1123,7 +1388,7 @@ internal sealed class TypedHorseIdentityStoreReaders(
         return quote == '\0' ? normalized.ToString() : "\u0000invalid-sql-expression";
     }
 
-    private static async Task<CollectionSchemaHistoryLayout> ReadCollectionSchemaHistoryLayoutAsync(
+    private static async Task<CollectionSchemaHistoryRead> ReadCollectionSchemaHistoryLayoutAsync(
         SqliteConnection connection, SqliteTransaction transaction, CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
@@ -1136,29 +1401,31 @@ internal sealed class TypedHorseIdentityStoreReaders(
             LIMIT $limit;
             """;
         command.Parameters.AddWithValue("$limit", MaximumCollectionSchemaHistoryRows + 1);
-        var versions = new List<int>(MaximumCollectionSchemaHistoryRows);
+        var versions = new List<int>(MaximumCollectionSchemaHistoryRows + 1);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            if (reader.IsDBNull(0) || versions.Count >= MaximumCollectionSchemaHistoryRows)
-                return CollectionSchemaHistoryLayout.Unknown;
+            if (reader.IsDBNull(0) || versions.Count >= MaximumCollectionSchemaHistoryRows + 1)
+                return new(CollectionSchemaHistoryLayout.Unknown, versions.ToArray());
             var version = reader.GetInt64(0);
+            if (version is >= int.MinValue and <= int.MaxValue)
+                versions.Add((int)version);
             if (version is < 1 or > CurrentCollectionPlatformSchemaVersion
-                || (versions.Count > 0 && version != versions[^1] + 1))
-                return CollectionSchemaHistoryLayout.Unknown;
-            versions.Add((int)version);
+                || (versions.Count > 1 && version != versions[^2] + 1))
+                return new(CollectionSchemaHistoryLayout.Unknown, versions.ToArray());
         }
 
         if (versions.Count == 1 && versions[0] == CurrentCollectionPlatformSchemaVersion)
-            return CollectionSchemaHistoryLayout.FreshEf;
+            return new(CollectionSchemaHistoryLayout.FreshEf, versions.ToArray());
         if (versions.Count == 0 || versions[^1] != CurrentCollectionPlatformSchemaVersion)
-            return CollectionSchemaHistoryLayout.Unknown;
-        return versions[0] switch
+            return new(CollectionSchemaHistoryLayout.Unknown, versions.ToArray());
+        var layout = versions[0] switch
         {
             6 => CollectionSchemaHistoryLayout.UpgradeV6,
             18 => CollectionSchemaHistoryLayout.UpgradeV18,
             _ => CollectionSchemaHistoryLayout.Upgrade,
         };
+        return new(layout, versions.ToArray());
     }
 
     private static async Task<bool> MatchesEventStoreMigrationHistoryAsync(
@@ -1220,6 +1487,33 @@ internal sealed class TypedHorseIdentityStoreReaders(
     }
 
     private static string QuoteIdentifier(string value) => $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+
+    private static string ExpectedTableFingerprint(ExpectedTable table)
+    {
+        var facets = table.Columns.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(item => $"c:{item.Key}:{item.Value.Type}:{item.Value.Nullable}:{item.Value.PrimaryKeyOrdinal}:{item.Value.DefaultExpression}")
+            .Concat(table.Indexes.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(item => $"i:{item.Key}:{item.Value.Unique}:{string.Join(",", item.Value.Columns)}:{item.Value.Predicate}"))
+            .Concat((table.ForeignKeys ?? []).OrderBy(item => item.PrincipalTable, StringComparer.OrdinalIgnoreCase)
+                .Select(item => $"f:{item.PrincipalTable}:{string.Join(",", item.Columns)}:{string.Join(",", item.PrincipalColumns)}:{item.OnDelete}:{item.OnUpdate}"));
+        return FingerprintText(string.Join("|", facets));
+    }
+
+    private static string ExpectedIndexFingerprint(IReadOnlyDictionary<string, ExpectedIndex> indexes) =>
+        FingerprintText(string.Join("|", indexes.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(item => $"{item.Key}:{item.Value.Unique}:{string.Join(",", item.Value.Columns)}:{item.Value.Predicate}")));
+
+    private static string ActualIndexFingerprint(IReadOnlyDictionary<string, ActualIndex> indexes) =>
+        FingerprintText(string.Join("|", indexes.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(item => $"{item.Key}:{item.Value.Unique}:{item.Value.Partial}:{item.Value.Origin}:{item.Value.Predicate}")));
+
+    private static string ExpectedForeignKeyFingerprint(IEnumerable<ExpectedForeignKey> foreignKeys) =>
+        FingerprintText(string.Join("|", foreignKeys.Select(item =>
+            $"{item.PrincipalTable}:{string.Join(",", item.Columns)}:{string.Join(",", item.PrincipalColumns)}:{item.OnDelete}:{item.OnUpdate}")));
+
+    private static string ActualForeignKeyFingerprint(IEnumerable<ActualForeignKey> foreignKeys) =>
+        FingerprintText(string.Join("|", foreignKeys.Select(item =>
+            $"{item.PrincipalTable}:{string.Join(",", item.Columns)}:{string.Join(",", item.PrincipalColumns)}:{item.OnDelete}:{item.OnUpdate}:{item.Match}")));
 
     private static string Fingerprint(IEnumerable<SchemaObject> objects)
     {
@@ -1398,6 +1692,9 @@ internal sealed class TypedHorseIdentityStoreReaders(
     private sealed record ActualIndexColumn(string Name, bool Descending, string Collation);
 
     private sealed record SchemaScan(IReadOnlyList<SchemaObject> Objects, bool Truncated);
+
+    private sealed record CollectionSchemaHistoryRead(CollectionSchemaHistoryLayout Layout,
+        IReadOnlyList<int> Versions);
 
     private sealed record SchemaObject(string Type, string Name, string? Sql, long SqlBytes);
 

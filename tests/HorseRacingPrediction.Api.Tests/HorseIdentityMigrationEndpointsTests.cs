@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using HorseRacingPrediction.Api.Endpoints.IdentityMigration;
 using HorseRacingPrediction.Api.IdentityMigration;
 using HorseRacingPrediction.Api.Security;
@@ -39,6 +40,17 @@ public sealed class HorseIdentityMigrationEndpointsTests
         Assert.IsNotNull(preview);
         Assert.IsTrue(preview.CanStage, string.Join(',', preview.Blockers));
         Assert.IsNotNull(preview.Fingerprint);
+        Assert.IsNotNull(preview.SchemaDiagnostics);
+        var diagnostics = await client.GetHorseIdentityMigrationSchemaDiagnosticsAsync();
+        Assert.IsNotNull(diagnostics);
+        Assert.IsTrue(diagnostics.IsComplete);
+        Assert.AreEqual(JsonSerializer.Serialize(preview.SchemaDiagnostics!.Surfaces),
+            JsonSerializer.Serialize(diagnostics.Surfaces));
+        var diagnosticsJson = JsonSerializer.Serialize(diagnostics, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.IsTrue(Encoding.UTF8.GetByteCount(diagnosticsJson)
+            <= HorseIdentityMigrationSchemaDiagnostics.MaximumReportBytes);
+        Assert.DoesNotContain(stores.Root, diagnosticsJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CREATE TABLE", diagnosticsJson, StringComparison.OrdinalIgnoreCase);
         Assert.AreEqual(before, await stores.SourceSnapshotAsync());
 
         var staged = await client.StageHorseIdentityMigrationAsync(manifest, preview.Fingerprint!);
@@ -69,6 +81,10 @@ public sealed class HorseIdentityMigrationEndpointsTests
         var before = await stores.SourceSnapshotAsync();
         await using var app = await StartApiAsync(stores);
         using var client = app.GetTestClient();
+
+        using var unauthenticatedDiagnostics = await client.GetAsync(
+            "/api/v2/admin/horse-id-migration-schema-diagnostics");
+        Assert.AreEqual(HttpStatusCode.Unauthorized, unauthenticatedDiagnostics.StatusCode);
 
         using var unauthenticated = await client.PostAsync("/api/v2/admin/horse-id-migration-previews",
             new StringContent("{ definitely not json", Encoding.UTF8, "application/json"));

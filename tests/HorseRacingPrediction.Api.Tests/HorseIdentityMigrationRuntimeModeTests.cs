@@ -109,6 +109,9 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
             var body = await status.Content.ReadAsStringAsync();
             StringAssert.Contains(body, "\"status\":\"Partial\"");
             Assert.AreEqual("no-store, no-cache, max-age=0", status.Headers.CacheControl?.ToString());
+            using var diagnostics = await client.GetAsync("/api/v2/admin/horse-id-migration-schema-diagnostics");
+            Assert.AreEqual(HttpStatusCode.ServiceUnavailable, diagnostics.StatusCode,
+                "The blocked host must not resolve or read configured source stores.");
             Assert.IsFalse(File.Exists(fixture.EventStorePath));
             Assert.IsFalse(File.Exists(fixture.CollectionStorePath));
             Assert.IsFalse(File.Exists(fixture.ScheduleStorePath));
