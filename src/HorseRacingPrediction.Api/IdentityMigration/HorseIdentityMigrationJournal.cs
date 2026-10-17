@@ -72,6 +72,19 @@ internal sealed record HorseIdentityMigrationJournalOutcome(
     internal bool Succeeded => Reason == HorseIdentityMigrationJournalReason.None && Operation is not null;
 }
 
+internal sealed record HorseIdentityMigrationRequestKeyRecord(
+    Guid RequestKey,
+    string ImmutableRequestHash,
+    string? PreviewFingerprint,
+    HorseIdentityMigrationJournalOperation Operation);
+
+internal sealed record HorseIdentityMigrationExecutionIntentOutcome(
+    HorseIdentityMigrationExecutionIntent? Intent,
+    HorseIdentityMigrationJournalReason Reason)
+{
+    internal bool Succeeded => Reason == HorseIdentityMigrationJournalReason.None && Intent is not null;
+}
+
 internal enum HorseIdentityMigrationStartupState
 {
     Ready,
@@ -101,6 +114,8 @@ internal sealed class HorseIdentityMigrationJournal
     internal static readonly TimeSpan TerminalRetention = TimeSpan.FromDays(30);
 
     private const long FailureStatusReserveBytes = 136 * 1024;
+    private const long RequestKeyCapacityReservationBytes = 512;
+    private const long ExecutionIntentCapacityReservationBytes = 512;
     private const int MaximumSqliteSectorSizeBytes = 64 * 1024;
     private const int RollbackJournalRecordOverheadBytes = 8;
     private const int RollbackJournalHeaderBytes = 24;
@@ -386,11 +401,110 @@ internal sealed class HorseIdentityMigrationJournal
         return operation;
     }
 
+    internal async Task<HorseIdentityMigrationRequestKeyRecord?> GetByRequestKeyAsync(
+        Guid requestKey,
+        CancellationToken cancellationToken = default)
+    {
+        if (requestKey == Guid.Empty || !File.Exists(_databasePath)) return null;
+        await PrepareReadOnlyDirectoryAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = _databasePath,
+            Mode = SqliteOpenMode.ReadOnly,
+            Pooling = false,
+            DefaultTimeout = 1,
+        }.ToString());
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: true);
+        if (!await HasRequestKeyTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false))
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+
+        var key = await ReadRequestKeyAsync(connection, transaction, requestKey, cancellationToken).ConfigureAwait(false);
+        if (key is null)
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+
+        var keyValue = key.Value;
+        var operation = await ReadOperationAsync(connection, transaction, keyValue.OperationId, cancellationToken)
+            .ConfigureAwait(false);
+        if (operation is null)
+            throw new InvalidDataException("Migration journal request key refers to a missing operation.");
+        if (operation.Status == HorseIdentityMigrationOperationStatus.Succeeded
+            && !await HasCompleteVerifiedEvidenceAsync(connection, transaction, operation.OperationId, cancellationToken)
+                .ConfigureAwait(false))
+            throw new InvalidDataException("Succeeded operation has incomplete page evidence.");
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new(requestKey, keyValue.ImmutableRequestHash, keyValue.PreviewFingerprint, operation);
+    }
+
     internal async Task<HorseIdentityMigrationJournalOutcome> StageAsync(
         Guid operationId,
         HorseIdentityMigrationManifest? manifest,
         DateTimeOffset now,
+        CancellationToken cancellationToken = default) =>
+        await StageCoreAsync(operationId, manifest, null, null, null, now, cancellationToken).ConfigureAwait(false);
+
+    internal async Task<HorseIdentityMigrationJournalOutcome> StageWithRequestKeyAsync(
+        Guid operationId,
+        HorseIdentityMigrationManifest? manifest,
+        Guid requestKey,
+        string immutableRequestHash,
+        DateTimeOffset now,
         CancellationToken cancellationToken = default)
+        => await StageWithRequestKeyAsync(operationId, manifest, requestKey, immutableRequestHash, null, now,
+            cancellationToken).ConfigureAwait(false);
+
+    internal async Task<HorseIdentityMigrationJournalOutcome> StageWithRequestKeyAsync(
+        Guid operationId,
+        HorseIdentityMigrationManifest? manifest,
+        Guid requestKey,
+        string immutableRequestHash,
+        string? previewFingerprint,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        if (requestKey == Guid.Empty || !IsSha256Hash(immutableRequestHash))
+            return new(null, HorseIdentityMigrationJournalReason.RequestConflict);
+
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await StageCoreAsync(operationId, manifest, requestKey, immutableRequestHash, previewFingerprint,
+                    now, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (SqliteException exception) when (exception.SqliteErrorCode is 5 or 6 or 19)
+            {
+                if (attempt >= 12)
+                    return new(null, HorseIdentityMigrationJournalReason.OwnershipBusy);
+                await Task.Delay(TimeSpan.FromMilliseconds(50 * (attempt + 1)), cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (InvalidDataException exception)
+                when (exception.Message == "Initialized migration journal is missing.")
+            {
+                if (attempt >= 12)
+                    return new(null, HorseIdentityMigrationJournalReason.OwnershipBusy);
+                await Task.Delay(TimeSpan.FromMilliseconds(50 * (attempt + 1)), cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async Task<HorseIdentityMigrationJournalOutcome> StageCoreAsync(
+        Guid operationId,
+        HorseIdentityMigrationManifest? manifest,
+        Guid? requestKey,
+        string? immutableRequestHash,
+        string? previewFingerprint,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
     {
         if (operationId == Guid.Empty || manifest is null)
             return new(null, HorseIdentityMigrationJournalReason.RequestConflict);
@@ -409,10 +523,30 @@ internal sealed class HorseIdentityMigrationJournal
         await using var transaction = connection.BeginTransaction();
         await PurgeEligibleTerminalAsync(connection, transaction, now, cancellationToken).ConfigureAwait(false);
 
+        if (requestKey is { } key)
+        {
+            var existingKey = await ReadRequestKeyAsync(connection, transaction, key, cancellationToken)
+                .ConfigureAwait(false);
+            if (existingKey is not null)
+            {
+                var existingKeyValue = existingKey.Value;
+                var keyedOperation = await ReadOperationAsync(connection, transaction, existingKeyValue.OperationId, cancellationToken)
+                    .ConfigureAwait(false);
+                if (keyedOperation is null)
+                    throw new InvalidDataException("Migration journal request key refers to a missing operation.");
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return string.Equals(existingKeyValue.ImmutableRequestHash, immutableRequestHash, StringComparison.Ordinal)
+                    ? new(keyedOperation, HorseIdentityMigrationJournalReason.None)
+                    : new(keyedOperation, HorseIdentityMigrationJournalReason.RequestConflict);
+            }
+        }
+
         var existing = await ReadOperationAsync(connection, transaction, operationId, cancellationToken)
             .ConfigureAwait(false);
         if (existing is not null)
         {
+            if (requestKey is not null)
+                return new(existing, HorseIdentityMigrationJournalReason.RequestConflict);
             var existingRequest = await ReadRequestHashAsync(connection, transaction, operationId, cancellationToken)
                 .ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -421,7 +555,8 @@ internal sealed class HorseIdentityMigrationJournal
                 : new(existing, HorseIdentityMigrationJournalReason.RequestConflict);
         }
 
-        if (!await HasCapacityAsync(connection, transaction, requestBytes,
+        var requestKeyBytes = requestKey is null ? 0 : RequestKeyCapacityReservationBytes;
+        if (!await HasCapacityAsync(connection, transaction, checked(requestBytes + requestKeyBytes),
                 cancellationToken).ConfigureAwait(false))
             return new(null, HorseIdentityMigrationJournalReason.CapacityExceeded);
 
@@ -444,10 +579,166 @@ internal sealed class HorseIdentityMigrationJournal
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        if (requestKey is { } newKey)
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = "INSERT INTO migration_request_keys (request_key, immutable_request_hash, preview_fingerprint, operation_id) VALUES ($key, $hash, $fingerprint, $id);";
+            command.Parameters.AddWithValue("$key", newKey.ToString("D"));
+            command.Parameters.AddWithValue("$hash", immutableRequestHash!);
+            command.Parameters.AddWithValue("$fingerprint", (object?)previewFingerprint ?? DBNull.Value);
+            command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         var staged = await ReadOperationAsync(connection, transaction, operationId, cancellationToken)
             .ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return new(staged, HorseIdentityMigrationJournalReason.None);
+    }
+
+    internal async Task<HorseIdentityMigrationExecutionIntentOutcome> CreateExecutionIntentAsync(
+        Guid operationId,
+        string immutableRequestHash,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        if (operationId == Guid.Empty || !IsSha256Hash(immutableRequestHash))
+            return new(null, HorseIdentityMigrationJournalReason.RequestConflict);
+
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction();
+        var operation = await ReadOperationAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        var existing = await ReadExecutionIntentAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        if (existing is not null)
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return string.Equals(existing.ImmutableRequestHash, immutableRequestHash, StringComparison.Ordinal)
+                ? new(existing, HorseIdentityMigrationJournalReason.None)
+                : new(existing, HorseIdentityMigrationJournalReason.RequestConflict);
+        }
+
+        var key = await ReadRequestKeyForOperationAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        if (!HorseIdentityMigrationExecutionPolicy.CanCreateIntent(operation?.Status, existing is not null)
+            || key is null
+            || !string.Equals(key, immutableRequestHash, StringComparison.Ordinal))
+            return new(null, HorseIdentityMigrationJournalReason.StaleOperation);
+
+        if (!await HasCapacityAsync(connection, transaction, ExecutionIntentCapacityReservationBytes,
+                cancellationToken).ConfigureAwait(false))
+            return new(null, HorseIdentityMigrationJournalReason.CapacityExceeded);
+
+        var timestamp = now.ToUniversalTime().ToString("O");
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "INSERT INTO migration_execution_intents (operation_id, immutable_request_hash, created_utc, updated_utc, phase) VALUES ($id, $hash, $created, $updated, $phase);";
+            command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            command.Parameters.AddWithValue("$hash", immutableRequestHash);
+            command.Parameters.AddWithValue("$created", timestamp);
+            command.Parameters.AddWithValue("$updated", timestamp);
+            command.Parameters.AddWithValue("$phase", (int)HorseIdentityMigrationExecutionPhase.IntentRecorded);
+            try
+            {
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+            {
+                return new(null, HorseIdentityMigrationJournalReason.OwnershipBusy);
+            }
+        }
+
+        var intent = await ReadExecutionIntentAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new(intent, HorseIdentityMigrationJournalReason.None);
+    }
+
+    internal async Task<HorseIdentityMigrationExecutionIntent?> GetExecutionIntentAsync(
+        Guid operationId,
+        CancellationToken cancellationToken = default)
+    {
+        if (operationId == Guid.Empty || !File.Exists(_databasePath)) return null;
+        await using var connection = await OpenReadOnlyAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: true);
+        if (!await HasExecutionIntentTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false))
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+        var intent = await ReadExecutionIntentAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return intent;
+    }
+
+    internal async Task<HorseIdentityMigrationExecutionIntentOutcome> AdvanceExecutionIntentAsync(
+        Guid operationId,
+        HorseIdentityMigrationExecutionPhase nextPhase,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        if (operationId == Guid.Empty)
+            return new(null, HorseIdentityMigrationJournalReason.StaleOperation);
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction();
+        var current = await ReadExecutionIntentAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        var operation = await ReadOperationAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        var requestHash = await ReadRequestKeyForOperationAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        if (current is null || operation is null
+            || requestHash is null
+            || !string.Equals(requestHash, current.ImmutableRequestHash, StringComparison.Ordinal)
+            || !HorseIdentityMigrationExecutionPolicy.CanTransition(current.Phase, nextPhase)
+            || ((nextPhase is HorseIdentityMigrationExecutionPhase.Applying
+                or HorseIdentityMigrationExecutionPhase.DataSucceeded
+                or HorseIdentityMigrationExecutionPhase.Verifying
+                or HorseIdentityMigrationExecutionPhase.Verified
+                ) && ((nextPhase == HorseIdentityMigrationExecutionPhase.Applying
+                    && operation.Status != HorseIdentityMigrationOperationStatus.Staged)
+                    || (nextPhase != HorseIdentityMigrationExecutionPhase.Applying
+                        && operation.Status != HorseIdentityMigrationOperationStatus.Succeeded))))
+            return new(current, HorseIdentityMigrationJournalReason.StaleOperation);
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "UPDATE migration_execution_intents SET phase = $phase, updated_utc = $updated WHERE operation_id = $id AND phase = $current;";
+            command.Parameters.AddWithValue("$phase", (int)nextPhase);
+            command.Parameters.AddWithValue("$updated", now.ToUniversalTime().ToString("O"));
+            command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            command.Parameters.AddWithValue("$current", (int)current.Phase);
+            if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+                return new(current, HorseIdentityMigrationJournalReason.OwnershipBusy);
+        }
+
+        var advanced = await ReadExecutionIntentAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new(advanced, HorseIdentityMigrationJournalReason.None);
+    }
+
+    internal async Task<bool> CanBeginReadonlyVerificationAsync(
+        Guid operationId,
+        CancellationToken cancellationToken = default)
+    {
+        if (operationId == Guid.Empty || !File.Exists(_databasePath)) return false;
+        await using var connection = await OpenReadOnlyAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: true);
+        var operation = await ReadOperationAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        var intent = await HasExecutionIntentTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false)
+            ? await ReadExecutionIntentAsync(connection, transaction, operationId, cancellationToken).ConfigureAwait(false)
+            : null;
+        var canVerify = operation is not null && intent is not null
+            && HorseIdentityMigrationExecutionPolicy.CanBeginReadonlyVerification(operation.Status, intent.Phase);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return canVerify;
     }
 
     internal async Task<HorseIdentityMigrationJournalOutcome> ClaimWorkflowAsync(
@@ -885,6 +1176,117 @@ internal sealed class HorseIdentityMigrationJournal
         return (string?)await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    private static bool IsSha256Hash(string? value) => value is { Length: 64 }
+        && value.All(character => character is >= '0' and <= '9' or >= 'A' and <= 'F');
+
+    private static async Task<bool> HasRequestKeyTableAsync(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'migration_request_keys';";
+        return await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null;
+    }
+
+    private static async Task<bool> HasRequestKeyPreviewFingerprintColumnAsync(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT 1 FROM pragma_table_info('migration_request_keys') WHERE name = 'preview_fingerprint' LIMIT 1;";
+        return await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null;
+    }
+
+    private static async Task<bool> HasExecutionIntentTableAsync(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'migration_execution_intents';";
+        return await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null;
+    }
+
+    private async Task<(string ImmutableRequestHash, string? PreviewFingerprint, Guid OperationId)?> ReadRequestKeyAsync(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        Guid requestKey,
+        CancellationToken cancellationToken)
+    {
+        if (!await HasRequestKeyTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false))
+            return null;
+        var hasPreviewFingerprint = await HasRequestKeyPreviewFingerprintColumnAsync(connection, transaction,
+            cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = hasPreviewFingerprint
+            ? "SELECT immutable_request_hash, preview_fingerprint, operation_id FROM migration_request_keys WHERE request_key = $key;"
+            : "SELECT immutable_request_hash, operation_id FROM migration_request_keys WHERE request_key = $key;";
+        command.Parameters.AddWithValue("$key", requestKey.ToString("D"));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) return null;
+        var hash = reader.GetString(0);
+        var operationIndex = hasPreviewFingerprint ? 2 : 1;
+        var fingerprint = hasPreviewFingerprint && !reader.IsDBNull(1) ? reader.GetString(1) : null;
+        var operationText = reader.GetString(operationIndex);
+        if (!IsSha256Hash(hash)
+            || (fingerprint is not null && (fingerprint.Length != 64 || !fingerprint.All(Uri.IsHexDigit)))
+            || !Guid.TryParseExact(operationText, "D", out var operationId)
+            || operationId == Guid.Empty)
+            throw new InvalidDataException("Migration journal request key is corrupt.");
+        return (hash, fingerprint, operationId);
+    }
+
+    private async Task<string?> ReadRequestKeyForOperationAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        Guid operationId,
+        CancellationToken cancellationToken)
+    {
+        if (!await HasRequestKeyTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false))
+            return null;
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT immutable_request_hash FROM migration_request_keys WHERE operation_id = $id;";
+        command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+        return (string?)await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<HorseIdentityMigrationExecutionIntent?> ReadExecutionIntentAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        Guid operationId,
+        CancellationToken cancellationToken)
+    {
+        if (!await HasExecutionIntentTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false))
+            return null;
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT immutable_request_hash, created_utc, updated_utc, phase FROM migration_execution_intents WHERE operation_id = $id;";
+        command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) return null;
+        try
+        {
+            var hash = reader.GetString(0);
+            var phase = (HorseIdentityMigrationExecutionPhase)reader.GetInt32(3);
+            if (!IsSha256Hash(hash) || !Enum.IsDefined(phase))
+                throw new InvalidDataException("Migration journal execution intent is corrupt.");
+            return new(operationId, hash,
+                DateTimeOffset.Parse(reader.GetString(1), System.Globalization.CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse(reader.GetString(2), System.Globalization.CultureInfo.InvariantCulture), phase);
+        }
+        catch (Exception exception) when (exception is FormatException or ArgumentException)
+        {
+            throw new InvalidDataException("Migration journal execution intent is corrupt.");
+        }
+    }
+
     private async Task<HorseIdentityMigrationJournalOperation?> ReadOperationAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
@@ -1085,12 +1487,19 @@ internal sealed class HorseIdentityMigrationJournal
             WHERE operation_id IN (
                 SELECT operation_id FROM migration_operations
                 WHERE status IN ($succeeded, $rejected, $failed) AND terminal_utc < $cutoff
+                    AND NOT EXISTS (
+                        SELECT 1 FROM migration_execution_intents i
+                        WHERE i.operation_id = migration_operations.operation_id
+                            AND i.phase NOT IN ($verified, $intentFailed)
+                    )
                 ORDER BY terminal_utc, operation_id LIMIT 16
             );
             """;
         command.Parameters.AddWithValue("$succeeded", (int)HorseIdentityMigrationOperationStatus.Succeeded);
         command.Parameters.AddWithValue("$rejected", (int)HorseIdentityMigrationOperationStatus.Rejected);
         command.Parameters.AddWithValue("$failed", (int)HorseIdentityMigrationOperationStatus.Failed);
+        command.Parameters.AddWithValue("$verified", (int)HorseIdentityMigrationExecutionPhase.Verified);
+        command.Parameters.AddWithValue("$intentFailed", (int)HorseIdentityMigrationExecutionPhase.Failed);
         command.Parameters.AddWithValue("$cutoff", (now - TerminalRetention).ToUniversalTime().ToString("O"));
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -1170,10 +1579,29 @@ internal sealed class HorseIdentityMigrationJournal
                 PRIMARY KEY (operation_id, page_identity),
                 FOREIGN KEY (operation_id) REFERENCES migration_operations(operation_id) ON DELETE CASCADE
             );
+            CREATE TABLE IF NOT EXISTS migration_request_keys (
+                request_key TEXT PRIMARY KEY NOT NULL,
+                immutable_request_hash TEXT NOT NULL,
+                preview_fingerprint TEXT NULL,
+                operation_id TEXT NOT NULL UNIQUE,
+                FOREIGN KEY (operation_id) REFERENCES migration_operations(operation_id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS migration_execution_intents (
+                operation_id TEXT PRIMARY KEY NOT NULL,
+                immutable_request_hash TEXT NOT NULL,
+                created_utc TEXT NOT NULL,
+                updated_utc TEXT NOT NULL,
+                phase INTEGER NOT NULL,
+                FOREIGN KEY (operation_id) REFERENCES migration_operations(operation_id) ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_migration_execution_intents_single_active
+                ON migration_execution_intents ((1))
+                WHERE phase NOT IN (9, 10);
             """;
         try
         {
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await EnsureRequestKeyPreviewFingerprintColumnAsync(connection, cancellationToken).ConfigureAwait(false);
             await ConfigureMaximumPageCountAsync(connection, cancellationToken).ConfigureAwait(false);
             return connection;
         }
@@ -1181,6 +1609,24 @@ internal sealed class HorseIdentityMigrationJournal
         {
             await connection.DisposeAsync().ConfigureAwait(false);
             throw;
+        }
+    }
+
+    private static async Task EnsureRequestKeyPreviewFingerprintColumnAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "ALTER TABLE migration_request_keys ADD COLUMN preview_fingerprint TEXT NULL;";
+        try
+        {
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == 1
+            && exception.Message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase)
+            && exception.Message.Contains("preview_fingerprint", StringComparison.OrdinalIgnoreCase))
+        {
+            // Existing v1 journals are upgraded in place; the nullable column preserves legacy rows.
         }
     }
 
@@ -1264,6 +1710,19 @@ internal sealed class HorseIdentityMigrationJournal
             {
                 await using var command = connection.CreateCommand();
                 command.CommandText = query;
+                await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (await HasRequestKeyTableAsync(connection, null, cancellationToken).ConfigureAwait(false))
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = "SELECT request_key, immutable_request_hash, operation_id FROM migration_request_keys LIMIT 0;";
+                await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            }
+            if (await HasExecutionIntentTableAsync(connection, null, cancellationToken).ConfigureAwait(false))
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = "SELECT operation_id, immutable_request_hash, created_utc, updated_utc, phase FROM migration_execution_intents LIMIT 0;";
                 await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             }
 

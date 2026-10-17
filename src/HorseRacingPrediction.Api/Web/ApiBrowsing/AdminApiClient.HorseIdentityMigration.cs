@@ -7,6 +7,7 @@ public sealed partial class AdminApiClient
 {
     private const string HorseIdentityMigrationPreviewPath = "/api/v2/admin/horse-id-migration-previews";
     private const string HorseIdentityMigrationOperationsPath = "/api/v2/admin/horse-id-migration-operations";
+    private const string HorseIdentityMigrationRequestsPath = "/api/v2/admin/horse-id-migration-requests";
 
     public Task<HorseIdentityMigrationPreview?> PreviewHorseIdentityMigrationAsync(
         HorseIdentityMigrationManifest manifest, CancellationToken cancellationToken = default)
@@ -15,8 +16,22 @@ public sealed partial class AdminApiClient
     public Task<HorseIdentityMigrationOperationResponse?> StageHorseIdentityMigrationAsync(
         HorseIdentityMigrationManifest manifest, string previewFingerprint,
         CancellationToken cancellationToken = default)
+        => StageHorseIdentityMigrationAsync(manifest, previewFingerprint, null, cancellationToken);
+
+    public Task<HorseIdentityMigrationOperationResponse?> StageHorseIdentityMigrationAsync(
+        HorseIdentityMigrationManifest manifest, string previewFingerprint, Guid? requestKey,
+        CancellationToken cancellationToken = default)
         => PostJsonAsync<HorseIdentityMigrationOperationResponse>(HorseIdentityMigrationOperationsPath,
-            new HorseIdentityMigrationStageRequest(manifest, previewFingerprint), cancellationToken);
+            new HorseIdentityMigrationStageRequest(manifest, previewFingerprint) { RequestKey = requestKey },
+            cancellationToken);
+
+    public Task<HorseIdentityMigrationOperationResponse?> GetHorseIdentityMigrationRequestAsync(
+        Guid requestKey, CancellationToken cancellationToken = default)
+    {
+        if (requestKey == Guid.Empty) return Task.FromResult<HorseIdentityMigrationOperationResponse?>(null);
+        return GetJsonAsync<HorseIdentityMigrationOperationResponse>(
+            $"{HorseIdentityMigrationRequestsPath}/{requestKey:D}", cancellationToken);
+    }
 
     public Task<HorseIdentityMigrationOperationResponse?> GetHorseIdentityMigrationOperationAsync(
         Guid operationId, CancellationToken cancellationToken = default)

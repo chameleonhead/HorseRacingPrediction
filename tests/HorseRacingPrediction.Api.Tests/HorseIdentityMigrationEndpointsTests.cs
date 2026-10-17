@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -70,6 +71,108 @@ public sealed class HorseIdentityMigrationEndpointsTests
         using var malformedStatus = await transport.GetAsync("/api/v2/admin/horse-id-migration-operations/not-a-guid");
         Assert.AreEqual(HttpStatusCode.NotFound, malformedStatus.StatusCode);
         Assert.AreEqual(before, await stores.SourceSnapshotAsync(), "Preview and stage must not write source stores.");
+    }
+
+    [TestMethod]
+    public async Task RequestKeyReplaysBeforeFreshPreviewAndChangedContentsConflict()
+    {
+        await using var stores = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
+        await stores.SeedHorseAsync(OldHorseId);
+        await stores.SeedSerializedHorseEventAsync(OldHorseId);
+        await using var app = await StartApiAsync(stores);
+        using var transport = app.GetTestClient();
+        var client = new AdminApiClient(transport,
+            new AdminApiBaseAddressResolver(app.Services.GetRequiredService<IServer>()),
+            Options.Create(new ApiKeyOptions { HeaderName = "X-Api-Key", Key = TestApplicationFactory.TestApiKey }));
+        var manifest = Manifest();
+        var preview = await client.PreviewHorseIdentityMigrationAsync(manifest);
+        Assert.IsNotNull(preview?.Fingerprint);
+        var requestKey = Guid.NewGuid();
+
+        var first = await client.StageHorseIdentityMigrationAsync(manifest, preview.Fingerprint!, requestKey);
+        Assert.IsNotNull(first);
+        await stores.ExecuteAsync(stores.EventStorePath, "UPDATE Horses SET RegisteredName = 'Changed after admission';");
+
+        var replay = await client.StageHorseIdentityMigrationAsync(manifest, preview.Fingerprint!, requestKey);
+        Assert.IsNotNull(replay);
+        Assert.AreEqual(first.OperationId, replay.OperationId);
+        var recovered = await client.GetHorseIdentityMigrationRequestAsync(requestKey);
+        Assert.IsNotNull(recovered);
+        Assert.AreEqual(first.OperationId, recovered.OperationId);
+
+        var changedManifest = new HorseIdentityMigrationManifest(
+            [new HorseIdentityMigrationManifestEntry(OldHorseId, "jra-horse:2024100829", true)]);
+        using var changed = await transport.PostAsJsonAsync("/api/v2/admin/horse-id-migration-operations",
+            new HorseIdentityMigrationStageRequest(changedManifest, preview.Fingerprint)
+            { RequestKey = requestKey });
+        Assert.AreEqual(HttpStatusCode.Conflict, changed.StatusCode);
+        StringAssert.Contains(await changed.Content.ReadAsStringAsync(), "RequestConflict");
+
+        using var empty = await transport.PostAsJsonAsync("/api/v2/admin/horse-id-migration-operations",
+            new HorseIdentityMigrationStageRequest(manifest, preview.Fingerprint)
+            { RequestKey = Guid.Empty });
+        Assert.AreEqual(HttpStatusCode.BadRequest, empty.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task LostAdmissionResponseCanReplayThroughTheRealClientWithSavedManifestAndFingerprint()
+    {
+        await using var stores = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
+        await stores.SeedHorseAsync(OldHorseId);
+        await stores.SeedSerializedHorseEventAsync(OldHorseId);
+        await using var app = await StartApiAsync(stores);
+        var droppingHandler = new DropFirstResponseHandler(app.GetTestServer().CreateHandler());
+        using var transport = new HttpClient(droppingHandler) { BaseAddress = new Uri("http://localhost") };
+        var client = new AdminApiClient(transport,
+            new AdminApiBaseAddressResolver(app.Services.GetRequiredService<IServer>()),
+            Options.Create(new ApiKeyOptions { HeaderName = "X-Api-Key", Key = TestApplicationFactory.TestApiKey }));
+        var manifest = Manifest();
+        var preview = await client.PreviewHorseIdentityMigrationAsync(manifest);
+        Assert.IsNotNull(preview?.Fingerprint);
+        var requestKey = Guid.NewGuid();
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            client.StageHorseIdentityMigrationAsync(manifest, preview.Fingerprint!, requestKey));
+        var replay = await client.StageHorseIdentityMigrationAsync(manifest, preview.Fingerprint!, requestKey);
+
+        Assert.IsNotNull(replay);
+        var journal = GetJournal(stores);
+        var saved = await journal.GetByRequestKeyAsync(requestKey);
+        Assert.IsNotNull(saved);
+        Assert.AreEqual(preview.Fingerprint, saved.PreviewFingerprint);
+        Assert.AreEqual(replay.OperationId, saved.Operation.OperationId);
+        Assert.IsTrue((await journal.ClaimWorkflowAsync(replay.OperationId, DateTimeOffset.UtcNow)).Succeeded);
+        var claimed = await journal.GetClaimedStagedRequestAsync(replay.OperationId);
+        Assert.IsNotNull(claimed);
+        Assert.AreEqual(JsonSerializer.Serialize(manifest.Entries), JsonSerializer.Serialize(claimed.Manifest.Entries));
+    }
+
+    [TestMethod]
+    public async Task ConcurrentRequestKeyStagesReturnExactlyOneOperation()
+    {
+        await using var stores = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
+        await stores.SeedHorseAsync(OldHorseId);
+        await stores.SeedSerializedHorseEventAsync(OldHorseId);
+        await using var app = await StartApiAsync(stores);
+        using var transport = app.GetTestClient();
+        var client = new AdminApiClient(transport,
+            new AdminApiBaseAddressResolver(app.Services.GetRequiredService<IServer>()),
+            Options.Create(new ApiKeyOptions { HeaderName = "X-Api-Key", Key = TestApplicationFactory.TestApiKey }));
+        var manifest = Manifest();
+        var preview = await client.PreviewHorseIdentityMigrationAsync(manifest);
+        Assert.IsNotNull(preview?.Fingerprint);
+        var requestKey = Guid.NewGuid();
+
+        var staged = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ =>
+            client.StageHorseIdentityMigrationAsync(manifest, preview.Fingerprint!, requestKey)));
+
+        Assert.IsTrue(staged.All(operation => operation is not null));
+        Assert.AreEqual(1, staged.Select(operation => operation!.OperationId).Distinct().Count());
+        Assert.AreEqual(1, Directory.GetFiles(stores.Root, "horse-identity-migration-journal.db*").Length);
+        await using var journalConnection = new SqliteConnection($"Data Source={GetJournal(stores).DatabasePath};Pooling=False");
+        await journalConnection.OpenAsync();
+        Assert.AreEqual(1L, await ScalarAsync(journalConnection, "SELECT COUNT(*) FROM migration_operations;"));
+        Assert.AreEqual(1L, await ScalarAsync(journalConnection, "SELECT COUNT(*) FROM migration_request_keys;"));
     }
 
     [TestMethod]
@@ -208,6 +311,33 @@ public sealed class HorseIdentityMigrationEndpointsTests
     private static HorseIdentityMigrationJournal GetJournal(
         HorseIdentityMigrationStoreEngineTests.StoreFixture stores)
         => new(stores.Root, [stores.EventStorePath, stores.CollectionPath, stores.SchedulePath]);
+
+    private static async Task<long> ScalarAsync(SqliteConnection connection, string sql)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return Convert.ToInt64(await command.ExecuteScalarAsync());
+    }
+
+    private sealed class DropFirstResponseHandler(HttpMessageHandler inner) : DelegatingHandler(inner)
+    {
+        private int _dropped;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (request.Method == HttpMethod.Post
+                && request.RequestUri?.ToString().Contains("horse-id-migration-operations",
+                    StringComparison.Ordinal) == true
+                && Interlocked.Exchange(ref _dropped, 1) == 0)
+            {
+                response.Dispose();
+                throw new HttpRequestException("Simulated lost admission response.");
+            }
+            return response;
+        }
+    }
 
     private static HorseIdentityMigrationManifest Manifest() => new(
     [

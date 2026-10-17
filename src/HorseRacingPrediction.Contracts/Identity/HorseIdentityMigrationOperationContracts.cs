@@ -1,9 +1,15 @@
+using System.Text.Json.Serialization;
+
 namespace HorseRacingPrediction.Contracts.Identity;
 
 /// <summary>Requests a journal-only admission after the displayed preview is freshly revalidated.</summary>
 public sealed record HorseIdentityMigrationStageRequest(
     HorseIdentityMigrationManifest? Manifest,
-    string? PreviewFingerprint);
+    string? PreviewFingerprint)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? RequestKey { get; init; }
+}
 
 /// <summary>Safe, bounded public view of a staged or previously executed migration.</summary>
 public sealed record HorseIdentityMigrationOperationResponse(

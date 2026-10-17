@@ -23,6 +23,7 @@ public sealed class HorseIdentityMigrationClientTests
             "horse-11111111-1111-4111-8111-111111111111", "jra-horse:2024100828", true)]);
         var preview = new HorseIdentityMigrationPreview(true, new string('A', 64), [], [], [], [], [], 1, 64);
         var operationId = Guid.NewGuid();
+        var requestKey = Guid.NewGuid();
         var response = new HorseIdentityMigrationOperationResponse(operationId, "AwaitingActions", "None",
             DateTimeOffset.Parse("2026-10-15T00:00:00Z"), DateTimeOffset.Parse("2026-10-15T00:00:00Z"), []);
         HorseIdentityMigrationManifest? receivedPreviewManifest = null;
@@ -50,6 +51,7 @@ public sealed class HorseIdentityMigrationClientTests
             return Results.Created($"/api/v2/admin/horse-id-migration-operations/{operationId:D}", response);
         });
         routes.MapGet($"/v2/admin/horse-id-migration-operations/{operationId:D}", () => Results.Ok(response));
+        routes.MapGet($"/v2/admin/horse-id-migration-requests/{requestKey:D}", () => Results.Ok(response));
         await app.StartAsync();
 
         using var http = app.GetTestClient();
@@ -65,6 +67,16 @@ public sealed class HorseIdentityMigrationClientTests
         Assert.AreEqual("AwaitingActions", observedStage.Status);
         Assert.AreEqual(observedPreview.Fingerprint, receivedStage!.PreviewFingerprint);
         Assert.AreEqual(manifest.Entries![0], receivedStage.Manifest!.Entries![0]);
+
+        var observedStableStage = await client.StageHorseIdentityMigrationAsync(
+            manifest, observedPreview.Fingerprint!, requestKey);
+        Assert.IsNotNull(observedStableStage);
+        Assert.AreEqual(operationId, observedStableStage.OperationId);
+        Assert.AreEqual(requestKey, receivedStage.RequestKey);
+
+        var observedRequest = await client.GetHorseIdentityMigrationRequestAsync(requestKey);
+        Assert.IsNotNull(observedRequest);
+        Assert.AreEqual(operationId, observedRequest.OperationId);
 
         var observedStatus = await client.GetHorseIdentityMigrationOperationAsync(operationId);
         Assert.IsNotNull(observedStatus);

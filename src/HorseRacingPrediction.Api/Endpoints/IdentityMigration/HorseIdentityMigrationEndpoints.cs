@@ -15,6 +15,7 @@ internal static class HorseIdentityMigrationEndpoints
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private const string PreviewPath = "/v2/admin/horse-id-migration-previews";
     private const string OperationsPath = "/v2/admin/horse-id-migration-operations";
+    private const string RequestsPath = "/v2/admin/horse-id-migration-requests";
     private const string SchemaDiagnosticsPath = "/v2/admin/horse-id-migration-schema-diagnostics";
 
     internal static void Map(IEndpointRouteBuilder endpoints)
@@ -23,6 +24,7 @@ internal static class HorseIdentityMigrationEndpoints
         endpoints.MapGet(SchemaDiagnosticsPath, GetSchemaDiagnosticsAsync);
         endpoints.MapPost(OperationsPath, StageAsync);
         endpoints.MapGet(OperationsPath + "/{operationId}", GetStatusAsync);
+        endpoints.MapGet(RequestsPath + "/{requestKey}", GetRequestAsync);
     }
 
     private static async Task<IResult> PreviewAsync(
@@ -110,21 +112,61 @@ internal static class HorseIdentityMigrationEndpoints
         var body = parsed.Value;
         if (body?.Manifest is null || string.IsNullOrWhiteSpace(body.PreviewFingerprint)
             || body.PreviewFingerprint.Length != 64
-            || !body.PreviewFingerprint.All(Uri.IsHexDigit))
+            || !body.PreviewFingerprint.All(Uri.IsHexDigit)
+            || !HorseIdentityMigrationExecutionPolicy.IsValidRequestKey(body.RequestKey))
             return Error(StatusCodes.Status400BadRequest, "InvalidRequest");
 
         var validation = HorseIdentityMigrationManifestPolicy.Validate(body.Manifest);
         if (!validation.IsValid) return Error(StatusCodes.Status400BadRequest, "InvalidManifest");
 
+        var immutableRequestHash = HorseIdentityMigrationExecutionPolicy
+            .ComputeImmutableRequestHash(body.Manifest, body.PreviewFingerprint);
+
         try
         {
-            var fresh = await engine.InspectPreviewAsync(body.Manifest, cancellationToken).ConfigureAwait(false);
+            if (body.RequestKey is { } existingRequestKey)
+            {
+                HorseIdentityMigrationRequestKeyRecord? prior;
+                try
+                {
+                    prior = await journal.GetByRequestKeyAsync(existingRequestKey, cancellationToken).ConfigureAwait(false);
+                }
+                catch (SqliteException)
+                {
+                    prior = null;
+                }
+                if (prior is not null)
+                    return string.Equals(prior.ImmutableRequestHash, immutableRequestHash, StringComparison.Ordinal)
+                        ? Results.Ok(HorseIdentityMigrationPublicMapper.ToPublic(prior.Operation))
+                        : Error(StatusCodes.Status409Conflict, "RequestConflict");
+            }
+
+            HorseIdentityMigrationPreview fresh;
+            try
+            {
+                fresh = await engine.InspectPreviewAsync(body.Manifest, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (IsUnavailable(exception) && body.RequestKey is { } failedRequestKey)
+            {
+                var replay = await WaitForRequestReplayAsync(journal, failedRequestKey, immutableRequestHash,
+                    cancellationToken).ConfigureAwait(false);
+                if (replay is not null) return replay;
+                throw;
+            }
             if (!fresh.CanStage || fresh.Fingerprint is null
                 || !string.Equals(fresh.Fingerprint, body.PreviewFingerprint, StringComparison.Ordinal))
             {
                 if (fresh.Blockers.Contains(HorseIdentityMigrationPreviewBlocker.ReadUnavailable)
                     || fresh.Blockers.Contains(HorseIdentityMigrationPreviewBlocker.StoreUnavailable))
+                {
+                    if (body.RequestKey is { } unavailableRequestKey)
+                    {
+                        var replay = await WaitForRequestReplayAsync(journal, unavailableRequestKey,
+                            immutableRequestHash, cancellationToken).ConfigureAwait(false);
+                        if (replay is not null) return replay;
+                    }
                     return Error(StatusCodes.Status503ServiceUnavailable, "Unavailable");
+                }
                 if (fresh.Blockers.Contains(HorseIdentityMigrationPreviewBlocker.SummaryTooLarge))
                     return Error(StatusCodes.Status429TooManyRequests, "CapacityExceeded");
                 if (fresh.Blockers.Contains(HorseIdentityMigrationPreviewBlocker.InvalidManifest))
@@ -133,9 +175,21 @@ internal static class HorseIdentityMigrationEndpoints
             }
 
             var operationId = Guid.NewGuid();
-            var outcome = await journal.StageAsync(operationId, body.Manifest, timeProvider.GetUtcNow(), cancellationToken)
-                .ConfigureAwait(false);
+            var outcome = body.RequestKey is { } requestKey
+                ? await journal.StageWithRequestKeyAsync(operationId, body.Manifest, requestKey,
+                    immutableRequestHash, body.PreviewFingerprint, timeProvider.GetUtcNow(), cancellationToken)
+                    .ConfigureAwait(false)
+                : await journal.StageAsync(operationId, body.Manifest, timeProvider.GetUtcNow(), cancellationToken)
+                    .ConfigureAwait(false);
             if (!outcome.Succeeded || outcome.Operation is null)
+            {
+                if (outcome.Reason == HorseIdentityMigrationJournalReason.OwnershipBusy
+                    && body.RequestKey is { } busyRequestKey)
+                {
+                    var replay = await WaitForRequestReplayAsync(journal, busyRequestKey, immutableRequestHash,
+                        cancellationToken).ConfigureAwait(false);
+                    if (replay is not null) return replay;
+                }
                 return Error(outcome.Reason switch
                 {
                     HorseIdentityMigrationJournalReason.RequestConflict => StatusCodes.Status409Conflict,
@@ -149,9 +203,12 @@ internal static class HorseIdentityMigrationEndpoints
                     HorseIdentityMigrationJournalReason.OwnershipBusy => "Busy",
                     _ => "Unavailable",
                 });
+            }
 
-            return Results.Created($"/api/v2/admin/horse-id-migration-operations/{operationId:D}",
-                HorseIdentityMigrationPublicMapper.ToPublic(outcome.Operation));
+            var operationResponse = HorseIdentityMigrationPublicMapper.ToPublic(outcome.Operation);
+            return outcome.Operation.OperationId == operationId
+                ? Results.Created($"/api/v2/admin/horse-id-migration-operations/{operationId:D}", operationResponse)
+                : Results.Ok(operationResponse);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -159,6 +216,12 @@ internal static class HorseIdentityMigrationEndpoints
         }
         catch (Exception exception) when (IsUnavailable(exception))
         {
+            if (body.RequestKey is { } failedRequestKey)
+            {
+                var replay = await WaitForRequestReplayAsync(journal, failedRequestKey, immutableRequestHash,
+                    cancellationToken).ConfigureAwait(false);
+                if (replay is not null) return replay;
+            }
             return Error(StatusCodes.Status503ServiceUnavailable, "Unavailable");
         }
     }
@@ -176,6 +239,30 @@ internal static class HorseIdentityMigrationEndpoints
             return operation is null
                 ? Results.NotFound()
                 : Results.Ok(HorseIdentityMigrationPublicMapper.ToPublic(operation));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (IsUnavailable(exception))
+        {
+            return Error(StatusCodes.Status503ServiceUnavailable, "Unavailable");
+        }
+    }
+
+    internal static async Task<IResult> GetRequestAsync(
+        string requestKey, HttpResponse response, [FromServices] HorseIdentityMigrationJournal journal,
+        CancellationToken cancellationToken)
+    {
+        SetNoStore(response);
+        if (!Guid.TryParseExact(requestKey, "D", out var parsed) || parsed == Guid.Empty)
+            return Results.NotFound();
+        try
+        {
+            var record = await journal.GetByRequestKeyAsync(parsed, cancellationToken).ConfigureAwait(false);
+            return record is null
+                ? Results.NotFound()
+                : Results.Ok(HorseIdentityMigrationPublicMapper.ToPublic(record.Operation));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -218,6 +305,34 @@ internal static class HorseIdentityMigrationEndpoints
 
     private static IResult Error(int statusCode, string code) =>
         Results.Json(new HorseIdentityMigrationOperationError(code), statusCode: statusCode);
+
+    private static async Task<IResult?> WaitForRequestReplayAsync(
+        HorseIdentityMigrationJournal journal,
+        Guid requestKey,
+        string immutableRequestHash,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            try
+            {
+                var prior = await journal.GetByRequestKeyAsync(requestKey, cancellationToken).ConfigureAwait(false);
+                if (prior is not null)
+                    return string.Equals(prior.ImmutableRequestHash, immutableRequestHash, StringComparison.Ordinal)
+                        ? Results.Ok(HorseIdentityMigrationPublicMapper.ToPublic(prior.Operation))
+                        : Error(StatusCodes.Status409Conflict, "RequestConflict");
+            }
+            catch (SqliteException)
+            {
+                // The atomic journal admission may still be committing; retry within this bounded request window.
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(50 * (attempt + 1)), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return null;
+    }
 
     private static void SetNoStore(HttpResponse response)
     {

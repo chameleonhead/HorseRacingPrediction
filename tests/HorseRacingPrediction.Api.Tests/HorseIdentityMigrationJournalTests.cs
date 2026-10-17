@@ -40,6 +40,263 @@ public sealed class HorseIdentityMigrationJournalTests
     }
 
     [TestMethod]
+    public async Task RequestKeyReplaysSameOperationAndRejectsChangedContents()
+    {
+        using var fixture = new Fixture();
+        var requestKey = Guid.NewGuid();
+        var manifest = Manifest(1);
+        var fingerprint = new string('A', 64);
+        var requestHash = HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(manifest, fingerprint);
+
+        var first = await fixture.Journal.StageWithRequestKeyAsync(
+            Guid.NewGuid(), manifest, requestKey, requestHash, fingerprint, Now);
+        var replay = await fixture.Journal.StageWithRequestKeyAsync(
+            Guid.NewGuid(), manifest, requestKey, requestHash, fingerprint, Now.AddMinutes(1));
+        var changedManifest = await fixture.Journal.StageWithRequestKeyAsync(
+            Guid.NewGuid(), Manifest(2), requestKey,
+            HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(Manifest(2), fingerprint), fingerprint,
+            Now.AddMinutes(2));
+
+        Assert.IsTrue(first.Succeeded);
+        Assert.IsTrue(replay.Succeeded);
+        Assert.AreEqual(first.Operation!.OperationId, replay.Operation!.OperationId);
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.RequestConflict, changedManifest.Reason);
+        Assert.AreEqual(first.Operation.OperationId, changedManifest.Operation!.OperationId);
+        var lookup = await fixture.Journal.GetByRequestKeyAsync(requestKey);
+        Assert.IsNotNull(lookup);
+        Assert.AreEqual(first.Operation.OperationId, lookup.Operation.OperationId);
+        Assert.AreEqual(fingerprint, lookup.PreviewFingerprint);
+    }
+
+    [TestMethod]
+    public async Task ConcurrentRequestKeyAdmissionCreatesExactlyOneOperation()
+    {
+        using var fixture = new Fixture();
+        var requestKey = Guid.NewGuid();
+        var manifest = Manifest(1);
+        var fingerprint = new string('B', 64);
+        var requestHash = HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(manifest, fingerprint);
+
+        var outcomes = await Task.WhenAll(Enumerable.Range(0, 8).Select(index =>
+            fixture.Journal.StageWithRequestKeyAsync(Guid.NewGuid(), manifest, requestKey, requestHash,
+                fingerprint, Now.AddTicks(index))));
+
+        Assert.IsTrue(outcomes.All(outcome => outcome.Succeeded),
+            string.Join(';', outcomes.Select(outcome => outcome.Reason)));
+        Assert.AreEqual(1, outcomes.Select(outcome => outcome.Operation!.OperationId).Distinct().Count());
+        var journalFiles = System.IO.Directory.GetFiles(fixture.Directory, "horse-identity-migration-journal.db*");
+        Assert.HasCount(1, journalFiles);
+        await using var connection = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False");
+        await connection.OpenAsync();
+        Assert.AreEqual(1L, await ScalarInt64Async(connection, "SELECT COUNT(*) FROM migration_operations;"));
+        Assert.AreEqual(1L, await ScalarInt64Async(connection, "SELECT COUNT(*) FROM migration_request_keys;"));
+    }
+
+    [TestMethod]
+    public async Task RequestKeyCapacityReservationPreservesJournalBound()
+    {
+        using var fixture = new Fixture(maximumBytes: 2 * 1024 * 1024, reserveBytes: 64 * 1024);
+        var manifest = Manifest(1);
+        var requestHash = HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(manifest, new string('C', 64));
+        var requestKey = Guid.NewGuid();
+        var outcome = await fixture.Journal.StageWithRequestKeyAsync(
+            Guid.NewGuid(), manifest, requestKey, requestHash, new string('C', 64), Now);
+
+        Assert.IsTrue(outcome.Succeeded);
+        Assert.IsTrue(new FileInfo(fixture.Journal.DatabasePath).Length <= 2 * 1024 * 1024);
+    }
+
+    [TestMethod]
+    public async Task LegacyV1JournalReadsAndUpgradesKeyedAdmissionWithoutPreviewColumn()
+    {
+        using var fixture = new Fixture();
+        var legacyOperationId = Guid.NewGuid();
+        Assert.IsTrue((await fixture.Journal.StageAsync(legacyOperationId, Manifest(1), Now)).Succeeded);
+        var legacyKey = Guid.NewGuid();
+        var legacyHash = new string('A', 64);
+        await using (var connection = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "DROP TABLE migration_request_keys; DROP TABLE migration_execution_intents; CREATE TABLE migration_request_keys (request_key TEXT PRIMARY KEY NOT NULL, immutable_request_hash TEXT NOT NULL, operation_id TEXT NOT NULL UNIQUE, FOREIGN KEY (operation_id) REFERENCES migration_operations(operation_id) ON DELETE CASCADE); INSERT INTO migration_request_keys (request_key, immutable_request_hash, operation_id) VALUES ($key, $hash, $id);";
+            command.Parameters.AddWithValue("$key", legacyKey.ToString("D"));
+            command.Parameters.AddWithValue("$hash", legacyHash);
+            command.Parameters.AddWithValue("$id", legacyOperationId.ToString("D"));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await using (var inspect = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await inspect.OpenAsync();
+            await using var command = inspect.CreateCommand();
+            command.CommandText = "SELECT immutable_request_hash || '|' || operation_id FROM migration_request_keys WHERE request_key = $key;";
+            command.Parameters.AddWithValue("$key", legacyKey.ToString("D"));
+            Assert.AreEqual($"{legacyHash}|{legacyOperationId:D}", Convert.ToString(await command.ExecuteScalarAsync()));
+        }
+
+        var legacy = await fixture.Journal.GetByRequestKeyAsync(legacyKey);
+        Assert.IsNotNull(legacy);
+        Assert.IsNull(legacy.PreviewFingerprint);
+        Assert.AreEqual(legacyOperationId, legacy.Operation.OperationId);
+
+        var manifest = Manifest(2);
+        var fingerprint = new string('B', 64);
+        var hash = HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(manifest, fingerprint);
+        var admittedKey = Guid.NewGuid();
+        var admitted = await fixture.Journal.StageWithRequestKeyAsync(Guid.NewGuid(), manifest, admittedKey, hash,
+            fingerprint, Now);
+        Assert.IsTrue(admitted.Succeeded);
+        var keyed = await fixture.Journal.GetByRequestKeyAsync(admittedKey);
+        Assert.IsNotNull(keyed);
+        Assert.AreEqual(fingerprint, keyed.PreviewFingerprint);
+    }
+
+    [TestMethod]
+    public async Task ExecutionIntentRequiresExplicitKeyAndRejectsBackwardsOrSkippedPhases()
+    {
+        Assert.IsFalse(HorseIdentityMigrationExecutionPolicy.CanTransition(
+            HorseIdentityMigrationExecutionPhase.IntentRecorded,
+            HorseIdentityMigrationExecutionPhase.BackedUp));
+        Assert.IsFalse(HorseIdentityMigrationExecutionPolicy.CanTransition(
+            HorseIdentityMigrationExecutionPhase.Preparing,
+            HorseIdentityMigrationExecutionPhase.IntentRecorded));
+        Assert.IsFalse(HorseIdentityMigrationExecutionPolicy.CanTransition(
+            HorseIdentityMigrationExecutionPhase.Verified,
+            HorseIdentityMigrationExecutionPhase.Failed));
+
+        using var fixture = new Fixture();
+        var legacyId = Guid.NewGuid();
+        Assert.IsTrue((await fixture.Journal.StageAsync(legacyId, Manifest(1), Now)).Succeeded);
+        var legacyIntent = await fixture.Journal.CreateExecutionIntentAsync(legacyId,
+            new string('D', 64), Now);
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.StaleOperation, legacyIntent.Reason);
+
+        var keyedId = Guid.NewGuid();
+        var fingerprint = new string('E', 64);
+        var manifest = Manifest(2);
+        var immutableHash = HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(manifest, fingerprint);
+        Assert.IsTrue((await fixture.Journal.StageWithRequestKeyAsync(keyedId, manifest, Guid.NewGuid(),
+            immutableHash, fingerprint, Now)).Succeeded);
+        var intent = await fixture.Journal.CreateExecutionIntentAsync(keyedId, immutableHash, Now);
+        Assert.IsTrue(intent.Succeeded);
+        Assert.IsTrue((await fixture.Journal.AdvanceExecutionIntentAsync(keyedId,
+            HorseIdentityMigrationExecutionPhase.Preparing, Now)).Succeeded);
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.StaleOperation,
+            (await fixture.Journal.AdvanceExecutionIntentAsync(keyedId,
+                HorseIdentityMigrationExecutionPhase.BackedUp, Now)).Reason);
+    }
+
+    [TestMethod]
+    public async Task UnsafeOperationStatesCannotAdvanceAnIntentIntoApplying()
+    {
+        using var fixture = new Fixture();
+        var positiveId = Guid.NewGuid();
+        var positiveManifest = Manifest(3);
+        var positiveFingerprint = new string('F', 64);
+        var positiveHash = HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(positiveManifest,
+            positiveFingerprint);
+        Assert.IsTrue((await fixture.Journal.StageWithRequestKeyAsync(positiveId, positiveManifest, Guid.NewGuid(),
+            positiveHash, positiveFingerprint, Now)).Succeeded);
+        Assert.IsTrue((await fixture.Journal.CreateExecutionIntentAsync(positiveId, positiveHash, Now)).Succeeded);
+        foreach (var phase in new[]
+        {
+            HorseIdentityMigrationExecutionPhase.Preparing,
+            HorseIdentityMigrationExecutionPhase.Draining,
+            HorseIdentityMigrationExecutionPhase.StoppingApi,
+            HorseIdentityMigrationExecutionPhase.ApiExited,
+            HorseIdentityMigrationExecutionPhase.BackedUp,
+        })
+            Assert.IsTrue((await fixture.Journal.AdvanceExecutionIntentAsync(positiveId, phase, Now)).Succeeded);
+        Assert.IsTrue((await fixture.Journal.AdvanceExecutionIntentAsync(positiveId,
+            HorseIdentityMigrationExecutionPhase.Applying, Now)).Succeeded);
+        Assert.IsFalse(await fixture.Journal.CanBeginReadonlyVerificationAsync(positiveId));
+        await using (var connection = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE migration_operations SET status = $status, reason = $reason, terminal_utc = $terminal WHERE operation_id = $id;";
+            command.Parameters.AddWithValue("$status", (int)HorseIdentityMigrationOperationStatus.Succeeded);
+            command.Parameters.AddWithValue("$reason", (int)HorseIdentityMigrationJournalReason.None);
+            command.Parameters.AddWithValue("$terminal", Now.ToString("O"));
+            command.Parameters.AddWithValue("$id", positiveId.ToString("D"));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        Assert.IsTrue((await fixture.Journal.AdvanceExecutionIntentAsync(positiveId,
+            HorseIdentityMigrationExecutionPhase.DataSucceeded, Now)).Succeeded);
+        Assert.IsTrue(await fixture.Journal.CanBeginReadonlyVerificationAsync(positiveId));
+        Assert.IsTrue((await fixture.Journal.AdvanceExecutionIntentAsync(positiveId,
+            HorseIdentityMigrationExecutionPhase.Verifying, Now)).Succeeded);
+        Assert.IsTrue(await fixture.Journal.CanBeginReadonlyVerificationAsync(positiveId));
+        Assert.IsTrue((await fixture.Journal.AdvanceExecutionIntentAsync(positiveId,
+            HorseIdentityMigrationExecutionPhase.Verified, Now)).Succeeded);
+
+        var operationId = Guid.NewGuid();
+        var requestKey = Guid.NewGuid();
+        var manifest = Manifest(4);
+        var fingerprint = new string('G', 64);
+        var hash = HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(manifest, fingerprint);
+        Assert.IsTrue((await fixture.Journal.StageWithRequestKeyAsync(operationId, manifest, requestKey, hash,
+            fingerprint, Now)).Succeeded);
+        Assert.IsTrue((await fixture.Journal.CreateExecutionIntentAsync(operationId, hash, Now)).Succeeded);
+        foreach (var phase in new[]
+        {
+            HorseIdentityMigrationExecutionPhase.Preparing,
+            HorseIdentityMigrationExecutionPhase.Draining,
+            HorseIdentityMigrationExecutionPhase.StoppingApi,
+            HorseIdentityMigrationExecutionPhase.ApiExited,
+            HorseIdentityMigrationExecutionPhase.BackedUp,
+        })
+            Assert.IsTrue((await fixture.Journal.AdvanceExecutionIntentAsync(operationId, phase, Now)).Succeeded);
+
+        await using (var connection = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE migration_operations SET status = $status, reason = $reason WHERE operation_id = $id;";
+            command.Parameters.AddWithValue("$status", (int)HorseIdentityMigrationOperationStatus.PartialUnverified);
+            command.Parameters.AddWithValue("$reason", (int)HorseIdentityMigrationJournalReason.OperationInterrupted);
+            command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var applying = await fixture.Journal.AdvanceExecutionIntentAsync(operationId,
+            HorseIdentityMigrationExecutionPhase.Applying, Now);
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.StaleOperation, applying.Reason);
+        Assert.AreEqual(HorseIdentityMigrationExecutionPhase.BackedUp, applying.Intent!.Phase);
+
+        await using (var connection = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE migration_operations SET status = $status, reason = $reason, terminal_utc = $terminal WHERE operation_id = $id;";
+            command.Parameters.AddWithValue("$status", (int)HorseIdentityMigrationOperationStatus.Succeeded);
+            command.Parameters.AddWithValue("$reason", (int)HorseIdentityMigrationJournalReason.None);
+            command.Parameters.AddWithValue("$terminal", Now.ToString("O"));
+            command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            await command.ExecuteNonQueryAsync();
+        }
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.StaleOperation,
+            (await fixture.Journal.AdvanceExecutionIntentAsync(operationId,
+                HorseIdentityMigrationExecutionPhase.Applying, Now)).Reason);
+
+        await using (var connection = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE migration_operations SET status = $status, reason = $reason, terminal_utc = NULL WHERE operation_id = $id; UPDATE migration_request_keys SET immutable_request_hash = $hash WHERE operation_id = $id;";
+            command.Parameters.AddWithValue("$status", (int)HorseIdentityMigrationOperationStatus.Interrupted);
+            command.Parameters.AddWithValue("$reason", (int)HorseIdentityMigrationJournalReason.OperationInterrupted);
+            command.Parameters.AddWithValue("$hash", new string('H', 64));
+            command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            await command.ExecuteNonQueryAsync();
+        }
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.StaleOperation,
+            (await fixture.Journal.AdvanceExecutionIntentAsync(operationId,
+                HorseIdentityMigrationExecutionPhase.Applying, Now)).Reason);
+    }
+
+    [TestMethod]
     public async Task StartupGuardInitializesOnceAndFailsClosedWhenEitherDurableFileDisappears()
     {
         using var fixture = new Fixture();
@@ -349,6 +606,26 @@ public sealed class HorseIdentityMigrationJournalTests
         await successLease.CompleteAsync(Now.AddDays(-31));
         await successLease.DisposeAsync();
 
+        await using (var connection = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "INSERT INTO migration_execution_intents (operation_id, immutable_request_hash, created_utc, updated_utc, phase) VALUES ($id, $hash, $created, $updated, $phase);";
+            command.Parameters.AddWithValue("$id", oldSuccessId.ToString("D"));
+            command.Parameters.AddWithValue("$hash", new string('A', 64));
+            command.Parameters.AddWithValue("$created", Now.AddDays(-31).ToString("O"));
+            command.Parameters.AddWithValue("$updated", Now.AddDays(-31).ToString("O"));
+            command.Parameters.AddWithValue("$phase", (int)HorseIdentityMigrationExecutionPhase.DataSucceeded);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var eligibleSuccessId = Guid.NewGuid();
+        var eligibleLease = await StartClaimedAsync(fixture, eligibleSuccessId, Now.AddDays(-31));
+        await fixture.Journal.RegisterRequiredPagesAsync(eligibleSuccessId, [Prepared(Evidence(2))], Now.AddDays(-31));
+        await AdvanceToVerifiedAsync(fixture.Journal, eligibleSuccessId, Evidence(2), Now.AddDays(-31));
+        await eligibleLease.CompleteAsync(Now.AddDays(-31));
+        await eligibleLease.DisposeAsync();
+
         var partialId = Guid.NewGuid();
         var partialLease = await StartClaimedAsync(fixture, partialId, Now.AddDays(-31));
         await fixture.Journal.RegisterRequiredPagesAsync(partialId, [Prepared(Evidence(1))], Now.AddDays(-31));
@@ -358,7 +635,9 @@ public sealed class HorseIdentityMigrationJournalTests
 
         var newId = Guid.NewGuid();
         await fixture.Journal.StageAsync(newId, Manifest(2), Now);
-        Assert.IsNull(await fixture.Journal.GetStatusAsync(oldSuccessId));
+        Assert.IsNull(await fixture.Journal.GetStatusAsync(eligibleSuccessId));
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.Succeeded,
+            (await fixture.Journal.GetStatusAsync(oldSuccessId))!.Status);
         Assert.AreEqual(HorseIdentityMigrationOperationStatus.PartialUnverified,
             (await fixture.Journal.GetStatusAsync(partialId))!.Status);
         Assert.IsNotNull(await fixture.Journal.GetPageCheckpointAsync(partialId, Evidence(1)));
