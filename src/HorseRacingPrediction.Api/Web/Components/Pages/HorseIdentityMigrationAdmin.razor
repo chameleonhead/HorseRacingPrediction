@@ -1,9 +1,14 @@
 @page "/settings/horse-id-migration"
 @attribute [Authorize]
 @using System.Net
+@using System.Text.Json
+@using Microsoft.JSInterop
+@using HorseRacingPrediction.Api.Identity
 @using HorseRacingPrediction.Contracts.Identity
+@using HorseRacingPrediction.Contracts.Horses
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>馬ID移行の確認</PageTitle>
 
@@ -16,15 +21,169 @@
     <p>プレビューは設定された保存先を読み取ります。実行依頼の保存は要求内容を別の運用ジャーナルへ記録するだけで、保存データは変更しません。保存後も処理は開始されません。既存の GitHub Actions workflow を GUID で手動実行する必要があります。</p>
 </section>
 
+<section class="entity-section migration-diagnostics" aria-labelledby="migration-diagnostics-heading">
+    <h2 id="migration-diagnostics-heading">保存先の読み取り専用診断</h2>
+    <p>候補を選ばずに保存先の構造だけを確認できます。業務データは変更しません。診断が完了しても、移行プレビューの代わりにはなりません。</p>
+    <div class="migration-actions">
+        <FluentButton Appearance="@Appearance.Outline" OnClick="LoadSchemaDiagnosticsAsync" Disabled="@(!interactiveReady || schemaDiagnosticsLoading || busy)">
+            @(schemaDiagnosticsLoading ? "診断中…" : "保存先を診断")
+        </FluentButton>
+        @if (schemaDiagnostics is not null)
+        {
+            <span>観測時刻 @schemaDiagnostics.ObservedAtUtc.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</span>
+            <FluentButton Appearance="@Appearance.Outline" OnClick="CopySchemaDiagnosticsAsync" Disabled="@schemaDiagnosticsLoading">安全な診断JSONをコピー</FluentButton>
+        }
+    </div>
+    @if (schemaDiagnosticsError is not null)
+    {
+        <p class="migration-error" role="alert">@schemaDiagnosticsError</p>
+    }
+    @if (schemaDiagnosticsCopiedMessage is not null)
+    {
+        <p role="status">@schemaDiagnosticsCopiedMessage</p>
+    }
+    @if (schemaDiagnosticsLoading && schemaDiagnostics is null)
+    {
+        <p role="status" aria-live="polite">保存先の診断を読み込んでいます…</p>
+    }
+    @if (schemaDiagnostics is not null)
+    {
+        <p class="@(schemaDiagnostics.IsComplete ? "migration-diagnostic-complete" : "migration-preview-blocked")" role="@(schemaDiagnostics.IsComplete ? "status" : "alert")">
+            @(schemaDiagnostics.IsComplete
+                ? "診断の読み取りは完了しました。移行可能かどうかは別途プレビューで確認してください。"
+                : "診断が未完了です。結果を正常・差異なしとは扱わず、移行依頼はプレビューの判定に従ってください。")
+        </p>
+        <div class="migration-grid">
+            <FluentDataGrid Items="@schemaDiagnostics.Surfaces.AsQueryable()" TGridItem="HorseIdentityMigrationSchemaSurfaceDiagnostic" MultiLine="true" aria-label="保存先の読み取り専用診断">
+                <TemplateColumn Title="保存先">@SurfaceLabel(context.Surface.ToString())</TemplateColumn>
+                <TemplateColumn Title="状態">@DiagnosticStatusLabel(context.Status)</TemplateColumn>
+                <TemplateColumn Title="既知テーブル">@context.TableCount</TemplateColumn>
+                <TemplateColumn Title="未知オブジェクト">@context.UnknownObjectCount</TemplateColumn>
+                <TemplateColumn Title="履歴版">@HistoryVersions(context.MigrationHistoryVersions)</TemplateColumn>
+                <TemplateColumn Title="差異">@context.Differences.Count</TemplateColumn>
+            </FluentDataGrid>
+        </div>
+        <div class="migration-cards" aria-label="保存先の読み取り専用診断">
+            @foreach (var surface in schemaDiagnostics.Surfaces)
+            {
+                <article class="migration-card">
+                    <h3>@SurfaceLabel(surface.Surface.ToString())</h3>
+                    <dl>
+                        <dt>状態</dt><dd>@DiagnosticStatusLabel(surface.Status)</dd>
+                        <dt>既知テーブル</dt><dd>@surface.TableCount</dd>
+                        <dt>未知オブジェクト</dt><dd>@surface.UnknownObjectCount</dd>
+                        <dt>履歴版</dt><dd>@HistoryVersions(surface.MigrationHistoryVersions)</dd>
+                    </dl>
+                    @if (surface.Differences.Count == 0)
+                    {
+                        <p>報告された差異はありません。</p>
+                    }
+                    else
+                    {
+                        <ul class="migration-differences">
+                            @foreach (var difference in surface.Differences)
+                            {
+                                <li>
+                                    <strong>@DifferenceLabel(difference.Kind)</strong> · @ObjectKindLabel(difference.ObjectKind)
+                                    @if (!string.IsNullOrWhiteSpace(difference.KnownIdentifier))
+                                    {
+                                        <code>@difference.KnownIdentifier</code>
+                                    }
+                                    <dl>
+                                        <dt>期待値</dt><dd>@ShapeLabel(difference.Expected)</dd>
+                                        <dt>観測値</dt><dd>@ShapeLabel(difference.Observed)</dd>
+                                    </dl>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </article>
+            }
+        </div>
+        @if (schemaDiagnostics.IsComplete && schemaDiagnostics.Surfaces.All(surface => surface.Status is HorseIdentityMigrationSchemaStatus.Observed or HorseIdentityMigrationSchemaStatus.NotConfigured)
+            && schemaDiagnostics.Surfaces.All(surface => surface.Differences.Count == 0 && surface.UnknownObjectCount == 0))
+        {
+            <p>構造差異は報告されていません。候補のプレビューを実行し、保存先の移行条件を確認してください。</p>
+        }
+        else
+        {
+            <p class="migration-warning">未知・未対応・未完了の構造は自動修復されません。保存内容を変更せず、表示された差異を確認してください。</p>
+        }
+    }
+</section>
+
 <section class="entity-section migration-candidates" aria-labelledby="migration-candidates-heading">
     <h2 id="migration-candidates-heading">確認する候補</h2>
-    <p>初期状態ではすべて未選択です。各チェックボックスは、その旧IDとJRA識別子の対応仮説を確認して選択する操作です。</p>
+    <p>初期状態ではすべて未選択です。同じ名前だけでは対応を選びません。候補を追加する場合は登録済みの旧IDを明示的に選び、JRA馬番号を入力してください。</p>
+    <section class="migration-candidate-search" aria-labelledby="candidate-search-heading">
+        <h3 id="candidate-search-heading">登録馬から候補を追加</h3>
+        <div class="migration-candidate-search-fields">
+            <FluentTextField Label="登録馬名またはIDで検索" Immediate="true" @bind-Value="horseSearchText" @bind-Value:after="OnHorseSearchTextChanged" Placeholder="馬名またはHorseId" aria-describedby="candidate-search-help" />
+            <FluentButton Appearance="@Appearance.Outline" OnClick="SearchHorsesAsync" Disabled="@(!interactiveReady || horseSearchLoading || busy)">
+                @(horseSearchLoading ? "検索中…" : "登録馬を検索")
+            </FluentButton>
+        </div>
+        <p id="candidate-search-help">検索結果から旧IDを選択します。表示名は候補の自動判定には使いません。</p>
+        @if (horseSearchError is not null)
+        {
+            <p class="migration-error" role="alert">@horseSearchError</p>
+        }
+        @if (horseSearchLoading)
+        {
+            <p role="status" aria-live="polite">登録馬を検索しています…</p>
+        }
+        @if (horseSearchResultsStale)
+        {
+            <p class="migration-warning" role="status">登録馬は同じ検索語で最後に成功した結果です。再検索が完了するまで最新の結果とは扱いません。</p>
+        }
+        @if (horseSearchResults is not null)
+        {
+            @if (horseSearchResults.Count == 0)
+            {
+                <p>一致する登録馬はありません。</p>
+            }
+            else
+            {
+                <FluentSelect TOption="string" Label="追加する旧ID" @bind-Value="selectedHorseId" @bind-Value:after="ClearPreviewForEdit" Disabled="@busy" aria-describedby="selected-horse-help">
+                    <FluentOption TOption="string" Value="">登録馬を選択してください</FluentOption>
+                    @foreach (var horse in horseSearchResults)
+                    {
+                        <FluentOption TOption="string" Value="@horse.HorseId">@horse.RegisteredName ・ @horse.HorseId ・ 生年月日 @(horse.BirthDate?.ToString("yyyy-MM-dd") ?? "—")</FluentOption>
+                    }
+                </FluentSelect>
+                <p id="selected-horse-help">選択後、読み取り専用の診断で現在の登録・初回登録・source証拠を確認できます。</p>
+            }
+        }
+        <div class="migration-candidate-search-fields">
+            <FluentTextField Label="JRA馬番号（半角数字10桁）" Immediate="true" @bind-Value="jraHorseNumber" @bind-Value:after="ClearPreviewForEdit" Placeholder="例: 2024104541" aria-describedby="jra-number-help" />
+            <FluentButton Appearance="@Appearance.Accent" OnClick="AddCandidate" Disabled="@(!CanAddCandidate)">候補へ追加</FluentButton>
+        </div>
+        <p id="jra-number-help">入力した番号からサーバー共通ルールでJRA識別子と移行先IDを導出します。任意URLや移行先IDは入力できません。追加候補を含め最大16件です。</p>
+        @if (!string.IsNullOrEmpty(jraHorseNumber) && !IsCanonicalJraHorseNumber(jraHorseNumber))
+        {
+            <p class="migration-field-error" role="alert">JRA馬番号は半角数字ちょうど10桁で入力してください。</p>
+        }
+        @if (!string.IsNullOrWhiteSpace(selectedHorseId) && Candidates.Any(candidate => candidate.OldHorseId == selectedHorseId))
+        {
+            <p class="migration-field-error" role="alert">この旧IDは候補に登録済みです。別の登録馬を選択してください。</p>
+        }
+        @if (Candidates.Count >= HorseIdentityMigrationManifest.MaximumEntries)
+        {
+            <p class="migration-field-error" role="status">候補は最大16件です。候補を外すと追加できます。</p>
+        }
+        @if (candidateInputError is not null)
+        {
+            <p class="migration-error" role="alert">@candidateInputError</p>
+        }
+    </section>
     <div class="migration-grid">
         <FluentDataGrid Items="@Candidates.AsQueryable()" TGridItem="MigrationCandidate" MultiLine="true" aria-label="馬ID移行の仮説候補">
-            <TemplateColumn Title="確認"><FluentCheckbox Value="@IsSelected(context)" ValueChanged="@(value => SetSelected(context, value))" Disabled="@(!interactiveReady || busy)" aria-label="@($"{context.Name} {context.OldHorseId} と {context.JraIdentity} の仮説を確認して選択")" /></TemplateColumn>
+            <TemplateColumn Title="移行対象"><FluentCheckbox Value="@IsSelected(context)" ValueChanged="@(value => SetSelected(context, value))" Disabled="@(!interactiveReady || busy)" aria-label="@($"{context.Name} {context.OldHorseId} を移行対象として選択")" /></TemplateColumn>
+            <TemplateColumn Title="仮説を確認"><FluentCheckbox Value="@context.HypothesisAccepted" ValueChanged="@(value => SetHypothesisAccepted(context, value))" Disabled="@(!interactiveReady || busy)" aria-label="@($"{context.Name} {context.JraIdentity} の仮説を確認")" /></TemplateColumn>
             <TemplateColumn Title="旧ID"><strong>@context.OldHorseId</strong></TemplateColumn>
-            <TemplateColumn Title="仮説の対応"><span>@context.Name → @context.JraIdentity</span><small>@context.EvidenceNote</small></TemplateColumn>
-            <TemplateColumn Title="根拠の限界"><span>@context.Limitations</span></TemplateColumn>
+            <TemplateColumn Title="仮説の対応"><span>@context.Name → @context.JraIdentity</span><small>既存の参考メモ（本人確認ではありません）: @context.EvidenceNote</small><small>@context.Limitations</small></TemplateColumn>
+            <TemplateColumn Title="登録馬の証拠"><a href="@DiagnosticUrl(context.OldHorseId)" target="_top" data-enhance-nav="false">読み取り専用診断を見る</a>@if (context.SourceHorse is not null){<small>@HorseSummary(context.SourceHorse)</small>}</TemplateColumn>
+            <TemplateColumn Title="候補の操作"><FluentButton Appearance="@Appearance.Outline" OnClick="@(() => RemoveCandidate(context))" Disabled="@busy">候補から外す</FluentButton></TemplateColumn>
         </FluentDataGrid>
     </div>
     <div class="migration-cards" aria-label="馬ID移行の仮説候補">
@@ -32,18 +191,33 @@
         {
             <article class="migration-card">
                 <div class="migration-card-selection">
-                    <FluentCheckbox Value="@IsSelected(candidate)" ValueChanged="@(value => SetSelected(candidate, value))" Disabled="@(!interactiveReady || busy)" aria-label="@($"{candidate.Name} {candidate.OldHorseId} と {candidate.JraIdentity} の仮説を確認して選択")" />
+                    <FluentCheckbox Value="@IsSelected(candidate)" ValueChanged="@(value => SetSelected(candidate, value))" Disabled="@(!interactiveReady || busy)" aria-label="@($"{candidate.Name} {candidate.OldHorseId} を移行対象として選択")" />
                     <strong>@candidate.Name</strong>
                 </div>
                 <dl>
                     <dt>旧ID</dt><dd>@candidate.OldHorseId</dd>
                     <dt>JRA識別子</dt><dd>@candidate.JraIdentity</dd>
-                    <dt>記録された根拠</dt><dd>@candidate.EvidenceNote</dd>
+                    <dt>既存の参考メモ</dt><dd>@candidate.EvidenceNote（本人確認ではありません）</dd>
                     <dt>根拠の限界</dt><dd>@candidate.Limitations</dd>
+                    <dt>登録馬の証拠</dt><dd><a href="@DiagnosticUrl(candidate.OldHorseId)" target="_top" data-enhance-nav="false">読み取り専用診断を見る</a>@if (candidate.SourceHorse is not null){<span> · @HorseSummary(candidate.SourceHorse)</span>}</dd>
                 </dl>
+                <label class="migration-hypothesis-acceptance">
+                    <FluentCheckbox Value="@candidate.HypothesisAccepted" ValueChanged="@(value => SetHypothesisAccepted(candidate, value))" Disabled="@(!interactiveReady || busy)" aria-label="@($"{candidate.Name} {candidate.JraIdentity} の未確認仮説を移行候補として確認")" />
+                    未確認の対応仮説であることを理解し、この対応をプレビュー対象に含めます。
+                </label>
+                <FluentButton Appearance="@Appearance.Outline" OnClick="@(() => RemoveCandidate(candidate))" Disabled="@busy">候補から外す</FluentButton>
             </article>
         }
     </div>
+    @if (RemovedPresets.Count > 0)
+    {
+        <div class="migration-removed-presets" aria-label="外した参考候補">
+            @foreach (var preset in RemovedPresets)
+            {
+                <FluentButton Appearance="@Appearance.Outline" OnClick="@(() => RestorePreset(preset))" Disabled="@busy">参考候補を再追加: @preset.Name</FluentButton>
+            }
+        </div>
+    }
 
     @if (errorMessage is not null)
     {
@@ -57,8 +231,12 @@
     {
         <p role="status" aria-live="polite">@busyMessage</p>
     }
+    @if (SelectedCandidates.Any(candidate => !candidate.HypothesisAccepted))
+    {
+        <p class="migration-warning" role="status">選択した候補の未確認仮説を明示的に確認するまで、プレビューはできません。</p>
+    }
     <div class="migration-actions">
-        <span class="migration-selection-count">@SelectedCandidates.Count 件を選択</span>
+        <span class="migration-selection-count">@SelectedCandidates.Count 件を選択 / @Candidates.Count 件（最大16件）</span>
         <FluentButton Appearance="@Appearance.Accent" OnClick="PreviewAsync" Disabled="@(!CanPreview)">
             @(busy && busyMessage == "読み取り専用プレビューを確認しています…" ? "プレビュー中…" : "選択内容をプレビュー")
         </FluentButton>
@@ -234,15 +412,17 @@
 </FluentDialog>
 
 @code {
-    private static readonly IReadOnlyList<MigrationCandidate> Candidates =
+    private static readonly IReadOnlyList<MigrationCandidate> Presets =
     [
         new("horse-d198b3e2-771f-5dcb-94dc-a739e98b6119", "jra-horse:2024100828", "ナムラアラバイ",
-            "表示名が一致する候補", "生年月日とプロフィールの根拠が不足しています。"),
+            "表示名が一致する候補", "生年月日とプロフィールの根拠が不足しています。", true, null),
         new("horse-ba9e991c-56e3-5ecd-a392-69d125afed42", "jra-horse:2024108210", "ノヴァアクレイム",
-            "表示名が一致する候補", "生年月日とプロフィールの根拠が不足しています。"),
+            "表示名が一致する候補", "生年月日とプロフィールの根拠が不足しています。", true, null),
         new("horse-923a0fdb-5c66-57ea-93a4-94dee4998b67", "jra-horse:2023102553", "ボクマダネムイヨ",
-            "legacy normalized-name candidate も異なります。", "生年月日とプロフィールの根拠が不足しています。"),
+            "legacy normalized-name candidate も異なります。", "生年月日とプロフィールの根拠が不足しています。", true, null),
     ];
+
+    private readonly List<MigrationCandidate> Candidates = Presets.Select(CloneCandidate).ToList();
 
     private readonly HashSet<string> selected = new(StringComparer.Ordinal);
     private HorseIdentityMigrationPreview? preview;
@@ -255,14 +435,36 @@
     private bool busy;
     private bool confirmStage;
     private bool interactiveReady;
+    private HorseIdentityMigrationSchemaDiagnostics? schemaDiagnostics;
+    private bool schemaDiagnosticsLoading;
+    private string? schemaDiagnosticsError;
+    private string? schemaDiagnosticsCopiedMessage;
+    private string horseSearchText = string.Empty;
+    private string? selectedHorseId;
+    private string jraHorseNumber = string.Empty;
+    private IReadOnlyList<HorseSummaryDto>? horseSearchResults;
+    private string? horseSearchResultsQuery;
+    private bool horseSearchResultsStale;
+    private bool horseSearchLoading;
+    private string? horseSearchError;
+    private string? candidateInputError;
 
     [SupplyParameterFromQuery(Name = "operationId")]
     public string? OperationIdQuery { get; set; }
 
     private IReadOnlyList<MigrationCandidate> SelectedCandidates => Candidates.Where(candidate => selected.Contains(candidate.OldHorseId)).ToArray();
-    private bool CanPreview => interactiveReady && !busy && SelectedCandidates.Count > 0;
-    private bool CanStage => interactiveReady && !busy && preview is { CanStage: true, Fingerprint.Length: 64 } && SelectedCandidates.Count > 0;
+    private IReadOnlyList<MigrationCandidate> RemovedPresets => Presets.Where(preset => Candidates.All(candidate => candidate.OldHorseId != preset.OldHorseId)).ToArray();
+    private bool CanPreview => interactiveReady && !busy && SelectedCandidates.Count > 0
+        && SelectedCandidates.All(candidate => candidate.HypothesisAccepted && IsCanonicalJraIdentity(candidate.JraIdentity));
+    private bool CanStage => interactiveReady && !busy && preview is { CanStage: true, Fingerprint.Length: 64 }
+        && SelectedCandidates.Count > 0 && SelectedCandidates.All(candidate => candidate.HypothesisAccepted);
     private bool CanReadStatus => interactiveReady && !busy && Guid.TryParseExact(operationIdInput.Trim(), "D", out var id) && id != Guid.Empty;
+    private bool CanAddCandidate => interactiveReady && !busy && Candidates.Count < HorseIdentityMigrationManifest.MaximumEntries
+        && !Candidates.Any(candidate => string.Equals(candidate.OldHorseId, selectedHorseId, StringComparison.Ordinal))
+        && horseSearchResults?.Any(candidate => string.Equals(candidate.HorseId, selectedHorseId, StringComparison.Ordinal)) == true
+        && IsCanonicalJraHorseNumber(jraHorseNumber)
+        && IsCanonicalJraIdentity($"jra-horse:{jraHorseNumber}")
+        && !Candidates.Any(candidate => candidate.JraIdentity == $"jra-horse:{jraHorseNumber}");
 
     protected override void OnAfterRender(bool firstRender)
     {
@@ -283,13 +485,161 @@
 
     private bool IsSelected(MigrationCandidate candidate) => selected.Contains(candidate.OldHorseId);
 
+    private async Task LoadSchemaDiagnosticsAsync()
+    {
+        if (busy || schemaDiagnosticsLoading) return;
+        schemaDiagnosticsLoading = true;
+        schemaDiagnosticsError = null;
+        schemaDiagnosticsCopiedMessage = null;
+        try
+        {
+            schemaDiagnostics = await Api.GetHorseIdentityMigrationSchemaDiagnosticsAsync();
+            if (schemaDiagnostics is null)
+                schemaDiagnosticsError = "診断結果を受け取れませんでした。入力や保存データは変更されていません。必要な場合に明示的に再取得してください。";
+        }
+        catch (HttpRequestException exception)
+        {
+            schemaDiagnosticsError = exception.StatusCode switch
+            {
+                HttpStatusCode.TooManyRequests => "診断が混み合っています。時間をおいて明示的に再取得してください。",
+                HttpStatusCode.ServiceUnavailable => "設定された保存先を診断できませんでした。",
+                _ => "診断を完了できませんでした。時間をおいて明示的に再取得してください。",
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            schemaDiagnosticsError = "診断を完了できませんでした。必要な場合に明示的に再取得してください。";
+        }
+        finally
+        {
+            schemaDiagnosticsLoading = false;
+        }
+    }
+
+    private async Task CopySchemaDiagnosticsAsync()
+    {
+        if (schemaDiagnostics is null || schemaDiagnosticsLoading) return;
+        try
+        {
+            var safeJson = JsonSerializer.Serialize(schemaDiagnostics, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", safeJson);
+            schemaDiagnosticsCopiedMessage = "安全な診断レポートをコピーしました。";
+        }
+        catch (JSException)
+        {
+            schemaDiagnosticsCopiedMessage = "この環境ではコピーできませんでした。画面の診断内容を確認してください。";
+        }
+    }
+
+    private async Task SearchHorsesAsync()
+    {
+        if (busy || horseSearchLoading || string.IsNullOrWhiteSpace(horseSearchText)) return;
+        var requestedQuery = horseSearchText.Trim();
+        var refreshesSameQuery = horseSearchResults is not null
+            && string.Equals(horseSearchResultsQuery, requestedQuery, StringComparison.Ordinal);
+        if (!refreshesSameQuery)
+        {
+            horseSearchResults = null;
+            horseSearchResultsQuery = null;
+        }
+        horseSearchResultsStale = refreshesSameQuery;
+        horseSearchLoading = true;
+        horseSearchError = null;
+        selectedHorseId = null;
+        ClearPreviewForEdit();
+        try
+        {
+            var result = await Api.SearchHorsesAsync(new SearchHorsesRequest
+            {
+                Query = requestedQuery,
+                Page = 1,
+                PageSize = 50,
+            });
+            horseSearchResults = result?.Items ?? Array.Empty<HorseSummaryDto>();
+            horseSearchResultsQuery = requestedQuery;
+            horseSearchResultsStale = false;
+        }
+        catch (HttpRequestException)
+        {
+            horseSearchError = "登録馬を検索できませんでした。検索語を保持しています。必要な場合に再度検索してください。";
+        }
+        catch (OperationCanceledException)
+        {
+            horseSearchError = "登録馬の検索を完了できませんでした。検索語を保持しています。必要な場合に再度検索してください。";
+        }
+        finally
+        {
+            horseSearchLoading = false;
+        }
+    }
+
+    private void OnHorseSearchTextChanged()
+    {
+        ClearPreviewForEdit();
+        if (horseSearchResults is null || string.Equals(horseSearchResultsQuery, horseSearchText.Trim(), StringComparison.Ordinal)) return;
+        horseSearchResults = null;
+        horseSearchResultsQuery = null;
+        horseSearchResultsStale = false;
+        selectedHorseId = null;
+    }
+
+    private void AddCandidate()
+    {
+        candidateInputError = null;
+        if (!CanAddCandidate)
+        {
+            candidateInputError = Candidates.Count >= HorseIdentityMigrationManifest.MaximumEntries
+                ? "候補は追加分と参考候補を合わせて最大16件です。不要な候補を外してから追加してください。"
+                : "登録馬を選び、半角数字10桁のJRA馬番号を入力してください。既にある旧IDは追加できません。";
+            return;
+        }
+
+        var horse = horseSearchResults!.Single(candidate => string.Equals(candidate.HorseId, selectedHorseId, StringComparison.Ordinal));
+        var horseNumber = jraHorseNumber;
+        Candidates.Add(new MigrationCandidate(horse.HorseId, $"jra-horse:{horseNumber}", horse.RegisteredName,
+            "登録馬として選択されています（JRA対応を証明するものではありません）。",
+            "この対応は未確認の仮説です。保存された登録・初回登録・source証拠を確認してください。", false, horse));
+        jraHorseNumber = string.Empty;
+        selectedHorseId = null;
+        candidateInputError = null;
+        ClearPreviewForEdit();
+    }
+
+    private void RemoveCandidate(MigrationCandidate candidate)
+    {
+        if (busy) return;
+        selected.Remove(candidate.OldHorseId);
+        Candidates.Remove(candidate);
+        ClearPreviewForEdit();
+    }
+
+    private void RestorePreset(MigrationCandidate preset)
+    {
+        if (busy || Candidates.Count >= HorseIdentityMigrationManifest.MaximumEntries
+            || Candidates.Any(candidate => candidate.OldHorseId == preset.OldHorseId)) return;
+        Candidates.Add(CloneCandidate(preset));
+        ClearPreviewForEdit();
+    }
+
+    private void SetHypothesisAccepted(MigrationCandidate candidate, bool value)
+    {
+        candidate.HypothesisAccepted = value;
+        ClearPreviewForEdit();
+    }
+
+    private void ClearPreviewForEdit()
+    {
+        preview = null;
+        confirmStage = false;
+        errorMessage = null;
+        successMessage = null;
+    }
+
     private void SetSelected(MigrationCandidate candidate, bool value)
     {
         if (value) selected.Add(candidate.OldHorseId);
         else selected.Remove(candidate.OldHorseId);
-        preview = null;
-        errorMessage = null;
-        successMessage = null;
+        ClearPreviewForEdit();
     }
 
     private async Task PreviewAsync()
@@ -422,6 +772,85 @@
             candidate.OldHorseId, candidate.JraIdentity, HypothesisAccepted: true))
         .ToArray());
 
+    private static bool IsCanonicalJraHorseNumber(string? value) => value is { Length: 10 }
+        && value.All(char.IsAsciiDigit);
+
+    private static bool IsCanonicalJraIdentity(string? value) => IdentityMigrationPreflightPolicy.IsCanonicalJraIdentity(value);
+
+    private static MigrationCandidate CloneCandidate(MigrationCandidate candidate) => new(candidate.OldHorseId,
+        candidate.JraIdentity, candidate.Name, candidate.EvidenceNote, candidate.Limitations, candidate.IsPreset,
+        candidate.SourceHorse);
+
+    private static string DiagnosticUrl(string horseId) =>
+        $"/settings/identity-diagnostics/horses/{Uri.EscapeDataString(horseId)}";
+
+    private static string HorseSummary(HorseSummaryDto horse) =>
+        $"{horse.RegisteredName} · {horse.HorseId} · 生年月日 {horse.BirthDate?.ToString("yyyy-MM-dd") ?? "—"}";
+
+    private static string HistoryVersions(IReadOnlyList<int> versions) =>
+        versions.Count == 0 ? "なし/未確認" : string.Join(", ", versions);
+
+    private static string DiagnosticStatusLabel(HorseIdentityMigrationSchemaStatus status) => status switch
+    {
+        HorseIdentityMigrationSchemaStatus.Observed => "確認済み",
+        HorseIdentityMigrationSchemaStatus.NotConfigured => "未設定",
+        HorseIdentityMigrationSchemaStatus.Unavailable => "利用不可",
+        HorseIdentityMigrationSchemaStatus.UnknownShape => "未確認の構造",
+        HorseIdentityMigrationSchemaStatus.Unsupported => "未対応の構造",
+        HorseIdentityMigrationSchemaStatus.Incomplete => "診断未完了",
+        _ => "確認できない状態",
+    };
+
+    private static string DifferenceLabel(HorseIdentityMigrationSchemaDifferenceKind kind) => kind switch
+    {
+        HorseIdentityMigrationSchemaDifferenceKind.MigrationHistory => "移行履歴",
+        HorseIdentityMigrationSchemaDifferenceKind.MissingTable => "不足テーブル",
+        HorseIdentityMigrationSchemaDifferenceKind.ColumnShape => "列の構造差異",
+        HorseIdentityMigrationSchemaDifferenceKind.IndexShape => "indexの構造差異",
+        HorseIdentityMigrationSchemaDifferenceKind.DefaultMismatch => "既定値の差異",
+        HorseIdentityMigrationSchemaDifferenceKind.ForeignKeyMismatch => "参照制約の差異",
+        HorseIdentityMigrationSchemaDifferenceKind.SqlShapeUnsupported => "未対応のSQL構造",
+        HorseIdentityMigrationSchemaDifferenceKind.UnknownObject => "未確認オブジェクト",
+        HorseIdentityMigrationSchemaDifferenceKind.IncompleteScan => "走査未完了",
+        HorseIdentityMigrationSchemaDifferenceKind.StoreUnavailable => "保存先の利用不可",
+        _ => "確認できない差異",
+    };
+
+    private static string ObjectKindLabel(HorseIdentityMigrationSchemaObjectKind kind) => kind switch
+    {
+        HorseIdentityMigrationSchemaObjectKind.Table => "テーブル",
+        HorseIdentityMigrationSchemaObjectKind.Index => "index",
+        HorseIdentityMigrationSchemaObjectKind.View => "view",
+        HorseIdentityMigrationSchemaObjectKind.Trigger => "trigger",
+        HorseIdentityMigrationSchemaObjectKind.Other => "その他",
+        _ => "確認できない種類",
+    };
+
+    private static string ShapeLabel(HorseIdentityMigrationSchemaShapeDescriptor? shape)
+    {
+        if (shape is null) return "記録なし";
+        var fields = new List<string>();
+        if (shape.DeclaredType is { } declaredType) fields.Add($"型 {DeclaredTypeLabel(declaredType)}");
+        if (shape.Nullable is { } nullable) fields.Add(nullable ? "NULL可" : "NOT NULL");
+        if (shape.PrimaryKeyOrdinal is { } primaryKeyOrdinal) fields.Add($"主キー位置 {primaryKeyOrdinal}");
+        if (shape.ObjectCount is { } objectCount) fields.Add($"対象数 {objectCount}");
+        if (shape.Unique is { } unique) fields.Add(unique ? "UNIQUE" : "非UNIQUE");
+        if (shape.Partial is { } partial) fields.Add(partial ? "部分index" : "全体index");
+        if (shape.Fingerprint is { Length: 64 } fingerprint) fields.Add($"fingerprint {fingerprint}");
+        return fields.Count == 0 ? "構造情報なし" : string.Join(" · ", fields);
+    }
+
+    private static string DeclaredTypeLabel(HorseIdentityMigrationSchemaDeclaredType declaredType) => declaredType switch
+    {
+        HorseIdentityMigrationSchemaDeclaredType.Integer => "整数",
+        HorseIdentityMigrationSchemaDeclaredType.Text => "テキスト",
+        HorseIdentityMigrationSchemaDeclaredType.Real => "実数",
+        HorseIdentityMigrationSchemaDeclaredType.Blob => "バイナリ",
+        HorseIdentityMigrationSchemaDeclaredType.Numeric => "数値",
+        HorseIdentityMigrationSchemaDeclaredType.Other => "その他",
+        _ => "確認できない型",
+    };
+
     private void RememberOperationId(Guid operationId)
     {
         var current = Navigation.ToAbsoluteUri(Navigation.Uri);
@@ -471,5 +900,8 @@
     };
 
     private sealed record MigrationCandidate(string OldHorseId, string JraIdentity, string Name,
-        string EvidenceNote, string Limitations);
+        string EvidenceNote, string Limitations, bool IsPreset, HorseSummaryDto? SourceHorse)
+    {
+        public bool HypothesisAccepted { get; set; }
+    }
 }

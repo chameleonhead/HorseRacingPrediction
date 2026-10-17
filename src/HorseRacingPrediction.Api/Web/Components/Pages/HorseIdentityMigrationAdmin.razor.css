@@ -1,8 +1,11 @@
 .migration-intro,
+.migration-diagnostics,
 .migration-candidates,
 .migration-operation { display: grid; gap: 12px; }
 .migration-intro h2,
+.migration-diagnostics h2,
 .migration-candidates h2,
+.migration-candidate-search h3,
 .migration-operation h2,
 .migration-preview h3,
 .migration-preview h4,
@@ -13,6 +16,17 @@
 .migration-cards { display: none; }
 .migration-card { border-top: 1px solid var(--neutral-stroke-rest); padding-top: 12px; min-width: 0; }
 .migration-card-selection { align-items: center; display: flex; gap: 8px; }
+.migration-candidate-search { border-top: 1px solid var(--neutral-stroke-rest); display: grid; gap: 10px; padding-top: 12px; }
+.migration-candidate-search-fields { align-items: end; display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) auto; min-width: 0; }
+.migration-candidate-search-fields fluent-text-field,
+.migration-candidate-search fluent-select { min-width: 0; width: 100%; }
+.migration-hypothesis-acceptance { align-items: start; display: flex; gap: 8px; line-height: 1.5; }
+.migration-removed-presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.migration-differences { display: grid; gap: 12px; list-style: none; margin: 0; padding: 0; }
+.migration-differences li { border-top: 1px solid var(--neutral-stroke-rest); display: grid; gap: 6px; min-width: 0; padding-top: 8px; }
+.migration-differences code { overflow-wrap: anywhere; }
+.migration-diagnostic-complete { border-inline-start: 3px solid var(--status-success-foreground-1); margin: 0; padding: 10px 12px; }
+.migration-field-error { color: var(--status-danger-foreground-1); margin: 0; }
 .migration-card dl,
 .migration-operation-result dl,
 .migration-preview-summary { display: grid; gap: 8px 12px; grid-template-columns: minmax(120px, 220px) minmax(0, 1fr); margin: 0; }
@@ -38,7 +52,8 @@
 .migration-mappings,
 .migration-roots { margin: 0; overflow-wrap: anywhere; padding-inline-start: 24px; }
 .migration-preview code,
-.migration-operation code { overflow-wrap: anywhere; }
+.migration-operation code,
+.migration-diagnostics code { overflow-wrap: anywhere; }
 @media (max-width: 760px) {
     .migration-grid { display: none; }
     .migration-cards { display: grid; gap: 12px; }
@@ -46,7 +61,9 @@
     .migration-status-form { align-items: stretch; flex-direction: column; }
     .migration-actions fluent-button,
     .migration-status-form fluent-button,
-    .migration-status-form fluent-text-field { width: 100%; }
+    .migration-status-form fluent-text-field,
+    .migration-candidate-search-fields fluent-button { width: 100%; }
+    .migration-candidate-search-fields { align-items: stretch; grid-template-columns: 1fr; }
     .migration-selection-count { margin-right: 0; }
     .migration-card dl,
     .migration-operation-result dl,
