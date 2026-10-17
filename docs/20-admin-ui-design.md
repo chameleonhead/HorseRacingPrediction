@@ -893,6 +893,10 @@ API 内の共通 UI コンポーネントは表示と UI 状態だけを担当�
 
 Settingsから `/settings/horse-id-migration` へ移動する。候補は未選択から明示的に選び、プレビュー後の確認を経て固定内容を保存する。保存したGUIDは同じ画面の `operationId` クエリへ残り、状態確認は「状態を更新」の手動操作で行う。再訪だけではAPI呼び出しや実行を開始しない。PCでは完全な識別情報を折り返し、狭幅では同じ情報を縦表示する。中断状態で通常アプリを起動できない場合も、既存ログインを使った読み取り専用の最小状態画面を同じURLから利用する。
 
+## Proposed — 管理画面から完結する馬ID復旧
+
+[管理画面内復旧案](changes/20261017_admin-screen-recovery/README.md)は2026-10-17の追加要望を整理した未承認設計で、現在の稼働仕様ではない。保存先の限定された構造診断、任意の既存馬/JRA番号候補の明示確認、プレビューと依頼保存に加え、管理画面から既存の固定GitHub Actions workflowを起動し、同じ依頼IDで結果を確認する。通常操作でGitHub/AWS画面へ移動させない一方、初回だけ専用repo限定Actions認証設定を要する。API停止中は接続断を想定し、再訪で自動dispatchせず永続状態を確認する。移行本体のoffline CLI、バックアップ、未知データの停止、対象再取得とpipeline再開の分離は維持する。上のApproved designの手動Actions境界を置き換えるには同案の明示承認が必要であり、現時点で置き換え済みとは扱わない。
+
 ## 15. 調査資料
 
 - [ASP.NET Core Blazor tooling / templates (.NET 10)](https://learn.microsoft.com/en-us/aspnet/core/blazor/tooling?view=aspnetcore-10.0)
