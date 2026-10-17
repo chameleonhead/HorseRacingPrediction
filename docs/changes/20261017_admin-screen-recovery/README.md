@@ -6,14 +6,15 @@
 - Owner: Lead
 - Created: 2026-10-17
 - Updated: 2026-10-18
+- JRA site contract impact: None
 
 ## CURRENT
 
 - User requests recovery entirely inside admin UI; explicitly rejected separate GitHub Actions screen handoff on2026-10-17.
 - User approved the revised token-free same-container design2026-10-17 (async reply: このToken不要の方式で進める). Token setup withdrawn; C1–C3 revised dispositions accepted.
 - Lead owns architecture/security/approval. Requestedgpt-6-luna/high readonly planner completed; runtime model/tokens unavailable.
-- T2 backend b402ce7b + T4 UI61320cda verified and pushed to main2026-10-18. Exact61320cda nativeCI all14commands exit0,1960passed/8knownskips/0failed. Matching app-deploy39057975151/app-ci39057975167 are running; dispatch is not deployment completion. T3-A2 selectable5.6Luna/high continues preserved CP1drafts/tests; no reset or production migration.
-- Existing UnknownShape cause remains unverified; new diagnostic must establish actual catalog difference before any lineage correction/apply.
+- T2 backend b402ce7b + T4 UI61320cda deployed2026-10-18. NativeCI all14exit0/1960pass/8knownskip; matching app-ci39057975167 and app-deploy39057975151 SUCCESS, all5deployjobs success/annotations[], APIhealth200; originalPaused=true retained. T3-A2 selectable5.6Luna/high continues unverified CP1drafts/F5closure; no reset or horse-ID migration.
+- Actual UI diagnostic2026-10-17T18:43:13Z identifies3Collection differences (CanonicalResourceType TEXT vsINTEGER, CreatedTask default hash, fairnessSQL hash); history19–25/26known/0unknown. Source-cohort reconstruction is readonly and still needs proof before correction/apply.
 - Preserve all dirty AGENTS/skills/policy-test/routing/efficiency files. No AWS login prerequisite for delivery through canonical GitHub deployment.
 
 ## Completion summary
@@ -22,9 +23,19 @@
 | --- | --- | --- |
 | Code | Connected | T2 backend and T4 diagnostic/candidate UI verified. Token-free executor is not implemented. |
 | Verification | Connected | T4 focused gates and exact61320cda Ubuntu24.04 native checkpoint all14commands pass; executor/final runtime tests remain. Coverage absent for3projects is disclosed, not a coverage success claim. |
-| Deployment/operation | Connected | Diagnostic revision61320cda pushed; matching CI/deployment running. Actual schema closure, supervised runtime, migration and real job progression remain. |
+| Deployment/operation | Connected | Diagnostic revision61320cda CI/deployed successfully; actual UI diagnosis captured3Collection differences. Schema closure, supervised runtime, migration and real job progression remain. |
 
 ## Context and evidence
+
+Actual readonly diagnostic2026-10-17T18:43:13Z from deployed61320cda authenticated admin screen, manual「保存先を診断」: EventStore Observed22known/0unknown; Schedule Observed1/0unknown; LocalQueue NotConfigured. Collection UnknownShape26known/0unknown, history versions19,20,21,22,23,24,25. Exactly3reported differences:
+
+| Surface | Expected | Observed |
+| --- | --- | --- |
+| collection_failure_notifications.CanonicalResourceType | INTEGER, nullable, PK0 | TEXT, nullable, PK0 |
+| collection_subject_identification_selections.CreatedTask default | SHA256 6e9c960fd025b2e5b1cbceebc7e7b31d041c4c352987f3b56b07f14ad43abca7 | SHA256 6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b |
+| collection_dispatcher_fairness_state SQL | SHA256 182135075c6dce493403b0f01aea3a50c6b460e7c7781bb5f351810fe54838b1 | SHA256 303a8ee7192fdd808a960678f34489323e41c26ce157a6a83fbc6ec117b634fe |
+
+No rawSQL/path/business row/secret captured. Diagnostic intentionally stays incomplete, not admission success. No candidate selected/staged/applied and no collection resume. Requested5.6Luna/high readonly source/history cohort planner owns matching these exact fingerprints and proposing the smallest typed data-preserving correction; source guard is not relaxed from table counts alone.
 
 Parent [approved migration](../20261014_horse-id-hypothesis-migration/README.md) remains unfinished; this change does not remove its data-preservation, offline CLI, backup, postcheck or production-recovery criteria. It proposes replacing its fixed-three-candidate/manual-GitHub-screen boundary, not its physical migration engine.
 
@@ -188,11 +199,15 @@ T2 pre-implementation release2026-10-17: Lead reloaded orchestration/DDD; Cheap 
 
 ## Documentation updates
 
+- CP2 readonly planning2026-10-18 (not source release): requested5.6Luna/high inspected CodeGraph/current startup, fixedCLI, readers and preflight. Next smallest8files: new IdentityMigration/HorseIdentityMigrationConfiguredSources.cs and HorseIdentityMigrationRuntimeOwnership.cs; existing IdentityMigration/HorseIdentityMigrationRuntimeMode.cs, Program.cs, IdentityMigration/TypedHorseIdentityStoreReaders.cs, Identity/IdentityMigrationPreflightConfiguredSurfaceReader.cs; new API.Tests/HorseIdentityMigrationRuntimeOwnershipTests.cs and existing HorseIdentityMigrationRuntimeModeTests.cs. Canonical resolver stays in API, may call CollectionOperations helper, no reverse dependency. Pure config normalization may precede Succeeded receipt, but no source stat/parent/sidecar/gate/lease access before receipt-only return. Per-source sibling reserved sidecars, sorted acquisition/rollback and deterministic absolute-path identity catch overlapping sets across journaldirs; missing DB path reserved before constructors, no DB creation by resolver. Reject ancestor reparse/symlink/nonregular/hardlink (OS identity adapter), reserved path collision and corrupt gate. API acquires ownership before business DI/migrator; refusal runs journal-only minimal host. FixedCLI holds ownership before readers/engine, preserves separate journal lease. CP2 does not activate physical gate creation/completion: backup+typedpostcheck checkpoint owns that lifecycle, so no physical-safety completion claim. Required tests: pure/no-filesystem resolution, memory/SQS/localqueue compatibility, absent-parent reservation, overlap/disjoint/release/partialrollback, symlink/hardlink/corrupt gate, API process no-bootstrap on refusal, CLI unchanged snapshots and Succeeded no-source-touch. Focused ownership/runtimeMode then Release solutionbuild/full !External/exactformat/graph/diff; Linux and Windows identity behavior require actual respective runner proof. Exact source readiness/audit and CP1 verified commit are still required before source release; no scope or external contract expansion.
+
 - `docs/20-admin-ui-design.md`: Approved successor link describes token-free same-container execution, restart/status and existing offline safety. This remains the canonical admin UI document.
 - Parent change record remains the canonical migration-engine/safety/actual production incident evidence. Its pending T20/T5/T26/T27 are not excluded by this new record; closure evidence will update them in the same work cycle.
 - No other canonical migration runbook found by readonly docs audit. New mock is change-specific, not a competing operational source.
 
 ## Verification record
+
+- Diagnostic delivery actual acceptance2026-10-18: app-ci39057975167 SUCCESS/job117469793245 annotations[]; app-deploy39057975151 SUCCESS at61320cda, jobs verify117469793404/build-and-push117471927266/deploy-collector-lambda117472507450/deploy117473202945/migrate-race-entry-owners117473388477 allsuccess and annotations[]. Lead independently reread exactSHA/alljobs and deployannotations. Logreceipt APIhealthyHTTP200 after transient000000/502 startup; ORIGINAL_WAS_PAUSED=true and Collection remains paused. No horse migrationGUID, so horse-specificbackup/CLI/postchecks skipped. Existing owner-repair job success has no row/count receipt; no invented data-mutation count. Terraform targeted-apply warning remains disclosed. Browser normalpage reloaded to new diagnostic/candidate controls, authenticated readonly diagnostic returned exact3Collection differences above; this closes diagnostic delivery only, not AC3–5/T20 recovery.
 
 - T5 diagnostic delivery checkpoint2026-10-18: frozen61320cda archive has2668members/0CRLF-normalized content differences, SHA256 D18CE7261D6331EE0AF98230A6AAF06BAF26B927428E7146EE2929EE0CB104CD. Owned native Ubuntu24.04.4/SDK10.0.202/pwsh7.5.0 run completed all14workflow-equivalent commands exit0; build0warnings/errors,1960passed/8knownskips/0failed across10project result paths; pinned real Chromium installed, EF model/emptySQLite/vulnerability/isolatedrepair gates pass. Evidence: TEMP/hrp-t5-native-ci-b21bf4cfcccb4f0ba9a2386d6bc5cbee/evidence. Lead independently read exitmanifest/test/repair logs and matched exitmanifest SHA256 2ACAE819393B5D99EDA31AC81D359F90E78196ECC39B523C2FBA349F5DED38F9 and testlog FC91B9757747C45CF83BD7840C591731934D200DE794EA7A47F5A96BB59689C5. Seven coverage attachment paths reported; Agents/Scraping/Collector lack coverlet.collector and emit warnings. Workflow has no independent coverage threshold; tests exit0 is its hard gate. No claim of complete coverage or retained rawTRX files, no rerun/oldcontainer mutation, no futureT3/T7/runtime/production proof. Existing8skips: OptionalBaselineBinary_RefusesCurrentSchemaBeforeChangingBusinessRows; Empty; CapacityFull; AllLanesReady; DenseActivePrefix; HeldPrefix; FixedLiveHistory1x; FixedLiveHistory10x. A2 reconciled terminal evidence afterA1quota rather than starting duplicateCI. Router accepts bounded diagnostic checkpoint; fullruntime T8 remains dependent.
 - Diagnostic deployment submission2026-10-18: remote main5b343cd7 checked, exactverified61320cda pushed without unverifiedCP1/userdirty files. app-deploy39057975151 and app-ci39057975167 matching headSHA observed In progress; collect terminal/annotations/health/actual schema before claiming delivered. No migrationGUID supplied, no data action or resume requested by this push.
@@ -211,3 +226,4 @@ T2 pre-implementation release2026-10-17: Lead reloaded orchestration/DDD; Cheap 
 | F2 | T2 | Lead AC1 review found reason-only report insufficient, then descriptor hash/identifier/index-detail defects; safe facets and table-qualified identifiers corrected | Actual attributable diff plus independent pre/post type fixture and final82/82; formatter/graph still separate pending gates | Material | Verified |
 | F3 | T4 | Real browser found JRA DOM value updated but Add stayed disabled until blur; Fluent Immediate enabled for candidate search/JRA | Release11bUnit/1realbrowser pass; browser requires Add enabled while input remains focused then actual mouseAdd | Material | Verified |
 | F4 | T4 | Independent AC1/AC2 review found missing long-ID/fingerprint wrap, search/diagnostic error/loading/retention, and full preview↔stage manifest proof | Independent delta review + final13ReleasebUnit/1realbrowser/184related/build/formatter/graph/diff pass; Lead four hashes match | Material | Verified |
+| F5 | T3 | Lead draft AC3/4 review: file counts do not prove no orphan operation rows; lostresponse/pure phase/capacity/retention proof missing; terminal purge can delete active verification intent; Applying transition lacks unsafe operation-state guard; original previewfingerprint not recoverable from hash alone | CP1 executor must correct within8files, add realHTTP lostACK/rowcount and phase/retention/capacity counterexamples, retain actual savedfingerprint, rerun focused/regression/build/format/graph after final edit | Material | In progress |
