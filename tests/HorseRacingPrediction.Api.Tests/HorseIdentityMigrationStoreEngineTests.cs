@@ -26,6 +26,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace HorseRacingPrediction.Api.Tests;
@@ -35,6 +36,304 @@ public sealed class HorseIdentityMigrationStoreEngineTests
 {
     private const string OldHorseId = "horse-11111111-1111-4111-8111-111111111111";
     private const string JraIdentity = "jra-horse:2024100828";
+    private const string SourceProvenV19FairnessSql = """
+        CREATE TABLE "collection_dispatcher_fairness_state" (
+            "StateId" INTEGER NOT NULL CONSTRAINT "PK_collection_dispatcher_fairness_state" PRIMARY KEY AUTOINCREMENT,
+            "ConsecutiveRealtime" INTEGER NOT NULL,
+            "LastGrantedLane" TEXT NULL,
+            "LastNonRealtimeLane" TEXT NULL,
+            "ReservationSequence" INTEGER NOT NULL,
+            "ScanAvailableAt" TEXT NULL,
+            "ScanOutboxId" TEXT NULL,
+            "UpdatedAt" TEXT NOT NULL
+        )
+        """;
+    private static readonly string[] SourceProvenV19FairnessSqlHashes =
+    [
+        "303A8EE7192FDD808A960678F34489323E41C26CE157A6A83FBC6EC117B634FE",
+        "9BA7E868F8D4BE305013559E43E2E3567D8F071F8A47851A03E69E525E6E3C88",
+    ];
+    private const string SourceProvenV19SchemaSql = """
+CREATE TABLE "collection_active_tasks" (
+    "ResourcePk" INTEGER NOT NULL,
+    "DefinitionId" TEXT NOT NULL,
+    "TaskId" TEXT NOT NULL,
+    CONSTRAINT "PK_collection_active_tasks" PRIMARY KEY ("ResourcePk", "DefinitionId")
+);
+CREATE TABLE "collection_attempt_stage_outcomes" (
+    "StageOutcomeId" TEXT NOT NULL CONSTRAINT "PK_collection_attempt_stage_outcomes" PRIMARY KEY,
+    "AttemptId" TEXT NOT NULL,
+    "Stage" TEXT NOT NULL,
+    "Artifact" TEXT NOT NULL,
+    "Result" TEXT NOT NULL,
+    "ErrorCode" TEXT NULL,
+    "ErrorMessage" TEXT NULL,
+    "RequestedUrl" TEXT NULL,
+    "FinalUrl" TEXT NULL,
+    "Persisted" INTEGER NOT NULL
+);
+CREATE TABLE "collection_attempts" (
+    "AttemptId" TEXT NOT NULL CONSTRAINT "PK_collection_attempts" PRIMARY KEY,
+    "TaskId" TEXT NOT NULL,
+    "AttemptNumber" INTEGER NOT NULL,
+    "StartedAt" TEXT NOT NULL,
+    "FinishedAt" TEXT NULL,
+    "Result" TEXT NOT NULL,
+    "ErrorCode" TEXT NULL,
+    "ErrorMessage" TEXT NULL,
+    "RequestedUrl" TEXT NULL,
+    "FinalUrl" TEXT NULL,
+    "HttpStatusCode" INTEGER NULL,
+    "PageIdentification" TEXT NULL,
+    "ExecutionBatchId" TEXT NULL,
+    "DispatchEnvelopeId" TEXT NULL,
+    "QueueMessageId" TEXT NULL,
+    "LambdaRequestId" TEXT NULL,
+    "BatchTaskOrdinal" INTEGER NULL,
+    "BatchTaskCount" INTEGER NULL
+);
+CREATE TABLE "collection_backfill_batches" (
+    "BatchId" TEXT NOT NULL CONSTRAINT "PK_collection_backfill_batches" PRIMARY KEY,
+    "Provider" TEXT NOT NULL,
+    "From" TEXT NOT NULL,
+    "To" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "ExpansionCompletedAt" TEXT NULL
+);
+CREATE TABLE "collection_definitions" (
+    "DefinitionId" TEXT NOT NULL CONSTRAINT "PK_collection_definitions" PRIMARY KEY,
+    "Name" TEXT NOT NULL,
+    "ResourceType" TEXT NOT NULL,
+    "CurrentRevision" INTEGER NOT NULL,
+    "Enabled" INTEGER NOT NULL
+);
+CREATE TABLE "collection_dispatcher_fairness_state" (
+    "StateId" INTEGER NOT NULL CONSTRAINT "PK_collection_dispatcher_fairness_state" PRIMARY KEY AUTOINCREMENT,
+    "ConsecutiveRealtime" INTEGER NOT NULL,
+    "LastGrantedLane" TEXT NULL,
+    "LastNonRealtimeLane" TEXT NULL,
+    "ReservationSequence" INTEGER NOT NULL,
+    "ScanAvailableAt" TEXT NULL,
+    "ScanOutboxId" TEXT NULL,
+    "UpdatedAt" TEXT NOT NULL
+);
+CREATE TABLE "collection_execution_leases" (
+    "ExecutionBatchId" TEXT NOT NULL CONSTRAINT "PK_collection_execution_leases" PRIMARY KEY,
+    "DispatchEnvelopeId" TEXT NOT NULL,
+    "WakeId" TEXT NOT NULL,
+    "ReservationToken" TEXT NOT NULL,
+    "LeaseToken" TEXT NOT NULL,
+    "Status" TEXT NOT NULL,
+    "LeaseExpiresAt" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "StartedAt" TEXT NULL,
+    "FinishedAt" TEXT NULL,
+    "QueueMessageId" TEXT NULL,
+    "LambdaRequestId" TEXT NULL
+);
+CREATE TABLE "collection_failure_notifications" (
+    "NotificationId" TEXT NOT NULL CONSTRAINT "PK_collection_failure_notifications" PRIMARY KEY,
+    "TaskId" TEXT NOT NULL,
+    "Status" TEXT NOT NULL,
+    "ErrorCode" TEXT NULL,
+    "ErrorMessage" TEXT NULL,
+    "AttemptCount" INTEGER NOT NULL,
+    "FailedAt" TEXT NOT NULL,
+    "AvailableAt" TEXT NOT NULL,
+    "PublishedAt" TEXT NULL,
+    "PublishAttemptCount" INTEGER NOT NULL,
+    "LastPublishError" TEXT NULL,
+    "ResolutionStatus" TEXT NOT NULL,
+    "RecoveryTaskId" TEXT NULL,
+    "RecoveryStartedAt" TEXT NULL,
+    "ResolvedAt" TEXT NULL
+);
+CREATE TABLE "collection_platform_controls" (
+    "ControlId" TEXT NOT NULL CONSTRAINT "PK_collection_platform_controls" PRIMARY KEY,
+    "IsPaused" INTEGER NOT NULL,
+    "Reason" TEXT NULL,
+    "UpdatedAt" TEXT NOT NULL
+);
+CREATE TABLE "collection_request_batch_bindings" (
+    "BatchItemId" TEXT NOT NULL CONSTRAINT "PK_collection_request_batch_bindings" PRIMARY KEY,
+    "PayloadFingerprint" TEXT NOT NULL,
+    "RequestId" TEXT NOT NULL,
+    "TaskId" TEXT NULL
+);
+CREATE TABLE "collection_requests" (
+    "RequestId" TEXT NOT NULL CONSTRAINT "PK_collection_requests" PRIMARY KEY,
+    "ResourcePk" INTEGER NOT NULL,
+    "DefinitionId" TEXT NOT NULL,
+    "RequestedRevision" INTEGER NOT NULL,
+    "Reason" TEXT NOT NULL,
+    "Lane" TEXT NOT NULL,
+    "Priority" INTEGER NOT NULL,
+    "MetadataJson" TEXT NOT NULL,
+    "RequestedAt" TEXT NOT NULL,
+    "ExplicitUrl" TEXT NULL,
+    "BatchId" TEXT NULL,
+    "PayloadFingerprint" TEXT NULL,
+    "OriginDefinitionId" TEXT NULL,
+    "OriginRequestedRevision" INTEGER NULL
+);
+CREATE TABLE "collection_resource_suppressions" (
+    "Type" TEXT NOT NULL,
+    "Provider" TEXT NOT NULL,
+    "ResourceId" TEXT NOT NULL,
+    "Reason" TEXT NOT NULL,
+    "RepairId" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    CONSTRAINT "PK_collection_resource_suppressions" PRIMARY KEY ("Type", "Provider", "ResourceId")
+);
+CREATE TABLE "collection_resources" (
+    "ResourcePk" INTEGER NOT NULL CONSTRAINT "PK_collection_resources" PRIMARY KEY AUTOINCREMENT,
+    "Type" TEXT NOT NULL,
+    "Provider" TEXT NOT NULL,
+    "ResourceId" TEXT NOT NULL,
+    "EffectiveDate" TEXT NULL,
+    "AttributesJson" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL
+);
+CREATE TABLE "collection_revision_impacts" (
+    "ImpactId" INTEGER NOT NULL CONSTRAINT "PK_collection_revision_impacts" PRIMARY KEY AUTOINCREMENT,
+    "DefinitionId" TEXT NOT NULL,
+    "Revision" INTEGER NOT NULL,
+    "ScopeType" TEXT NOT NULL,
+    "ScopePayload" TEXT NOT NULL
+);
+CREATE TABLE "collection_revisions" (
+    "DefinitionId" TEXT NOT NULL,
+    "Revision" INTEGER NOT NULL,
+    "Description" TEXT NOT NULL,
+    "MayRequireRecollection" INTEGER NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    CONSTRAINT "PK_collection_revisions" PRIMARY KEY ("DefinitionId", "Revision")
+);
+CREATE TABLE collection_schema_history (
+    version INTEGER NOT NULL CONSTRAINT PK_collection_schema_history PRIMARY KEY,
+    applied_at TEXT NOT NULL
+);
+CREATE TABLE "collection_states" (
+    "ResourcePk" INTEGER NOT NULL,
+    "DefinitionId" TEXT NOT NULL,
+    "AppliedRevision" INTEGER NOT NULL,
+    "RequiredRevision" INTEGER NOT NULL,
+    "LastCollectedAt" TEXT NULL,
+    "NextCollectionAt" TEXT NULL,
+    "Status" TEXT NOT NULL,
+    "UpdatedAt" TEXT NOT NULL,
+    CONSTRAINT "PK_collection_states" PRIMARY KEY ("ResourcePk", "DefinitionId")
+);
+CREATE TABLE "collection_task_outbox" (
+    "OutboxId" TEXT NOT NULL CONSTRAINT "PK_collection_task_outbox" PRIMARY KEY,
+    "TaskId" TEXT NOT NULL,
+    "DispatchGeneration" INTEGER NOT NULL,
+    "AvailableAt" TEXT NOT NULL,
+    "DispatchedAt" TEXT NULL,
+    "ReservationToken" TEXT NULL,
+    "ReservedUntilUnixMilliseconds" INTEGER NULL,
+    "EnvelopeId" TEXT NULL,
+    "WakeId" TEXT NULL,
+    "QueueMessageId" TEXT NULL,
+    "CreatedAt" TEXT NOT NULL
+);
+CREATE TABLE "collection_tasks" (
+    "TaskId" TEXT NOT NULL CONSTRAINT "PK_collection_tasks" PRIMARY KEY,
+    "RequestId" TEXT NOT NULL,
+    "ResourcePk" INTEGER NOT NULL,
+    "DefinitionId" TEXT NOT NULL,
+    "RequestedRevision" INTEGER NOT NULL,
+    "Status" TEXT NOT NULL,
+    "Lane" TEXT NOT NULL,
+    "Priority" INTEGER NOT NULL,
+    "AvailableAt" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "UpdatedAt" TEXT NOT NULL,
+    "StartedAt" TEXT NULL,
+    "FinishedAt" TEXT NULL,
+    "LeaseToken" TEXT NULL,
+    "LeaseExpiresAt" TEXT NULL,
+    "DispatchGeneration" INTEGER NOT NULL,
+    "RaceHoldGeneration" INTEGER NOT NULL,
+    "AttemptCount" INTEGER NOT NULL,
+    "CancellationRequestedAt" TEXT NULL,
+    "OriginDefinitionId" TEXT NULL,
+    "OriginRequestedRevision" INTEGER NULL,
+    "MetadataJson" TEXT NULL
+);
+CREATE TABLE "race_artifact_states" (
+    "ResourcePk" INTEGER NOT NULL,
+    "Artifact" TEXT NOT NULL,
+    "Status" TEXT NOT NULL,
+    "AppliedRevision" INTEGER NOT NULL,
+    "RequiredRevision" INTEGER NOT NULL,
+    "LastObservedAt" TEXT NULL,
+    "LastPersistedAt" TEXT NULL,
+    "NextDueAt" TEXT NULL,
+    "LastAttemptId" TEXT NULL,
+    "ErrorCode" TEXT NULL,
+    "ErrorMessage" TEXT NULL,
+    "UpdatedAt" TEXT NOT NULL,
+    CONSTRAINT "PK_race_artifact_states" PRIMARY KEY ("ResourcePk", "Artifact")
+);
+CREATE TABLE "race_repair_holds" (
+    "RaceId" TEXT NOT NULL,
+    "Generation" INTEGER NOT NULL,
+    "OperationId" TEXT NOT NULL,
+    "Reason" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "ReleasedAt" TEXT NULL,
+    "AssignmentFingerprint" TEXT NULL,
+    "ReleaseOperationId" TEXT NULL,
+    CONSTRAINT "PK_race_repair_holds" PRIMARY KEY ("RaceId", "Generation")
+);
+CREATE TABLE "race_scheduling_evidence" (
+    "ResourcePk" INTEGER NOT NULL CONSTRAINT "PK_race_scheduling_evidence" PRIMARY KEY AUTOINCREMENT,
+    "OfficialStartAt" TEXT NULL,
+    "Provenance" TEXT NULL,
+    "VerifiedAt" TEXT NULL,
+    "UpdatedAt" TEXT NOT NULL
+);
+CREATE TABLE "resource_locations" (
+    "LocationId" INTEGER NOT NULL CONSTRAINT "PK_resource_locations" PRIMARY KEY AUTOINCREMENT,
+    "ResourcePk" INTEGER NOT NULL,
+    "DefinitionId" TEXT NOT NULL,
+    "Url" TEXT NOT NULL,
+    "Source" TEXT NOT NULL,
+    "Status" TEXT NOT NULL,
+    "Artifact" TEXT NULL,
+    "DiscoveredAt" TEXT NOT NULL,
+    "LastVerifiedAt" TEXT NULL,
+    "LastFailedAt" TEXT NULL,
+    "LastFailureCode" TEXT NULL
+);
+CREATE UNIQUE INDEX "IX_collection_active_tasks_TaskId" ON "collection_active_tasks" ("TaskId");
+CREATE UNIQUE INDEX "IX_collection_attempt_stage_outcomes_AttemptId_Stage" ON "collection_attempt_stage_outcomes" ("AttemptId", "Stage");
+CREATE INDEX "IX_collection_attempts_ExecutionBatchId" ON "collection_attempts" ("ExecutionBatchId");
+CREATE UNIQUE INDEX "IX_collection_attempts_TaskId_AttemptNumber" ON "collection_attempts" ("TaskId", "AttemptNumber");
+CREATE INDEX "IX_collection_backfill_batches_Provider_From_To" ON "collection_backfill_batches" ("Provider", "From", "To");
+CREATE UNIQUE INDEX "IX_collection_execution_leases_DispatchEnvelopeId" ON "collection_execution_leases" ("DispatchEnvelopeId");
+CREATE INDEX "IX_collection_execution_leases_Status_LeaseExpiresAt" ON "collection_execution_leases" ("Status", "LeaseExpiresAt");
+CREATE INDEX "IX_collection_failure_notifications_PublishedAt_AvailableAt" ON "collection_failure_notifications" ("PublishedAt", "AvailableAt");
+CREATE INDEX "IX_collection_failure_notifications_RecoveryTaskId" ON "collection_failure_notifications" ("RecoveryTaskId");
+CREATE INDEX "IX_collection_failure_notifications_ResolutionStatus_AvailableAt" ON "collection_failure_notifications" ("ResolutionStatus", "AvailableAt");
+CREATE INDEX "IX_collection_failure_notifications_TaskId" ON "collection_failure_notifications" ("TaskId");
+CREATE INDEX "IX_collection_request_batch_bindings_RequestId" ON "collection_request_batch_bindings" ("RequestId");
+CREATE INDEX "IX_collection_requests_ResourcePk_DefinitionId_RequestedAt" ON "collection_requests" ("ResourcePk", "DefinitionId", "RequestedAt");
+CREATE INDEX "IX_collection_resource_suppressions_RepairId" ON "collection_resource_suppressions" ("RepairId");
+CREATE UNIQUE INDEX "IX_collection_resources_Type_Provider_ResourceId" ON "collection_resources" ("Type", "Provider", "ResourceId");
+CREATE INDEX "IX_collection_revision_impacts_DefinitionId_Revision" ON "collection_revision_impacts" ("DefinitionId", "Revision");
+CREATE INDEX "IX_collection_states_Status_NextCollectionAt" ON "collection_states" ("Status", "NextCollectionAt");
+CREATE INDEX "IX_collection_task_outbox_DispatchedAt_AvailableAt" ON "collection_task_outbox" ("DispatchedAt", "AvailableAt");
+CREATE INDEX "IX_collection_task_outbox_DispatchedAt_ReservedUntilUnixMilliseconds" ON "collection_task_outbox" ("DispatchedAt", "ReservedUntilUnixMilliseconds");
+CREATE INDEX "IX_collection_tasks_RequestId" ON "collection_tasks" ("RequestId");
+CREATE INDEX "IX_collection_tasks_ResourcePk_DefinitionId_RequestedRevision_CreatedAt" ON "collection_tasks" ("ResourcePk", "DefinitionId", "RequestedRevision", "CreatedAt");
+CREATE INDEX "IX_collection_tasks_Status_AvailableAt_Lane_Priority" ON "collection_tasks" ("Status", "AvailableAt", "Lane", "Priority");
+CREATE INDEX "IX_race_artifact_states_Status_NextDueAt" ON "race_artifact_states" ("Status", "NextDueAt");
+CREATE UNIQUE INDEX "IX_race_repair_holds_OperationId" ON "race_repair_holds" ("OperationId");
+CREATE UNIQUE INDEX "IX_race_repair_holds_RaceId" ON "race_repair_holds" ("RaceId") WHERE ReleasedAt IS NULL;
+CREATE UNIQUE INDEX "IX_resource_locations_ResourcePk_DefinitionId_Url" ON "resource_locations" ("ResourcePk", "DefinitionId", "Url");
+""";
 
     [TestMethod]
     public async Task ValidManifestReadsConfiguredSchemasAndRootsButNeverClaimsWriteReadiness()
@@ -1006,6 +1305,131 @@ public sealed class HorseIdentityMigrationStoreEngineTests
     }
 
     [TestMethod]
+    public async Task SourceProvenV19EfFirstHybridPreservesShapeHistoryAndRows()
+    {
+        var sourceVariants = new[]
+        {
+            SourceProvenV19FairnessSql.ReplaceLineEndings("\n"),
+            SourceProvenV19FairnessSql.ReplaceLineEndings("\r\n"),
+        };
+        CollectionAssert.AreEquivalent(SourceProvenV19FairnessSqlHashes,
+            sourceVariants.Select(sql => Convert.ToHexString(SHA256.HashData(
+                Encoding.UTF8.GetBytes(sql)))).ToArray());
+
+        foreach (var sourceSql in sourceVariants)
+        {
+            await using var fixture = await StoreFixture.CreateAsync(createCollectionStore: false);
+            await fixture.SeedHorseAsync(OldHorseId);
+            await fixture.CreateSourceProvenV19HybridCollectionAsync(sourceSql);
+
+            await fixture.NormalizeCollectionSqliteSidecarsAsync();
+            var before = await SnapshotSqliteFilesAsync(fixture.CollectionPath);
+            var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+
+            Assert.AreEqual(HorseIdentityStorePlanReason.TypedReferenceClosurePending, result.Reason,
+                JsonSerializer.Serialize(result.Stores));
+            var collection = result.Stores.Single(store =>
+                store.Surface == MigrationStoreSurface.CollectionPlatform);
+            Assert.AreEqual(MigrationStoreReadStatus.Observed, collection.Status);
+            CollectionAssert.AreEqual(Enumerable.Range(19, 7).ToArray(),
+                collection.MigrationHistoryVersions!.ToArray());
+            Assert.HasCount(1, result.Roots);
+            Assert.IsFalse(result.CanWrite);
+            await fixture.NormalizeCollectionSqliteSidecarsAsync();
+            CollectionAssert.AreEquivalent(before, await SnapshotSqliteFilesAsync(fixture.CollectionPath),
+                "Readonly inspection must not rewrite the source database.");
+
+            await using var connection = new SqliteConnection(
+                $"Data Source={fixture.CollectionPath};Pooling=False");
+            await connection.OpenAsync();
+            await using var fairness = connection.CreateCommand();
+            fairness.CommandText = "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'collection_dispatcher_fairness_state';";
+            var fairnessSql = Convert.ToString(await fairness.ExecuteScalarAsync());
+            Assert.IsTrue(SourceProvenV19FairnessSqlHashes.Contains(
+                Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fairnessSql!))),
+                StringComparer.OrdinalIgnoreCase));
+            await using var sentinel = connection.CreateCommand();
+            sentinel.CommandText = "SELECT StateId, ConsecutiveRealtime, ReservationSequence, LastGrantedLane, UpdatedAt FROM collection_dispatcher_fairness_state WHERE StateId = 1;";
+            await using var reader = await sentinel.ExecuteReaderAsync();
+            Assert.IsTrue(await reader.ReadAsync());
+            Assert.AreEqual(1, reader.GetInt32(0));
+            Assert.AreEqual(37, reader.GetInt32(1));
+            Assert.AreEqual(41, reader.GetInt32(2));
+            Assert.AreEqual("Realtime", reader.GetString(3));
+            Assert.AreEqual("2026-10-18 00:00:00", reader.GetString(4));
+        }
+    }
+
+    [TestMethod]
+    public async Task SourceProvenV19HybridRejectsCandidateMutationsWithoutRootsOrWrites()
+    {
+        var mutations = new[]
+        {
+            """
+            PRAGMA writable_schema = ON;
+            UPDATE sqlite_master
+            SET sql = replace(sql, 'PRIMARY KEY AUTOINCREMENT', 'PRIMARY KEY CHECK (StateId = 1)')
+            WHERE type = 'table' AND name = 'collection_dispatcher_fairness_state';
+            PRAGMA writable_schema = OFF;
+            """,
+            """
+            CREATE TABLE t9_unexpected_hybrid_object (Id INTEGER NOT NULL);
+            """,
+            """
+            DELETE FROM collection_schema_history;
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (19, 'v19');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (21, 'v21');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (22, 'v22');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (23, 'v23');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (24, 'v24');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (25, 'v25');
+            """,
+            """
+            DELETE FROM collection_schema_history;
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (19, 'v19');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (20, 'v20');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (21, 'v21');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (22, 'v22');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (23, 'v23');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (24, 'v24');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (25, 'v25');
+            INSERT INTO collection_schema_history (version, applied_at) VALUES (26, 'future');
+            """,
+            """
+            PRAGMA writable_schema = ON;
+            UPDATE sqlite_master
+            SET sql = replace(sql, '"Lane" TEXT NOT NULL', '"Lane" TEXT NOT NULL DEFAULT ''Normal''')
+            WHERE type = 'table' AND name = 'collection_requests';
+            PRAGMA writable_schema = OFF;
+            """,
+        };
+
+        foreach (var mutation in mutations)
+        {
+            await using var fixture = await StoreFixture.CreateAsync(createCollectionStore: false);
+            await fixture.SeedHorseAsync(OldHorseId);
+            await fixture.CreateSourceProvenV19HybridCollectionAsync(
+                SourceProvenV19FairnessSql.ReplaceLineEndings("\n"));
+            await fixture.ExecuteAsync(fixture.CollectionPath, mutation);
+            await fixture.NormalizeCollectionSqliteSidecarsAsync();
+            var before = await SnapshotSqliteFilesAsync(fixture.CollectionPath);
+
+            var result = await fixture.CreateEngine().InspectAsync(Manifest(), CancellationToken.None);
+            var collection = result.Stores.Single(store =>
+                store.Surface == MigrationStoreSurface.CollectionPlatform);
+
+            Assert.AreEqual(HorseIdentityStorePlanReason.StoreSchemaIncomplete, result.Reason);
+            Assert.AreEqual(MigrationStoreReadStatus.UnknownShape, collection.Status);
+            Assert.IsEmpty(result.Roots);
+            Assert.IsFalse(result.CanWrite);
+            Assert.IsFalse(JsonSerializer.Serialize(collection.Differences).Contains(
+                "CREATE TABLE", StringComparison.Ordinal));
+            await fixture.NormalizeCollectionSqliteSidecarsAsync();
+            CollectionAssert.AreEquivalent(before, await SnapshotSqliteFilesAsync(fixture.CollectionPath));
+        }
+    }
+
+    [TestMethod]
     public async Task AddedCheckConstraintStopsBeforeRootReads()
     {
         await using var fixture = await StoreFixture.CreateAsync();
@@ -1736,6 +2160,16 @@ public sealed class HorseIdentityMigrationStoreEngineTests
         return Convert.ToHexString(await SHA256.HashDataAsync(stream));
     }
 
+    private static async Task<Dictionary<string, string>> SnapshotSqliteFilesAsync(string databasePath)
+    {
+        var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in new[] { databasePath, databasePath + "-wal", databasePath + "-shm" })
+        {
+            snapshot[path] = File.Exists(path) ? await Sha256Async(path) : "<absent>";
+        }
+        return snapshot;
+    }
+
     private static string ComputeEvidenceHash(params string[] values)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
@@ -1819,7 +2253,8 @@ public sealed class HorseIdentityMigrationStoreEngineTests
         internal string Root => _root;
         internal IServiceProvider EventFlowServices => _eventFlowServices;
 
-        internal static async Task<StoreFixture> CreateAsync(bool createEventStore = true)
+        internal static async Task<StoreFixture> CreateAsync(bool createEventStore = true,
+            bool createCollectionStore = true)
         {
             Directory.CreateDirectory(TemporaryParent);
             var root = Path.Combine(TemporaryParent, Guid.NewGuid().ToString("N"));
@@ -1833,7 +2268,8 @@ public sealed class HorseIdentityMigrationStoreEngineTests
             var fixture = new StoreFixture(root, eventFlowServices);
             if (createEventStore)
                 await fixture.CreateEventStoreAsync();
-            await fixture.CreateCollectionStoreAsync();
+            if (createCollectionStore)
+                await fixture.CreateCollectionStoreAsync();
             await fixture.CreateScheduleStoreAsync();
             return fixture;
         }
@@ -2309,6 +2745,62 @@ public sealed class HorseIdentityMigrationStoreEngineTests
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
             command.CommandText = sql;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        internal async Task CreateSourceProvenV19HybridCollectionAsync(string sourceFairnessSql)
+        {
+            // This is the source-generated EF-first v19 seed: create only the base EF
+            // schema, replace its fairness table with the immutable DDL captured from
+            // the v19 source runner, seed the provenance marker before migration, then
+            // let the real current migrator continue through versions 20..25.
+            Directory.CreateDirectory(Path.GetDirectoryName(CollectionPath)!);
+            await using (var seedConnection = new SqliteConnection($"Data Source={CollectionPath};Pooling=False"))
+            {
+                await seedConnection.OpenAsync();
+                await using var seed = seedConnection.CreateCommand();
+                const string fairnessPrefix = "CREATE TABLE \"collection_dispatcher_fairness_state\"";
+                var fairnessStart = SourceProvenV19SchemaSql.IndexOf(fairnessPrefix, StringComparison.Ordinal);
+                var fairnessEnd = SourceProvenV19SchemaSql.IndexOf(";\nCREATE TABLE", fairnessStart,
+                    StringComparison.Ordinal) + 1;
+                Assert.IsGreaterThanOrEqualTo(0, fairnessStart);
+                Assert.IsTrue(fairnessEnd > fairnessStart);
+                var schemaSql = SourceProvenV19SchemaSql.Remove(fairnessStart, fairnessEnd - fairnessStart)
+                    .Insert(fairnessStart, sourceFairnessSql + ";\n");
+                seed.CommandText = schemaSql + """
+                    DELETE FROM collection_schema_history;
+                    INSERT INTO collection_schema_history (version, applied_at)
+                    VALUES (19, 'source-v19-ef-first');
+                    INSERT INTO collection_dispatcher_fairness_state
+                        (StateId, ConsecutiveRealtime, LastGrantedLane, LastNonRealtimeLane,
+                         ReservationSequence, ScanAvailableAt, ScanOutboxId, UpdatedAt)
+                    VALUES (1, 37, 'Realtime', 'Normal', 41, NULL, NULL, '2026-10-18 00:00:00');
+                    """;
+                await seed.ExecuteNonQueryAsync();
+            }
+
+            _ = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
+            {
+                StateDirectory = Path.GetDirectoryName(CollectionPath)!,
+                DatabaseFileName = Path.GetFileName(CollectionPath),
+            }));
+
+            await using var connection = new SqliteConnection($"Data Source={CollectionPath};Pooling=False");
+            await connection.OpenAsync();
+            await using var history = connection.CreateCommand();
+            history.CommandText = "SELECT version FROM collection_schema_history ORDER BY version;";
+            await using var reader = await history.ExecuteReaderAsync();
+            var versions = new List<int>();
+            while (await reader.ReadAsync()) versions.Add(reader.GetInt32(0));
+            CollectionAssert.AreEqual(Enumerable.Range(19, 7).ToArray(), versions.ToArray());
+        }
+
+        internal async Task NormalizeCollectionSqliteSidecarsAsync()
+        {
+            await using var connection = new SqliteConnection($"Data Source={CollectionPath};Pooling=False");
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
             await command.ExecuteNonQueryAsync();
         }
 

@@ -129,6 +129,16 @@ internal sealed class TypedHorseIdentityStoreReaders(
         new(BuildExpectedCollectionPlatformCurrentUpgradeModel);
     private static readonly Lazy<IReadOnlyDictionary<string, ExpectedTable>> CollectionPlatformV6UpgradeModel =
         new(BuildExpectedCollectionPlatformV6UpgradeModel);
+    private static readonly Lazy<IReadOnlyDictionary<string, ExpectedTable>> CollectionPlatformV19HybridModel =
+        new(BuildExpectedCollectionPlatformV19HybridModel);
+
+    // These are the two line-ending forms emitted by the source-proven EF-first v19 fixture.
+    // No normalized or otherwise arbitrary SQL is admitted.
+    private static readonly IReadOnlySet<string> SourceProvenV19FairnessSqlHashes = new HashSet<string>(
+        [
+            "303A8EE7192FDD808A960678F34489323E41C26CE157A6A83FBC6EC117B634FE",
+            "9BA7E868F8D4BE305013559E43E2E3567D8F071F8A47851A03E69E525E6E3C88",
+        ], StringComparer.OrdinalIgnoreCase);
     private static readonly Lazy<IReadOnlyList<string>> EventStoreMigrationIds = new(
         static () =>
         {
@@ -422,6 +432,19 @@ internal sealed class TypedHorseIdentityStoreReaders(
         return model;
     }
 
+    private static IReadOnlyDictionary<string, ExpectedTable> BuildExpectedCollectionPlatformV19HybridModel()
+    {
+        var model = new Dictionary<string, ExpectedTable>(CollectionPlatformCurrentUpgradeModel.Value,
+            StringComparer.OrdinalIgnoreCase)
+        {
+            // v19 creates this table through the base EF model before the later migrator
+            // defaults/check are introduced. Keep every other table on the upgrade model.
+            ["collection_dispatcher_fairness_state"] = CollectionPlatformModel.Value[
+                "collection_dispatcher_fairness_state"],
+        };
+        return model;
+    }
+
     private static IReadOnlyDictionary<string, ExpectedTable> BuildExpectedEventStoreModel()
     {
         var model = new Dictionary<string, ExpectedTable>(
@@ -572,6 +595,21 @@ internal sealed class TypedHorseIdentityStoreReaders(
                         CollectionPlatformModel.Value,
                     ];
                 }
+                else if (collectionHistoryLayout == CollectionSchemaHistoryLayout.UpgradeV19)
+                {
+                    var fairnessSql = tableObjects.TryGetValue("collection_dispatcher_fairness_state",
+                        out var fairnessTable) ? fairnessTable.Sql : null;
+                    if (IsSourceProvenV19FairnessSql(fairnessSql))
+                    {
+                        expectedShapes = CollectionPlatformV19HybridModel.Value;
+                        shapeCandidates = [CollectionPlatformV19HybridModel.Value];
+                    }
+                    else
+                    {
+                        expectedShapes = CollectionPlatformCurrentUpgradeModel.Value;
+                        shapeCandidates = [CollectionPlatformCurrentUpgradeModel.Value];
+                    }
+                }
                 else if (collectionHistoryLayout == CollectionSchemaHistoryLayout.UpgradeV6)
                 {
                     expectedShapes = CollectionPlatformV6UpgradeModel.Value;
@@ -612,6 +650,10 @@ internal sealed class TypedHorseIdentityStoreReaders(
                 var requireCanonicalFairnessCheck = ReferenceEquals(candidate,
                     CollectionPlatformCurrentUpgradeModel.Value)
                     || ReferenceEquals(candidate, CollectionPlatformV6UpgradeModel.Value);
+                var requiredFairnessSqlHashes = ReferenceEquals(candidate,
+                    CollectionPlatformV19HybridModel.Value)
+                    ? SourceProvenV19FairnessSqlHashes
+                    : null;
                 foreach (var tableName in tables)
                 {
                     var expected = candidate.TryGetValue(tableName, out var modelShape)
@@ -626,7 +668,8 @@ internal sealed class TypedHorseIdentityStoreReaders(
                     {
                         if (!await MatchesTableShapeAsync(connection, transaction, tableName, expected,
                                 tableObjects[tableName].Sql, requireCanonicalFairnessCheck,
-                                candidateDifferences, cancellationToken).ConfigureAwait(false))
+                                requiredFairnessSqlHashes, candidateDifferences,
+                                cancellationToken).ConfigureAwait(false))
                             candidateMatches = false;
                     }
                     catch (Exception exception) when (!candidateMatches
@@ -860,13 +903,14 @@ internal sealed class TypedHorseIdentityStoreReaders(
         ExpectedTable expected,
         string? tableSql,
         bool allowCanonicalFairnessCheck,
+        IReadOnlySet<string>? requiredFairnessSqlHashes,
         List<HorseIdentityMigrationSchemaDifference> differences,
         CancellationToken cancellationToken)
     {
         var sqliteInternalSequence = tableName.Equals("sqlite_sequence", StringComparison.OrdinalIgnoreCase)
             && tableSql is null;
         if (!sqliteInternalSequence && !MatchesSupportedTableSyntax(tableName, tableSql,
-                allowCanonicalFairnessCheck))
+                allowCanonicalFairnessCheck, requiredFairnessSqlHashes))
         {
             differences.Add(Difference(HorseIdentityMigrationSchemaDifferenceKind.SqlShapeUnsupported,
                 HorseIdentityMigrationSchemaObjectKind.Table, tableName,
@@ -1176,7 +1220,7 @@ internal sealed class TypedHorseIdentityStoreReaders(
             && string.Equals(columns[primaryKeyColumns[0]].Type, "INTEGER", StringComparison.OrdinalIgnoreCase);
 
     private static bool MatchesSupportedTableSyntax(string tableName, string? tableSql,
-        bool allowCanonicalFairnessCheck)
+        bool allowCanonicalFairnessCheck, IReadOnlySet<string>? requiredFairnessSqlHashes)
     {
         if (string.IsNullOrWhiteSpace(tableSql))
             return false;
@@ -1190,10 +1234,16 @@ internal sealed class TypedHorseIdentityStoreReaders(
         var checks = ExtractCheckExpressions(tableSql);
         if (string.Equals(tableName, "collection_dispatcher_fairness_state",
                 StringComparison.OrdinalIgnoreCase))
+        {
+            if (requiredFairnessSqlHashes is not null)
+                return checks.Count == 0 && tableSql is not null
+                    && requiredFairnessSqlHashes.Contains(Convert.ToHexString(
+                        SHA256.HashData(Encoding.UTF8.GetBytes(tableSql))));
             return allowCanonicalFairnessCheck
                 ? checks.Count == 1
                     && string.Equals(checks[0], "StateId=1", StringComparison.Ordinal)
                 : checks.Count == 0;
+        }
 
         return checks.Count == 0;
     }
@@ -1423,10 +1473,15 @@ internal sealed class TypedHorseIdentityStoreReaders(
         {
             6 => CollectionSchemaHistoryLayout.UpgradeV6,
             18 => CollectionSchemaHistoryLayout.UpgradeV18,
+            19 => CollectionSchemaHistoryLayout.UpgradeV19,
             _ => CollectionSchemaHistoryLayout.Upgrade,
         };
         return new(layout, versions.ToArray());
     }
+
+    private static bool IsSourceProvenV19FairnessSql(string? tableSql) => tableSql is not null
+        && SourceProvenV19FairnessSqlHashes.Contains(Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(tableSql))));
 
     private static async Task<bool> MatchesEventStoreMigrationHistoryAsync(
         SqliteConnection connection, SqliteTransaction transaction, CancellationToken cancellationToken)
@@ -1705,5 +1760,6 @@ internal sealed class TypedHorseIdentityStoreReaders(
         Upgrade,
         UpgradeV6,
         UpgradeV18,
+        UpgradeV19,
     }
 }
