@@ -273,65 +273,28 @@ internal sealed class TypedHorseIdentityStoreReaders(
 
     private List<ConfiguredStore> ResolveConfiguredStores()
     {
-        var eventConnectionString = configuration.GetConnectionString("EventStore") ?? "Data Source=eventstore.db";
-        var eventDataSource = new SqliteConnectionStringBuilder(eventConnectionString).DataSource;
-        var eventStorePath = string.IsNullOrWhiteSpace(eventDataSource) || eventDataSource == ":memory:"
-            ? null
-            : ResolvePath(eventDataSource, environment.ContentRootPath);
+        var paths = HorseIdentityMigrationConfiguredSources.Resolve(configuration, collectionOptions.Value,
+            scheduleOptions.Value, queueOptions.Value, environment.ContentRootPath,
+            Environment.CurrentDirectory, AppContext.BaseDirectory);
         var stores = new List<ConfiguredStore>
         {
-            new(MigrationStoreSurface.EventStore, eventStorePath, Required: true,
+            new(MigrationStoreSurface.EventStore, paths.EventStorePath, Required: true,
                 EventStoreTables, ["__EFMigrationsHistory"]),
         };
 
-        var collectionPath = CollectionPlatformStore.ResolveIdentityMigrationPreflightDatabasePath(collectionOptions);
         stores.Add(new(MigrationStoreSurface.CollectionPlatform,
-            ResolvePath(collectionPath, environment.ContentRootPath), Required: true,
+            paths.CollectionPlatformPath, Required: true,
             CollectionPlatformTables, ["collection_schema_history"]));
 
-        var schedule = scheduleOptions.Value;
-        var scheduleDirectory = string.IsNullOrWhiteSpace(schedule.StateDirectory)
-            ? Path.Combine(AppContext.BaseDirectory, "prediction-scheduling-state")
-            : schedule.StateDirectory;
-        var schedulePath = Path.Combine(scheduleDirectory,
-            string.IsNullOrWhiteSpace(schedule.StoreFileName) ? "prediction-executions.db" : schedule.StoreFileName);
         stores.Add(new(MigrationStoreSurface.PredictionSchedule,
-            ResolvePath(schedulePath, Environment.CurrentDirectory), Required: true,
+            paths.PredictionSchedulePath, Required: true,
             ["prediction_candidates"], []));
 
-        var queue = queueOptions.Value;
-        if (string.Equals(queue.Provider, "Sqs", StringComparison.OrdinalIgnoreCase))
-        {
-            stores.Add(new(MigrationStoreSurface.LocalCollectionQueue, null, Required: false, ["local_collection_messages"], []));
-        }
-        else if (string.Equals(queue.Provider, "Local", StringComparison.OrdinalIgnoreCase))
-        {
-            var queuePath = string.IsNullOrWhiteSpace(queue.LocalDatabasePath)
-                ? "collection-platform-state/local-collection-queue.db"
-                : queue.LocalDatabasePath;
-            stores.Add(new(MigrationStoreSurface.LocalCollectionQueue,
-                ResolvePath(queuePath, Environment.CurrentDirectory), Required: true,
-                ["local_collection_messages"], []));
-        }
-        else
-        {
-            stores.Add(new(MigrationStoreSurface.LocalCollectionQueue, null, Required: true,
-                ["local_collection_messages"], []));
-        }
+        stores.Add(new(MigrationStoreSurface.LocalCollectionQueue, paths.LocalCollectionQueuePath,
+            Required: !string.Equals(queueOptions.Value.Provider, "Sqs", StringComparison.OrdinalIgnoreCase),
+            ["local_collection_messages"], []));
 
         return stores;
-    }
-
-    private static string? ResolvePath(string path, string baseDirectory)
-    {
-        try
-        {
-            return Path.GetFullPath(path, baseDirectory);
-        }
-        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
-        {
-            return null;
-        }
     }
 
     private static EventStoreDbContext CreateEventStoreModel()

@@ -40,6 +40,20 @@ var builder = WebApplication.CreateBuilder(args);
 if (await HorseIdentityMigrationRuntimeMode.RunBlockedHostIfNeededAsync(builder))
     return;
 
+HorseIdentityMigrationRuntimeOwnership sourceOwnership;
+try
+{
+    sourceOwnership = HorseIdentityMigrationRuntimeMode.AcquireConfiguredSourceOwnership(builder);
+}
+catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+    or InvalidDataException or PlatformNotSupportedException or ArgumentException)
+{
+    await HorseIdentityMigrationRuntimeMode.RunBlockedHostIfNeededAsync(builder, forceBlocked: true);
+    return;
+}
+using var sourceOwnershipLifetime = sourceOwnership;
+builder.Services.AddSingleton(sourceOwnership);
+
 builder.Services.Configure<ApiKeyOptions>(options =>
 {
     options.HeaderName = builder.Configuration["ApiKey:HeaderName"] ?? "X-Api-Key";

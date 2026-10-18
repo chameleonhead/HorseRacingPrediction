@@ -66,6 +66,8 @@ internal static class HorseIdentityMigrationRuntimeMode
             if (prior?.Status == HorseIdentityMigrationOperationStatus.Succeeded) return 0;
             if (prior is not null && prior.Status != HorseIdentityMigrationOperationStatus.Staged) return 4;
 
+            using var sourceOwnership = AcquireConfiguredSourceOwnership(builder);
+
             var claim = await journal.ClaimWorkflowAsync(operationId, DateTimeOffset.UtcNow).ConfigureAwait(false);
             if (!claim.Succeeded) return 4;
 
@@ -94,11 +96,12 @@ internal static class HorseIdentityMigrationRuntimeMode
     }
 
     /// <summary>Runs a journal-only host when the journal is not safe for ordinary application startup.</summary>
-    internal static async Task<bool> RunBlockedHostIfNeededAsync(WebApplicationBuilder builder)
+    internal static async Task<bool> RunBlockedHostIfNeededAsync(WebApplicationBuilder builder,
+        bool forceBlocked = false)
     {
         var journal = CreateJournal(builder);
         var guard = await journal.InspectStartupGuardAsync(DateTimeOffset.UtcNow).ConfigureAwait(false);
-        if (guard.State == HorseIdentityMigrationStartupState.Ready) return false;
+        if (guard.State == HorseIdentityMigrationStartupState.Ready && !forceBlocked) return false;
 
         builder.Services.Configure<ApiKeyOptions>(options =>
         {
@@ -172,38 +175,22 @@ internal static class HorseIdentityMigrationRuntimeMode
     internal static HorseIdentityMigrationJournal CreateJournal(WebApplicationBuilder builder)
     {
         var collection = ReadCollectionOptions(builder);
-        var schedule = ReadScheduleOptions(builder);
-        var queue = ReadQueueOptions(builder);
-        var protectedPaths = new List<string>();
-
-        var eventConnection = builder.Configuration.GetConnectionString("EventStore") ?? "Data Source=eventstore.db";
-        var eventSource = new SqliteConnectionStringBuilder(eventConnection).DataSource;
-        if (!string.IsNullOrWhiteSpace(eventSource) && eventSource != ":memory:")
-            protectedPaths.Add(Path.IsPathRooted(eventSource)
-                ? Path.GetFullPath(eventSource)
-                : Path.GetFullPath(eventSource, builder.Environment.ContentRootPath));
-
-        protectedPaths.Add(CollectionPlatformStore.ResolveIdentityMigrationPreflightDatabasePath(Options.Create(collection)));
-        var scheduleDirectory = string.IsNullOrWhiteSpace(schedule.StateDirectory)
-            ? Path.Combine(AppContext.BaseDirectory, "prediction-scheduling-state")
-            : schedule.StateDirectory;
-        var schedulePath = Path.Combine(scheduleDirectory,
-            string.IsNullOrWhiteSpace(schedule.StoreFileName) ? "prediction-executions.db" : schedule.StoreFileName);
-        protectedPaths.Add(Path.IsPathRooted(schedulePath)
-            ? Path.GetFullPath(schedulePath)
-            : Path.GetFullPath(schedulePath, Environment.CurrentDirectory));
-
-        if (string.Equals(queue.Provider, "Local", StringComparison.OrdinalIgnoreCase))
-        {
-            var queuePath = string.IsNullOrWhiteSpace(queue.LocalDatabasePath)
-                ? "collection-platform-state/local-collection-queue.db" : queue.LocalDatabasePath;
-            protectedPaths.Add(Path.IsPathRooted(queuePath)
-                ? Path.GetFullPath(queuePath)
-                : Path.GetFullPath(queuePath, Environment.CurrentDirectory));
-        }
-
-        return new(collection.StateDirectory, protectedPaths);
+        var paths = ResolveConfiguredSources(builder, collection);
+        return new(collection.StateDirectory, paths.PhysicalSourcePaths);
     }
+
+    internal static HorseIdentityMigrationRuntimeOwnership AcquireConfiguredSourceOwnership(
+        WebApplicationBuilder builder)
+    {
+        var paths = ResolveConfiguredSources(builder, ReadCollectionOptions(builder));
+        return HorseIdentityMigrationRuntimeOwnership.Acquire(paths.PhysicalSourcePaths);
+    }
+
+    private static HorseIdentityMigrationConfiguredSources ResolveConfiguredSources(
+        WebApplicationBuilder builder, CollectionPlatformOptions collection) =>
+        HorseIdentityMigrationConfiguredSources.Resolve(builder.Configuration, collection,
+            ReadScheduleOptions(builder), ReadQueueOptions(builder), builder.Environment.ContentRootPath,
+            Environment.CurrentDirectory, AppContext.BaseDirectory);
 
     private static CollectionPlatformOptions ReadCollectionOptions(WebApplicationBuilder builder)
     {

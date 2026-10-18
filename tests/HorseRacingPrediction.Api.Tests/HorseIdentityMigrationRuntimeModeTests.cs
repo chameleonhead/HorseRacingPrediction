@@ -10,9 +10,12 @@ using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Domain.Predictions;
 using HorseRacingPrediction.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Api.Tests;
@@ -150,6 +153,63 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
     }
 
     [TestMethod]
+    public async Task NormalHostRefusesSourceOwnershipWithoutBootstrappingConfiguredStores()
+    {
+        using var fixture = new RuntimeFixture();
+        using var heldOwnership = HorseIdentityMigrationRuntimeOwnership.Acquire(
+            [fixture.EventStorePath, fixture.CollectionStorePath, fixture.ScheduleStorePath, fixture.QueueStorePath]);
+
+        using var child = fixture.StartApiProcess();
+        try
+        {
+            using var client = await fixture.WaitForHealthAsync(child);
+            client.DefaultRequestHeaders.Add("X-Test-Horse-Key", fixture.ApiKey);
+            using var response = await client.GetAsync("/api/v2/admin/horse-id-migration-schema-diagnostics");
+            Assert.AreEqual(HttpStatusCode.ServiceUnavailable, response.StatusCode,
+                "A source owner must prevent the ordinary API bootstrap and expose only the journal-only host.");
+            Assert.IsFalse(File.Exists(fixture.EventStorePath));
+            Assert.IsFalse(File.Exists(fixture.CollectionStorePath));
+            Assert.IsFalse(File.Exists(fixture.ScheduleStorePath));
+            Assert.IsFalse(File.Exists(fixture.QueueStorePath));
+        }
+        finally
+        {
+            await RuntimeFixture.StopAsync(child);
+        }
+    }
+
+    [TestMethod]
+    public async Task InProcessHostShutdownDisposesItsSourceOwnership()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"horse-source-host-disposal-{Guid.NewGuid():N}");
+        var sourcePath = Path.Combine(root, "source.db");
+        var ownership = HorseIdentityMigrationRuntimeOwnership.Acquire([sourcePath]);
+        using (ownership)
+        {
+            var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+            {
+                EnvironmentName = "Development",
+                ContentRootPath = root,
+            });
+            builder.WebHost.UseUrls("http://127.0.0.1:0");
+            builder.Services.AddSingleton(ownership);
+            var app = builder.Build();
+            try
+            {
+                await app.StartAsync();
+                await app.StopAsync();
+            }
+            finally
+            {
+                await app.DisposeAsync();
+            }
+        }
+
+        using var reacquired = HorseIdentityMigrationRuntimeOwnership.Acquire([sourcePath]);
+        Assert.IsFalse(File.Exists(sourcePath));
+    }
+
+    [TestMethod]
     public async Task NormalHostRegistersRealPreviewAndJournalServicesBehindTheAdminApiClient()
     {
         using var fixture = new RuntimeFixture();
@@ -245,6 +305,9 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
         Assert.AreEqual(HorseIdentityMigrationOperationStatus.Succeeded,
             (await journal.GetStatusAsync(operationId))!.Status);
         var afterFirstRun = await stores.SourceSnapshotAsync();
+        Assert.IsTrue(File.Exists(GetSourceGatePath(stores.EventStorePath)));
+        Assert.IsTrue(File.Exists(GetSourceGatePath(stores.CollectionPath)));
+        Assert.IsTrue(File.Exists(GetSourceGatePath(stores.SchedulePath)));
         Assert.AreNotEqual(beforeInvalidCommands, afterFirstRun);
         var destination = HorseIdentityMigrationManifestPolicy.Validate(manifest).Mappings.Single().DestinationHorseId;
         await using (var eventStore = new SqliteConnection($"Data Source={stores.EventStorePath};Mode=ReadOnly;Pooling=False"))
@@ -255,6 +318,7 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
             Assert.AreEqual(destination, await command.ExecuteScalarAsync());
         }
 
+        File.WriteAllText(GetSourceGatePath(stores.EventStorePath), "corrupt gate proves receipt-only replay");
         var terminalRetry = await RunMigrationCommandAsync(stores,
             [HorseIdentityMigrationRuntimeMode.CommandName, operationId.ToString("D")]);
         Assert.AreEqual(0, terminalRetry.ExitCode,
@@ -270,6 +334,9 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
         new HorseIdentityMigrationManifestEntry(
             "horse-00000000-0000-0000-0000-000000000111", "jra-horse:2024100828", true),
     ]);
+
+    private static string GetSourceGatePath(string sourcePath) =>
+        Path.Combine(Path.GetDirectoryName(sourcePath)!, $".{Path.GetFileName(sourcePath)}.horse-identity-migration.lock");
 
     private static async Task<CliResult> RunMigrationCommandAsync(
         HorseIdentityMigrationStoreEngineTests.StoreFixture stores, IReadOnlyList<string> arguments,

@@ -7,6 +7,7 @@ using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Contracts.Collection;
 using HorseRacingPrediction.Contracts.Common;
 using HorseRacingPrediction.Contracts.Identity;
+using HorseRacingPrediction.Api.IdentityMigration;
 using HorseRacingPrediction.PredictionScheduling;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -59,12 +60,18 @@ internal sealed class IdentityMigrationPreflightConfiguredSurfaceReader(
         "IX_race_repair_holds_RaceId",
     ];
 
+    private HorseIdentityMigrationConfiguredSources ResolveConfiguredPaths() =>
+        HorseIdentityMigrationConfiguredSources.Resolve(null, collectionOptions.Value, scheduleOptions.Value,
+            queueOptions.Value, environment.ContentRootPath, Environment.CurrentDirectory, AppContext.BaseDirectory);
+
     internal async Task<IReadOnlyList<IdentityMigrationPreflightSchemaObservation>> InspectAsync(
         CancellationToken cancellationToken)
     {
         var observations = new List<IdentityMigrationPreflightSchemaObservation>(3);
+        var paths = ResolveConfiguredPaths();
 
-        var platformPath = CollectionPlatformStore.ResolveIdentityMigrationPreflightDatabasePath(collectionOptions);
+        var platformPath = paths.CollectionPlatformPath
+            ?? throw new InvalidOperationException("The configured collection store path is invalid.");
         var platformKnown = GetCollectionPlatformTableNames(platformPath);
         observations.Add(await IdentityMigrationPreflightSqliteSchema.InspectAsync(
             IdentityMigrationPreflightSurface.CollectionPlatform,
@@ -76,12 +83,8 @@ internal sealed class IdentityMigrationPreflightConfiguredSurfaceReader(
             },
             ["collection_resources"], cancellationToken).ConfigureAwait(false));
 
-        var schedule = scheduleOptions.Value;
-        var scheduleDirectory = string.IsNullOrWhiteSpace(schedule.StateDirectory)
-            ? Path.Combine(AppContext.BaseDirectory, "prediction-scheduling-state")
-            : schedule.StateDirectory;
-        var schedulePath = Path.GetFullPath(Path.Combine(scheduleDirectory,
-            string.IsNullOrWhiteSpace(schedule.StoreFileName) ? "prediction-executions.db" : schedule.StoreFileName));
+        var schedulePath = paths.PredictionSchedulePath
+            ?? throw new InvalidOperationException("The configured schedule store path is invalid.");
         observations.Add(await IdentityMigrationPreflightSqliteSchema.InspectAsync(
             IdentityMigrationPreflightSurface.PredictionSchedule,
             schedulePath,
@@ -92,17 +95,13 @@ internal sealed class IdentityMigrationPreflightConfiguredSurfaceReader(
             },
             ["prediction_candidates", "IX_prediction_candidates_Status_AvailableAt"], cancellationToken).ConfigureAwait(false));
 
-        var queue = queueOptions.Value;
-        if (!string.Equals(queue.Provider, "Local", StringComparison.OrdinalIgnoreCase))
+        if (paths.LocalCollectionQueuePath is not { } queuePath)
         {
             observations.Add(IdentityMigrationPreflightSchemaObservation.NotConfigured(
                 IdentityMigrationPreflightSurface.LocalCollectionQueue));
         }
         else
         {
-            var queuePath = Path.GetFullPath(string.IsNullOrWhiteSpace(queue.LocalDatabasePath)
-                ? "collection-platform-state/local-collection-queue.db"
-                : queue.LocalDatabasePath, environment.ContentRootPath);
             observations.Add(await IdentityMigrationPreflightSqliteSchema.InspectAsync(
                 IdentityMigrationPreflightSurface.LocalCollectionQueue,
                 queuePath,
@@ -120,7 +119,8 @@ internal sealed class IdentityMigrationPreflightConfiguredSurfaceReader(
     internal async Task<IdentityMigrationPreflightCollectionPage> ReadCollectionResourcesAsync(
         string? afterKey, CancellationToken cancellationToken)
     {
-        var path = CollectionPlatformStore.ResolveIdentityMigrationPreflightDatabasePath(collectionOptions);
+        var path = ResolveConfiguredPaths().CollectionPlatformPath
+            ?? throw new InvalidOperationException("The configured collection store path is invalid.");
         await using var connection = await IdentityMigrationPreflightSqliteSchema.OpenReadOnlyAsync(path,
             cancellationToken).ConfigureAwait(false);
         await using var transaction = connection.BeginTransaction(IsolationLevel.Serializable, deferred: true);
