@@ -182,6 +182,40 @@ internal sealed class HorseIdentityMigrationManagedBackup
         return receipt;
     }
 
+    internal async Task<IReadOnlyDictionary<MigrationStoreSurface, string>> GetApplicationSourcesAsync(
+        Guid operationId,
+        HorseIdentityMigrationConfiguredSources sources,
+        HorseIdentityMigrationJournal journal,
+        CancellationToken cancellationToken = default)
+    {
+        var receipt = await ValidateAsync(operationId, sources, journal, cancellationToken).ConfigureAwait(false);
+        var packageDirectory = GetPackageDirectory(operationId);
+        var paths = new Dictionary<MigrationStoreSurface, string>();
+        foreach (var member in receipt.Members.Where(member => member.IsApplicationMember && member.IsSqliteDatabase))
+        {
+            var surface = member.LogicalName switch
+            {
+                "application/event-store.db" => MigrationStoreSurface.EventStore,
+                "application/collection-platform.db" => MigrationStoreSurface.CollectionPlatform,
+                "application/prediction-schedule.db" => MigrationStoreSurface.PredictionSchedule,
+                "application/local-collection-queue.db" => MigrationStoreSurface.LocalCollectionQueue,
+                _ => throw new InvalidDataException("Managed backup contains an unexpected application database."),
+            };
+            if (!paths.TryAdd(surface, GetTargetPath(packageDirectory, member.LogicalName)))
+                throw new InvalidDataException("Managed backup contains a duplicate application database.");
+        }
+
+        var expectedCount = sources.LocalCollectionQueuePath is null ? 3 : 4;
+        if (paths.Count != expectedCount
+            || !paths.ContainsKey(MigrationStoreSurface.EventStore)
+            || !paths.ContainsKey(MigrationStoreSurface.CollectionPlatform)
+            || !paths.ContainsKey(MigrationStoreSurface.PredictionSchedule)
+            || paths.ContainsKey(MigrationStoreSurface.LocalCollectionQueue)
+                != (sources.LocalCollectionQueuePath is not null))
+            throw new InvalidDataException("Managed backup application database set is incomplete.");
+        return paths;
+    }
+
     internal static void ValidateInventoryBounds(IReadOnlyList<HorseIdentityMigrationBackupMember> inventory)
     {
         ArgumentNullException.ThrowIfNull(inventory);
