@@ -10,18 +10,77 @@ namespace HorseRacingPrediction.Api.IdentityMigration;
 internal sealed class HorseIdentityMigrationRuntimeOwnership : IDisposable
 {
     private const string GatePrefix = "HorseIdentityMigrationSourceOwnership:v1:";
+    private readonly string[] _sourcePaths;
     private readonly List<FileStream> _handles;
     private bool _disposed;
 
-    private HorseIdentityMigrationRuntimeOwnership(List<FileStream> handles) => _handles = handles;
-
-    internal static HorseIdentityMigrationRuntimeOwnership Acquire(IEnumerable<string> sourcePaths)
+    private HorseIdentityMigrationRuntimeOwnership(string[] sourcePaths, List<FileStream> handles)
     {
-        ArgumentNullException.ThrowIfNull(sourcePaths);
+        _sourcePaths = sourcePaths;
+        _handles = handles;
+    }
+
+    internal static HorseIdentityMigrationRuntimeOwnership Acquire(IEnumerable<string> sourcePaths) =>
+        AcquireCore(sourcePaths, operationAuthorization: null);
+
+    internal static HorseIdentityMigrationRuntimeOwnership AcquireForOperation(
+        IEnumerable<string> sourcePaths,
+        HorseIdentityMigrationMaintenanceCapability.OperationAuthorization operationAuthorization)
+    {
+        ArgumentNullException.ThrowIfNull(operationAuthorization);
+        return AcquireCore(sourcePaths, operationAuthorization, readonlyAuthorization: null);
+    }
+
+    internal static async Task<HorseIdentityMigrationRuntimeOwnership> AcquireForReadonlyReverificationAsync(
+        IEnumerable<string> sourcePaths,
+        HorseIdentityMigrationMaintenanceOwnership.HorseIdentityMigrationSupervisorControlLease controlLease,
+        HorseIdentityMigrationMaintenanceCapability.ReadonlyReverificationAuthorization authorization,
+        HorseIdentityMigrationJournal journal,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(controlLease);
+        ArgumentNullException.ThrowIfNull(authorization);
+        ArgumentNullException.ThrowIfNull(journal);
+        var paths = CanonicalizeSourcePaths(sourcePaths);
+        if (!controlLease.OwnsSameSourceSet(paths))
+            throw new IOException("Read-only re-verification requires the matching live supervisor control lease.");
+        if (!await authorization.ValidateForSourcePathsAsync(paths, journal, cancellationToken).ConfigureAwait(false))
+            throw new IOException("The read-only re-verification authorization is not eligible for this source set.");
+
+        var ownership = AcquireCore(paths, operationAuthorization: null, readonlyAuthorization: authorization);
+        if (!await authorization.ValidateForSourcePathsAsync(paths, journal, cancellationToken).ConfigureAwait(false))
+        {
+            ownership.Dispose();
+            throw new IOException("The read-only re-verification authorization changed while source ownership was acquired.");
+        }
+        return ownership;
+    }
+
+    internal static HorseIdentityMigrationRuntimeOwnership AcquireForMaintenanceGateManagement(
+        IEnumerable<string> sourcePaths,
+        HorseIdentityMigrationMaintenanceOwnership.HorseIdentityMigrationSupervisorControlLease controlLease,
+        HorseIdentityMigrationMaintenanceCapability.OperationAuthorization authorization)
+    {
+        ArgumentNullException.ThrowIfNull(controlLease);
+        ArgumentNullException.ThrowIfNull(authorization);
+        var paths = CanonicalizeSourcePaths(sourcePaths);
+        if (!controlLease.OwnsSameSourceSet(paths))
+            throw new IOException("Maintenance gate management requires the matching live supervisor control lease.");
+        return AcquireCore(paths, authorization, readonlyAuthorization: null);
+    }
+
+    private static HorseIdentityMigrationRuntimeOwnership AcquireCore(IEnumerable<string> sourcePaths,
+        HorseIdentityMigrationMaintenanceCapability.OperationAuthorization? operationAuthorization,
+        HorseIdentityMigrationMaintenanceCapability.ReadonlyReverificationAuthorization? readonlyAuthorization = null)
+    {
+        var paths = CanonicalizeSourcePaths(sourcePaths);
         var comparer = HorseIdentityMigrationConfiguredSources.PathComparer;
-        var paths = sourcePaths.Select(Path.GetFullPath).Select(CanonicalizeWindowsSourcePath).Distinct(comparer)
-            .OrderBy(path => path, comparer).ToArray();
-        if (paths.Length == 0) return new([]);
+        if (paths.Length == 0)
+        {
+            if (operationAuthorization is not null || readonlyAuthorization is not null)
+                throw new IOException("An operation authorization cannot be used without configured source files.");
+            return new([], []);
+        }
 
         var gates = paths.Select(GetGatePath).ToArray();
         var allPaths = paths.Concat(gates).ToArray();
@@ -54,7 +113,28 @@ internal sealed class HorseIdentityMigrationRuntimeOwnership : IDisposable
                 }
             }
 
-            return new(handles);
+            if (operationAuthorization is null)
+            {
+                if (readonlyAuthorization is null
+                    && paths.Any(path => File.Exists(HorseIdentityMigrationMaintenanceOwnership.GetMaintenanceGatePath(path))))
+                    throw new IOException("A configured source is held by an active migration maintenance gate.");
+            }
+            else if (!operationAuthorization.ValidateForSourcePaths(paths) || readonlyAuthorization is not null)
+            {
+                throw new IOException("The operation authorization does not match the complete maintenance gate set.");
+            }
+            else if (!HorseIdentityMigrationMaintenanceOwnership.ValidateMaintenanceGateSet(paths,
+                         operationAuthorization.OperationId, operationAuthorization.RequestHash,
+                         operationAuthorization.SourceSetHash))
+                throw new IOException("The operation authorization does not match the complete maintenance gate set.");
+            if (readonlyAuthorization is not null
+                && (!readonlyAuthorization.ValidateForSourcePaths(paths)
+                    || !HorseIdentityMigrationMaintenanceOwnership.ValidateMaintenanceGateSet(paths,
+                        readonlyAuthorization.OperationId, readonlyAuthorization.RequestHash,
+                        readonlyAuthorization.SourceSetHash)))
+                throw new IOException("The read-only re-verification authorization does not match the complete maintenance gate set.");
+
+            return new(paths, handles);
         }
         catch
         {
@@ -62,6 +142,30 @@ internal sealed class HorseIdentityMigrationRuntimeOwnership : IDisposable
             throw;
         }
     }
+
+    internal string[] SourcePaths => _sourcePaths.ToArray();
+
+    internal void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+    }
+
+    internal static string[] CanonicalizeSourcePaths(IEnumerable<string> sourcePaths)
+    {
+        ArgumentNullException.ThrowIfNull(sourcePaths);
+        var comparer = HorseIdentityMigrationConfiguredSources.PathComparer;
+        return sourcePaths.Select(path => Path.GetFullPath(path)).Select(CanonicalizeWindowsSourcePath)
+            .Distinct(comparer).OrderBy(path => path, comparer).ToArray();
+    }
+
+    internal static string ComputeSourceSetHash(IEnumerable<string> sourcePaths)
+    {
+        var canonical = CanonicalizeSourcePaths(sourcePaths);
+        var bytes = Encoding.UTF8.GetBytes(string.Join('\n', canonical));
+        return Convert.ToHexString(SHA256.HashData(bytes));
+    }
+
+    internal static string GetRuntimeOwnershipGatePath(string sourcePath) => GetGatePath(sourcePath);
 
     private static string GetGatePath(string sourcePath)
     {
