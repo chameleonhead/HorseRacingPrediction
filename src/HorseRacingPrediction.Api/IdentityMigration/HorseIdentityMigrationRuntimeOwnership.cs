@@ -166,7 +166,7 @@ internal sealed class HorseIdentityMigrationRuntimeOwnership : IDisposable
             throw new InvalidDataException("A source ownership gate is corrupt or belongs to a different path.");
     }
 
-    private static void ValidateExistingAncestors(string path, bool sourceFile)
+    internal static void ValidateExistingAncestors(string path, bool sourceFile)
     {
         var fullPath = Path.GetFullPath(path);
         var current = fullPath;

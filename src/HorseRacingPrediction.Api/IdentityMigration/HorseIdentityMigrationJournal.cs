@@ -121,8 +121,8 @@ internal sealed class HorseIdentityMigrationJournal
     private const int RollbackJournalHeaderBytes = 24;
     private const string JournalFileName = "horse-identity-migration-journal.db";
     private const string LockFileName = "horse-identity-migration-operation.lock";
-    private const string InitializationMarkerFileName = "horse-identity-migration-initialized.marker";
-    private const string InitializationMarkerContent = "horse-identity-migration-journal-v1";
+    internal const string InitializationMarkerFileName = "horse-identity-migration-initialized.marker";
+    internal const string InitializationMarkerContent = "horse-identity-migration-journal-v1";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly string _directory;
     private readonly string _databasePath;
