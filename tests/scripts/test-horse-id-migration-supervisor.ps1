@@ -22,6 +22,7 @@ $fixtureMethod = 'FullyQualifiedName~ExportProductionContainerFixtureWhenRequest
 $oldHorseId = 'horse-11111111-1111-4111-8111-111111111111'
 $jraIdentity = 'jra-horse:2024100828'
 $maxOutputCharacters = 64 * 1024
+$harnessSucceeded = $false
 
 Add-Type -TypeDefinition @'
 using System;
@@ -448,16 +449,39 @@ write_stat 40 Z 1 12345
 printf '%s\n' 'PASS observer PID/start liveness rejects missing and zombie processes'
 '@
     $output = Invoke-Docker @('run', '--rm', '--network', 'none', '--entrypoint', '/bin/sh', $Image, '-c', $shellScript) 30
+    $generatedScripts = @(
+        (Get-FixedCliObserverWatcherScript),
+        (Get-FixedCliObserverStatusScript),
+        (Get-FixedCliObserverExitScript))
+    foreach ($generatedScript in $generatedScripts) {
+        [void](Invoke-Docker @('run', '--rm', '--network', 'none', '--entrypoint', '/bin/sh', $Image,
+            '-n', '-c', $generatedScript, 'hrp-observer-syntax') 30)
+    }
+    $liveScript = (Get-FixedCliObserverShellHelpers) + "`n" + @'
+set -eu
+sleep 30 &
+child=$!
+start=$(read_proc_start "/proc/$child/stat")
+[ "$(observer_liveness "$child" "$start" /proc)" = alive ] || exit 21
+kill "$child"
+wait "$child" 2>/dev/null || true
+[ "$(observer_liveness "$child" "$start" /proc)" = gone ] || exit 22
+printf '%s\n' 'PASS live observer process transitions from exact PID/start alive to reaped/gone'
+'@
+    $liveOutput = Invoke-Docker @('run', '--rm', '--network', 'none', '--entrypoint', '/bin/sh', $Image,
+        '-c', $liveScript, 'hrp-observer-live-test') 30
     foreach ($expected in @(
         'PASS set-e watcher scan continues after deterministic /proc status ENOENT and writes terminal markers',
         'PASS post-stop PID disappearance is reported as identity ambiguity',
         'PASS observer PID/start liveness rejects missing and zombie processes')) {
         if (-not $output.Contains($expected)) { throw "The observer shell counterexample did not report: $expected" }
     }
+    if (-not $liveOutput.Contains('PASS live observer process transitions from exact PID/start alive to reaped/gone')) {
+        throw 'The live observer process liveness/reap counterexample did not pass.'
+    }
 }
 
-function Start-FixedCliObserver([string] $Container, [string] $OperationId, [ValidateSet('record', 'stop')] [string] $Action) {
-    $marker = "/tmp/hrp-horse-id-observer-$OperationId-$Action"
+function Get-FixedCliObserverWatcherScript {
     $watcherScript = @'
 set -eu
 operation="$1"
@@ -476,17 +500,11 @@ done
 : > "$marker.done"
 exit 9
 '@
-    $watcherScript = $watcherScript.Replace('set -eu', (Get-FixedCliObserverShellHelpers) + "`nset -eu")
-    [void](Invoke-Docker @('exec', '-d', $Container, '/bin/sh', '-c', $watcherScript,
-        'hrp-fixed-cli-observer', $OperationId, $Action, $marker) 30)
-    return [pscustomobject]@{ Marker = $marker; Action = $Action }
+    return $watcherScript.Replace('set -eu', (Get-FixedCliObserverShellHelpers) + "`nset -eu")
 }
 
-function Wait-FixedCliObserver([string] $Container, $Observer, [int] $TimeoutSeconds = 1250) {
-    $deadline = [DateTimeOffset]::UtcNow.AddSeconds($TimeoutSeconds)
-    $startedAt = [DateTimeOffset]::UtcNow
-    $result = $null
-    $statusScript = @'
+function Get-FixedCliObserverStatusScript {
+    return (Get-FixedCliObserverShellHelpers) + "`n" + @'
 if [ -f "$1.error" ]; then echo error; cat "$1.error"
 elif [ -f "$1.timeout" ]; then echo timeout
 elif [ -f "$1.found" ] && [ -f "$1.done" ]; then echo found; cat "$1.found"
@@ -498,7 +516,27 @@ else
   printf 'pending-%s\n' "$liveness"
 fi
 '@
-    $statusScript = (Get-FixedCliObserverShellHelpers) + "`n" + $statusScript
+}
+
+function Get-FixedCliObserverExitScript {
+    return (Get-FixedCliObserverShellHelpers) + "`n" + @'
+observer_liveness "$1" "$2" /proc
+'@
+}
+
+function Start-FixedCliObserver([string] $Container, [string] $OperationId, [ValidateSet('record', 'stop')] [string] $Action) {
+    $marker = "/tmp/hrp-horse-id-observer-$OperationId-$Action"
+    $watcherScript = Get-FixedCliObserverWatcherScript
+    [void](Invoke-Docker @('exec', '-d', $Container, '/bin/sh', '-c', $watcherScript,
+        'hrp-fixed-cli-observer', $OperationId, $Action, $marker) 30)
+    return [pscustomobject]@{ Marker = $marker; Action = $Action }
+}
+
+function Wait-FixedCliObserver([string] $Container, $Observer, [int] $TimeoutSeconds = 1250) {
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds($TimeoutSeconds)
+    $startedAt = [DateTimeOffset]::UtcNow
+    $result = $null
+    $statusScript = Get-FixedCliObserverStatusScript
     while ([DateTimeOffset]::UtcNow -lt $deadline) {
         $state = Invoke-Docker @('exec', $Container, '/bin/sh', '-c', $statusScript,
             'hrp-observer-status', $Observer.Marker) 15
@@ -526,9 +564,7 @@ fi
     $watcherPid = [int]$pidParts[0]
     $watcherStart = $pidParts[1]
     $exitDeadline = [DateTimeOffset]::UtcNow.AddSeconds(10)
-    $exitScript = (Get-FixedCliObserverShellHelpers) + @'
-observer_liveness "$1" "$2" /proc
-'@
+    $exitScript = Get-FixedCliObserverExitScript
     while ([DateTimeOffset]::UtcNow -lt $exitDeadline) {
         $watcherState = Invoke-Docker @('exec', $Container, '/bin/sh', '-c', $exitScript,
             'hrp-observer-exit', [string]$watcherPid, $watcherStart) 15
@@ -793,6 +829,7 @@ try {
     Test-ExternalProcessWrapper
     if ($WrapperSmokeOnly) {
         Write-Output 'PASS bounded process wrapper stdout/stderr, EOF, timeout, and owned-tree cleanup smoke'
+        $harnessSucceeded = $true
         return
     }
 
@@ -800,6 +837,7 @@ try {
     Test-FixedCliObserverProcReadCounterexamples $image
     if ($ObserverSmokeOnly) {
         Write-Output 'PASS fixed CLI observer proc-read churn, post-stop ambiguity, and exact PID/start liveness counterexamples'
+        $harnessSucceeded = $true
         return
     }
 
@@ -961,13 +999,33 @@ try {
     if ($termExitCode -cne '143' -or $termState -cne 'exited|143') {
         throw "The disposable PID-1 supervisor did not report the expected graceful TERM exit (wait='$termExitCode', state='$termState')."
     }
+    $harnessSucceeded = $true
     Write-Output 'PASS real production image PID-1/API/fixed-CLI handoff, 900-second pause, backup/postcheck, killed-child blocked restart, and bounded cleanup'
 }
 finally {
-    foreach ($container in @($happyContainer, $crashContainer)) {
-        try { Invoke-Docker @('rm', '--force', $container) | Out-Null } catch { }
+    if ($harnessSucceeded) {
+        foreach ($container in @($happyContainer, $crashContainer)) {
+            try { Invoke-Docker @('rm', '--force', $container) | Out-Null } catch { }
+        }
+        try { Invoke-Docker @('image', 'rm', '--force', $image) | Out-Null } catch { }
+        Assert-DisposablePath $tempRoot
+        if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force }
     }
-    try { Invoke-Docker @('image', 'rm', '--force', $image) | Out-Null } catch { }
-    Assert-DisposablePath $tempRoot
-    if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force }
+    else {
+        if (Test-Path -LiteralPath $tempRoot) {
+            $failureEvidence = Join-Path $tempRoot 'failure-evidence'
+            [void](New-Item -ItemType Directory -Path $failureEvidence -Force)
+            foreach ($container in @($happyContainer, $crashContainer)) {
+                try {
+                    Invoke-Docker @('update', '--restart=no', $container) | Out-Null
+                    $logs = Invoke-Docker @('logs', '--tail', '200', $container) 30
+                    [IO.File]::WriteAllText((Join-Path $failureEvidence "$container.log"), $logs)
+                    $state = Invoke-Docker @('inspect', $container, '--format', '{{.State.Status}}|{{.State.ExitCode}}|{{.RestartCount}}')
+                    [IO.File]::WriteAllText((Join-Path $failureEvidence "$container.state"), $state)
+                }
+                catch { }
+            }
+        }
+        Write-Output "PRESERVED_FAILURE_EVIDENCE root=$tempRoot image=$image happyContainer=$happyContainer crashContainer=$crashContainer"
+    }
 }
