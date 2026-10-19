@@ -69,6 +69,29 @@ public sealed class HorseIdentityMigrationJournalTests
     }
 
     [TestMethod]
+    public async Task StandaloneLegacyBindingStoresFreshFingerprintAndIsIdempotent()
+    {
+        using var fixture = new Fixture();
+        var operationId = Guid.NewGuid();
+        var manifest = Manifest(1);
+        Assert.IsTrue((await fixture.Journal.StageAsync(operationId, manifest, Now)).Succeeded);
+        var fingerprint = new string('C', 64);
+
+        Assert.IsTrue((await fixture.Journal.BindStandaloneRequestAsync(operationId, manifest, fingerprint, Now)).Succeeded);
+        Assert.IsTrue((await fixture.Journal.BindStandaloneRequestAsync(operationId, manifest, fingerprint, Now.AddMinutes(1))).Succeeded);
+        var saved = await fixture.Journal.GetSavedRequestAsync(operationId);
+        Assert.IsNotNull(saved);
+        Assert.AreEqual(fingerprint, saved.PreviewFingerprint);
+        Assert.AreEqual(HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(manifest, fingerprint),
+            saved.ImmutableRequestHash);
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.RequestConflict,
+            (await fixture.Journal.BindStandaloneRequestAsync(operationId, manifest, new string('D', 64), Now))
+                .Reason);
+        Assert.IsTrue((await fixture.Journal.CreateExecutionIntentAsync(operationId, saved.ImmutableRequestHash, Now))
+            .Succeeded);
+    }
+
+    [TestMethod]
     public async Task ConcurrentRequestKeyAdmissionCreatesExactlyOneOperation()
     {
         using var fixture = new Fixture();
@@ -184,6 +207,30 @@ public sealed class HorseIdentityMigrationJournalTests
         Assert.AreEqual(HorseIdentityMigrationJournalReason.StaleOperation,
             (await fixture.Journal.AdvanceExecutionIntentAsync(keyedId,
                 HorseIdentityMigrationExecutionPhase.BackedUp, Now)).Reason);
+    }
+
+    [TestMethod]
+    public async Task OnlyOneNonterminalExecutionIntentCanBeActiveAtATime()
+    {
+        using var fixture = new Fixture();
+        var firstManifest = Manifest(11);
+        var firstFingerprint = new string('1', 64);
+        var firstHash = HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(firstManifest, firstFingerprint);
+        var firstId = Guid.NewGuid();
+        Assert.IsTrue((await fixture.Journal.StageWithRequestKeyAsync(firstId, firstManifest, Guid.NewGuid(),
+            firstHash, firstFingerprint, Now)).Succeeded);
+        Assert.IsTrue((await fixture.Journal.CreateExecutionIntentAsync(firstId, firstHash, Now)).Succeeded);
+
+        var secondManifest = Manifest(12);
+        var secondFingerprint = new string('2', 64);
+        var secondHash = HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(secondManifest, secondFingerprint);
+        var secondId = Guid.NewGuid();
+        Assert.IsTrue((await fixture.Journal.StageWithRequestKeyAsync(secondId, secondManifest, Guid.NewGuid(),
+            secondHash, secondFingerprint, Now)).Succeeded);
+        var secondIntent = await fixture.Journal.CreateExecutionIntentAsync(secondId, secondHash, Now);
+
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.OwnershipBusy, secondIntent.Reason);
+        Assert.AreEqual(firstId, (await fixture.Journal.GetActiveExecutionIntentAsync())?.OperationId);
     }
 
     [TestMethod]
@@ -571,6 +618,44 @@ public sealed class HorseIdentityMigrationJournalTests
 
         Assert.AreEqual(HorseIdentityMigrationOperationStatus.Succeeded,
             (await fixture.Journal.GetStatusAsync(lease.OperationId))!.Status);
+    }
+
+    [TestMethod]
+    public async Task SupervisedCompletionAtomicallyMakesSucceededIntentReadonlyEligible()
+    {
+        using var fixture = new Fixture();
+        var operationId = Guid.NewGuid();
+        var manifest = Manifest(7);
+        var fingerprint = new string('B', 64);
+        var immutableHash = HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(manifest, fingerprint);
+        Assert.IsTrue((await fixture.Journal.StageWithRequestKeyAsync(operationId, manifest, Guid.NewGuid(),
+            immutableHash, fingerprint, Now)).Succeeded);
+        Assert.IsTrue((await fixture.Journal.CreateExecutionIntentAsync(operationId, immutableHash, Now)).Succeeded);
+        foreach (var phase in new[]
+        {
+            HorseIdentityMigrationExecutionPhase.Preparing,
+            HorseIdentityMigrationExecutionPhase.Draining,
+            HorseIdentityMigrationExecutionPhase.StoppingApi,
+            HorseIdentityMigrationExecutionPhase.ApiExited,
+            HorseIdentityMigrationExecutionPhase.BackedUp,
+            HorseIdentityMigrationExecutionPhase.Applying,
+        })
+            Assert.IsTrue((await fixture.Journal.AdvanceExecutionIntentAsync(operationId, phase, Now)).Succeeded);
+
+        Assert.IsTrue((await fixture.Journal.ClaimWorkflowAsync(operationId, Now)).Succeeded);
+        await using var lease = await fixture.Journal.TryAcquireExecutionAsync(operationId, Now)
+            ?? throw new AssertFailedException("Expected the explicitly claimed migration lease.");
+        var evidence = Evidence(7);
+        Assert.IsTrue((await fixture.Journal.RegisterRequiredPagesAsync(operationId, [Prepared(evidence)], Now)).Succeeded);
+        await AdvanceToVerifiedAsync(fixture.Journal, operationId, evidence);
+
+        await lease.CompleteAsync(Now);
+
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.Succeeded,
+            (await fixture.Journal.GetStatusAsync(operationId))!.Status);
+        Assert.AreEqual(HorseIdentityMigrationExecutionPhase.DataSucceeded,
+            (await fixture.Journal.GetExecutionIntentAsync(operationId))!.Phase);
+        Assert.IsTrue(await fixture.Journal.CanBeginReadonlyVerificationAsync(operationId));
     }
 
     [TestMethod]

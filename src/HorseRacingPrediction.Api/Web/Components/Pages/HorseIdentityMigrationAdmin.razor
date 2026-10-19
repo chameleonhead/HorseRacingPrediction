@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @using System.Net
 @using System.Text.Json
+@using Microsoft.AspNetCore.WebUtilities
 @using Microsoft.JSInterop
 @using HorseRacingPrediction.Api.Identity
 @using HorseRacingPrediction.Contracts.Identity
@@ -18,7 +19,7 @@
 <section class="entity-section migration-intro" aria-labelledby="migration-intro-heading">
     <h2 id="migration-intro-heading">名前だけでは同一性を確認できません</h2>
     <p>以下の対応は、表示名が一致しても本人確認にならない仮説です。生年月日やプロフィールの証拠が不足している候補があります。根拠を個別に確認し、承認できない候補は選択しないでください。</p>
-    <p>プレビューは設定された保存先を読み取ります。実行依頼の保存は要求内容を別の運用ジャーナルへ記録するだけで、保存データは変更しません。保存後も処理は開始されません。既存の GitHub Actions workflow を GUID で手動実行する必要があります。</p>
+    <p>プレビューは設定された保存先を読み取ります。実行依頼の保存は要求内容を別の運用ジャーナルへ記録するだけで、保存データは変更しません。保存後も処理は開始されず、保存済みの内容を確認した後に明示的に実行します。</p>
 </section>
 
 <section class="entity-section migration-diagnostics" aria-labelledby="migration-diagnostics-heading">
@@ -223,6 +224,12 @@
     {
         <p class="migration-error" role="alert">@errorMessage</p>
     }
+    @if (stageRequestRejected && !string.IsNullOrWhiteSpace(requestKeyInput))
+    {
+        <div class="migration-actions">
+            <FluentButton Appearance="@Appearance.Outline" OnClick="AbandonRejectedStageRequest">拒否された受付キーを破棄して再プレビュー</FluentButton>
+        </div>
+    }
     @if (successMessage is not null)
     {
         <p class="migration-success" role="status">@successMessage</p>
@@ -352,12 +359,16 @@
 
 <section class="entity-section migration-operation" aria-labelledby="migration-operation-heading">
     <h2 id="migration-operation-heading">保存済み依頼の状態を確認</h2>
-    <p>GUIDを入力して状態を確認します。再接続時も自動取得や自動実行は行いません。</p>
+    <p>GUIDまたは受付照会キーを使って、必要なときに状態を手動で確認します。再読込・再接続では自動取得や自動実行は行いません。</p>
     <div class="migration-status-form">
         <FluentTextField Label="実行依頼 GUID" @bind-Value="operationIdInput" aria-describedby="operation-id-help" />
+        @if (!string.IsNullOrWhiteSpace(requestKeyInput))
+        {
+            <div class="migration-request-key"><span>受付照会キー</span><code>@requestKeyInput</code></div>
+        }
         <FluentButton Appearance="@Appearance.Outline" OnClick="ReadStatusAsync" Disabled="@(!CanReadStatus)">状態を更新</FluentButton>
     </div>
-    <p id="operation-id-help">状態を確認する場合は、保存結果に表示されたGUIDを入力してください。</p>
+    <p id="operation-id-help">受付結果を受け取れなかった場合は、URLに保存された受付照会キーで手動確認できます。状態確認は読み取り専用です。</p>
     @if (operationError is not null)
     {
         <p class="migration-error" role="alert">@operationError</p>
@@ -368,10 +379,51 @@
             <h3 id="migration-operation-result-heading">保存済み依頼</h3>
             <dl>
                 <dt>依頼 GUID</dt><dd><code>@operation.OperationId.ToString("D")</code></dd>
-                <dt>状態</dt><dd><RaceOpsStatusBadge Label="@StatusLabel(operation.Status)" Tone="@StatusTone(operation.Status)" /></dd>
+                <dt>状態</dt><dd><RaceOpsStatusBadge Label="@StatusLabel(operation)" Tone="@StatusTone(operation)" /></dd>
                 <dt>理由コード</dt><dd>@operation.Reason</dd>
                 <dt>更新時刻 (UTC)</dt><dd>@operation.UpdatedAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</dd>
+                @if (!string.IsNullOrWhiteSpace(operation.ExecutionPhase))
+                {
+                    <dt>実行段階</dt><dd>@ExecutionPhaseLabel(operation.ExecutionPhase)</dd>
+                    @if (operation.ExecutionUpdatedAt is { } phaseUpdatedAt)
+                    {
+                        <dt>段階更新時刻 (UTC)</dt><dd>@phaseUpdatedAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</dd>
+                    }
+                }
             </dl>
+            @if (operation.SavedManifest?.Entries is { Count: > 0 } savedEntries)
+            {
+                <section class="migration-saved-request" aria-labelledby="migration-saved-request-heading">
+                    <h4 id="migration-saved-request-heading">保存された実行内容</h4>
+                    <ul class="migration-mappings">
+                        @foreach (var entry in savedEntries)
+                        {
+                            if (entry is not null)
+                            {
+                                <li><strong>@entry.OldHorseId</strong> → @entry.JraIdentity</li>
+                            }
+                        }
+                    </ul>
+                    @if (!string.IsNullOrWhiteSpace(operation.PreviewFingerprint))
+                    {
+                        <p>保存時のプレビュー fingerprint <code>@operation.PreviewFingerprint</code></p>
+                    }
+                </section>
+            }
+            @if (executeUncertain)
+            {
+                <p class="migration-warning" role="alert">実行要求の受付結果を確認できませんでした。再送はしていません。状態を手動で更新し、保存済み依頼の段階を確認してください。</p>
+            }
+            @if (operation.Status == "AwaitingActions" && CanExecute)
+            {
+                <div class="migration-actions">
+                    <FluentButton Appearance="@Appearance.Accent" OnClick="OpenExecuteConfirmation">この保存済み依頼を実行</FluentButton>
+                </div>
+            }
+            else if (operation.Status == "AwaitingActions")
+            {
+                <p class="migration-warning" role="alert">保存された依頼の内容・fingerprint・実行段階を確認できないため、この画面からは実行できません。手動で状態を更新してください。</p>
+            }
             @if (operation.Results.Count > 0)
             {
                 <h4>安全な進捗集計</h4>
@@ -382,11 +434,11 @@
                     }
                 </ul>
             }
-            @if (operation.Status == "AwaitingActions")
+            @if (operation.Status == "AwaitingActions" && operation.ExecutionPhase is null)
             {
                 <div class="migration-warning" role="status">
-                    <strong>まだ実行されていません。</strong>
-                    <p>この依頼 GUID を確認し、既存の GitHub Actions の app-deploy workflow を手動 dispatch してください。処理が開始されるまでは AwaitingActions のままです。</p>
+                    <strong>実行開始前の依頼です。</strong>
+                    <p>保存された内容と依頼 GUIDを確認してから、この画面の確認操作で開始できます。実行途中の再読込・再接続は処理を再送しません。</p>
                     <code>@operation.OperationId.ToString("D")</code>
                 </div>
             }
@@ -402,12 +454,26 @@
     <FluentDialogHeader ShowDismiss="@(!busy)"><h2 id="migration-stage-title">実行依頼を保存しますか？</h2></FluentDialogHeader>
     <FluentDialogBody>
         <p>選択した @SelectedCandidates.Count 件の旧IDとJRA識別子の対応仮説、および確認済みプレビューを保存します。</p>
-        <p>この操作では元の保存データを変更せず、移行も開始しません。保存後はGUIDを使って既存workflowを別途手動実行してください。</p>
+        <p>この操作では元の保存データを変更せず、移行も開始しません。保存後に表示される固定内容を確認してから、別の明示的な操作で実行します。</p>
         <ul>@foreach (var candidate in SelectedCandidates){<li><strong>@candidate.OldHorseId</strong> → @candidate.JraIdentity</li>}</ul>
     </FluentDialogBody>
     <FluentDialogFooter>
         <FluentButton OnClick="CloseStageConfirmation" Disabled="@busy">戻って確認</FluentButton>
         <FluentButton Appearance="@Appearance.Accent" OnClick="StageAsync" Disabled="@(!CanStage)">@(busy && busyMessage == "実行依頼を保存しています…" ? "保存中…" : "この内容を実行依頼として保存")</FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
+<FluentDialog Hidden="@(!confirmExecute)" HiddenChanged="@(hidden => confirmExecute = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="migration-execute-title" Style="width:min(680px, calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="@(!busy)"><h2 id="migration-execute-title">保存済み依頼を実行しますか？</h2></FluentDialogHeader>
+    <FluentDialogBody>
+        <p>依頼 @operation?.OperationId.ToString("D") に保存された内容だけを実行します。画面上で編集した候補は送信しません。</p>
+        <p>実行前に <a href="/jobs">収集管理</a> でパイプライン全体を明示的に一時停止してください。実行中の処理があれば、最大10分の完了待ちと、一時停止を確定してから15分間の待機が必要です。</p>
+        <p>処理中はAPIが一時的に接続できなくなることがあります。同じURLへ戻ってログインし、この保存済み依頼の状態を手動で更新してください。成功後もパイプラインは停止したままです。再開や再試行は別の明示操作です。</p>
+        <p>開始後は再読込や状態確認から再実行されません。通信が切れた場合は、再送せず状態を手動で確認してください。</p>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton OnClick="CloseExecuteConfirmation" Disabled="@busy">戻って確認</FluentButton>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="ExecuteAsync" Disabled="@(!CanExecute)">@(busy && busyMessage == "保存済み依頼を開始しています…" ? "開始中…" : "この依頼を実行")</FluentButton>
     </FluentDialogFooter>
 </FluentDialog>
 
@@ -428,12 +494,16 @@
     private HorseIdentityMigrationPreview? preview;
     private HorseIdentityMigrationOperationResponse? operation;
     private string operationIdInput = string.Empty;
+    private string requestKeyInput = string.Empty;
     private string? errorMessage;
     private string? operationError;
     private string? successMessage;
     private string? busyMessage;
     private bool busy;
     private bool confirmStage;
+    private bool confirmExecute;
+    private bool executeUncertain;
+    private bool stageRequestRejected;
     private bool interactiveReady;
     private HorseIdentityMigrationSchemaDiagnostics? schemaDiagnostics;
     private bool schemaDiagnosticsLoading;
@@ -452,13 +522,30 @@
     [SupplyParameterFromQuery(Name = "operationId")]
     public string? OperationIdQuery { get; set; }
 
+    [SupplyParameterFromQuery(Name = "requestKey")]
+    public string? RequestKeyQuery { get; set; }
+
     private IReadOnlyList<MigrationCandidate> SelectedCandidates => Candidates.Where(candidate => selected.Contains(candidate.OldHorseId)).ToArray();
     private IReadOnlyList<MigrationCandidate> RemovedPresets => Presets.Where(preset => Candidates.All(candidate => candidate.OldHorseId != preset.OldHorseId)).ToArray();
     private bool CanPreview => interactiveReady && !busy && SelectedCandidates.Count > 0
         && SelectedCandidates.All(candidate => candidate.HypothesisAccepted && IsCanonicalJraIdentity(candidate.JraIdentity));
-    private bool CanStage => interactiveReady && !busy && preview is { CanStage: true, Fingerprint.Length: 64 }
+    private bool CanStage => interactiveReady && !busy && string.IsNullOrWhiteSpace(requestKeyInput)
+        && preview is { CanStage: true, Fingerprint.Length: 64 }
         && SelectedCandidates.Count > 0 && SelectedCandidates.All(candidate => candidate.HypothesisAccepted);
-    private bool CanReadStatus => interactiveReady && !busy && Guid.TryParseExact(operationIdInput.Trim(), "D", out var id) && id != Guid.Empty;
+    private bool CanReadStatus => interactiveReady && !busy
+        && (Guid.TryParseExact(operationIdInput.Trim(), "D", out var id) && id != Guid.Empty
+            || Guid.TryParseExact(requestKeyInput.Trim(), "D", out var requestKey) && requestKey != Guid.Empty);
+    private bool CanExecute
+    {
+        get
+        {
+            var current = operation;
+            return interactiveReady && !busy && !executeUncertain && string.IsNullOrWhiteSpace(requestKeyInput)
+                && current is { Status: "AwaitingActions", ExecutionPhase: null, PreviewFingerprint.Length: 64 }
+                && current.PreviewFingerprint!.All(Uri.IsHexDigit)
+                && HorseIdentityMigrationManifestPolicy.Validate(current.SavedManifest).IsValid;
+        }
+    }
     private bool CanAddCandidate => interactiveReady && !busy && Candidates.Count < HorseIdentityMigrationManifest.MaximumEntries
         && !Candidates.Any(candidate => string.Equals(candidate.OldHorseId, selectedHorseId, StringComparison.Ordinal))
         && horseSearchResults?.Any(candidate => string.Equals(candidate.HorseId, selectedHorseId, StringComparison.Ordinal)) == true
@@ -480,6 +567,14 @@
             && operationId != Guid.Empty)
         {
             operationIdInput = operationId.ToString("D");
+            requestKeyInput = string.Empty;
+        }
+        else if (!string.IsNullOrWhiteSpace(RequestKeyQuery)
+            && Guid.TryParseExact(RequestKeyQuery, "D", out var requestKey)
+            && requestKey != Guid.Empty)
+        {
+            operationIdInput = string.Empty;
+            requestKeyInput = requestKey.ToString("D");
         }
     }
 
@@ -695,34 +790,46 @@
         successMessage = null;
         try
         {
-            var response = await Api.StageHorseIdentityMigrationAsync(BuildManifest(), fingerprint);
+            var requestKey = Guid.TryParseExact(requestKeyInput, "D", out var pendingRequestKey)
+                ? pendingRequestKey
+                : Guid.NewGuid();
+            requestKeyInput = requestKey.ToString("D");
+            operationIdInput = string.Empty;
+            operation = null;
+            stageRequestRejected = false;
+            RememberRequestKey(requestKey);
+            var response = await Api.StageHorseIdentityMigrationAsync(BuildManifest(), fingerprint, requestKey);
             if (response is null)
             {
-                errorMessage = "保存結果を受け取れませんでした。元データは変更されていません。GUIDを確認して状態を手動で再取得してください。";
+                errorMessage = "受付結果を受け取れませんでした。再送はしていません。URLに保存された受付照会キーで状態を手動確認してください。";
                 confirmStage = false;
                 return;
             }
 
             operation = response;
             operationIdInput = response.OperationId.ToString("D");
+            requestKeyInput = string.Empty;
+            executeUncertain = false;
             RememberOperationId(response.OperationId);
-            successMessage = "実行依頼を保存しました。元の保存データは変更されておらず、処理も開始されていません。";
+            successMessage = "実行依頼の保存結果を受け取りました。表示された状態を確認してください。";
             confirmStage = false;
         }
         catch (HttpRequestException exception)
         {
+            stageRequestRejected = exception.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Conflict;
             errorMessage = exception.StatusCode switch
             {
-                HttpStatusCode.BadRequest => "実行依頼の内容を受け付けられませんでした。候補の選択とプレビューを確認してください。",
-                HttpStatusCode.Conflict => "保存先の状態がプレビュー後に変わりました。最新の状態をもう一度プレビューしてください。",
-                HttpStatusCode.TooManyRequests => "実行依頼の容量上限に達したか、別の処理と競合しています。自動再試行はしていません。",
-                HttpStatusCode.ServiceUnavailable => "実行依頼を保存できる状態ではありません。自動再試行はしていません。",
-                _ => "実行依頼を保存できませんでした。選択内容は保持されています。",
+                HttpStatusCode.BadRequest => "実行依頼の内容を受け付けられませんでした。候補とプレビューを確認し、受付照会キーで状態を手動確認してください。",
+                HttpStatusCode.Conflict => "保存先の状態がプレビュー後に変わりました。最新の状態をもう一度プレビューしてください。拒否された受付照会キーを破棄して再プレビューできます。",
+                HttpStatusCode.TooManyRequests => "実行依頼を確認できませんでした。自動再試行はしていません。受付照会キーで状態を手動確認してください。",
+                HttpStatusCode.ServiceUnavailable => "実行依頼を確認できませんでした。自動再試行はしていません。受付照会キーで状態を手動確認してください。",
+                _ => "実行依頼の受付結果を確認できませんでした。再送はしていません。受付照会キーで状態を手動確認してください。",
             };
+            confirmStage = false;
         }
         catch (OperationCanceledException)
         {
-            errorMessage = "保存結果を確認できませんでした。自動再送はしていません。GUIDが分かる場合は状態を手動で確認してください。";
+            errorMessage = "受付結果を確認できませんでした。自動再送はしていません。URLに保存された受付照会キーで状態を手動確認してください。";
             confirmStage = false;
         }
         finally
@@ -732,17 +839,56 @@
         }
     }
 
+    private void AbandonRejectedStageRequest()
+    {
+        if (!stageRequestRejected || string.IsNullOrWhiteSpace(requestKeyInput)) return;
+        stageRequestRejected = false;
+        requestKeyInput = string.Empty;
+        operationIdInput = string.Empty;
+        operation = null;
+        preview = null;
+        confirmStage = false;
+        errorMessage = "受付は拒否され、保存済み依頼はありません。候補を確認し、もう一度プレビューしてください。";
+        successMessage = null;
+        ClearRequestLocatorFromUrl();
+    }
+
     private async Task ReadStatusAsync()
     {
-        if (!CanReadStatus || !Guid.TryParseExact(operationIdInput.Trim(), "D", out var operationId)) return;
+        if (!CanReadStatus) return;
+        var useRequestKey = Guid.TryParseExact(requestKeyInput.Trim(), "D", out var requestKey)
+            && requestKey != Guid.Empty;
+        Guid operationId = Guid.Empty;
+        if (!useRequestKey && (!Guid.TryParseExact(operationIdInput.Trim(), "D", out operationId) || operationId == Guid.Empty)) return;
         busy = true;
         busyMessage = "保存済み依頼の状態を読み取っています…";
         operationError = null;
-        RememberOperationId(operationId);
         try
         {
-            operation = await Api.GetHorseIdentityMigrationOperationAsync(operationId);
-            if (operation is null) operationError = "このGUIDの依頼を見つけられませんでした。入力を確認してください。";
+            if (useRequestKey)
+            {
+                operation = await Api.GetHorseIdentityMigrationRequestAsync(requestKey);
+            }
+            else
+            {
+                RememberOperationId(operationId);
+                operation = await Api.GetHorseIdentityMigrationOperationAsync(operationId);
+            }
+
+            if (operation is null)
+            {
+                operationError = useRequestKey
+                    ? "この受付照会キーの依頼を見つけられませんでした。キーは保持されています。"
+                    : "このGUIDの依頼を見つけられませんでした。入力を確認してください。";
+            }
+            else
+            {
+                executeUncertain = false;
+                operationIdInput = operation.OperationId.ToString("D");
+                requestKeyInput = string.Empty;
+                stageRequestRejected = false;
+                RememberOperationId(operation.OperationId);
+            }
         }
         catch (HttpRequestException exception)
         {
@@ -759,6 +905,59 @@
         {
             operation = null;
             operationError = "状態を読み取れませんでした。必要な場合に手動で再度確認してください。";
+        }
+        finally
+        {
+            busy = false;
+            busyMessage = null;
+        }
+    }
+
+    private void OpenExecuteConfirmation()
+    {
+        if (CanExecute) confirmExecute = true;
+    }
+
+    private void CloseExecuteConfirmation()
+    {
+        if (!busy) confirmExecute = false;
+    }
+
+    private async Task ExecuteAsync()
+    {
+        if (!CanExecute || operation is null) return;
+        var operationId = operation.OperationId;
+        busy = true;
+        busyMessage = "保存済み依頼を開始しています…";
+        operationError = null;
+        executeUncertain = false;
+        try
+        {
+            var response = await Api.ExecuteHorseIdentityMigrationAsync(operationId);
+            if (response is null)
+            {
+                executeUncertain = true;
+                operationError = "開始結果を受け取れませんでした。再送はしていません。状態を手動で確認してください。";
+                confirmExecute = false;
+                return;
+            }
+
+            operation = response;
+            operationIdInput = response.OperationId.ToString("D");
+            RememberOperationId(response.OperationId);
+            confirmExecute = false;
+        }
+        catch (HttpRequestException)
+        {
+            executeUncertain = true;
+            operationError = "開始結果を確認できませんでした。再送はしていません。状態を手動で確認してください。";
+            confirmExecute = false;
+        }
+        catch (OperationCanceledException)
+        {
+            executeUncertain = true;
+            operationError = "開始結果を確認できませんでした。再送はしていません。状態を手動で確認してください。";
+            confirmExecute = false;
         }
         finally
         {
@@ -854,7 +1053,43 @@
     private void RememberOperationId(Guid operationId)
     {
         var current = Navigation.ToAbsoluteUri(Navigation.Uri);
-        var updated = Navigation.GetUriWithQueryParameter("operationId", operationId.ToString("D"));
+        IEnumerable<KeyValuePair<string, string?>> query = current.Query is { Length: > 1 }
+            ? QueryHelpers.ParseQuery(current.Query)
+                .Where(pair => !string.Equals(pair.Key, "operationId", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(pair.Key, "requestKey", StringComparison.OrdinalIgnoreCase))
+                .SelectMany(pair => pair.Value.Select(value => new KeyValuePair<string, string?>(pair.Key, value)))
+            : Enumerable.Empty<KeyValuePair<string, string?>>();
+        var updated = QueryHelpers.AddQueryString(current.GetLeftPart(UriPartial.Path),
+            query.Append(new KeyValuePair<string, string?>("operationId", operationId.ToString("D"))));
+        if (!string.Equals(current.AbsoluteUri, updated, StringComparison.Ordinal))
+            Navigation.NavigateTo(updated, replace: true);
+    }
+
+    private void RememberRequestKey(Guid requestKey)
+    {
+        var current = Navigation.ToAbsoluteUri(Navigation.Uri);
+        IEnumerable<KeyValuePair<string, string?>> query = current.Query is { Length: > 1 }
+            ? QueryHelpers.ParseQuery(current.Query)
+                .Where(pair => !string.Equals(pair.Key, "operationId", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(pair.Key, "requestKey", StringComparison.OrdinalIgnoreCase))
+                .SelectMany(pair => pair.Value.Select(value => new KeyValuePair<string, string?>(pair.Key, value)))
+            : Enumerable.Empty<KeyValuePair<string, string?>>();
+        var updated = QueryHelpers.AddQueryString(current.GetLeftPart(UriPartial.Path),
+            query.Append(new KeyValuePair<string, string?>("requestKey", requestKey.ToString("D"))));
+        if (!string.Equals(current.AbsoluteUri, updated, StringComparison.Ordinal))
+            Navigation.NavigateTo(updated, replace: true);
+    }
+
+    private void ClearRequestLocatorFromUrl()
+    {
+        var current = Navigation.ToAbsoluteUri(Navigation.Uri);
+        IEnumerable<KeyValuePair<string, string?>> query = current.Query is { Length: > 1 }
+            ? QueryHelpers.ParseQuery(current.Query)
+                .Where(pair => !string.Equals(pair.Key, "operationId", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(pair.Key, "requestKey", StringComparison.OrdinalIgnoreCase))
+                .SelectMany(pair => pair.Value.Select(value => new KeyValuePair<string, string?>(pair.Key, value)))
+            : Enumerable.Empty<KeyValuePair<string, string?>>();
+        var updated = QueryHelpers.AddQueryString(current.GetLeftPart(UriPartial.Path), query);
         if (!string.Equals(current.AbsoluteUri, updated, StringComparison.Ordinal))
             Navigation.NavigateTo(updated, replace: true);
     }
@@ -879,11 +1114,13 @@
         _ => "確認対象の保存先",
     };
 
-    private static string StatusLabel(string status) => status switch
+    private static string StatusLabel(HorseIdentityMigrationOperationResponse operation) => operation.Status switch
     {
         "AwaitingActions" => "手動操作待ち",
         "Running" => "実行中",
-        "Succeeded" => "検証済み完了",
+        "Succeeded" when operation.ExecutionPhase == "Verified" => "検証済み完了",
+        "Succeeded" when operation.ExecutionPhase is "DataSucceeded" or "Verifying" => "データ移行済み・検証中",
+        "Succeeded" => "成功記録・検証未確認",
         "Rejected" => "拒否",
         "Failed" => "失敗",
         "Partial" => "未検証の一部適用",
@@ -891,12 +1128,28 @@
         _ => "確認できない状態",
     };
 
-    private static string StatusTone(string status) => status switch
+    private static string StatusTone(HorseIdentityMigrationOperationResponse operation) => operation.Status switch
     {
-        "Succeeded" => "success",
+        "Succeeded" when operation.ExecutionPhase == "Verified" => "success",
         "Running" => "info",
         "AwaitingActions" => "warning",
         _ => "warning",
+    };
+
+    private static string ExecutionPhaseLabel(string phase) => phase switch
+    {
+        "IntentRecorded" => "開始受付済み",
+        "Preparing" => "準備中",
+        "Draining" => "API終了待ち",
+        "StoppingApi" => "API停止中",
+        "ApiExited" => "API終了済み",
+        "BackedUp" => "バックアップ確認済み",
+        "Applying" => "データ移行中",
+        "DataSucceeded" => "データ移行済み・検証待ち",
+        "Verifying" => "読み取り専用検証中",
+        "Verified" => "検証済み",
+        "Failed" => "失敗・要確認",
+        _ => "確認できない段階（安全のため追加操作は停止）",
     };
 
     private sealed record MigrationCandidate(string OldHorseId, string JraIdentity, string Name,

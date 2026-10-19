@@ -85,6 +85,11 @@ internal sealed record HorseIdentityMigrationExecutionIntentOutcome(
     internal bool Succeeded => Reason == HorseIdentityMigrationJournalReason.None && Intent is not null;
 }
 
+internal sealed record HorseIdentityMigrationSavedRequest(
+    HorseIdentityMigrationManifest Manifest,
+    string PreviewFingerprint,
+    string ImmutableRequestHash);
+
 internal enum HorseIdentityMigrationStartupState
 {
     Ready,
@@ -401,6 +406,61 @@ internal sealed class HorseIdentityMigrationJournal
         return operation;
     }
 
+    internal async Task<HorseIdentityMigrationSavedRequest?> GetSavedRequestAsync(
+        Guid operationId, CancellationToken cancellationToken = default)
+    {
+        if (operationId == Guid.Empty || !File.Exists(_databasePath)) return null;
+        await using var connection = await OpenReadOnlyAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: true);
+        string? requestJson = null;
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "SELECT request_json FROM migration_operations WHERE operation_id = $id;";
+            command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            requestJson = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as string;
+        }
+
+        if (requestJson is null || !await HasRequestKeyTableAsync(connection, transaction, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+
+        string? immutableRequestHash = null;
+        string? fingerprint = null;
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "SELECT immutable_request_hash, preview_fingerprint FROM migration_request_keys WHERE operation_id = $id;";
+            command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                immutableRequestHash = reader.GetString(0);
+                fingerprint = reader.IsDBNull(1) ? null : reader.GetString(1);
+            }
+        }
+        if (immutableRequestHash is null || fingerprint is null || !IsSha256Hash(fingerprint))
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+
+        var mappings = JsonSerializer.Deserialize<HorseIdentityMigrationMapping[]>(requestJson, JsonOptions);
+        var manifest = mappings is null ? null : new HorseIdentityMigrationManifest(mappings.Select(mapping =>
+            (HorseIdentityMigrationManifestEntry?)new(mapping.OldHorseId, mapping.JraIdentity, true)).ToArray());
+        if (manifest is null || !HorseIdentityMigrationManifestPolicy.Validate(manifest).IsValid)
+            throw new InvalidDataException("Saved migration request is invalid.");
+        var expectedHash = HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(manifest, fingerprint);
+        if (!string.Equals(immutableRequestHash, expectedHash, StringComparison.Ordinal))
+            throw new InvalidDataException("Saved migration request binding is inconsistent.");
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new(manifest, fingerprint, expectedHash);
+    }
+
     internal async Task<HorseIdentityMigrationRequestKeyRecord?> GetByRequestKeyAsync(
         Guid requestKey,
         CancellationToken cancellationToken = default)
@@ -495,6 +555,75 @@ internal sealed class HorseIdentityMigrationJournal
                     .ConfigureAwait(false);
             }
         }
+    }
+
+    internal async Task<HorseIdentityMigrationJournalOutcome> BindStandaloneRequestAsync(
+        Guid operationId, HorseIdentityMigrationManifest? manifest, string previewFingerprint,
+        DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        if (operationId == Guid.Empty || manifest is null || !IsSha256Hash(previewFingerprint))
+            return new(null, HorseIdentityMigrationJournalReason.RequestConflict);
+        var validation = HorseIdentityMigrationManifestPolicy.Validate(manifest);
+        if (!validation.IsValid) return new(null, HorseIdentityMigrationJournalReason.RequestConflict);
+        var immutableRequestHash = HorseIdentityMigrationExecutionPolicy
+            .ComputeImmutableRequestHash(manifest, previewFingerprint);
+        var requestJson = JsonSerializer.Serialize(validation.Mappings, JsonOptions);
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction();
+        var operation = await ReadOperationAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        if (operation?.Status != HorseIdentityMigrationOperationStatus.Staged)
+            return new(operation, HorseIdentityMigrationJournalReason.StaleOperation);
+
+        var storedRequestHash = await ReadRequestHashAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        if (storedRequestHash is null
+            || !string.Equals(storedRequestHash,
+                Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(requestJson))), StringComparison.Ordinal))
+            return new(operation, HorseIdentityMigrationJournalReason.RequestConflict);
+
+        await using (var existing = connection.CreateCommand())
+        {
+            existing.Transaction = transaction;
+            existing.CommandText = "SELECT immutable_request_hash, preview_fingerprint FROM migration_request_keys WHERE operation_id = $id;";
+            existing.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            await using var reader = await existing.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var sameBinding = string.Equals(reader.GetString(0), immutableRequestHash, StringComparison.Ordinal)
+                    && !reader.IsDBNull(1)
+                    && string.Equals(reader.GetString(1), previewFingerprint, StringComparison.Ordinal);
+                await reader.DisposeAsync().ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return sameBinding
+                    ? new(operation, HorseIdentityMigrationJournalReason.None)
+                    : new(operation, HorseIdentityMigrationJournalReason.RequestConflict);
+            }
+        }
+
+        if (!await HasCapacityAsync(connection, transaction, RequestKeyCapacityReservationBytes,
+                cancellationToken).ConfigureAwait(false))
+            return new(operation, HorseIdentityMigrationJournalReason.CapacityExceeded);
+        await using (var insert = connection.CreateCommand())
+        {
+            insert.Transaction = transaction;
+            insert.CommandText = "INSERT INTO migration_request_keys (request_key, immutable_request_hash, preview_fingerprint, operation_id) VALUES ($key, $hash, $fingerprint, $id);";
+            insert.Parameters.AddWithValue("$key", Guid.NewGuid().ToString("D"));
+            insert.Parameters.AddWithValue("$hash", immutableRequestHash);
+            insert.Parameters.AddWithValue("$fingerprint", previewFingerprint);
+            insert.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            try
+            {
+                await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+            {
+                return new(operation, HorseIdentityMigrationJournalReason.OwnershipBusy);
+            }
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new(operation, HorseIdentityMigrationJournalReason.None);
     }
 
     private async Task<HorseIdentityMigrationJournalOutcome> StageCoreAsync(
@@ -627,6 +756,17 @@ internal sealed class HorseIdentityMigrationJournal
             || !string.Equals(key, immutableRequestHash, StringComparison.Ordinal))
             return new(null, HorseIdentityMigrationJournalReason.StaleOperation);
 
+        await using (var activeCommand = connection.CreateCommand())
+        {
+            activeCommand.Transaction = transaction;
+            activeCommand.CommandText = "SELECT operation_id FROM migration_execution_intents WHERE phase NOT IN ($verified, $failed) AND operation_id <> $id LIMIT 1;";
+            activeCommand.Parameters.AddWithValue("$verified", (int)HorseIdentityMigrationExecutionPhase.Verified);
+            activeCommand.Parameters.AddWithValue("$failed", (int)HorseIdentityMigrationExecutionPhase.Failed);
+            activeCommand.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            if (await activeCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null)
+                return new(null, HorseIdentityMigrationJournalReason.OwnershipBusy);
+        }
+
         if (!await HasCapacityAsync(connection, transaction, ExecutionIntentCapacityReservationBytes,
                 cancellationToken).ConfigureAwait(false))
             return new(null, HorseIdentityMigrationJournalReason.CapacityExceeded);
@@ -671,6 +811,43 @@ internal sealed class HorseIdentityMigrationJournal
         }
         var intent = await ReadExecutionIntentAsync(connection, transaction, operationId, cancellationToken)
             .ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return intent;
+    }
+
+    internal async Task<HorseIdentityMigrationExecutionIntent?> GetActiveExecutionIntentAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!File.Exists(_databasePath)) return null;
+        await using var connection = await OpenReadOnlyAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: true);
+        if (!await HasExecutionIntentTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false))
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+
+        Guid? operationId = null;
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "SELECT operation_id FROM migration_execution_intents WHERE phase NOT IN ($verified, $failed) LIMIT 2;";
+            command.Parameters.AddWithValue("$verified", (int)HorseIdentityMigrationExecutionPhase.Verified);
+            command.Parameters.AddWithValue("$failed", (int)HorseIdentityMigrationExecutionPhase.Failed);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                if (!Guid.TryParseExact(reader.GetString(0), "D", out var parsed) || parsed == Guid.Empty)
+                    throw new InvalidDataException("Migration journal contains an invalid active operation ID.");
+                operationId = parsed;
+                if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                    throw new InvalidDataException("Migration journal contains multiple active execution intents.");
+            }
+        }
+
+        var intent = operationId is { } id
+            ? await ReadExecutionIntentAsync(connection, transaction, id, cancellationToken).ConfigureAwait(false)
+            : null;
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return intent;
     }
@@ -1038,6 +1215,36 @@ internal sealed class HorseIdentityMigrationJournal
         if (!await HasCompleteVerifiedEvidenceAsync(connection, transaction, operationId, cancellationToken)
                 .ConfigureAwait(false))
             throw new InvalidOperationException("All typed migration pages must be independently verified before success.");
+
+        // A supervised operation becomes eligible for readonly verification in the same
+        // transaction that records its successful data result.  Keeping these writes
+        // together prevents a process exit between Succeeded and DataSucceeded from
+        // leaving a completed migration that cannot be safely reverified.
+        if (await HasExecutionIntentTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false))
+        {
+            var intent = await ReadExecutionIntentAsync(connection, transaction, operationId, cancellationToken)
+                .ConfigureAwait(false);
+            if (intent is not null)
+            {
+                var requestHash = await ReadRequestKeyForOperationAsync(connection, transaction, operationId,
+                    cancellationToken).ConfigureAwait(false);
+                if (intent.Phase != HorseIdentityMigrationExecutionPhase.Applying
+                    || requestHash is null
+                    || !string.Equals(requestHash, intent.ImmutableRequestHash, StringComparison.Ordinal))
+                    throw new InvalidOperationException("A supervised operation must complete from its bound Applying intent.");
+
+                await using var advanceIntent = connection.CreateCommand();
+                advanceIntent.Transaction = transaction;
+                advanceIntent.CommandText = "UPDATE migration_execution_intents SET phase = $phase, updated_utc = $updated WHERE operation_id = $id AND phase = $current;";
+                advanceIntent.Parameters.AddWithValue("$phase", (int)HorseIdentityMigrationExecutionPhase.DataSucceeded);
+                advanceIntent.Parameters.AddWithValue("$updated", now.ToUniversalTime().ToString("O"));
+                advanceIntent.Parameters.AddWithValue("$id", operationId.ToString("D"));
+                advanceIntent.Parameters.AddWithValue("$current", (int)HorseIdentityMigrationExecutionPhase.Applying);
+                if (await advanceIntent.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+                    throw new InvalidOperationException("The supervised execution intent changed before completion.");
+            }
+        }
+
         await SetStatusAsync(connection, transaction, operationId, HorseIdentityMigrationOperationStatus.Succeeded,
             HorseIdentityMigrationJournalReason.None, now, cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);

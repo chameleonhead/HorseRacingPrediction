@@ -502,10 +502,14 @@ public sealed class HorseIdentityMigrationRuntimeOwnershipTests
             await lease!.CompleteAsync(now);
         }
 
+        var completedIntent = await journal.GetExecutionIntentAsync(operationId);
+        Assert.IsNotNull(completedIntent);
+        Assert.AreEqual(HorseIdentityMigrationExecutionPhase.DataSucceeded, completedIntent.Phase,
+            "Successful data completion must atomically make its intent readonly-verification eligible.");
+
         var phases = leaveVerifying
-            ? new[] { HorseIdentityMigrationExecutionPhase.DataSucceeded, HorseIdentityMigrationExecutionPhase.Verifying }
-            : new[] { HorseIdentityMigrationExecutionPhase.DataSucceeded, HorseIdentityMigrationExecutionPhase.Verifying,
-                HorseIdentityMigrationExecutionPhase.Verified };
+            ? new[] { HorseIdentityMigrationExecutionPhase.Verifying }
+            : new[] { HorseIdentityMigrationExecutionPhase.Verifying, HorseIdentityMigrationExecutionPhase.Verified };
         foreach (var phase in phases)
             Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId, phase, now)).Succeeded);
     }

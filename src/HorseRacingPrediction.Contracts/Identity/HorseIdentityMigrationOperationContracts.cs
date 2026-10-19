@@ -18,7 +18,22 @@ public sealed record HorseIdentityMigrationOperationResponse(
     string Reason,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    IReadOnlyList<HorseIdentityMigrationOperationResult> Results);
+    IReadOnlyList<HorseIdentityMigrationOperationResult> Results)
+{
+    /// <summary>The immutable request saved with this operation, when it was staged for supervised execution.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public HorseIdentityMigrationManifest? SavedManifest { get; init; }
+
+    /// <summary>The source preview fingerprint captured when the request was staged.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? PreviewFingerprint { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ExecutionPhase { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? ExecutionUpdatedAt { get; init; }
+}
 
 public sealed record HorseIdentityMigrationOperationResult(
     string Code,

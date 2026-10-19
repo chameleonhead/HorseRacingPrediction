@@ -29,6 +29,17 @@ using Microsoft.OpenApi;
 using Microsoft.Extensions.Options;
 using System.Net;
 
+var horseIdentityMigrationSupervisorExitCode = await HorseIdentityMigrationSupervisor.RunIfRequestedAsync(args);
+if (horseIdentityMigrationSupervisorExitCode is { } supervisorExitCode)
+{
+    Environment.ExitCode = supervisorExitCode;
+    return;
+}
+
+var internalApiChild = HorseIdentityMigrationSupervisor.IsApiChild(args);
+var internalBlockedChild = HorseIdentityMigrationSupervisor.IsBlockedChild(args);
+if (internalApiChild || internalBlockedChild) args = [];
+
 var horseIdentityMigrationExitCode = await HorseIdentityMigrationRuntimeMode.RunFixedCommandAsync(args);
 if (horseIdentityMigrationExitCode is { } migrationExitCode)
 {
@@ -37,6 +48,34 @@ if (horseIdentityMigrationExitCode is { } migrationExitCode)
 }
 
 var builder = WebApplication.CreateBuilder(args);
+var configuredSources = HorseIdentityMigrationRuntimeMode.ResolveConfiguredSources(builder,
+    HorseIdentityMigrationRuntimeMode.ReadCollectionOptions(builder));
+HorseIdentityMigrationMaintenanceCapability.ApiBootstrapAuthorization? migrationBootstrapAuthorization = null;
+var privateBootstrap = Environment.GetEnvironmentVariable(
+    HorseIdentityMigrationMaintenanceCapability.PrivateEnvironmentVariable);
+if (privateBootstrap is not null)
+{
+    if (!HorseIdentityMigrationMaintenanceCapability.ApiBootstrapAuthorization.TryImportAndValidate(
+            privateBootstrap, configuredSources.PhysicalSourcePaths, out var importedBootstrapAuthorization)
+        || !HorseIdentityMigrationSupervisor.TryEstablishParentDeathSignal(
+            importedBootstrapAuthorization!.ParentProcessId, importedBootstrapAuthorization.ParentStartTicks))
+    {
+        Environment.ExitCode = 4;
+        return;
+    }
+    migrationBootstrapAuthorization = importedBootstrapAuthorization;
+}
+else if (internalApiChild || internalBlockedChild)
+{
+    Environment.ExitCode = 4;
+    return;
+}
+
+if (internalBlockedChild)
+{
+    await HorseIdentityMigrationRuntimeMode.RunBlockedHostIfNeededAsync(builder, forceBlocked: true);
+    return;
+}
 if (await HorseIdentityMigrationRuntimeMode.RunBlockedHostIfNeededAsync(builder))
     return;
 
@@ -199,6 +238,15 @@ builder.Services.AddSingleton<TypedHorseIdentityStoreReaders>(services => new(
     services.GetRequiredService<EventFlow.EventStores.IDomainEventFactory>()));
 builder.Services.AddSingleton<TypedHorseIdentityStoreEngine>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(services => new HorseIdentityMigrationPreparationService(
+    services.GetRequiredService<HorseIdentityMigrationJournal>(),
+    services.GetRequiredService<CollectionPlatformStore>(), sourceOwnership,
+    migrationBootstrapAuthorization, services.GetRequiredService<TimeProvider>(),
+    services.GetRequiredService<IHostApplicationLifetime>(),
+    services.GetRequiredService<ILogger<HorseIdentityMigrationPreparationService>>()));
+if (migrationBootstrapAuthorization is not null)
+    builder.Services.AddHostedService(services =>
+        services.GetRequiredService<HorseIdentityMigrationPreparationService>());
 builder.Services.Configure<CollectionMonitoringOptions>(
     builder.Configuration.GetSection(CollectionMonitoringOptions.SectionName));
 builder.Services.AddSingleton<CollectionMonitoringService>();

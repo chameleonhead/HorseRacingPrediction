@@ -28,6 +28,7 @@ public sealed class HorseIdentityMigrationClientTests
             DateTimeOffset.Parse("2026-10-15T00:00:00Z"), DateTimeOffset.Parse("2026-10-15T00:00:00Z"), []);
         HorseIdentityMigrationManifest? receivedPreviewManifest = null;
         HorseIdentityMigrationStageRequest? receivedStage = null;
+        var executeCount = 0;
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         builder.Services.Configure<ApiKeyOptions>(options =>
@@ -51,6 +52,11 @@ public sealed class HorseIdentityMigrationClientTests
             return Results.Created($"/api/v2/admin/horse-id-migration-operations/{operationId:D}", response);
         });
         routes.MapGet($"/v2/admin/horse-id-migration-operations/{operationId:D}", () => Results.Ok(response));
+        routes.MapPost($"/v2/admin/horse-id-migration-operations/{operationId:D}/execute", () =>
+        {
+            executeCount++;
+            return Results.Accepted($"/api/v2/admin/horse-id-migration-operations/{operationId:D}", response);
+        });
         routes.MapGet($"/v2/admin/horse-id-migration-requests/{requestKey:D}", () => Results.Ok(response));
         await app.StartAsync();
 
@@ -81,6 +87,12 @@ public sealed class HorseIdentityMigrationClientTests
         var observedStatus = await client.GetHorseIdentityMigrationOperationAsync(operationId);
         Assert.IsNotNull(observedStatus);
         Assert.AreEqual(operationId, observedStatus.OperationId);
+
+        var executed = await client.ExecuteHorseIdentityMigrationAsync(operationId);
+        Assert.IsNotNull(executed);
+        Assert.AreEqual(operationId, executed.OperationId);
+        Assert.AreEqual(1, executeCount);
+        Assert.IsNull(await client.ExecuteHorseIdentityMigrationAsync(Guid.Empty));
 
         using var anonymousHttp = app.GetTestClient();
         var anonymousClient = CreateClient(anonymousHttp, app.Services.GetRequiredService<IServer>(), includeApiKey: false);

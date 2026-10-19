@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -32,7 +33,8 @@ public sealed class HorseIdentityMigrationAdminBrowserTests
         await stores.SeedSerializedHorseEventAsync(AddedHorseId);
         var localApiKey = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
         var baseAddress = new Uri($"http://127.0.0.1:{ReserveLoopbackPort()}");
-        using var process = StartApiProcess(repositoryRoot, stores, protectionDirectory, localApiKey, baseAddress);
+        var endpointLog = new ConcurrentQueue<string>();
+        using var process = StartApiProcess(repositoryRoot, stores, protectionDirectory, localApiKey, baseAddress, endpointLog);
         try
         {
             await WaitUntilReadyAsync(process, baseAddress);
@@ -143,16 +145,17 @@ public sealed class HorseIdentityMigrationAdminBrowserTests
                 await Assertions.Expect(confirmSaveButton).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions
                 { Timeout = (float)RequestTimeout.TotalMilliseconds });
                 await confirmSaveButton.ClickAsync();
-                await page.GetByText("まだ実行されていません").WaitForAsync(new LocatorWaitForOptions
+                await page.GetByText("実行開始前の依頼です").WaitForAsync(new LocatorWaitForOptions
                 { Timeout = (float)RequestTimeout.TotalMilliseconds });
-                Assert.IsTrue(await page.GetByText("まだ実行されていません").IsVisibleAsync(),
+                Assert.IsTrue(await page.GetByText("実行開始前の依頼です").IsVisibleAsync(),
                     "Saving an operation must display a receipt without starting the workflow.");
+                Assert.AreEqual(1, CountEndpoint(endpointLog, "POST", "/api/v2/admin/horse-id-migration-operations"),
+                    $"The server-side operation stage must be observed through the isolated host's real endpoint logs. Related output: {string.Join(" | ", endpointLog.Where(line => line.Contains("horse-id-migration", StringComparison.OrdinalIgnoreCase)))}");
                 Assert.IsTrue(page.Url.Contains("/settings/horse-id-migration?operationId=", StringComparison.Ordinal),
                     "The saved GUID should be addressable through the same Settings URL without fetching status automatically.");
-                Assert.IsTrue(await page.GetByText("既存の GitHub Actions の app-deploy workflow を手動 dispatch").IsVisibleAsync());
                 await page.SetViewportSizeAsync(390, 844);
                 Assert.IsTrue(await page.EvaluateAsync<bool>("() => document.documentElement.scrollWidth <= window.innerWidth"),
-                    "The mobile status/reconnect screen must not overflow horizontally.");
+                    "The mobile saved-operation screen must not overflow horizontally.");
                 Assert.IsTrue(await page.Locator(".migration-cards").First.IsVisibleAsync());
                 Assert.IsFalse(await page.Locator(".migration-grid").First.IsVisibleAsync());
                 await Assertions.Expect(page.Locator(".migration-candidates .migration-cards").GetByText(AddedHorseId, new() { Exact = true }))
@@ -171,10 +174,32 @@ public sealed class HorseIdentityMigrationAdminBrowserTests
                     """);
                 Assert.IsTrue(hasVisibleFullFingerprint,
                     "At 390px, a complete 64-character preview hash must remain visible and wrap within its card cell.");
+                await page.Locator(".migration-candidates").ScrollIntoViewIfNeededAsync();
+                await page.ScreenshotAsync(new PageScreenshotOptions
+                { Path = Path.Combine(screenshotDirectory, "mobile-preview.png") });
+                await page.SetViewportSizeAsync(1280, 900);
+                var statusReadsBeforeReload = CountStatusReads(endpointLog);
+                await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.DOMContentLoaded, Timeout = (float)RequestTimeout.TotalMilliseconds });
+                await page.GetByRole(AriaRole.Button, new() { Name = "状態を更新" }).WaitForAsync(new LocatorWaitForOptions
+                { Timeout = (float)RequestTimeout.TotalMilliseconds });
+                Assert.AreEqual(statusReadsBeforeReload, CountStatusReads(endpointLog),
+                    "Reload must only restore the operation ID; the real API boundary must see no status lookup.");
+                Assert.AreEqual(0, CountEndpoint(endpointLog, "POST", "/api/v2/admin/horse-id-migration-operations/{operationId}/execute"),
+                    "Reloading a saved operation ID must never dispatch execution to the real API.");
+                await page.SetViewportSizeAsync(390, 844);
+                Assert.IsTrue(await page.EvaluateAsync<bool>("() => document.documentElement.scrollWidth <= window.innerWidth"),
+                    "The mobile status/reconnect screen must not overflow horizontally.");
+                Assert.IsTrue(await page.Locator(".migration-cards").First.IsVisibleAsync());
+                Assert.IsFalse(await page.Locator(".migration-grid").First.IsVisibleAsync());
 
                 await page.GetByRole(AriaRole.Button, new() { Name = "状態を更新" }).ClickAsync();
                 await page.GetByText("手動操作待ち").WaitForAsync(new LocatorWaitForOptions
                 { Timeout = (float)RequestTimeout.TotalMilliseconds });
+                Assert.AreEqual(statusReadsBeforeReload + 1, CountStatusReads(endpointLog),
+                    "The explicit status button is a positive control for observing real server-side API reads.");
+                Assert.IsTrue(await page.GetByRole(AriaRole.Button, new() { Name = "この保存済み依頼を実行" }).IsVisibleAsync(),
+                    "Execution must become available only after an explicit status read restores the saved receipt.");
+                Assert.AreEqual(0, CountEndpoint(endpointLog, "POST", "/api/v2/admin/horse-id-migration-operations/{operationId}/execute"));
                 await page.GetByText("手動操作待ち").ScrollIntoViewIfNeededAsync();
                 await page.ScreenshotAsync(new PageScreenshotOptions
                 { Path = Path.Combine(screenshotDirectory, "mobile-receipt-status.png") });
@@ -193,7 +218,8 @@ public sealed class HorseIdentityMigrationAdminBrowserTests
 
     private static Process StartApiProcess(string repositoryRoot,
         HorseIdentityMigrationStoreEngineTests.StoreFixture stores,
-        string protectionDirectory, string localApiKey, Uri baseAddress)
+        string protectionDirectory, string localApiKey, Uri baseAddress,
+        ConcurrentQueue<string> endpointLog)
     {
         var apiProject = Path.Combine(repositoryRoot, "src", "HorseRacingPrediction.Api", "HorseRacingPrediction.Api.csproj");
         var startInfo = new ProcessStartInfo("dotnet")
@@ -229,15 +255,29 @@ public sealed class HorseIdentityMigrationAdminBrowserTests
         environment["CollectionDeadLetterQueueReconciler__Enabled"] = "false";
         environment["DataProtection__KeysDirectory"] = protectionDirectory;
         environment["Logging__LogLevel__Microsoft.AspNetCore"] = "Warning";
+        environment["Logging__LogLevel__Microsoft.AspNetCore.Routing.EndpointMiddleware"] = "Information";
 
         var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
-        process.OutputDataReceived += (_, _) => { };
-        process.ErrorDataReceived += (_, _) => { };
+        process.OutputDataReceived += (_, eventArgs) =>
+        {
+            if (eventArgs.Data is not null) endpointLog.Enqueue(eventArgs.Data);
+        };
+        process.ErrorDataReceived += (_, eventArgs) =>
+        {
+            if (eventArgs.Data is not null) endpointLog.Enqueue(eventArgs.Data);
+        };
         if (!process.Start()) throw new InvalidOperationException("The isolated API process did not start.");
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
         return process;
     }
+
+    private static int CountStatusReads(ConcurrentQueue<string> endpointLog) =>
+        endpointLog.Count(line => line.Contains("Executing endpoint 'HTTP: GET /api/v2/admin/horse-id-migration-operations/{operationId}", StringComparison.Ordinal)
+            || line.Contains("Executing endpoint 'HTTP: GET /api/v2/admin/horse-id-migration-requests/{requestKey}", StringComparison.Ordinal));
+
+    private static int CountEndpoint(ConcurrentQueue<string> endpointLog, string method, string route) =>
+        endpointLog.Count(line => line.Contains($"Executing endpoint 'HTTP: {method} {route}", StringComparison.Ordinal));
 
     private static async Task WaitUntilReadyAsync(Process process, Uri baseAddress)
     {

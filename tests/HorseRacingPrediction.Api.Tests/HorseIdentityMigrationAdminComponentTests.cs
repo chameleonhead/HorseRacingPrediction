@@ -212,7 +212,9 @@ public sealed class HorseIdentityMigrationAdminComponentTests
         StringAssert.Contains(cut.Markup, "実行依頼を保存しますか？");
         var acceptance = cut.FindComponents<FluentCheckbox>().First(box => box.Markup.Contains("仮説を確認", StringComparison.Ordinal));
         await cut.InvokeAsync(() => acceptance.Instance.ValueChanged.InvokeAsync(false));
-        Assert.IsTrue(cut.FindComponents<FluentDialog>().Single().Instance.Hidden);
+        Assert.IsTrue(cut.FindComponents<FluentDialog>()
+            .Single(dialog => dialog.Markup.Contains("実行依頼を保存しますか？", StringComparison.Ordinal))
+            .Instance.Hidden);
         Assert.IsFalse(cut.Markup.Contains("表示された候補と保存状態を確認してください", StringComparison.Ordinal));
 
         for (var index = 0; index < 3; index++)
@@ -326,7 +328,7 @@ public sealed class HorseIdentityMigrationAdminComponentTests
         Assert.AreEqual(1, handler.Requests.Count, "Opening confirmation must not stage automatically.");
         await ClickAsync(cut, "この内容を実行依頼として保存");
 
-        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "まだ実行されていません"));
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "実行開始前の依頼です"));
         Assert.AreEqual(2, handler.Requests.Count);
         Assert.AreEqual("/api/v2/admin/horse-id-migration-operations", handler.Requests[1].Path);
         using var stageJson = JsonDocument.Parse(handler.Requests[1].Body!);
@@ -337,10 +339,12 @@ public sealed class HorseIdentityMigrationAdminComponentTests
         Assert.AreEqual(JraIdentity, stage.GetProperty("manifest").GetProperty("entries")[0].GetProperty("jraIdentity").GetString());
         Assert.AreEqual(new string('A', 64), stage.GetProperty("previewFingerprint").GetString());
         Assert.AreEqual(StageablePreview().Fingerprint, stage.GetProperty("previewFingerprint").GetString());
+        Assert.IsTrue(Guid.TryParse(stage.GetProperty("requestKey").GetString(), out var requestKey) && requestKey != Guid.Empty,
+            "The request key must be persisted before the stage request can lose its response.");
         Assert.IsFalse(handler.Requests.Any(request => request.Method == HttpMethod.Get), "The stage receipt must not trigger status polling.");
         StringAssert.Contains(cut.Markup, "c54c11b0-b17a-4aed-a956-b8feb0c57a74");
-        StringAssert.Contains(cut.Markup, "既存の GitHub Actions の app-deploy workflow を手動 dispatch");
-        StringAssert.Contains(cut.Markup, "処理が開始されるまでは AwaitingActions のままです");
+        Assert.IsFalse(cut.FindComponents<FluentButton>().Any(button => button.Markup.Contains("この保存済み依頼を実行", StringComparison.Ordinal)),
+            "A receipt without the saved manifest and fingerprint must fail closed for execution.");
     }
 
     [TestMethod]
@@ -402,6 +406,141 @@ public sealed class HorseIdentityMigrationAdminComponentTests
     }
 
     [TestMethod]
+    public async Task ExplicitExecuteUsesOnlyTheSavedOperationAndManifestAfterCandidateChanges()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var operationId = Guid.Parse("a54c11b0-b17a-4aed-a956-b8feb0c57a74");
+        var savedManifest = new HorseIdentityMigrationManifest(
+            [new(OldHorseId, JraIdentity, true)]);
+        var staged = Operation(operationId, "AwaitingActions", savedManifest, "A".PadLeft(64, 'A'));
+        var handler = new MigrationHandler
+        {
+            Preview = StageablePreview(),
+            Staged = staged,
+            Executed = Operation(operationId, "Running", savedManifest, new string('A', 64), "IntentRecorded"),
+        };
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = context.Render<HorseIdentityMigrationAdmin>();
+        await SelectAndAcceptFirstCandidateAsync(cut);
+        await ClickAsync(cut, "選択内容をプレビュー");
+        await ClickAsync(cut, "この固定内容を実行依頼として保存");
+        await ClickAsync(cut, "この内容を実行依頼として保存");
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, OldHorseId));
+        Assert.AreEqual(2, handler.Requests.Count, "Saving a receipt must not execute it.");
+
+        var selection = cut.FindComponents<FluentCheckbox>()
+            .First(component => component.Markup.Contains("移行対象として選択", StringComparison.Ordinal));
+        await cut.InvokeAsync(() => selection.Instance.ValueChanged.InvokeAsync(false));
+        StringAssert.Contains(cut.Find(".migration-saved-request").TextContent, OldHorseId,
+            "Editing candidates after staging must not change the saved manifest shown for execution.");
+
+        await ClickAsync(cut, "この保存済み依頼を実行");
+        StringAssert.Contains(cut.Markup, "保存済み依頼を実行しますか？");
+        var executeDialog = cut.Find("fluent-dialog[aria-labelledby='migration-execute-title']");
+        Assert.AreEqual("/jobs", executeDialog.QuerySelector("a")?.GetAttribute("href"));
+        StringAssert.Contains(executeDialog.TextContent, "最大10分");
+        StringAssert.Contains(executeDialog.TextContent, "15分間");
+        StringAssert.Contains(executeDialog.TextContent, "成功後もパイプラインは停止したまま");
+        Assert.AreEqual(2, handler.Requests.Count, "Opening the execute confirmation must not dispatch.");
+        await ClickAsync(cut, "この依頼を実行");
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "開始受付済み"));
+        Assert.AreEqual(3, handler.Requests.Count);
+        Assert.AreEqual(HttpMethod.Post, handler.Requests[2].Method);
+        Assert.AreEqual($"/api/v2/admin/horse-id-migration-operations/{operationId:D}/execute", handler.Requests[2].Path);
+        Assert.IsNull(handler.Requests[2].Body, "Execution must send the saved operation ID, not an editable manifest.");
+    }
+
+    [TestMethod]
+    public async Task UncertainExecuteRequiresManualStatusAndSucceededWithoutVerifiedPhaseIsNotSuccess()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var operationId = Guid.Parse("b54c11b0-b17a-4aed-a956-b8feb0c57a74");
+        var manifest = new HorseIdentityMigrationManifest([new(OldHorseId, JraIdentity, true)]);
+        var handler = new MigrationHandler
+        {
+            Status = Operation(operationId, "Succeeded", manifest, new string('A', 64), "DataSucceeded"),
+            Preview = StageablePreview(),
+            Staged = Operation(operationId, "AwaitingActions", manifest, new string('A', 64)),
+            ExecuteStatus = HttpStatusCode.ServiceUnavailable,
+        };
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = context.Render<HorseIdentityMigrationAdmin>();
+
+        await SelectAndAcceptFirstCandidateAsync(cut);
+        await ClickAsync(cut, "選択内容をプレビュー");
+        await ClickAsync(cut, "この固定内容を実行依頼として保存");
+        await ClickAsync(cut, "この内容を実行依頼として保存");
+        await ClickAsync(cut, "この保存済み依頼を実行");
+        await ClickAsync(cut, "この依頼を実行");
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "実行要求の受付結果を確認できませんでした"));
+        Assert.AreEqual(3, handler.Requests.Count, "A lost execute response must not be automatically resent or queried.");
+        Assert.IsFalse(cut.FindComponents<FluentButton>().Any(button => button.Markup.Contains("この保存済み依頼を実行", StringComparison.Ordinal)));
+        await ClickAsync(cut, "状態を更新");
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "データ移行済み・検証中"));
+        Assert.IsFalse(cut.Markup.Contains("検証済み完了", StringComparison.Ordinal));
+        Assert.IsFalse(cut.Markup.Contains("検証を実行", StringComparison.Ordinal),
+            "VerifyOnly is owned by the minimal host, not duplicated in the normal Razor page.");
+
+        Assert.AreEqual(4, handler.Requests.Count);
+        Assert.AreEqual(HttpMethod.Get, handler.Requests[3].Method,
+            "After uncertainty, the only follow-up is an explicit read-only status request.");
+    }
+
+    [TestMethod]
+    public async Task LostStageResponseRecoversByManualRequestKeyLookupWithoutResending()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var operationId = Guid.Parse("c54c11b0-b17a-4aed-a956-b8feb0c57a74");
+        var savedManifest = new HorseIdentityMigrationManifest([new(OldHorseId, JraIdentity, true)]);
+        var handler = new MigrationHandler
+        {
+            Preview = StageablePreview(),
+            StageStatus = HttpStatusCode.ServiceUnavailable,
+            RequestReceipt = Operation(operationId, "AwaitingActions", savedManifest, new string('A', 64)),
+        };
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = context.Render<HorseIdentityMigrationAdmin>();
+        await SelectAndAcceptFirstCandidateAsync(cut);
+        await ClickAsync(cut, "選択内容をプレビュー");
+        await ClickAsync(cut, "この固定内容を実行依頼として保存");
+        await ClickAsync(cut, "この内容を実行依頼として保存");
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "受付照会キーで状態を手動確認してください"));
+        Assert.AreEqual(2, handler.Requests.Count, "A lost stage response must not trigger an automatic lookup or retry.");
+        using var stageJson = JsonDocument.Parse(handler.Requests[1].Body!);
+        var requestKey = stageJson.RootElement.GetProperty("requestKey").GetString();
+        Assert.IsFalse(string.IsNullOrWhiteSpace(requestKey));
+        StringAssert.Contains(context.Services.GetRequiredService<NavigationManager>().Uri, $"requestKey={requestKey}");
+
+        await using var recoveredContext = CreateContext(app.Services, http);
+        recoveredContext.Services.GetRequiredService<NavigationManager>()
+            .NavigateTo($"http://localhost/settings/horse-id-migration?requestKey={requestKey}");
+        var recoveredCut = recoveredContext.Render<HorseIdentityMigrationAdmin>();
+        Assert.AreEqual(2, handler.Requests.Count, "Reloading with a request key only restores the lookup field.");
+        await ClickAsync(recoveredCut, "状態を更新");
+
+        recoveredCut.WaitForAssertion(() => StringAssert.Contains(recoveredCut.Markup, operationId.ToString("D")));
+        Assert.AreEqual(3, handler.Requests.Count, "Recovery reads the journal receipt and does not repeat the stage POST.");
+        Assert.AreEqual(HttpMethod.Get, handler.Requests[2].Method);
+        Assert.AreEqual($"/api/v2/admin/horse-id-migration-requests/{requestKey}", handler.Requests[2].Path);
+        StringAssert.Contains(recoveredContext.Services.GetRequiredService<NavigationManager>().Uri, $"operationId={operationId:D}");
+        Assert.IsFalse(recoveredContext.Services.GetRequiredService<NavigationManager>().Uri.Contains("requestKey=", StringComparison.Ordinal));
+        Assert.IsTrue(recoveredCut.FindComponents<FluentButton>().Any(button => button.Markup.Contains("この保存済み依頼を実行", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
     public async Task StaleStageKeepsSelectionAndExplainsThatPreviewMustBeRefreshed()
     {
         var (app, original) = await TestApplicationFactory.CreateAsync();
@@ -425,6 +564,13 @@ public sealed class HorseIdentityMigrationAdminComponentTests
         Assert.IsTrue(cut.FindComponents<FluentCheckbox>().First(box => box.Markup.Contains("移行対象として選択", StringComparison.Ordinal)).Instance.Value,
             "A stale preview must not clear the operator's explicit selection.");
         Assert.IsFalse(cut.Markup.Contains("実行依頼を保存しました", StringComparison.Ordinal));
+        var navigation = context.Services.GetRequiredService<NavigationManager>();
+        StringAssert.Contains(navigation.Uri, "requestKey=");
+        await ClickAsync(cut, "拒否された受付キーを破棄して再プレビュー");
+        Assert.IsFalse(navigation.Uri.Contains("requestKey=", StringComparison.Ordinal));
+        Assert.IsTrue(cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("選択内容をプレビュー", StringComparison.Ordinal)).Instance.Disabled == false,
+            "After a definitive rejection, explicit abandonment returns the operator to a fresh preview instead of retrying the stage.");
+        Assert.AreEqual(2, handler.Requests.Count, "Abandoning a rejected receipt key must not send another request.");
     }
 
     [TestMethod]
@@ -497,6 +643,17 @@ public sealed class HorseIdentityMigrationAdminComponentTests
         [new(OldHorseId, "horse-4f4ef3a7-9c3c-4878-b7d4-1689b1d2cced", "Ready", false)],
         [new("EventStore", "Horses", 1, new string('C', 64), new string('D', 64))], 10, 256);
 
+    private static HorseIdentityMigrationOperationResponse Operation(Guid operationId, string status,
+        HorseIdentityMigrationManifest manifest, string fingerprint, string? phase = null) =>
+        new(operationId, status, "None", DateTimeOffset.Parse("2026-10-19T00:00:00Z"),
+            DateTimeOffset.Parse("2026-10-19T00:01:00Z"), [])
+        {
+            SavedManifest = manifest,
+            PreviewFingerprint = fingerprint,
+            ExecutionPhase = phase,
+            ExecutionUpdatedAt = phase is null ? null : DateTimeOffset.Parse("2026-10-19T00:01:00Z"),
+        };
+
     private static HorseIdentityMigrationSchemaDiagnostics SchemaDiagnostics(bool complete = true) => new(
         DateTimeOffset.Parse("2026-10-17T01:02:03Z"), complete,
         [new(HorseIdentityMigrationSchemaSurface.EventStore,
@@ -509,6 +666,9 @@ public sealed class HorseIdentityMigrationAdminComponentTests
         public HorseIdentityMigrationPreview? Preview { get; init; }
         public HorseIdentityMigrationOperationResponse? Staged { get; init; }
         public HorseIdentityMigrationOperationResponse? Status { get; init; }
+        public HorseIdentityMigrationOperationResponse? RequestReceipt { get; init; }
+        public HorseIdentityMigrationOperationResponse? Executed { get; init; }
+        public HttpStatusCode? ExecuteStatus { get; init; }
         public HorseIdentityMigrationSchemaDiagnostics? SchemaDiagnostics { get; init; }
         public IReadOnlyList<HorseRacingPrediction.Contracts.Horses.HorseSummaryDto> SearchHorses { get; init; } = [];
         public HttpStatusCode? StageStatus { get; init; }
@@ -523,6 +683,13 @@ public sealed class HorseIdentityMigrationAdminComponentTests
             var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
             var path = request.RequestUri!.AbsolutePath;
             Requests.Add(new(request.Method, path, body));
+            if (path.EndsWith("/execute", StringComparison.Ordinal) && ExecuteStatus is { } executeStatus)
+                return new HttpResponseMessage(executeStatus);
+            if (path.EndsWith("/execute", StringComparison.Ordinal) && Executed is { } executed)
+                return new HttpResponseMessage(HttpStatusCode.Accepted)
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(executed, Json), System.Text.Encoding.UTF8, "application/json"),
+                };
             if (path == "/api/v2/admin/horse-id-migration-operations" && StageStatus is { } stageStatus)
                 return new HttpResponseMessage(stageStatus)
                 {
@@ -545,6 +712,7 @@ public sealed class HorseIdentityMigrationAdminComponentTests
                 "/api/v2/admin/horse-id-migration-previews" => PreviewPending is { } pending
                     ? await pending.Task.WaitAsync(cancellationToken) : Preview,
                 "/api/v2/admin/horse-id-migration-operations" => Staged,
+                _ when path.StartsWith("/api/v2/admin/horse-id-migration-requests/", StringComparison.Ordinal) => RequestReceipt,
                 _ when path.StartsWith("/api/v2/admin/horse-id-migration-operations/", StringComparison.Ordinal) => Status,
                 _ => null,
             };

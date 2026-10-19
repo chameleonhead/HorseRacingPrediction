@@ -29,3 +29,4 @@ EXPOSE 8080
 COPY --from=build /app/publish ./
 
 ENTRYPOINT ["dotnet", "HorseRacingPrediction.Api.dll"]
+CMD ["supervise"]

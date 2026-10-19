@@ -58,12 +58,26 @@ public sealed class HorseIdentityMigrationEndpointsTests
         Assert.IsNotNull(staged);
         Assert.AreEqual("AwaitingActions", staged.Status);
         Assert.AreEqual("None", staged.Reason);
+        Assert.AreEqual(preview.Fingerprint, staged.PreviewFingerprint);
+        Assert.AreEqual(JsonSerializer.Serialize(manifest.Entries),
+            JsonSerializer.Serialize(staged.SavedManifest?.Entries));
+        var journalSnapshot = await GetJournal(stores).GetSavedRequestAsync(staged.OperationId);
+        Assert.IsNotNull(journalSnapshot);
+        Assert.AreEqual(preview.Fingerprint, journalSnapshot.PreviewFingerprint);
         Assert.AreEqual(HorseIdentityMigrationOperationStatus.Staged,
             (await GetJournal(stores).GetStatusAsync(staged.OperationId))!.Status);
 
         var status = await client.GetHorseIdentityMigrationOperationAsync(staged.OperationId);
         Assert.IsNotNull(status);
         Assert.AreEqual("AwaitingActions", status.Status);
+        Assert.AreEqual(preview.Fingerprint, status.PreviewFingerprint);
+        Assert.AreEqual(JsonSerializer.Serialize(manifest.Entries),
+            JsonSerializer.Serialize(status.SavedManifest?.Entries));
+        using var unsupervisedExecute = await transport.PostAsync(
+            $"/api/v2/admin/horse-id-migration-operations/{staged.OperationId:D}/execute", content: null);
+        Assert.AreEqual(HttpStatusCode.ServiceUnavailable, unsupervisedExecute.StatusCode,
+            "An ordinary API host must reject execution before committing an intent.");
+        Assert.IsNull(await GetJournal(stores).GetExecutionIntentAsync(staged.OperationId));
         using var rawStatus = await transport.GetAsync($"/api/v2/admin/horse-id-migration-operations/{staged.OperationId:D}");
         Assert.AreEqual("no-store, no-cache, max-age=0", rawStatus.Headers.CacheControl?.ToString());
         using var unknownStatus = await transport.GetAsync($"/api/v2/admin/horse-id-migration-operations/{Guid.NewGuid():D}");

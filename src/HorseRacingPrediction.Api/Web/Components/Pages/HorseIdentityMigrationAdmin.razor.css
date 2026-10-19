@@ -40,8 +40,12 @@
 .migration-status-form { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; }
 .migration-selection-count { margin-right: auto; }
 .migration-status-form fluent-text-field { flex: 1 1 320px; min-width: 0; }
+.migration-request-key { display: grid; flex: 1 1 320px; gap: 4px; min-width: 0; }
+.migration-request-key code { overflow-wrap: anywhere; }
 .migration-preview,
-.migration-operation-result { border-top: 1px solid var(--neutral-stroke-rest); display: grid; gap: 12px; padding-top: 16px; }
+.migration-operation-result,
+.migration-saved-request { border-top: 1px solid var(--neutral-stroke-rest); display: grid; gap: 12px; min-width: 0; padding-top: 16px; }
+.migration-saved-request p { margin: 0; overflow-wrap: anywhere; }
 .migration-preview-ready,
 .migration-success { border-inline-start: 3px solid var(--status-success-foreground-1); margin: 0; padding: 10px 12px; }
 .migration-preview-blocked,

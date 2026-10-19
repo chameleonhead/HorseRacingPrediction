@@ -2,20 +2,33 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using EventFlow;
+using EventFlow.EntityFramework;
+using EventFlow.EntityFramework.Extensions;
+using EventFlow.Extensions;
 using HorseRacingPrediction.Contracts.Common;
 using HorseRacingPrediction.Api.Identity;
 using HorseRacingPrediction.Api.IdentityMigration;
+using HorseRacingPrediction.Application.Commands.Horses;
+using HorseRacingPrediction.Application.Commands.Predictions;
 using HorseRacingPrediction.Contracts.Identity;
+using HorseRacingPrediction.Domain.Horses;
+using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.Api.Web;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Domain.Predictions;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Api.Tests;
@@ -153,6 +166,142 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
     }
 
     [TestMethod]
+    public async Task MinimalHostReadonlyVerificationRequiresCookieAndAntiforgeryAndTouchesOnlyJournal()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"hrp-readonly-ui-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var state = Path.Combine(root, "journal");
+        var sourcePaths = new[] { Path.Combine(root, "event.db"), Path.Combine(root, "collection.db") };
+        var journal = new HorseIdentityMigrationJournal(state, sourcePaths);
+        var operationId = Guid.NewGuid();
+        var manifest = Manifest();
+        var fingerprint = new string('A', 64);
+        var requestHash = HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(manifest, fingerprint);
+        Assert.IsTrue((await journal.StageWithRequestKeyAsync(operationId, manifest, Guid.NewGuid(), requestHash,
+            fingerprint, DateTimeOffset.UtcNow)).Succeeded);
+        Assert.IsTrue((await journal.CreateExecutionIntentAsync(operationId, requestHash, DateTimeOffset.UtcNow)).Succeeded);
+        var now = DateTimeOffset.UtcNow;
+        foreach (var phase in new[]
+        {
+            HorseIdentityMigrationExecutionPhase.Preparing,
+            HorseIdentityMigrationExecutionPhase.Draining,
+            HorseIdentityMigrationExecutionPhase.StoppingApi,
+            HorseIdentityMigrationExecutionPhase.ApiExited,
+            HorseIdentityMigrationExecutionPhase.BackedUp,
+            HorseIdentityMigrationExecutionPhase.Applying,
+        })
+            Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId, phase, now)).Succeeded);
+        Assert.IsTrue((await journal.ClaimWorkflowAsync(operationId, now)).Succeeded);
+        await using (var lease = await journal.TryAcquireExecutionAsync(operationId, now)
+            ?? throw new AssertFailedException("The readonly verification fixture must acquire its journal execution."))
+        {
+            var evidence = new TypedHorseIdentityPageEvidence(MigrationStoreSurface.EventStore, "EventEntity", 1,
+                new string('B', 64), new string('C', 64), "0", "0");
+            var prepared = new HorseIdentityMigrationPageCheckpoint(evidence, new string('D', 64),
+                HorseIdentityMigrationPageState.Prepared);
+            Assert.IsTrue((await journal.RegisterRequiredPagesAsync(operationId, [prepared], now)).Succeeded);
+            foreach (var pageState in new[]
+            {
+                HorseIdentityMigrationPageState.Prepared,
+                HorseIdentityMigrationPageState.CommittedUnverified,
+                HorseIdentityMigrationPageState.Verified,
+            })
+                Assert.IsTrue((await journal.RecordPageCheckpointAsync(operationId,
+                    prepared with { State = pageState }, now)).Succeeded);
+            await lease.CompleteAsync(now);
+        }
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.Succeeded,
+            (await journal.GetStatusAsync(operationId))!.Status);
+        Assert.AreEqual(HorseIdentityMigrationExecutionPhase.DataSucceeded,
+            (await journal.GetExecutionIntentAsync(operationId))!.Phase);
+        Assert.IsTrue(await journal.CanBeginReadonlyVerificationAsync(operationId));
+
+        var previousExitCode = Environment.ExitCode;
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        builder.Services.Configure<ApiKeyOptions>(options => options.Key = "test-only-key");
+        builder.Services.AddAdminAuthentication();
+        HorseIdentityMigrationRuntimeMode.ConfigureMinimalOperatorCookieChallenges(builder.Services);
+        builder.Services.AddAntiforgery();
+        var app = builder.Build();
+        var hostLifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+        app.UseApiKeyProtection();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseAntiforgery();
+        app.MapAdminLoginEndpoints();
+        HorseIdentityMigrationRuntimeMode.MapReadonlyVerificationEndpoints(app, journal);
+        await app.StartAsync();
+        try
+        {
+            using var client = app.GetTestClient();
+            using var anonymous = await client.GetAsync($"/settings/horse-id-migration?operationId={operationId:D}");
+            Assert.AreEqual(HttpStatusCode.Redirect, anonymous.StatusCode);
+            Assert.IsTrue(anonymous.Headers.Location?.ToString().Contains("/login", StringComparison.Ordinal));
+            Assert.AreEqual(HttpStatusCode.Unauthorized,
+                (await client.PostAsync($"/settings/horse-id-migration/{operationId:D}/verify",
+                    new FormUrlEncodedContent(new Dictionary<string, string>()))).StatusCode);
+
+            using var login = await client.PostAsync("/login", new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["username"] = "user",
+                ["password"] = "test-only-key",
+                ["ReturnUrl"] = $"/settings/horse-id-migration?operationId={operationId:D}",
+            }));
+            Assert.AreEqual(HttpStatusCode.Redirect, login.StatusCode);
+            var authCookie = login.Headers.GetValues("Set-Cookie").Single().Split(';')[0];
+            using var statusRequest = new HttpRequestMessage(HttpMethod.Get,
+                $"/settings/horse-id-migration?operationId={operationId:D}");
+            statusRequest.Headers.Add("Cookie", authCookie);
+            using var status = await client.SendAsync(statusRequest);
+            Assert.AreEqual(HttpStatusCode.OK, status.StatusCode);
+            var html = await status.Content.ReadAsStringAsync();
+            StringAssert.Contains(html, "Run read-only verification");
+            var tokenMatch = System.Text.RegularExpressions.Regex.Match(html,
+                "name=\\\"__RequestVerificationToken\\\" value=\\\"([^\\\"]+)\\\"");
+            Assert.IsTrue(tokenMatch.Success, "The status page must include an antiforgery token only for the eligible operation.");
+            var antiforgeryCookie = status.Headers.GetValues("Set-Cookie").Single(value =>
+                !value.StartsWith("HorseRacingPrediction.Admin=", StringComparison.Ordinal)).Split(';')[0];
+
+            using var rejected = new HttpRequestMessage(HttpMethod.Post,
+                $"/settings/horse-id-migration/{operationId:D}/verify")
+            {
+                Content = new FormUrlEncodedContent(new Dictionary<string, string>()),
+            };
+            rejected.Headers.Add("Cookie", authCookie + "; " + antiforgeryCookie);
+            Assert.AreEqual(HttpStatusCode.BadRequest, (await client.SendAsync(rejected)).StatusCode);
+            Assert.AreEqual(HorseIdentityMigrationExecutionPhase.DataSucceeded,
+                (await journal.GetExecutionIntentAsync(operationId))!.Phase);
+
+            using var accepted = new HttpRequestMessage(HttpMethod.Post,
+                $"/settings/horse-id-migration/{operationId:D}/verify")
+            {
+                Content = new FormUrlEncodedContent(new Dictionary<string, string>
+                {
+                    ["__RequestVerificationToken"] = tokenMatch.Groups[1].Value,
+                }),
+            };
+            accepted.Headers.Add("Cookie", authCookie + "; " + antiforgeryCookie);
+            using var response = await client.SendAsync(accepted);
+            Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
+            StringAssert.Contains((await response.Content.ReadAsStringAsync()).ToLowerInvariant(),
+                "read-only verification was requested");
+            Assert.IsTrue(hostLifetime.ApplicationStopping.IsCancellationRequested);
+            Assert.AreEqual(HorseIdentityMigrationExecutionPhase.Verifying,
+                (await journal.GetExecutionIntentAsync(operationId))!.Phase);
+            Assert.AreEqual(HorseIdentityMigrationSupervisor.VerifyReadyExitCode, Environment.ExitCode);
+            Assert.IsTrue(sourcePaths.All(path => !File.Exists(path)),
+                "The minimal operator surface must not create or inspect business stores.");
+        }
+        finally
+        {
+            Environment.ExitCode = previousExitCode;
+            await app.DisposeAsync();
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public async Task NormalHostRefusesSourceOwnershipWithoutBootstrappingConfiguredStores()
     {
         using var fixture = new RuntimeFixture();
@@ -286,6 +435,7 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
         Assert.AreEqual(2, extraArgument.ExitCode);
         Assert.AreEqual(beforeInvalidCommands, await stores.SourceSnapshotAsync(),
             "Invalid fixed-mode invocations must return before any configured source is read or modified.");
+        await ReplaceSupportedEventsWithCommandBusSeedAsync(stores, oldHorseId, raceId, ticketId, oldEntryId);
 
         var manifest = new HorseIdentityMigrationManifest(
         [
@@ -295,11 +445,20 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
             [stores.EventStorePath, stores.CollectionPath, stores.SchedulePath]);
         var operationId = Guid.NewGuid();
         Assert.IsTrue((await journal.StageAsync(operationId, manifest, DateTimeOffset.UtcNow)).Succeeded);
+        var collectionStore = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
+        {
+            StateDirectory = Path.GetDirectoryName(stores.CollectionPath)!,
+            DatabaseFileName = Path.GetFileName(stores.CollectionPath),
+        }));
+        await collectionStore.SetPausedAsync(true, "standalone fixed CLI fixture",
+            DateTimeOffset.UtcNow.AddSeconds(-901));
 
         var firstRun = await RunMigrationCommandAsync(stores,
             [HorseIdentityMigrationRuntimeMode.CommandName, operationId.ToString("D")]);
         Assert.AreEqual(0, firstRun.ExitCode,
-            "The fixed subcommand must execute the claimed operation through T10's owner-bound engine.");
+            $"The fixed subcommand must execute the claimed operation through T10's owner-bound engine. " +
+            $"Journal status/phase: {(await journal.GetStatusAsync(operationId))?.Status}/" +
+            $"{(await journal.GetExecutionIntentAsync(operationId))?.Phase}; child output: {firstRun.Output}");
         Assert.IsFalse(firstRun.Output.Contains(stores.Root, StringComparison.OrdinalIgnoreCase),
             "CLI output must not disclose configured store paths.");
         Assert.AreEqual(HorseIdentityMigrationOperationStatus.Succeeded,
@@ -334,6 +493,41 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
         new HorseIdentityMigrationManifestEntry(
             "horse-00000000-0000-0000-0000-000000000111", "jra-horse:2024100828", true),
     ]);
+
+    internal static async Task ReplaceSupportedEventsWithCommandBusSeedAsync(
+        HorseIdentityMigrationStoreEngineTests.StoreFixture stores, string horseId, string raceId,
+        string ticketId, string entryId)
+    {
+        var provider = new SqliteDbContextProvider($"Data Source={stores.EventStorePath};Pooling=False");
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(provider);
+        services.AddSingleton<IDbContextProvider<EventStoreDbContext>>(
+            serviceProvider => serviceProvider.GetRequiredService<SqliteDbContextProvider>());
+        services.AddEventFlow(options => options
+            .AddDefaults(typeof(HorseAggregate).Assembly)
+            .AddDefaults(typeof(RaceAggregate).Assembly)
+            .AddDefaults(typeof(RegisterHorseCommand).Assembly)
+            .ConfigureEntityFramework(EntityFrameworkConfiguration.New)
+            .UseEntityFrameworkEventStore<EventStoreDbContext>());
+        try
+        {
+            await using (var context = provider.CreateContext())
+                await context.Database.MigrateAsync();
+            await stores.ExecuteAsync(stores.EventStorePath,
+                "DELETE FROM EventEntity WHERE AggregateName IN ('HorseAggregate', 'PredictionTicketAggregate');");
+            using var eventFlow = services.BuildServiceProvider();
+            var commandBus = eventFlow.GetRequiredService<ICommandBus>();
+            await commandBus.PublishAsync(new RegisterHorseCommand(new HorseId(horseId), "Fixture Horse", "FixtureHorse"),
+                CancellationToken.None);
+            var typedTicketId = new PredictionTicketId(ticketId);
+            await commandBus.PublishAsync(new CreatePredictionTicketCommand(typedTicketId, raceId,
+                "fixture", "preserve-predictor", .5m, "preserve summary"), CancellationToken.None);
+            await commandBus.PublishAsync(new AddPredictionMarkCommand(typedTicketId, entryId, "A", 1, .9m,
+                "preserve mark"), CancellationToken.None);
+        }
+        finally { provider.Dispose(); }
+    }
 
     private static string GetSourceGatePath(string sourcePath) =>
         Path.Combine(Path.GetDirectoryName(sourcePath)!, $".{Path.GetFileName(sourcePath)}.horse-identity-migration.lock");

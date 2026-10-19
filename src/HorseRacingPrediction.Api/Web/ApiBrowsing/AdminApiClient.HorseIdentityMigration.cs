@@ -41,6 +41,20 @@ public sealed partial class AdminApiClient
             $"{HorseIdentityMigrationOperationsPath}/{operationId:D}", cancellationToken);
     }
 
+    public async Task<HorseIdentityMigrationOperationResponse?> ExecuteHorseIdentityMigrationAsync(
+        Guid operationId, CancellationToken cancellationToken = default)
+    {
+        if (operationId == Guid.Empty) return null;
+        using var response = await _httpClient.PostAsync(
+            $"{HorseIdentityMigrationOperationsPath}/{operationId:D}/execute", content: null, cancellationToken)
+            .ConfigureAwait(false);
+        if (response.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.NoContent)
+            return null;
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<HorseIdentityMigrationOperationResponse>(
+            JsonOptions, cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task<T?> PostJsonAsync<T>(string requestUri, object body, CancellationToken cancellationToken)
     {
         using var response = await _httpClient.PostAsJsonAsync(requestUri, body, JsonOptions, cancellationToken)
