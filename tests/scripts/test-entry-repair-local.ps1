@@ -1,7 +1,12 @@
 param(
     [Parameter(Mandatory)][string]$DatabasePath,
     [string]$BaseUrl = 'http://127.0.0.1:5512',
-    [string]$AlternateBaseUrl
+    [string]$AlternateBaseUrl,
+    [ValidateSet('All', 'PrepareHold', 'ContinueAfterRestart')][string]$Phase = 'All',
+    [string]$RaceId,
+    [string]$ExpectedHoldOperationId,
+    [long]$ExpectedHoldGeneration = -1,
+    [int]$ExpectedVersion = -1
 )
 $ErrorActionPreference = 'Stop'
 $target = [Uri]$BaseUrl
@@ -23,23 +28,39 @@ $entries = @(1..14 | ForEach-Object {
     @{ horseNumber = $_; horseName = "ローカル検証馬$_"; jockeyName = 'ローカル検証騎手'; bodyWeight = 450 + $_;
        horseSourceIdentity = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud00202410$($_.ToString('D4'))/AB" }
 })
-$created = Post-LocalJson '/api/races/result-bulk' @{
-    result = @{
-        raceDate = '2026-09-26'; racecourseCode = '中山'; raceNumber = 5; raceName = 'ローカル14頭補正検証';
-        gradeCode = 'G2'; entryCount = 14; isRaceCard = $true; entries = $entries
+if ($Phase -ne 'ContinueAfterRestart') {
+    $created = Post-LocalJson '/api/races/result-bulk' @{
+        result = @{
+            raceDate = '2026-09-26'; racecourseCode = '中山'; raceNumber = 5; raceName = 'ローカル14頭補正検証';
+            gradeCode = 'G2'; entryCount = 14; isRaceCard = $true; entries = $entries
+        }
     }
+    if (-not $created.result.corePersisted -or $created.result.errors.Count -ne 0) { throw ($created | ConvertTo-Json -Depth 8) }
+    $raceId = $created.result.raceId
+} elseif ([string]::IsNullOrWhiteSpace($RaceId)) {
+    throw 'ContinueAfterRestart requires the race ID created before the API process restart.'
 }
-if (-not $created.result.corePersisted -or $created.result.errors.Count -ne 0) { throw ($created | ConvertTo-Json -Depth 8) }
-$raceId = $created.result.raceId
 $repairPath = "/api/v2/admin/races/$raceId/entry-repair/inspection"
 $holdPath = "/api/v2/admin/races/$raceId/entry-repair/hold"
+$holdStatePath = "/api/v2/admin/races/$raceId/entry-repair/hold-state"
 $previewPath = "/api/v2/admin/races/$raceId/entry-repair-previews"
 $applyPath = "/api/v2/admin/races/$raceId/entry-repairs"
 $before = (Invoke-RestMethod -Uri ($BaseUrl + $repairPath) -Headers $headers).inspection
-$holdRequest = @{ operationId = [Guid]::NewGuid().ToString(); expectedGeneration = 0; reason = 'isolated cross-process smoke' }
-$holdResponse = Invoke-RestMethod -Method Put -Uri ($AlternateBaseUrl + $holdPath) -Headers $headers -ContentType 'application/json' -Body (@{ hold = $holdRequest } | ConvertTo-Json)
-$hold = $holdResponse.hold
-if (-not $hold.isQuiescent) { throw ($hold | ConvertTo-Json -Depth 10) }
+$hold = $null
+if ($Phase -ne 'ContinueAfterRestart') {
+    $holdRequest = @{ operationId = [Guid]::NewGuid().ToString(); expectedGeneration = 0; reason = 'isolated cross-process smoke' }
+    $holdResponse = Invoke-RestMethod -Method Put -Uri ($AlternateBaseUrl + $holdPath) -Headers $headers -ContentType 'application/json' -Body (@{ hold = $holdRequest } | ConvertTo-Json)
+    $hold = $holdResponse.hold
+    if (-not $hold.isQuiescent) { throw ($hold | ConvertTo-Json -Depth 10) }
+} else {
+    $hold = (Invoke-RestMethod -Uri ($BaseUrl + $holdStatePath) -Headers $headers).hold
+    if (-not $hold -or -not $hold.isQuiescent -or
+        $hold.operationId -ne $ExpectedHoldOperationId -or
+        $hold.generation -ne $ExpectedHoldGeneration -or
+        $before.version -ne $ExpectedVersion) {
+        throw 'The active quiescent repair hold did not persist unchanged across the API process restart.'
+    }
+}
 $request = @{ task = @{ mode = 'Resource'; resource = @{
     resourceType = 0; provider = 'JRA'; resourceId = '20260926:Nakayama:5'; definitionId = 'race-detail'
     requestedRevision = $hold.requiredRevision; reason = 5; effectiveDate = '2026-09-26'
@@ -48,6 +69,13 @@ $deferred = Post-LocalJson '/api/v2/admin/collection/tasks' $request
 if (-not $deferred.submission.receipt.deferredByRepairHold -or $deferred.submission.receipt.createdTask) { throw 'Cross-process hold did not defer the request.' }
 $heldRead = Invoke-WebRequest -Uri ($BaseUrl + "/api/races/$raceId/context") -Headers $headers -SkipHttpErrorCheck
 if ($heldRead.StatusCode -ne 409) { throw 'Held prediction context was exposed.' }
+if ($Phase -eq 'PrepareHold') {
+    [pscustomobject]@{
+        prepared = $true; raceId = $raceId; inspectionVersion = $before.version
+        holdOperationId = $hold.operationId; holdGeneration = $hold.generation; holdRequiredRevision = $hold.requiredRevision
+    }
+    return
+}
 $manifest = @{
     expectedVersion = $before.version; sourceUrl = 'https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604080520260926/AC';
     observedAt = [DateTimeOffset]::UtcNow.ToString('o'); gradeCode = 'G3'; sourceSnapshotSha256 = ('A' * 64);
