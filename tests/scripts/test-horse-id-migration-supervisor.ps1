@@ -1,9 +1,24 @@
+[CmdletBinding()]
 param(
     [string] $Docker = 'docker',
     [string] $Dotnet = 'dotnet',
     [switch] $WrapperSmokeOnly,
-    [switch] $ObserverSmokeOnly
+    [switch] $ObserverSmokeOnly,
+    [switch] $FastLifecycleSmokeOnly
 )
+$smokeModeCount = [int]$WrapperSmokeOnly.IsPresent + [int]$ObserverSmokeOnly.IsPresent + [int]$FastLifecycleSmokeOnly.IsPresent
+if ($smokeModeCount -gt 1) {
+    throw 'Wrapper, observer, and fast-lifecycle smoke modes are mutually exclusive.'
+}
+if ($FastLifecycleSmokeOnly) {
+    Write-Output 'MODE aged-pause FAST lifecycle preflight (not a 900-second timing proof)'
+} elseif ($WrapperSmokeOnly) {
+    Write-Output 'MODE bounded process-wrapper smoke'
+} elseif ($ObserverSmokeOnly) {
+    Write-Output 'MODE fixed-CLI observer smoke'
+} else {
+    Write-Output 'MODE full real 900-second lifecycle gate'
+}
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
@@ -575,32 +590,51 @@ function Wait-FixedCliObserver([string] $Container, $Observer, [int] $TimeoutSec
 }
 
 function Get-ContainerProcessSnapshot([string] $Container) {
-    $pid1Command = (Invoke-Docker @('exec', $Container, '/bin/cat', '/proc/1/cmdline')).Replace([char]0, ' ').Trim()
-    $taskChildrenText = Invoke-Docker @('exec', $Container, '/bin/sh', '-c', 'for f in /proc/1/task/*/children; do cat "$f"; printf "\n"; done')
-    $children = @(Get-UniqueProcessIdsFromTaskChildren @($taskChildrenText -split "`n"))
-    $childCommands = @()
-    foreach ($childPid in $children) {
-        $command = (Invoke-Docker @('exec', $Container, '/bin/cat', "/proc/$childPid/cmdline")).Replace([char]0, ' ').Trim()
-        $status = Invoke-Docker @('exec', $Container, '/bin/cat', "/proc/$childPid/status")
-        $parentLine = ((@($status -split "`n" | Where-Object { $_.StartsWith('PPid:') }) | Select-Object -First 1).Trim())
-        $stat = Invoke-Docker @('exec', $Container, '/bin/cat', "/proc/$childPid/stat")
-        if ($stat -notmatch '^\d+ \(.*\) (?<fields>.*)$') { throw "Could not parse start identity for child PID $childPid." }
-        $statFields = @($Matches.fields -split '\s+')
-        if ($statFields.Count -le 19) { throw "Child PID $childPid had incomplete process identity data." }
-        $childCommands += [pscustomobject]@{
-            ProcessId = $childPid
-            Command = $command
-            ParentLine = $parentLine
-            State = $statFields[0]
-            StartIdentity = $statFields[19]
+    for ($attempt = 0; $attempt -lt 6; $attempt++) {
+        try {
+            $pid1Command = (Invoke-Docker @('exec', $Container, '/bin/cat', '/proc/1/cmdline')).Replace([char]0, ' ').Trim()
+            $taskChildrenText = Invoke-Docker @('exec', $Container, '/bin/sh', '-c', 'for f in /proc/1/task/*/children; do cat "$f"; printf "\n"; done')
+            $children = @(Get-UniqueProcessIdsFromTaskChildren @($taskChildrenText -split "`n"))
+            $childCommands = @()
+            foreach ($childPid in $children) {
+                $command = (Invoke-Docker @('exec', $Container, '/bin/cat', "/proc/$childPid/cmdline")).Replace([char]0, ' ').Trim()
+                $status = Invoke-Docker @('exec', $Container, '/bin/cat', "/proc/$childPid/status")
+                $parentLine = ((@($status -split "`n" | Where-Object { $_.StartsWith('PPid:') }) | Select-Object -First 1).Trim())
+                $stat = Invoke-Docker @('exec', $Container, '/bin/cat', "/proc/$childPid/stat")
+                if ($stat -notmatch '^\d+ \(.*\) (?<fields>.*)$') { throw "Could not parse start identity for child PID $childPid." }
+                $statFields = @($Matches.fields -split '\s+')
+                if ($statFields.Count -le 19) { throw "Child PID $childPid had incomplete process identity data." }
+                $childCommands += [pscustomobject]@{
+                    ProcessId = $childPid
+                    Command = $command
+                    ParentLine = $parentLine
+                    State = $statFields[0]
+                    StartIdentity = $statFields[19]
+                }
+            }
+            return [pscustomobject]@{ Pid1Command = $pid1Command; Children = $childCommands }
+        }
+        catch {
+            if ($_.Exception.Message -notmatch '/proc/\d+/(cmdline|status|stat): No such file or directory' -or $attempt -eq 5) {
+                throw
+            }
+            Start-Sleep -Milliseconds 25
         }
     }
-    return [pscustomobject]@{ Pid1Command = $pid1Command; Children = $childCommands }
+    throw 'The bounded PID-1 process snapshot could not obtain a stable child identity.'
 }
 
 function Assert-Pid1ApiShape([string] $Container, [string] $ExpectedChildFlag) {
     $snapshot = Get-ContainerProcessSnapshot $Container
     return Assert-Pid1ApiSnapshot $snapshot $ExpectedChildFlag
+}
+
+function Get-Pid1ChildMode([string] $Command) {
+    if ($Command -match '--internal-api-child') { return 'api-before-or-after' }
+    if ($Command -match '/app/HorseRacingPrediction\.Api\.dll horse-id-migration [0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') {
+        return 'fixed-cli'
+    }
+    return $null
 }
 
 function Assert-Pid1ApiSnapshot($snapshot, [string] $ExpectedChildFlag) {
@@ -629,6 +663,22 @@ function Test-Pid1ApiSnapshotCounterexamples {
         })
     }
     [void](Assert-Pid1ApiSnapshot $base '--internal-api-child')
+    if ((Get-Pid1ChildMode $base.Children[0].Command) -ne 'api-before-or-after') {
+        throw 'The PID-1 command classifier rejected the expected internal API child.'
+    }
+    $fixedCliCommand = '/usr/share/dotnet/dotnet /app/HorseRacingPrediction.Api.dll horse-id-migration 9c8c9dc5-65ff-445f-a888-afc1988bbb69'
+    if ((Get-Pid1ChildMode $fixedCliCommand) -ne 'fixed-cli') {
+        throw 'The PID-1 command classifier rejected the fixed migration CLI with its actual operation-ID argv.'
+    }
+    foreach ($unexpectedCommand in @(
+        '/usr/share/dotnet/dotnet /app/HorseRacingPrediction.Api.dll horse-id-migration-operation 9c8c9dc5-65ff-445f-a888-afc1988bbb69',
+        '/usr/share/dotnet/dotnet /app/Other.Api.dll horse-id-migration 9c8c9dc5-65ff-445f-a888-afc1988bbb69',
+        '/usr/share/dotnet/dotnet /app/HorseRacingPrediction.Api.dll horse-id-migration invalid-id extra-arg'
+    )) {
+        if ($null -ne (Get-Pid1ChildMode $unexpectedCommand)) {
+            throw "The PID-1 command classifier accepted an unexpected child: $unexpectedCommand"
+        }
+    }
     foreach ($invalid in @(
         [pscustomobject]@{ Snapshot = [pscustomobject]@{ Pid1Command = $base.Pid1Command; Children = @([pscustomobject]@{
             ProcessId = 40; Command = $base.Children[0].Command; ParentLine = 'PPid: 0'; State = 'S'; StartIdentity = '12345'
@@ -701,7 +751,7 @@ function Wait-ForMigration([string] $BaseUrl, [string] $ApiKey, [string] $Operat
 }
 
 function Wait-ForPreparationDrain([string] $BaseUrl, [string] $ApiKey, [string] $OperationId,
-    [string] $Container, [string] $PauseTimestampPath, [int] $ApiProcessId) {
+    [string] $Container, [string] $PauseTimestampPath, [int] $ApiProcessId, [bool] $AllowAlreadyElapsed = $false) {
     $pauseStartedAt = [DateTimeOffset]::Parse((Get-Content -Raw -LiteralPath $PauseTimestampPath).Trim()).ToUniversalTime()
     $deadline = $pauseStartedAt.AddSeconds(900)
     $sawDraining = $false
@@ -730,7 +780,9 @@ function Wait-ForPreparationDrain([string] $BaseUrl, [string] $ApiKey, [string] 
         if (Test-PreparationWindowObservation ([DateTimeOffset]::UtcNow) $deadline $status.executionPhase $apiChildMatches $false) { break }
         Start-Sleep -Seconds 1
     }
-    if (-not $sawDraining) { throw 'Execute did not enter the persisted Draining phase during its full pause window.' }
+    if (-not $sawDraining -and -not $AllowAlreadyElapsed) {
+        throw 'Execute did not enter the persisted Draining phase during its full pause window.'
+    }
 }
 
 function Wait-ForStoppedCliAfterBackup([string] $Container, [string] $DataDirectory,
@@ -745,11 +797,11 @@ function Wait-ForStoppedCliAfterBackup([string] $Container, [string] $DataDirect
         }
         if ($snapshot.Children.Count -eq 1) {
             $child = $snapshot.Children[0]
-            $isExpectedStoppedCli = $child.ProcessId -eq $ObserverResult.ProcessId
-                -and $child.StartIdentity -eq $ObserverResult.StartIdentity
-                -and $child.State -in @('T', 't')
-                -and $child.ParentLine -match '^PPid:\s+1$'
-                -and (Test-IsFixedCliCandidate 1 $child.Command.Trim() $OperationId)
+            $isExpectedStoppedCli = ($child.ProcessId -eq $ObserverResult.ProcessId) -and
+                ($child.StartIdentity -eq $ObserverResult.StartIdentity) -and
+                ($child.State -in @('T', 't')) -and
+                ($child.ParentLine -match '^PPid:\s+1$') -and
+                (Test-IsFixedCliCandidate 1 $child.Command.Trim() $OperationId)
             if ($isExpectedStoppedCli -and (Test-Path -LiteralPath $receiptPath)) {
                 return $child
             }
@@ -790,6 +842,21 @@ function Reset-DisposablePauseWindow([string] $BaseUrl, [string] $ApiKey, [strin
         throw 'The explicit pause mutation did not refresh the persisted pause timestamp.'
     }
     Set-Content -LiteralPath $PauseTimestampPath -Value ([DateTimeOffset]::Parse([string]$state.pipeline.updatedAt).ToUniversalTime().ToString('O')) -NoNewline
+}
+
+function Assert-AgedDisposablePauseWindow([string] $BaseUrl, [string] $ApiKey, [string] $PauseTimestampPath) {
+    $state = Invoke-Api $BaseUrl '/api/v2/admin/collection/pipeline-state' -ApiKey $ApiKey
+    if (-not $state.pipeline.isPaused -or -not $state.pipeline.updatedAt) {
+        throw 'The disposable pipeline must remain paused with a persisted timestamp for the fast lifecycle preflight.'
+    }
+    $fixtureTimestamp = [DateTimeOffset]::Parse((Get-Content -Raw -LiteralPath $PauseTimestampPath).Trim()).ToUniversalTime()
+    $persistedTimestamp = [DateTimeOffset]::Parse([string]$state.pipeline.updatedAt).ToUniversalTime()
+    if ([Math]::Abs(($persistedTimestamp - $fixtureTimestamp).TotalSeconds) -ge 1) {
+        throw 'API bootstrap changed the persisted pause timestamp from the exported fast fixture.'
+    }
+    if (([DateTimeOffset]::UtcNow - $persistedTimestamp).TotalSeconds -le 900) {
+        throw 'The persisted disposable pause timestamp is not older than the full 900-second drain window.'
+    }
 }
 
 function Assert-DisposablePath([string] $Path) {
@@ -845,7 +912,10 @@ try {
         'test', $testProject, '-c', 'Release', '--no-restore', '--filter', $fixtureMethod,
         '--logger', 'console;verbosity=minimal')
     $fixtureOutput = Invoke-External -FilePath $dotnetCommand -Arguments $fixtureArguments -TimeoutSeconds 300 `
-        -Environment @{ HRP_HORSE_IDENTITY_SUPERVISOR_FIXTURE_DIR = $happyData }
+        -Environment @{
+            HRP_HORSE_IDENTITY_SUPERVISOR_FIXTURE_DIR = $happyData
+            HRP_HORSE_IDENTITY_SUPERVISOR_FIXTURE_PAUSE_AGED = $(if ($FastLifecycleSmokeOnly) { '1' } else { '' })
+        }
     if (-not $fixtureOutput.Contains('ExportProductionContainerFixtureWhenRequested')) {
         # VSTest may suppress names for a one-test success; filesystem evidence below is authoritative.
     }
@@ -875,16 +945,22 @@ try {
     $happyPort = Get-PublishedPort $happyContainer
     $happyUrl = "http://127.0.0.1:$happyPort"
     Wait-Api $happyUrl $apiKey
+    if ($FastLifecycleSmokeOnly) {
+        Assert-AgedDisposablePauseWindow $happyUrl $apiKey (Join-Path $happyData 'pause-start.txt')
+    }
     $initialChild = Assert-Pid1ApiShape $happyContainer '--internal-api-child'
     $happyOperationId = Stage-Operation $happyUrl $apiKey
-    Reset-DisposablePauseWindow $happyUrl $apiKey (Join-Path $happyData 'pause-start.txt')
-    [void](Invoke-Api $happyUrl "/api/v2/admin/horse-id-migration-operations/$happyOperationId/execute" 'POST' @{} $apiKey)
+    if (-not $FastLifecycleSmokeOnly) {
+        Reset-DisposablePauseWindow $happyUrl $apiKey (Join-Path $happyData 'pause-start.txt')
+    }
     $happyObserver = Start-FixedCliObserver $happyContainer $happyOperationId 'record'
+    [void](Invoke-Api $happyUrl "/api/v2/admin/horse-id-migration-operations/$happyOperationId/execute" 'POST' @{} $apiKey)
     Wait-ForPreparationDrain $happyUrl $apiKey $happyOperationId $happyContainer `
-        (Join-Path $happyData 'pause-start.txt') $initialChild.ProcessId
-    $happyCli = Wait-FixedCliObserver $happyContainer $happyObserver
+        (Join-Path $happyData 'pause-start.txt') $initialChild.ProcessId ([bool]$FastLifecycleSmokeOnly)
+    $observerTimeoutSeconds = if ($FastLifecycleSmokeOnly) { 180 } else { 1250 }
+    $happyCli = Wait-FixedCliObserver $happyContainer $happyObserver $observerTimeoutSeconds
 
-    $happyDeadline = [DateTimeOffset]::UtcNow.AddMinutes(40)
+    $happyDeadline = [DateTimeOffset]::UtcNow.AddMinutes($(if ($FastLifecycleSmokeOnly) { 4 } else { 40 }))
     $observedChildModes = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     if ($happyCli.ProcessId -le 0 -or $happyCli.StartIdentity -notmatch '^\d+$') {
         throw 'The happy-path observer did not record the exact fixed CLI process identity.'
@@ -895,8 +971,8 @@ try {
         if ($snapshot.Children.Count -gt 1) { throw 'More than one service child was live under PID 1.' }
         if ($snapshot.Children.Count -eq 1) {
             $command = $snapshot.Children[0].Command
-            if ($command -match '--internal-api-child') { [void]$observedChildModes.Add('api-before-or-after') }
-            elseif ($command -match 'horse-id-migration-operation') { [void]$observedChildModes.Add('fixed-cli') }
+            $childMode = Get-Pid1ChildMode $command
+            if ($childMode) { [void]$observedChildModes.Add($childMode) }
             else { throw "PID 1 spawned an unexpected child command: $command" }
         }
         try {
@@ -948,15 +1024,22 @@ try {
     $crashPort = Get-PublishedPort $crashContainer
     $crashUrl = "http://127.0.0.1:$crashPort"
     Wait-Api $crashUrl $crashKey
+    if ($FastLifecycleSmokeOnly) {
+        Assert-AgedDisposablePauseWindow $crashUrl $crashKey (Join-Path $crashData 'pause-start.txt')
+    }
     $crashOperationId = Stage-Operation $crashUrl $crashKey
-    Reset-DisposablePauseWindow $crashUrl $crashKey (Join-Path $crashData 'pause-start.txt')
-    [void](Invoke-Api $crashUrl "/api/v2/admin/horse-id-migration-operations/$crashOperationId/execute" 'POST' @{} $crashKey)
+    if (-not $FastLifecycleSmokeOnly) {
+        Reset-DisposablePauseWindow $crashUrl $crashKey (Join-Path $crashData 'pause-start.txt')
+    }
     $crashInitialChild = Assert-Pid1ApiShape $crashContainer '--internal-api-child'
     $crashObserver = Start-FixedCliObserver $crashContainer $crashOperationId 'stop'
+    [void](Invoke-Api $crashUrl "/api/v2/admin/horse-id-migration-operations/$crashOperationId/execute" 'POST' @{} $crashKey)
     Wait-ForPreparationDrain $crashUrl $crashKey $crashOperationId $crashContainer `
-        (Join-Path $crashData 'pause-start.txt') $crashInitialChild.ProcessId
-    $crashCli = Wait-FixedCliObserver $crashContainer $crashObserver
-    $stoppedCli = Wait-ForStoppedCliAfterBackup $crashContainer $crashData $crashOperationId $crashCli
+        (Join-Path $crashData 'pause-start.txt') $crashInitialChild.ProcessId ([bool]$FastLifecycleSmokeOnly)
+    $crashCli = Wait-FixedCliObserver $crashContainer $crashObserver $observerTimeoutSeconds
+    $stoppedCliTimeoutSeconds = if ($FastLifecycleSmokeOnly) { 180 } else { 300 }
+    $stoppedCli = Wait-ForStoppedCliAfterBackup $crashContainer $crashData $crashOperationId $crashCli `
+        $stoppedCliTimeoutSeconds
     $crashSourceFingerprint = Get-SourceFileFingerprint $crashData
     $beforeKill = Get-ContainerProcessSnapshot $crashContainer
     if (($beforeKill.Children.Count -ne 1) -or
@@ -967,6 +1050,8 @@ try {
     }
     Invoke-Docker @('exec', $crashContainer, '/bin/kill', '-KILL', [string]$crashCli.ProcessId) | Out-Null
     Wait-ForContainerRestart $crashContainer 1
+    $crashPort = Get-PublishedPort $crashContainer
+    $crashUrl = "http://127.0.0.1:$crashPort"
     Wait-Api $crashUrl $crashKey
     $blockedChild = Assert-Pid1ApiShape $crashContainer '--internal-blocked-child'
     $blockedStatus = Invoke-Api $crashUrl "/api/v2/admin/horse-id-migration-operations/$crashOperationId" -ApiKey $crashKey
@@ -1000,7 +1085,11 @@ try {
         throw "The disposable PID-1 supervisor did not report the expected graceful TERM exit (wait='$termExitCode', state='$termState')."
     }
     $harnessSucceeded = $true
-    Write-Output 'PASS real production image PID-1/API/fixed-CLI handoff, 900-second pause, backup/postcheck, killed-child blocked restart, and bounded cleanup'
+    if ($FastLifecycleSmokeOnly) {
+        Write-Output 'PASS aged-pause FAST lifecycle preflight: production image PID-1/API/fixed-CLI handoff, backup/postcheck, killed-child blocked restart, and bounded cleanup; real 900-second timing remains unproven'
+    } else {
+        Write-Output 'PASS real production image PID-1/API/fixed-CLI handoff, 900-second pause, backup/postcheck, killed-child blocked restart, and bounded cleanup'
+    }
 }
 finally {
     if ($harnessSucceeded) {

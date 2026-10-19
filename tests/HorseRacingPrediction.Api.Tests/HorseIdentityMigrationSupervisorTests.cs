@@ -47,7 +47,16 @@ public sealed class HorseIdentityMigrationSupervisorTests
     public async Task ExportProductionContainerFixtureWhenRequested()
     {
         var requestedDirectory = Environment.GetEnvironmentVariable("HRP_HORSE_IDENTITY_SUPERVISOR_FIXTURE_DIR");
-        if (string.IsNullOrWhiteSpace(requestedDirectory)) return;
+        var pauseAgeRequested = Environment.GetEnvironmentVariable(
+            "HRP_HORSE_IDENTITY_SUPERVISOR_FIXTURE_PAUSE_AGED");
+        if (!string.IsNullOrWhiteSpace(pauseAgeRequested) && pauseAgeRequested != "1")
+            throw new InvalidOperationException("The disposable fixture pause-age flag must be exactly '1'.");
+        if (string.IsNullOrWhiteSpace(requestedDirectory))
+        {
+            if (!string.IsNullOrWhiteSpace(pauseAgeRequested))
+                throw new InvalidOperationException("The disposable fixture pause-age flag requires a fixture export directory.");
+            return;
+        }
 
         var outputDirectory = Path.GetFullPath(requestedDirectory);
         var temporaryRoot = Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar)
@@ -72,7 +81,9 @@ public sealed class HorseIdentityMigrationSupervisorTests
             StateDirectory = Path.GetDirectoryName(stores.CollectionPath)!,
             DatabaseFileName = Path.GetFileName(stores.CollectionPath),
         }));
-        await collectionStore.SetPausedAsync(true, "isolated supervisor fixture", DateTimeOffset.UtcNow);
+        var pauseStartedAt = DateTimeOffset.UtcNow;
+        if (pauseAgeRequested == "1") pauseStartedAt -= TimeSpan.FromMinutes(16);
+        await collectionStore.SetPausedAsync(true, "isolated supervisor fixture", pauseStartedAt);
         var pipeline = await collectionStore.GetPipelineStateAsync();
         if (!pipeline.IsPaused || pipeline.UpdatedAt is null)
             throw new InvalidOperationException("The disposable fixture did not persist its collection pause timestamp.");
