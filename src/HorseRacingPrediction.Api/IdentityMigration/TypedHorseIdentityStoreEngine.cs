@@ -109,7 +109,9 @@ internal sealed class TypedHorseIdentityStoreEngine(TypedHorseIdentityStoreReade
             .Select(item => new HorseIdentityMigrationPreviewRoot(item.OldHorseId, item.DestinationHorseId,
                 item.SourceStatus.ToString(), item.HasTargetCollision)).ToArray();
         var typed = snapshot.TypedReferences;
-        var pages = typed?.Pages.OrderBy(item => item.Surface).ThenBy(item => item.Table, StringComparer.Ordinal)
+        var pages = typed?.Pages
+            .Where(item => !string.Equals(item.BeforeHash, item.ExpectedAfterHash, StringComparison.Ordinal))
+            .OrderBy(item => item.Surface).ThenBy(item => item.Table, StringComparer.Ordinal)
             .ThenBy(item => item.FirstKey, StringComparer.Ordinal).ThenBy(item => item.LastKey, StringComparer.Ordinal)
             .Select(item => new HorseIdentityMigrationPreviewPage(item.Surface.ToString(), item.Table,
                 item.RowCount, item.BeforeHash, item.ExpectedAfterHash)).ToArray() ?? [];

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text;
 using HorseRacingPrediction.Api.Identity;
 using HorseRacingPrediction.Api.IdentityMigration;
 using HorseRacingPrediction.Contracts.Identity;
@@ -34,6 +35,62 @@ public sealed class HorseIdentityMigrationPreviewTests
         Assert.DoesNotContain(fixture.Root, json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Data Source", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("eventJsonSerializer", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [TestMethod]
+    public async Task LargeUnrelatedEventStoreStaysStageableAndFingerprintBindsOmittedPages()
+    {
+        await using var fixture = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        await SeedUnrelatedHorseEventsAsync(fixture, 10_000);
+        var engine = fixture.CreateEngineWithEventFlow();
+        var snapshot = await fixture.CreateReadersWithEventFlow().InspectAsync(
+            HorseIdentityMigrationManifestPolicy.Validate(Manifest()).Mappings, CancellationToken.None);
+
+        var preview = await engine.InspectPreviewAsync(Manifest(), CancellationToken.None);
+
+        Assert.IsTrue(preview.CanStage, string.Join(',', preview.Blockers));
+        Assert.IsTrue(snapshot.TypedReferenceClosureInspected);
+        Assert.IsTrue(snapshot.TypedReferences?.IsComplete, snapshot.TypedReferences?.Failure);
+        var unfilteredPages = snapshot.TypedReferences!.Pages.Select(page => new HorseIdentityMigrationPreviewPage(
+            page.Surface.ToString(), page.Table, page.RowCount, page.BeforeHash, page.ExpectedAfterHash)).ToArray();
+        var unfilteredPreview = preview with { Pages = unfilteredPages };
+        var unfilteredSummaryBytes = JsonSerializer.SerializeToUtf8Bytes(unfilteredPreview,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)).Length;
+        var internalSummaryBytes = snapshot.TypedReferences.Pages.Sum(page =>
+            Encoding.UTF8.GetByteCount(page.Surface.ToString()) + Encoding.UTF8.GetByteCount(page.Table)
+            + Encoding.UTF8.GetByteCount(page.BeforeHash) + Encoding.UTF8.GetByteCount(page.ExpectedAfterHash)
+            + (page.FirstKey is null ? 0 : Encoding.UTF8.GetByteCount(page.FirstKey))
+            + (page.LastKey is null ? 0 : Encoding.UTF8.GetByteCount(page.LastKey)) + sizeof(long) + sizeof(int));
+        Assert.IsGreaterThan(HorseIdentityMigrationPreview.MaximumSummaryBytes, unfilteredSummaryBytes,
+            "The prior public all-pages summary must exceed its response cap.");
+        Assert.IsLessThan(HorseIdentityMigrationPreview.MaximumSummaryBytes, internalSummaryBytes,
+            "The fixture must stay within the reader's independent immutable-evidence budget.");
+        Assert.AreEqual(HorseIdentityMigrationPreviewBlocker.SummaryTooLarge,
+            TypedHorseIdentityStoreEngine.BoundPreviewSummary(unfilteredPreview).Blockers.Single());
+        Assert.IsNotNull(preview.Fingerprint);
+        Assert.IsGreaterThan(10_000L, preview.InspectedRows);
+        Assert.IsGreaterThan(1_000_000L, preview.InspectedBytes);
+        Assert.IsLessThan(10, preview.Pages.Count, "Unchanged evidence pages should not appear in the operator's conversion-page list.");
+        Assert.IsTrue(preview.Pages.All(page => !string.Equals(page.BeforeHash, page.ExpectedAfterHash,
+            StringComparison.Ordinal)));
+        Assert.IsTrue(preview.Pages.Any(page => page.Table == "EventEntity"));
+
+        var visiblePages = preview.Pages.ToArray();
+        var visibleFingerprint = preview.Fingerprint;
+        await fixture.ExecuteAsync(fixture.EventStorePath,
+            "UPDATE EventEntity SET BatchId = 'mutated-batch' WHERE GlobalSequenceNumber = 10001;");
+
+        var changedUnrelatedEvidence = await engine.InspectPreviewAsync(Manifest(), CancellationToken.None);
+
+        Assert.IsTrue(changedUnrelatedEvidence.CanStage, string.Join(',', changedUnrelatedEvidence.Blockers));
+        Assert.AreNotEqual(visibleFingerprint, changedUnrelatedEvidence.Fingerprint,
+            "The fingerprint must still bind changes to internal pages omitted from the public conversion list.");
+        CollectionAssert.AreEqual(visiblePages, changedUnrelatedEvidence.Pages.ToArray(),
+            "A non-transformed page remains absent even though its data still changes the full fingerprint.");
+        Assert.AreEqual(preview.InspectedRows, changedUnrelatedEvidence.InspectedRows);
+        Assert.AreEqual(preview.InspectedBytes, changedUnrelatedEvidence.InspectedBytes);
     }
 
     [TestMethod]
@@ -139,6 +196,32 @@ public sealed class HorseIdentityMigrationPreviewTests
     private static HorseIdentityMigrationManifest Manifest() => new([
         new HorseIdentityMigrationManifestEntry(OldHorseId, JraIdentity, true),
     ]);
+
+    private static Task SeedUnrelatedHorseEventsAsync(
+        HorseIdentityMigrationStoreEngineTests.StoreFixture fixture, int count)
+    {
+        return fixture.ExecuteAsync(fixture.EventStorePath, $$"""
+            WITH RECURSIVE seq(value) AS (
+                SELECT 2 UNION ALL SELECT value + 1 FROM seq WHERE value < {{count + 1}}
+            )
+            , unrelated(value, stream_key, stream_sequence) AS (
+                SELECT value, (value - 2) / 2, ((value - 2) % 2) + 1 FROM seq
+            )
+            INSERT INTO EventEntity
+                (GlobalSequenceNumber, AggregateId, AggregateName, AggregateSequenceNumber, BatchId, Data, Metadata)
+            SELECT unrelated.value,
+                   'horse-33333333-3333-4333-8333-' || printf('%012d', unrelated.stream_key + 1),
+                   source.AggregateName, unrelated.stream_sequence, source.BatchId, source.Data,
+                   replace(replace(replace(source.Metadata, '{{OldHorseId}}',
+                       'horse-33333333-3333-4333-8333-' || printf('%012d', unrelated.stream_key + 1)),
+                       '"aggregate_sequence_number":"1"',
+                       '"aggregate_sequence_number":"' || unrelated.stream_sequence || '"'),
+                       '"global_sequence_number":"1"',
+                       '"global_sequence_number":"' || unrelated.value || '"')
+            FROM unrelated CROSS JOIN EventEntity AS source
+            WHERE source.AggregateId = '{{OldHorseId}}';
+            """);
+    }
 
     private static string DestinationHorseId() => HorseIdentityMigrationManifestPolicy.Validate(Manifest())
         .Mappings.Single().DestinationHorseId;
