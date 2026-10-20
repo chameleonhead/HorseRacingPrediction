@@ -220,13 +220,32 @@ public sealed class HorseIdentityMigrationManagedBackupTests
         var root = new DriveInfo("/");
         Assert.AreNotEqual(root.DriveFormat, shm.DriveFormat, "The test requires a destination filesystem distinct from root.");
         const long reserve = 64L * 1024 * 1024;
-        Assert.IsTrue(root.AvailableFreeSpace > reserve * 2);
-        Assert.IsTrue(shm.AvailableFreeSpace < reserve * 2);
         using var mountFixture = new BackupFixture("/dev/shm");
-        var backup = new HorseIdentityMigrationManagedBackup(mountFixture.StateDirectory);
+        var expectedProbePath = Path.GetFullPath(mountFixture.StateDirectory);
+        var lowCapacityProbePaths = new List<string>();
+        var backup = new HorseIdentityMigrationManagedBackup(mountFixture.StateDirectory, path =>
+        {
+            var probePath = Path.GetFullPath(path);
+            lowCapacityProbePaths.Add(probePath);
+            return probePath == expectedProbePath ? reserve : long.MaxValue;
+        });
         await Assert.ThrowsExactlyAsync<IOException>(() =>
             backup.CreateAsync(mountFixture.OperationId, mountFixture.Sources, mountFixture.Journal));
+        CollectionAssert.Contains(lowCapacityProbePaths, expectedProbePath,
+            "Capacity admission must probe the nearest existing directory on the actual destination mount.");
         Assert.IsFalse(Directory.Exists(mountFixture.PackagePath), "The actual destination mount must fail capacity admission before package creation.");
+
+        using var highCapacityFixture = new BackupFixture("/dev/shm");
+        var highCapacityProbePaths = new List<string>();
+        var highCapacityBackup = new HorseIdentityMigrationManagedBackup(highCapacityFixture.StateDirectory, path =>
+        {
+            highCapacityProbePaths.Add(Path.GetFullPath(path));
+            return long.MaxValue;
+        });
+        await highCapacityBackup.CreateAsync(highCapacityFixture.OperationId, highCapacityFixture.Sources, highCapacityFixture.Journal);
+        CollectionAssert.Contains(highCapacityProbePaths, Path.GetFullPath(highCapacityFixture.StateDirectory),
+            "High available capacity on the actual destination mount must be accepted.");
+        Assert.IsTrue(Directory.Exists(highCapacityFixture.PackagePath));
     }
 
     private sealed class BackupFixture : IDisposable
