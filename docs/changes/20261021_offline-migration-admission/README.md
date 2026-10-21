@@ -31,7 +31,7 @@ Keep token-free completion inside the admin screen. Replace the requirement to f
 4. Under that ownership, validate the SQLite-consistent managed backup and filesystem capacity. Run the canonical full schema/root/typed/unknown-data/collision census with a supervised finite token and existing30min/1M/4GiB reader bounds. Atomically seal its real fingerprint to the exact immutable pending manifest before Applying/write authorization. Incomplete, conflict, timeout or cancellation cannot seal or write.
 5. Reuse fixed CLI/writer preflight/page freshness checks and full post-verification. Keep their second read; avoiding it is out of scope. Unknown/collision/partial/crash remains blocked, not automatically replayed or resumed. Restart normal API paused only after verification succeeds; show result after reconnect. Retry affected jobs and resume collection remain separate authorized actions.
 
-No new service, generic background queue, GitHub token, shell UI or preview-only second offline cycle. Existing online full-preview diagnostics can remain an optional read-only tool, not a prerequisite for pending-mode requests. Existing bound requests retain their original binding semantics; no destructive journal rewrite or reinterpretation of their hashes.
+No new service, generic background queue, GitHub token, shell UI or preview-only second offline cycle. Existing online full-preview diagnostics can remain an optional read-only tool, not a prerequisite for pending-mode requests. Existing bound requests retain their original binding semantics; no destructive journal rewrite or reinterpretation of their hashes. The30min limit is for full inspection, not total downtime: existing drain, backup, writer and post-verification add their own bounded time. Do not promise a30min total outage or production throughput from synthetic fixtures.
 
 ### Wireframe (desktop and390px)
 
@@ -87,7 +87,7 @@ No unresolved agent objection. Production throughput, total volume and extra Eco
 | AC3 | Existing authorized supervisor stops/drains normal API, validates backup/capacity, completes all configured-data census before firstwrite, retains collisions/unknown data/cancel/row/byte/time limits and writer freshness | P3,P4 | Independent beforewrite invariant/counterexamples and full all-store tests, held API/failed backup cannot apply | Not started |
 | AC4 | Full data preserved except approved identity changes; restore evidence retained; partial/kill/timeouts remain blocked/no replay/no auto resume; successful restart paused | P2,P3,P4 | Typed/global hashes, backup/postcheck/replay tests, real lifecycle/crash controls | Not started |
 | AC5 | Final source matches actual tested input, exact formatter/build/fullCI and original deploy gates pass | P4,P5 | Native complete commands +matching-SHA CI/deploy/annotations; no skipped mandatory branch | Not started |
-| AC6 | Actual original3 approved pairs migrate successfully with backup and postchecks; selected replacement jobs succeed, then separate resume demonstrates three-lane progress or precise evidenced external blocker | P5 | Actual UI GUID/status/receipt, failure history and lane timestamps; no forced fourthpair/reset | Not started |
+| AC6 | Actual original3 approved pairs migrate successfully with backup and postchecks; selected replacement jobs succeed, then separate resume demonstrates three-lane progress | P5 | Actual UI GUID/status/receipt, failure history and lane timestamps; no forced fourthpair/reset. An external blocker leaves this AC and recovery unfinished | Not started |
 
 ## Task plan
 
