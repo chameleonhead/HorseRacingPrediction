@@ -21,7 +21,12 @@ public sealed class HorseIdentityMigrationClientTests
         var manifest = new HorseIdentityMigrationManifest(
         [new HorseIdentityMigrationManifestEntry(
             "horse-11111111-1111-4111-8111-111111111111", "jra-horse:2024100828", true)]);
-        var preview = new HorseIdentityMigrationPreview(true, new string('A', 64), [], [], [], [], [], 1, 64);
+        var preview = new HorseIdentityMigrationPreview(true, new string('A', 64), [], [], [], [], [], 1, 64)
+        {
+            InspectionDiagnostic = new(HorseIdentityMigrationInspectionPhase.TypedReferences,
+                HorseIdentityMigrationInspectionResult.Running, HorseIdentityMigrationSchemaSurface.EventStore,
+                "EventEntity", 1, 64, 12),
+        };
         var operationId = Guid.NewGuid();
         var requestKey = Guid.NewGuid();
         var response = new HorseIdentityMigrationOperationResponse(operationId, "AwaitingActions", "None",
@@ -65,6 +70,8 @@ public sealed class HorseIdentityMigrationClientTests
         var observedPreview = await client.PreviewHorseIdentityMigrationAsync(manifest);
         Assert.IsNotNull(observedPreview);
         Assert.AreEqual(new string('A', 64), observedPreview.Fingerprint);
+        Assert.AreEqual(HorseIdentityMigrationInspectionResult.Running, observedPreview.InspectionDiagnostic?.Result);
+        Assert.AreEqual("EventEntity", observedPreview.InspectionDiagnostic?.LastCompletedTable);
         Assert.AreEqual(manifest.Entries![0], receivedPreviewManifest!.Entries![0]);
 
         var observedStage = await client.StageHorseIdentityMigrationAsync(manifest, observedPreview.Fingerprint!);

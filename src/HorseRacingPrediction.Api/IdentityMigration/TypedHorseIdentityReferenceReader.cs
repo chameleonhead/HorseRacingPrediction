@@ -155,14 +155,29 @@ internal sealed class TypedHorseIdentityReferenceReader
         "collection_batch_recovery_progress", "collection_batch_recovery_scan",
     ];
 
+    internal static bool IsKnownDiagnosticPage(MigrationStoreSurface surface, string table) => surface switch
+    {
+        MigrationStoreSurface.EventStore => table is "Horses" or "HorseWeightHistories" or "HorseRaceHistories"
+            or "JraSubjectProfileReadModel" or "Jockeys" or "Trainers" or "RacePredictionContexts"
+            or "RaceResults" or "PredictionTickets" or "PredictionComparisons" or "MemoSubjects"
+            or "JockeyRaceHistories" or "SnapshotEntity" or "HorseIdentityRepairCandidates"
+            or "HorseIdentityRepairRedirects" or "SubjectIdentificationRepairIssues" or "EventEntity",
+        MigrationStoreSurface.CollectionPlatform => CollectionTables.Contains(table, StringComparer.Ordinal),
+        MigrationStoreSurface.PredictionSchedule => table == "prediction_candidates",
+        MigrationStoreSurface.LocalCollectionQueue => table == "local_collection_messages",
+        _ => false,
+    };
+
     internal async Task<TypedHorseIdentityReferenceReadResult> InspectAsync(
         string eventStorePath,
         string collectionPath,
         string schedulePath,
         string? queuePath,
         IReadOnlyList<HorseIdentityMigrationMapping> mappings,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        HorseIdentityMigrationInspectionProgress? inspectionProgress = null)
     {
+        inspectionProgress?.StartPhase(HorseIdentityMigrationInspectionPhase.TypedReferences);
         var stopwatch = Stopwatch.StartNew();
         var pages = new List<TypedHorseIdentityPageEvidence>();
         var oldIds = mappings.Select(mapping => mapping.OldHorseId)
@@ -174,7 +189,7 @@ internal sealed class TypedHorseIdentityReferenceReader
         long inspectedRows = 0;
         long inputBytes = 0;
         var state = new ReadState(pages, oldIds, destinationIds, replacements,
-            stopwatch, inspectedRows, inputBytes);
+            stopwatch, inspectedRows, inputBytes, inspectionProgress);
 
         try
         {
@@ -797,7 +812,7 @@ internal sealed class TypedHorseIdentityReferenceReader
         var replacements = mappings.ToDictionary(mapping => mapping.OldHorseId,
             mapping => mapping.DestinationHorseId, StringComparer.Ordinal);
         var state = new ReadState([], oldIds, destinationIds, replacements,
-            Stopwatch.StartNew(), 0, 0);
+            Stopwatch.StartNew(), 0, 0, null);
         return TryTransformKnownJson(table, column, json, rowKey, raceId, state, out expectedJson);
     }
 
@@ -814,7 +829,7 @@ internal sealed class TypedHorseIdentityReferenceReader
         var replacements = mappings.ToDictionary(mapping => mapping.OldHorseId,
             mapping => mapping.DestinationHorseId, StringComparer.Ordinal);
         var state = new ReadState([], oldIds, destinationIds, replacements,
-            Stopwatch.StartNew(), 0, 0);
+            Stopwatch.StartNew(), 0, 0, null);
         return TryTransformCollectionMetadata(json, state, out expectedJson);
     }
 
@@ -2283,7 +2298,8 @@ internal sealed class TypedHorseIdentityReferenceReader
         IReadOnlyDictionary<string, string> replacements,
         Stopwatch stopwatch,
         long inspectedRows,
-        long inputBytes)
+        long inputBytes,
+        HorseIdentityMigrationInspectionProgress? inspectionProgress)
     {
         internal readonly List<TypedHorseIdentityPageEvidence> Pages = pages;
         internal readonly HashSet<string> OldIds = oldIds;
@@ -2295,6 +2311,7 @@ internal sealed class TypedHorseIdentityReferenceReader
         internal long SummaryBytes;
         internal bool Collision;
         internal string? Failure;
+        private readonly HorseIdentityMigrationInspectionProgress? _inspectionProgress = inspectionProgress;
 
         internal bool AddRow(ref long pageRows, ref long bytes, long rowBytes)
         {
@@ -2310,6 +2327,7 @@ internal sealed class TypedHorseIdentityReferenceReader
         {
             // Page evidence is immutable and bounded; the source rows are never retained.
             Pages.Add(new(surface, table, rows, beforeHash, expectedAfterHash, firstKey, lastKey));
+            _inspectionProgress?.PageCompleted(surface, table, InspectedRows, InputBytes);
             SummaryBytes += Encoding.UTF8.GetByteCount(surface.ToString()) + Encoding.UTF8.GetByteCount(table)
                 + Encoding.UTF8.GetByteCount(beforeHash) + Encoding.UTF8.GetByteCount(expectedAfterHash)
                 + (firstKey is null ? 0 : Encoding.UTF8.GetByteCount(firstKey))

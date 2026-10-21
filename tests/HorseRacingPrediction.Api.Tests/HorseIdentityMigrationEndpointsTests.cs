@@ -42,6 +42,13 @@ public sealed class HorseIdentityMigrationEndpointsTests
         Assert.IsTrue(preview.CanStage, string.Join(',', preview.Blockers));
         Assert.IsNotNull(preview.Fingerprint);
         Assert.IsNotNull(preview.SchemaDiagnostics);
+        Assert.IsNotNull(preview.InspectionDiagnostic);
+        Assert.AreEqual(HorseIdentityMigrationInspectionResult.Completed, preview.InspectionDiagnostic.Result);
+        Assert.IsGreaterThan(0L, preview.InspectionDiagnostic.InspectedRowsLowerBound);
+        var previewJson = JsonSerializer.Serialize(preview, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.DoesNotContain(stores.Root, previewJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Data Source", previewJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CREATE TABLE", previewJson, StringComparison.OrdinalIgnoreCase);
         var diagnostics = await client.GetHorseIdentityMigrationSchemaDiagnosticsAsync();
         Assert.IsNotNull(diagnostics);
         Assert.IsTrue(diagnostics.IsComplete);

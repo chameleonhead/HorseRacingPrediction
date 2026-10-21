@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace HorseRacingPrediction.Contracts.Identity;
 
 /// <summary>Safe, read-only readiness summary for a horse identity migration admission preview.</summary>
@@ -15,7 +17,39 @@ public sealed record HorseIdentityMigrationPreview(
     public const int MaximumSummaryBytes = 1024 * 1024;
 
     public HorseIdentityMigrationSchemaDiagnostics? SchemaDiagnostics { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public HorseIdentityMigrationInspectionDiagnostic? InspectionDiagnostic { get; init; }
 }
+
+[JsonConverter(typeof(JsonStringEnumConverter<HorseIdentityMigrationInspectionPhase>))]
+public enum HorseIdentityMigrationInspectionPhase
+{
+    Request,
+    Schema,
+    Roots,
+    TypedReferences,
+    Complete,
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<HorseIdentityMigrationInspectionResult>))]
+public enum HorseIdentityMigrationInspectionResult
+{
+    Running,
+    Completed,
+    Incomplete,
+    DeadlineExceeded,
+}
+
+/// <summary>Optional, bounded progress metadata. Counters describe completed pages only.</summary>
+public sealed record HorseIdentityMigrationInspectionDiagnostic(
+    HorseIdentityMigrationInspectionPhase Phase,
+    HorseIdentityMigrationInspectionResult Result,
+    HorseIdentityMigrationSchemaSurface? LastCompletedSurface,
+    string? LastCompletedTable,
+    long InspectedRowsLowerBound,
+    long InspectedBytesLowerBound,
+    long ElapsedMilliseconds);
 
 public enum HorseIdentityMigrationPreviewBlocker
 {

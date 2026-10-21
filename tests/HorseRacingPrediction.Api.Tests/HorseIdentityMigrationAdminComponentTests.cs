@@ -376,6 +376,43 @@ public sealed class HorseIdentityMigrationAdminComponentTests
     }
 
     [TestMethod]
+    public async Task DeadlineDiagnosticIsDisplayedAndCannotBeStagedEvenWhenPhaseIsComplete()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var handler = new MigrationHandler
+        {
+            Preview = new HorseIdentityMigrationPreview(true, new string('A', 64), [], [], [], [], [], 0, 0)
+            {
+                InspectionDiagnostic = new(HorseIdentityMigrationInspectionPhase.Complete,
+                    HorseIdentityMigrationInspectionResult.DeadlineExceeded, null, null, 0, 0, 30000),
+            },
+        };
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = context.Render<HorseIdentityMigrationAdmin>();
+        await SelectAndAcceptFirstCandidateAsync(cut);
+
+        await ClickAsync(cut, "選択内容をプレビュー");
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup,
+            "プレビューは時間上限に達したため完了しませんでした。"));
+        StringAssert.Contains(cut.Markup, "読み取り結果");
+        StringAssert.Contains(cut.Markup, "時間上限");
+        StringAssert.Contains(cut.Markup, "読み取り段階");
+        StringAssert.Contains(cut.Markup, "完了処理");
+        StringAssert.Contains(cut.Markup, "最後に完了したページ");
+        StringAssert.Contains(cut.Markup, "確認対象の保存先 / —");
+        Assert.IsFalse(cut.Find("details").HasAttribute("open"),
+            "Technical progress details must be collapsed initially.");
+        Assert.IsTrue(cut.FindComponents<FluentButton>()
+            .Single(button => button.Markup.Contains("この固定内容を実行依頼として保存", StringComparison.Ordinal))
+            .Instance.Disabled);
+        Assert.IsFalse(cut.Markup.Contains("表示された候補と保存状態を確認してください", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public async Task QueryPrefillsManualStatusLookupWithoutInitialFetch()
     {
         var (app, original) = await TestApplicationFactory.CreateAsync();

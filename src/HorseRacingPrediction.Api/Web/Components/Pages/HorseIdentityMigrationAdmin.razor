@@ -253,7 +253,7 @@
     {
         <section class="migration-preview" aria-labelledby="migration-preview-heading">
             <h3 id="migration-preview-heading">読み取り専用プレビュー</h3>
-            @if (preview.CanStage && !string.IsNullOrWhiteSpace(preview.Fingerprint))
+            @if (IsPreviewReady(preview))
             {
                 <p class="migration-preview-ready" role="status">表示された候補と保存状態を確認してください。プレビューは実行依頼の保存可否を示し、実行の開始やバックアップの作成を示すものではありません。</p>
             }
@@ -270,6 +270,25 @@
                         <li>@BlockerLabel(blocker)</li>
                     }
                 </ul>
+            }
+
+            @if (preview.InspectionDiagnostic is { } inspection)
+            {
+                var blockedByInspection = IsBlockingInspectionResult(inspection.Result);
+                <p class="@(blockedByInspection ? "migration-preview-blocked" : "migration-preview-ready")" role="@(blockedByInspection ? "alert" : "status")">
+                    @InspectionResultSummary(inspection.Result)
+                </p>
+                <details>
+                    <summary>読み取り進捗の詳細を表示</summary>
+                    <dl class="migration-preview-summary">
+                        <dt>読み取り結果</dt><dd>@InspectionResultLabel(inspection.Result)</dd>
+                        <dt>読み取り段階</dt><dd>@InspectionPhaseLabel(inspection.Phase)</dd>
+                        <dt>最後に完了したページ</dt><dd>@SurfaceLabel(inspection.LastCompletedSurface?.ToString() ?? string.Empty) / @(inspection.LastCompletedTable ?? "—")</dd>
+                        <dt>完了ページまでの下限行数</dt><dd>@inspection.InspectedRowsLowerBound</dd>
+                        <dt>完了ページまでの下限サイズ</dt><dd>@inspection.InspectedBytesLowerBound バイト</dd>
+                        <dt>経過時間</dt><dd>@inspection.ElapsedMilliseconds ミリ秒</dd>
+                    </dl>
+                </details>
             }
 
             <dl class="migration-preview-summary">
@@ -530,7 +549,7 @@
     private bool CanPreview => interactiveReady && !busy && SelectedCandidates.Count > 0
         && SelectedCandidates.All(candidate => candidate.HypothesisAccepted && IsCanonicalJraIdentity(candidate.JraIdentity));
     private bool CanStage => interactiveReady && !busy && string.IsNullOrWhiteSpace(requestKeyInput)
-        && preview is { CanStage: true, Fingerprint.Length: 64 }
+        && preview is { } current && IsPreviewReady(current)
         && SelectedCandidates.Count > 0 && SelectedCandidates.All(candidate => candidate.HypothesisAccepted);
     private bool CanReadStatus => interactiveReady && !busy
         && (Guid.TryParseExact(operationIdInput.Trim(), "D", out var id) && id != Guid.Empty
@@ -1103,6 +1122,42 @@
         HorseIdentityMigrationPreviewBlocker.ReadUnavailable => "保存データの読み取りを完了できません。",
         HorseIdentityMigrationPreviewBlocker.SummaryTooLarge => "プレビューが安全な表示上限を超えています。",
         _ => "確認できない阻害理由があります。",
+    };
+
+    private static bool IsPreviewReady(HorseIdentityMigrationPreview value) =>
+        value.CanStage && value.Fingerprint is { Length: 64 }
+        && (value.InspectionDiagnostic is null
+            || value.InspectionDiagnostic.Result == HorseIdentityMigrationInspectionResult.Completed);
+
+    private static bool IsBlockingInspectionResult(HorseIdentityMigrationInspectionResult result) =>
+        result != HorseIdentityMigrationInspectionResult.Completed;
+
+    private static string InspectionResultLabel(HorseIdentityMigrationInspectionResult result) => result switch
+    {
+        HorseIdentityMigrationInspectionResult.Running => "読み取り中",
+        HorseIdentityMigrationInspectionResult.Completed => "完了",
+        HorseIdentityMigrationInspectionResult.Incomplete => "未完了",
+        HorseIdentityMigrationInspectionResult.DeadlineExceeded => "時間上限",
+        _ => "確認できない状態",
+    };
+
+    private static string InspectionResultSummary(HorseIdentityMigrationInspectionResult result) => result switch
+    {
+        HorseIdentityMigrationInspectionResult.Running => "プレビューの読み取りが完了状態ではありません。保存依頼は作成できません。",
+        HorseIdentityMigrationInspectionResult.Completed => "読み取り進捗の安全な診断情報です。保存可否は上のプレビュー判定に従ってください。",
+        HorseIdentityMigrationInspectionResult.Incomplete => "プレビューの読み取りが完了しませんでした。保存依頼は作成できません。",
+        HorseIdentityMigrationInspectionResult.DeadlineExceeded => "プレビューは時間上限に達したため完了しませんでした。保存依頼は作成できません。",
+        _ => "プレビューの読み取り状態を確認できないため、保存依頼は作成できません。",
+    };
+
+    private static string InspectionPhaseLabel(HorseIdentityMigrationInspectionPhase phase) => phase switch
+    {
+        HorseIdentityMigrationInspectionPhase.Request => "入力受信",
+        HorseIdentityMigrationInspectionPhase.Schema => "保存先の構造",
+        HorseIdentityMigrationInspectionPhase.Roots => "登録ルート",
+        HorseIdentityMigrationInspectionPhase.TypedReferences => "型付きページ",
+        HorseIdentityMigrationInspectionPhase.Complete => "完了処理",
+        _ => "確認できない段階",
     };
 
     private static string SurfaceLabel(string surface) => surface switch

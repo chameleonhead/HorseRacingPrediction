@@ -34,15 +34,17 @@ internal static class HorseIdentityMigrationEndpoints
     {
         SetNoStore(response);
         using var deadline = CreateDeadline(cancellationToken);
+        var inspectionProgress = new HorseIdentityMigrationInspectionProgress();
         try
         {
             var parsed = await ReadBodyAsync<HorseIdentityMigrationManifest>(request, deadline.Token).ConfigureAwait(false);
             if (!parsed.Success) return Error(parsed.StatusCode, parsed.ErrorCode!);
             if (!HorseIdentityMigrationManifestPolicy.Validate(parsed.Value).IsValid)
                 return Error(StatusCodes.Status400BadRequest, "InvalidManifest");
-            var preview = await engine.InspectPreviewAsync(parsed.Value, deadline.Token).ConfigureAwait(false);
+            var preview = await engine.InspectPreviewAsync(parsed.Value, deadline.Token, inspectionProgress)
+                .ConfigureAwait(false);
             if (deadline.IsCancellationRequested)
-                preview = TypedHorseIdentityStoreEngine.CreateIncompletePreview();
+                preview = DeadlinePreview(inspectionProgress, cancellationToken);
             var bytes = JsonSerializer.SerializeToUtf8Bytes(preview, JsonOptions);
             if (bytes.Length > HorseIdentityMigrationPreview.MaximumSummaryBytes)
                 preview = TypedHorseIdentityStoreEngine.BoundPreviewSummary(preview with
@@ -52,14 +54,25 @@ internal static class HorseIdentityMigrationEndpoints
                         : TypedHorseIdentityStoreReaders.IncompleteSchemaDiagnostics(preview.SchemaDiagnostics),
                 });
             if (deadline.IsCancellationRequested)
-                preview = TypedHorseIdentityStoreEngine.CreateIncompletePreview();
+                preview = DeadlinePreview(inspectionProgress, cancellationToken);
             return Results.Ok(preview);
         }
         catch (OperationCanceledException) when (deadline.IsCancellationRequested
             && !cancellationToken.IsCancellationRequested)
         {
-            return Results.Ok(TypedHorseIdentityStoreEngine.CreateIncompletePreview());
+            return Results.Ok(DeadlinePreview(inspectionProgress, cancellationToken));
         }
+    }
+
+    internal static HorseIdentityMigrationPreview DeadlinePreview(
+        HorseIdentityMigrationInspectionProgress inspectionProgress,
+        CancellationToken callerCancellationToken = default)
+    {
+        callerCancellationToken.ThrowIfCancellationRequested();
+        return TypedHorseIdentityStoreEngine.CreateIncompletePreview() with
+        {
+            InspectionDiagnostic = inspectionProgress.Snapshot(HorseIdentityMigrationInspectionResult.DeadlineExceeded),
+        };
     }
 
     private static async Task<IResult> GetSchemaDiagnosticsAsync(

@@ -70,7 +70,9 @@ internal sealed class TypedHorseIdentityStoreEngine(TypedHorseIdentityStoreReade
     }
 
     internal async Task<HorseIdentityMigrationPreview> InspectPreviewAsync(
-        HorseIdentityMigrationManifest? manifest, CancellationToken cancellationToken)
+        HorseIdentityMigrationManifest? manifest,
+        CancellationToken cancellationToken,
+        HorseIdentityMigrationInspectionProgress? inspectionProgress = null)
     {
         var validation = HorseIdentityMigrationManifestPolicy.Validate(manifest);
         if (!validation.IsValid)
@@ -79,7 +81,8 @@ internal sealed class TypedHorseIdentityStoreEngine(TypedHorseIdentityStoreReade
         MigrationStoreReadSnapshot snapshot;
         try
         {
-            snapshot = await readers.InspectAsync(validation.Mappings, cancellationToken).ConfigureAwait(false);
+            snapshot = await readers.InspectAsync(validation.Mappings, cancellationToken, inspectionProgress)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -87,6 +90,7 @@ internal sealed class TypedHorseIdentityStoreEngine(TypedHorseIdentityStoreReade
         }
         catch (Exception exception) when (exception is SqliteException or InvalidDataException or IOException)
         {
+            inspectionProgress?.Finish(complete: false);
             return new(false, null, [HorseIdentityMigrationPreviewBlocker.ReadUnavailable], [], [], [], [], 0, 0);
         }
 
@@ -120,11 +124,13 @@ internal sealed class TypedHorseIdentityStoreEngine(TypedHorseIdentityStoreReade
                 item.JraIdentity, item.DestinationHorseId)).ToArray();
         var fingerprint = BuildPreviewFingerprint(validation.Mappings, snapshot);
         var canStage = blockers.Count == 0 && fingerprint is not null;
+        inspectionProgress?.Finish(snapshot.TypedReferenceClosureInspected);
         var preview = new HorseIdentityMigrationPreview(canStage, fingerprint,
             blockers.ToArray(), mappings, stores, roots, pages,
             typed?.InspectedRows ?? 0, typed?.InspectedBytes ?? 0)
         {
             SchemaDiagnostics = TypedHorseIdentityStoreReaders.ToSchemaDiagnostics(snapshot.Schemas),
+            InspectionDiagnostic = inspectionProgress?.Snapshot(),
         };
         return BoundPreviewSummary(preview);
     }

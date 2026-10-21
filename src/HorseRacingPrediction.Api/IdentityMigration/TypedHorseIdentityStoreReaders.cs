@@ -148,8 +148,10 @@ internal sealed class TypedHorseIdentityStoreReaders(
 
     internal async Task<MigrationStoreReadSnapshot> InspectAsync(
         IReadOnlyList<HorseIdentityMigrationMapping> mappings,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        HorseIdentityMigrationInspectionProgress? inspectionProgress = null)
     {
+        inspectionProgress?.StartPhase(HorseIdentityMigrationInspectionPhase.Schema);
         var configured = ResolveConfiguredStores();
         var schemas = new List<MigrationStoreSchema>(configured.Count);
         foreach (var store in configured)
@@ -161,14 +163,16 @@ internal sealed class TypedHorseIdentityStoreReaders(
 
         var eventStore = configured.Single(store => store.Surface == MigrationStoreSurface.EventStore);
         var collection = configured.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform);
+        inspectionProgress?.StartPhase(HorseIdentityMigrationInspectionPhase.Roots);
         var roots = await InspectRootsAsync(eventStore.Path!, collection.Path!, mappings, cancellationToken)
             .ConfigureAwait(false);
 
+        inspectionProgress?.StartPhase(HorseIdentityMigrationInspectionPhase.TypedReferences);
         var typedReferences = await new TypedHorseIdentityReferenceReader(eventJsonSerializer, domainEventFactory).InspectAsync(
             eventStore.Path!, collection.Path!,
             configured.Single(store => store.Surface == MigrationStoreSurface.PredictionSchedule).Path!,
             configured.Single(store => store.Surface == MigrationStoreSurface.LocalCollectionQueue).Path,
-            mappings, cancellationToken).ConfigureAwait(false);
+            mappings, cancellationToken, inspectionProgress).ConfigureAwait(false);
         return new(schemas, roots, typedReferences.IsComplete, typedReferences);
     }
 

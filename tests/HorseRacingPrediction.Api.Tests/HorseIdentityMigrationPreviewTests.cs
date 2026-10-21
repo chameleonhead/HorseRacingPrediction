@@ -38,6 +38,34 @@ public sealed class HorseIdentityMigrationPreviewTests
     }
 
     [TestMethod]
+    public async Task OptionalInspectionProgressDoesNotChangePreviewFingerprintAndLegacyPayloadsRemainValid()
+    {
+        await using var fixture = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        var engine = fixture.CreateEngineWithEventFlow();
+
+        var legacyCall = await engine.InspectPreviewAsync(Manifest(), CancellationToken.None);
+        var progress = new HorseIdentityMigrationInspectionProgress();
+        var observedCall = await engine.InspectPreviewAsync(Manifest(), CancellationToken.None, progress);
+
+        Assert.AreEqual(legacyCall.Fingerprint, observedCall.Fingerprint);
+        Assert.IsTrue(observedCall.CanStage);
+        Assert.IsNotNull(observedCall.InspectionDiagnostic);
+        Assert.AreEqual(HorseIdentityMigrationInspectionResult.Completed, observedCall.InspectionDiagnostic.Result);
+        Assert.IsNull(legacyCall.InspectionDiagnostic);
+
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var legacyJson = JsonSerializer.Serialize(legacyCall, options);
+        Assert.DoesNotContain("inspectionDiagnostic", legacyJson, StringComparison.Ordinal);
+        var parsedLegacy = JsonSerializer.Deserialize<HorseIdentityMigrationPreview>("""
+            {"canStage":false,"fingerprint":null,"blockers":[3],"mappings":[],"stores":[],"roots":[],"pages":[],"inspectedRows":0,"inspectedBytes":0}
+            """, options);
+        Assert.IsNotNull(parsedLegacy);
+        Assert.IsNull(parsedLegacy.InspectionDiagnostic);
+    }
+
+    [TestMethod]
     public async Task LargeUnrelatedEventStoreStaysStageableAndFingerprintBindsOmittedPages()
     {
         await using var fixture = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
