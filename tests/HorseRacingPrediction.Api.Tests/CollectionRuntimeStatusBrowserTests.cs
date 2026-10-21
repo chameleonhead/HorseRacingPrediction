@@ -42,6 +42,125 @@ public sealed class CollectionRuntimeStatusBrowserTests
     }
 
     [TestMethod]
+    [Timeout(30_000)]
+    public async Task MonitoringNavigationWait_UsesCommitButStillRequiresExactUrlAndRenderedContent()
+    {
+        const string monitoringPattern = @"/jobs/operations\?tab=monitoring$";
+        const int SyntheticWaitTimeoutMilliseconds = 2_000;
+        var baseAddress = new Uri($"http://127.0.0.1:{ReserveLoopbackPort()}");
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
+        {
+            Headless = true,
+        });
+        await using var browserContext = await browser.NewContextAsync();
+
+        async Task<(IPage Page, TaskCompletionSource ReleaseHeldLoad)> CreateSyntheticPageAsync()
+        {
+            var page = await browserContext.NewPageAsync();
+            var releaseHeldLoad = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            await page.RouteAsync("**/*", async route =>
+            {
+                try
+                {
+                    var requestUri = new Uri(route.Request.Url);
+                    if (requestUri.AbsolutePath.Equals("/held.png", StringComparison.Ordinal))
+                    {
+                        await releaseHeldLoad.Task;
+                        await route.FulfillAsync(new RouteFulfillOptions
+                        {
+                            Status = 200,
+                            ContentType = "image/png",
+                            Body = "held-load-released",
+                        });
+                        return;
+                    }
+
+                    if (requestUri.AbsolutePath.Equals("/jobs/operations", StringComparison.Ordinal))
+                    {
+                        await route.FulfillAsync(new RouteFulfillOptions
+                        {
+                            Status = 200,
+                            ContentType = "text/html; charset=utf-8",
+                            Body = """
+                                <!doctype html>
+                                <html><body>
+                                <h1>バックグラウンド処理の稼働状況</h1>
+                                <img src="/held.png" alt="held load">
+                                </body></html>
+                                """,
+                        });
+                        return;
+                    }
+
+                    await route.AbortAsync();
+                }
+                catch (PlaywrightException)
+                {
+                    // Closing a scenario page cancels its intentionally held resource.
+                }
+            });
+            return (page, releaseHeldLoad);
+        }
+
+        var (commitPage, commitRelease) = await CreateSyntheticPageAsync();
+        try
+        {
+            var commitWait = commitPage.WaitForURLAsync(new Regex(monitoringPattern),
+                new PageWaitForURLOptions
+                {
+                    Timeout = SyntheticWaitTimeoutMilliseconds,
+                    WaitUntil = WaitUntilState.Commit,
+                });
+            await commitPage.GotoAsync(new Uri(baseAddress, "/jobs/operations?tab=monitoring").ToString(),
+                new PageGotoOptions { WaitUntil = WaitUntilState.Commit, Timeout = SyntheticWaitTimeoutMilliseconds });
+            await commitWait;
+            await commitPage.GetByRole(AriaRole.Heading,
+                    new() { Name = "バックグラウンド処理の稼働状況" })
+                .WaitForAsync(new LocatorWaitForOptions { Timeout = SyntheticWaitTimeoutMilliseconds });
+        }
+        finally
+        {
+            commitRelease.TrySetResult();
+            await commitPage.CloseAsync();
+        }
+
+        var (loadPage, loadRelease) = await CreateSyntheticPageAsync();
+        try
+        {
+            var loadWait = loadPage.WaitForURLAsync(new Regex(monitoringPattern),
+                new PageWaitForURLOptions { Timeout = SyntheticWaitTimeoutMilliseconds });
+            await loadPage.GotoAsync(new Uri(baseAddress, "/jobs/operations?tab=monitoring").ToString(),
+                new PageGotoOptions { WaitUntil = WaitUntilState.Commit, Timeout = SyntheticWaitTimeoutMilliseconds });
+            await Assert.ThrowsAsync<TimeoutException>(async () => await loadWait);
+        }
+        finally
+        {
+            loadRelease.TrySetResult();
+            await loadPage.CloseAsync();
+        }
+
+        var (wrongUrlPage, wrongUrlRelease) = await CreateSyntheticPageAsync();
+        try
+        {
+            var wrongUrlWait = wrongUrlPage.WaitForURLAsync(new Regex(monitoringPattern),
+                new PageWaitForURLOptions
+                {
+                    Timeout = SyntheticWaitTimeoutMilliseconds,
+                    WaitUntil = WaitUntilState.Commit,
+                });
+            await wrongUrlPage.GotoAsync(new Uri(baseAddress, "/jobs/operations?tab=failures").ToString(),
+                new PageGotoOptions { WaitUntil = WaitUntilState.Commit, Timeout = SyntheticWaitTimeoutMilliseconds });
+            await Assert.ThrowsAsync<TimeoutException>(async () => await wrongUrlWait);
+        }
+        finally
+        {
+            wrongUrlRelease.TrySetResult();
+            await wrongUrlPage.CloseAsync();
+        }
+    }
+
+    [TestMethod]
     [Timeout(180_000)]
     public async Task OperationsPage_RendersDesktopAndMobileWithAuthenticatedRuntimeRefresh()
     {
@@ -167,7 +286,11 @@ public sealed class CollectionRuntimeStatusBrowserTests
                     await interactiveMonitoringTab.ClickAsync(new() { NoWaitAfter = true });
 #pragma warning restore CS0612
                     await page.WaitForURLAsync(new Regex(@"/jobs/operations\?tab=monitoring$"),
-                        new PageWaitForURLOptions { Timeout = (float)RequestTimeout.TotalMilliseconds });
+                        new PageWaitForURLOptions
+                        {
+                            Timeout = (float)RequestTimeout.TotalMilliseconds,
+                            WaitUntil = WaitUntilState.Commit,
+                        });
                     await WaitForRuntimeRequestCountAsync(process, () => Volatile.Read(ref runtimeStatusRequestCount), 1);
                     await page.GetByRole(AriaRole.Heading, new() { Name = "バックグラウンド処理の稼働状況" })
                         .WaitForAsync();
