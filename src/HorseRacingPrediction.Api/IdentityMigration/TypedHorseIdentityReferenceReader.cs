@@ -133,6 +133,7 @@ internal sealed class TypedHorseIdentityReferenceReader
     private const int MaximumSummaryBytes = 1024 * 1024;
     private static readonly TimeSpan MaximumDuration = TimeSpan.FromMinutes(30);
     private static readonly JsonSerializerOptions LocalQueueJsonOptions = CreateLocalQueueJsonOptions();
+    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
 
     private static readonly string[] TypedJsonNames =
     [
@@ -644,7 +645,7 @@ internal sealed class TypedHorseIdentityReferenceReader
         ReadState state, out string expectedJson)
     {
         expectedJson = json;
-        var options = CreateJsonOptions();
+        var options = JsonOptions;
         try
         {
             switch ((table, column))

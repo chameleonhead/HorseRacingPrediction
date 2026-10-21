@@ -38,6 +38,48 @@ public sealed class HorseIdentityMigrationPreviewTests
     }
 
     [TestMethod]
+    public async Task ConcurrentFirstUseAndWarmPreviewsKeepEvidenceStableAndReadOnly()
+    {
+        await using var fixture = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        var sourceBefore = await fixture.SourceSnapshotAsync();
+
+        var concurrentPreviews = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ =>
+            Task.Run(() => fixture.CreateEngineWithEventFlow().InspectPreviewAsync(Manifest(), CancellationToken.None))));
+        var warmPreview = await fixture.CreateEngineWithEventFlow()
+            .InspectPreviewAsync(Manifest(), CancellationToken.None);
+
+        static string SerializeStablePreview(HorseIdentityMigrationPreview preview)
+        {
+            var normalized = preview with
+            {
+                SchemaDiagnostics = preview.SchemaDiagnostics is { } schema
+                    ? schema with { ObservedAtUtc = DateTimeOffset.UnixEpoch }
+                    : null,
+                InspectionDiagnostic = preview.InspectionDiagnostic is { } diagnostic
+                    ? diagnostic with { ElapsedMilliseconds = 0 }
+                    : null,
+            };
+            return JsonSerializer.Serialize(normalized, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        }
+
+        Assert.IsTrue(warmPreview.CanStage, string.Join(',', warmPreview.Blockers));
+        Assert.IsNotNull(warmPreview.Fingerprint);
+        Assert.IsTrue(concurrentPreviews.All(preview => preview.CanStage));
+        foreach (var concurrentPreview in concurrentPreviews)
+        {
+            Assert.AreEqual(warmPreview.Fingerprint, concurrentPreview.Fingerprint);
+            Assert.AreEqual(warmPreview.InspectedRows, concurrentPreview.InspectedRows);
+            Assert.AreEqual(warmPreview.InspectedBytes, concurrentPreview.InspectedBytes);
+            CollectionAssert.AreEqual(warmPreview.Pages.ToArray(), concurrentPreview.Pages.ToArray());
+            Assert.AreEqual(SerializeStablePreview(warmPreview), SerializeStablePreview(concurrentPreview));
+        }
+
+        Assert.AreEqual(sourceBefore, await fixture.SourceSnapshotAsync());
+    }
+
+    [TestMethod]
     public async Task OptionalInspectionProgressDoesNotChangePreviewFingerprintAndLegacyPayloadsRemainValid()
     {
         await using var fixture = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();

@@ -9,6 +9,8 @@
 
 ## Context and scope
 
+On hold2026-10-21: parent T26-A2 measured a substantial synthetic gain from one options-cache change. Parent T27 now tests this behavior-preserving alternative with same-physical-data equivalence and actual production verification before changing admission contracts. This proposal is still unapproved and no pending-mode code is authorized. The user's continuation request is not interpreted as acceptance of a different Stage contract.
+
 Parent: [admin-screen recovery](../20261017_admin-screen-recovery/README.md), F45/T26 and original3 approved hypothesis pairs. This proposal does not authorize Ecolotera, ambiguous same-name identities, bulk retries, resets, automatic resume or weaker data checks. Parent operational acceptance remains unfinished.
 
 Actual03484dd0 cold/warm authenticated UI previews both stop at the30s HTTP deadline, during TypedReferences. Completed-page lower bounds:27167rows/1727548bytes and30533rows/3941480bytes. Last page does not identify the hotspot or total volume. Reader's existing whole-scan bounds are30min/1Mrows/4GiB. Native small fixtures are not production capacity evidence. No behavior-preserving optimization can guarantee unknown-volume full census in30s. No production data has been migrated.
