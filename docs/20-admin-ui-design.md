@@ -224,7 +224,7 @@ erDiagram
 
 ### 5.8 その他設定 `/settings`
 
-`/settings/horse-id-migration` のToken不要の移行・復旧操作は、[管理画面からの馬ID移行・復旧](changes/20261017_admin-screen-recovery/README.md)を正本とする。現在の全件プレビューが30秒で完了しない本番事象に対し、[停止後の全件検証による移行](changes/20261021_offline-migration-admission/README.md)を提案している。後者は未承認・未実装であり、検証前の依頼保存と、停止・バックアップ後かつ書込前の全件検証を明確に区別する。承認までは既存の保存条件を緩和しない。
+`/settings/horse-id-migration` のToken不要の移行・復旧操作は、[管理画面からの馬ID移行・復旧](changes/20261017_admin-screen-recovery/README.md)を正本とする。現在の全件プレビューが30秒で完了しない本番事象に対し、[停止後の全件検証による移行](changes/20261021_offline-migration-admission/README.md)が2026-10-21に承認され、実装中である。検証前の依頼は明確に「未検証」と表示し、明示実行後に停止・バックアップ・書込前の検証を行う。対象の馬IDや固定の3件を実装へ埋め込まず、登録馬とJRA番号を画面で選択する。配備済み動作はまだ旧方式であり、未検証依頼を既存の検証済み依頼として扱わない。
 
 設定から「馬IDの診断」へ移動し、`/settings/identity-diagnostics` で指定した馬の初回登録情報、現在の情報、保存済みJRA識別情報とID算出の比較を読み取り専用で確認する。固有URLからの再訪と再取得に対応し、保存先ごとの読取時刻、証拠不足、確認範囲を表示する。仕様・検証・配備状況は[馬ID診断の変更記録](changes/20261011_horse-identity-diagnostics/README.md)を参照する。既存の補正操作や[全データ移行案](changes/20261011_recurring-horse-identity-conflict/README.md)の実行・復旧を代替しない。
 
