@@ -9,7 +9,7 @@
 
 ## Context and scope
 
-On hold2026-10-21: parent T26-A2 measured a substantial synthetic gain from one options-cache change. Parent T27 now tests this behavior-preserving alternative with same-physical-data equivalence and actual production verification before changing admission contracts. This proposal is still unapproved and no pending-mode code is authorized. The user's continuation request is not interpreted as acceptance of a different Stage contract.
+Approval requested2026-10-21 after bounded alternative: parent T27 cache-only change cf0a37c7498f1b25cdb727940d78425be38e8795 passed native and actualremote2035tests/8skip, app-ci39577374948/app-deploy39577374904 SUCCESS/all6checks. Actual3 approvedpairs still hit30s TypedReferences deadline: lastcompletedEventStore/Trainers,31742rows/4155706bytes/30081ms (completed-page lowerbounds, not fullvolume/hotspot). Therefore the same-contract optimization did not restore admission; no further blindpreview/timeoutincrease is planned. This proposal is no longer onhold but remains unapproved, and no pending-mode code is authorized. Parent recovery is unfinished pending explicit approval of this changed Stage contract.
 
 Parent: [admin-screen recovery](../20261017_admin-screen-recovery/README.md), F45/T26 and original3 approved hypothesis pairs. This proposal does not authorize Ecolotera, ambiguous same-name identities, bulk retries, resets, automatic resume or weaker data checks. Parent operational acceptance remains unfinished.
 
@@ -20,6 +20,7 @@ Actual03484dd0 cold/warm authenticated UI previews both stop at the30s HTTP dead
 | Claim | Boundary and evidence | Falsifier/result | Disposition |
 | --- | --- | --- | --- |
 | HTTP deadline prevents current online admission | Fact: exact endpoint deadline branch and actual DeadlineExceeded metadata twice | Warm Lazy-cache falsifier still30010ms | Confirmed |
+| Small immutable-options cache is sufficient to restore production admission | Native samephysicalFP/preservation equal and syntheticgain real, but production capacity unproved | Deployedcf0a37c7 actual3pairs stillDeadlineExceeded30081ms/TypedReferences | Falsified as sufficient recovery; retain harmless verified optimization, use explicit gate-relocation proposal |
 | A specific table/JSON routine is the production hotspot | Inference only: sequential reader, lower-bound last pages | No per-phase/active-row timing or production volume | Not used as design premise |
 | Existing offline lifecycle can preserve full checks | Source: supervisor owns drain/API exit/backup/fixed child; writer validates canonical inputs beforewrite | Tests must prove pending cannot reach write without binding and complete inspection | Reuse with explicit pending/bound contract; not permission to reuse standalone binding blindly |
 
@@ -101,7 +102,7 @@ No unresolved agent objection. Production throughput, total volume and extra Eco
 | P4 | Independent integrated counterexamples/native gates | lifecycle verifier | Luna/high — mechanical verification and local corrections | P3 | Relevant tests plus disposable isolated environment only; source corrections return exclusive executor | Exact CI format/build/test, real pending900s plus crash, full consumer roundtrip | Not started; no runtime/model/usage inferred | Proposed | Worker — frozen bounded implementation/verification after approval | none | unavailable; retries 0; corrections 0; reviews 0 |
 | P5 | Deploy, execute approved3, verify recovery | Lead | Lead — production/data/security/final acceptance | P4 | Canonical GitHub deploy/admin UI and governing records only | Actual matching-SHA gates/backup/apply/postchecks/selectedretry/separateresume/3lanes | Not started; AWS login not required | Proposed | Lead — architecture/data/security/final acceptance | none | unavailable; retries 0; corrections 0; reviews 0 |
 
-Delegation uses selectable Luna/high; requested and observed model/usage recorded separately at dispatch. No cost or speed claim. Exact test commands and file ownership freeze in preimplementation plan; no coding until approval/canonical audit. Continue independent already-approved T25 CI correction while this proposal awaits approval.
+Delegation uses selectable Luna/high; requested and observed model/usage recorded separately at dispatch. No cost or speed claim. Exact test commands and file ownership freeze in preimplementation plan; no coding until approval/canonical audit. T25/T27 source and deployment are now verified; no remaining independent approved source slice bypasses this approval boundary.
 
 ## Review gates / documentation
 
