@@ -224,6 +224,8 @@ erDiagram
 
 ### 5.8 その他設定 `/settings`
 
+`/settings/horse-id-migration` のToken不要の移行・復旧操作は、[管理画面からの馬ID移行・復旧](changes/20261017_admin-screen-recovery/README.md)を正本とする。現在の全件プレビューが30秒で完了しない本番事象に対し、[停止後の全件検証による移行](changes/20261021_offline-migration-admission/README.md)を提案している。後者は未承認・未実装であり、検証前の依頼保存と、停止・バックアップ後かつ書込前の全件検証を明確に区別する。承認までは既存の保存条件を緩和しない。
+
 設定から「馬IDの診断」へ移動し、`/settings/identity-diagnostics` で指定した馬の初回登録情報、現在の情報、保存済みJRA識別情報とID算出の比較を読み取り専用で確認する。固有URLからの再訪と再取得に対応し、保存先ごとの読取時刻、証拠不足、確認範囲を表示する。仕様・検証・配備状況は[馬ID診断の変更記録](changes/20261011_horse-identity-diagnostics/README.md)を参照する。既存の補正操作や[全データ移行案](changes/20261011_recurring-horse-identity-conflict/README.md)の実行・復旧を代替しない。
 
 運用ナビゲーションの「その他設定」は、通常のオブジェクト編集や収集管理では扱えない低頻度の管理操作を置くSettings Pageとする。上段の「要対応データ補正」には、Collection Platformでactiveな `SubjectNotIdentified` failure notificationを競走馬・騎手・調教師・馬主ごとに表示する。下段には、従来の `20260913-jra-horse-identity-repair` 専用候補を互換機能として残す。
