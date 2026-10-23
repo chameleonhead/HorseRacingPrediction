@@ -231,6 +231,8 @@ internal sealed class HorseIdentityMigrationJournal
             {
                 await using var connection = await OpenExistingAsync(cancellationToken).ConfigureAwait(false);
                 await using var transaction = connection.BeginTransaction();
+                await EnsureOperationalSchemaUpgradesAsync(connection, transaction, cancellationToken)
+                    .ConfigureAwait(false);
                 await using (var invalid = connection.CreateCommand())
                 {
                     invalid.Transaction = transaction;
@@ -2190,9 +2192,11 @@ internal sealed class HorseIdentityMigrationJournal
 
     private static async Task EnsureRequestKeyPreviewFingerprintColumnAsync(
         SqliteConnection connection,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        SqliteTransaction? transaction = null)
     {
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = "ALTER TABLE migration_request_keys ADD COLUMN preview_fingerprint TEXT NULL;";
         try
         {
@@ -2208,9 +2212,11 @@ internal sealed class HorseIdentityMigrationJournal
 
     private static async Task EnsureRequestKeyRequestKindColumnAsync(
         SqliteConnection connection,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        SqliteTransaction? transaction = null)
     {
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = "ALTER TABLE migration_request_keys ADD COLUMN request_kind TEXT NOT NULL DEFAULT 'BoundV1';";
         try
         {
@@ -2222,6 +2228,42 @@ internal sealed class HorseIdentityMigrationJournal
         {
             // Existing request keys retain their bound-v1 identity when upgraded in place.
         }
+    }
+
+    private static async Task EnsurePendingSealTableAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasPendingSealTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false))
+            return;
+
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            CREATE TABLE migration_pending_seals (
+                operation_id TEXT PRIMARY KEY NOT NULL,
+                immutable_request_hash TEXT NOT NULL,
+                full_fingerprint TEXT NOT NULL,
+                source_set_hash TEXT NOT NULL,
+                backup_manifest_hash TEXT NOT NULL,
+                sealed_utc TEXT NOT NULL,
+                FOREIGN KEY (operation_id) REFERENCES migration_operations(operation_id) ON DELETE CASCADE
+            );
+            """;
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task EnsureOperationalSchemaUpgradesAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await EnsureRequestKeyPreviewFingerprintColumnAsync(connection, cancellationToken, transaction)
+            .ConfigureAwait(false);
+        await EnsureRequestKeyRequestKindColumnAsync(connection, cancellationToken, transaction)
+            .ConfigureAwait(false);
+        await EnsurePendingSealTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)

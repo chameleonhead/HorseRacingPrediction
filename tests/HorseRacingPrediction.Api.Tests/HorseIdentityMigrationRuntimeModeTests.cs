@@ -432,6 +432,38 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
     }
 
     [TestMethod]
+    public async Task NormalHostServesSwaggerDocumentAfterLegacyJournalUpgrade()
+    {
+        using var fixture = new RuntimeFixture();
+        var operationId = Guid.NewGuid();
+        Assert.IsTrue((await fixture.Journal.StageAsync(operationId, Manifest(), DateTimeOffset.UtcNow)).Succeeded);
+        await using (var connection = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "DROP TABLE migration_request_keys; DROP TABLE migration_execution_intents; DROP TABLE migration_pending_seals; CREATE TABLE migration_request_keys (request_key TEXT PRIMARY KEY NOT NULL, immutable_request_hash TEXT NOT NULL, operation_id TEXT NOT NULL UNIQUE, FOREIGN KEY (operation_id) REFERENCES migration_operations(operation_id) ON DELETE CASCADE); INSERT INTO migration_request_keys (request_key, immutable_request_hash, operation_id) VALUES ($key, $hash, $id);";
+            command.Parameters.AddWithValue("$key", Guid.NewGuid().ToString("D"));
+            command.Parameters.AddWithValue("$hash", new string('E', 64));
+            command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        using var child = fixture.StartApiProcess(maintenanceMode: true);
+        try
+        {
+            using var client = await fixture.WaitForHealthAsync(child);
+            using var swagger = await client.GetAsync("/swagger/v1/swagger.json");
+            Assert.AreEqual(HttpStatusCode.OK, swagger.StatusCode,
+                "A valid legacy journal must be upgraded before the normal host serves its public contract.");
+            StringAssert.Contains(swagger.Content.Headers.ContentType?.MediaType ?? string.Empty, "json");
+        }
+        finally
+        {
+            await RuntimeFixture.StopAsync(child);
+        }
+    }
+
+    [TestMethod]
     public async Task StandaloneFixedCommandRejectsPendingRequestWithoutClaimOrIntent()
     {
         await using var stores = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
