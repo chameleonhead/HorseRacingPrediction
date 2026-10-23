@@ -65,18 +65,18 @@ internal sealed class HorseIdentityMigrationPreparationService : BackgroundServi
         if (operation.Status != HorseIdentityMigrationOperationStatus.Staged)
             return HorseIdentityMigrationExecutionRequestResult.Conflict;
 
-        var saved = await _journal.GetSavedRequestAsync(operationId, cancellationToken).ConfigureAwait(false);
-        if (saved is null) return HorseIdentityMigrationExecutionRequestResult.Conflict;
+        var request = await _journal.GetExecutableRequestAsync(operationId, cancellationToken).ConfigureAwait(false);
+        if (request is null) return HorseIdentityMigrationExecutionRequestResult.Conflict;
 
         var intent = await _journal.GetExecutionIntentAsync(operationId, cancellationToken).ConfigureAwait(false);
         if (intent is null)
         {
-            var created = await _journal.CreateExecutionIntentAsync(operationId, saved.ImmutableRequestHash,
+            var created = await _journal.CreateExecutionIntentAsync(operationId, request.ImmutableRequestHash,
                 _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
             if (!created.Succeeded) return HorseIdentityMigrationExecutionRequestResult.Conflict;
             intent = created.Intent;
         }
-        else if (!string.Equals(intent.ImmutableRequestHash, saved.ImmutableRequestHash, StringComparison.Ordinal))
+        else if (!string.Equals(intent.ImmutableRequestHash, request.ImmutableRequestHash, StringComparison.Ordinal))
         {
             return HorseIdentityMigrationExecutionRequestResult.Conflict;
         }

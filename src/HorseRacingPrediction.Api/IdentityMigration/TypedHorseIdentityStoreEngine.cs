@@ -322,8 +322,11 @@ internal sealed class TypedHorseIdentityStoreEngine(TypedHorseIdentityStoreReade
         CancellationToken cancellationToken,
         Func<CancellationToken, Task>? beforeFirstWrite = null,
         Func<CancellationToken, Task>? afterPageCommit = null,
-        TimeProvider? timeProvider = null) =>
-        new TypedHorseIdentityStoreWriter(readers, this, journal, beforeFirstWrite, afterPageCommit, timeProvider)
+        TimeProvider? timeProvider = null,
+        string? authorizedSourceSetHash = null,
+        string? authorizedBackupManifestHash = null) =>
+        new TypedHorseIdentityStoreWriter(readers, this, journal, beforeFirstWrite, afterPageCommit, timeProvider,
+            authorizedSourceSetHash, authorizedBackupManifestHash)
             .ExecuteAsync(operationId, manifest, cancellationToken);
 
     internal async Task<HorseIdentityStorePlan> InspectAsync(

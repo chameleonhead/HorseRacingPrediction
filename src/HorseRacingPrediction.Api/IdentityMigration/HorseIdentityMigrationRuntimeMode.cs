@@ -78,6 +78,9 @@ internal static class HorseIdentityMigrationRuntimeMode
                 return await RunStandaloneFixedCommandAsync(builder, journal, operationId, configuredSources)
                     .ConfigureAwait(false);
 
+            var executableRequest = await journal.GetExecutableRequestAsync(operationId).ConfigureAwait(false);
+            if (executableRequest is null) return 4;
+
             if (privateAuthorization is not null)
             {
                 if (!HorseIdentityMigrationMaintenanceCapability.OperationAuthorization.TryImportAndValidate(
@@ -85,10 +88,32 @@ internal static class HorseIdentityMigrationRuntimeMode
                     || !HorseIdentityMigrationSupervisor.TryEstablishParentDeathSignal(
                         operationAuthorization!.ParentProcessId, operationAuthorization.ParentStartTicks))
                     return 4;
+                if (executableRequest.RequestKind == HorseIdentityMigrationAdmissionKind.PendingV2)
+                {
+                    var seal = await journal.GetPendingSealAsync(operationId).ConfigureAwait(false);
+                    if (seal is null
+                        || !string.Equals(seal.ImmutableRequestHash, executableRequest.ImmutableRequestHash,
+                            StringComparison.Ordinal)
+                        || !string.Equals(seal.SourceSetHash, operationAuthorization!.SourceSetHash,
+                            StringComparison.Ordinal))
+                        return 4;
+                }
             }
 
             using var sourceOwnership = HorseIdentityMigrationRuntimeOwnership.AcquireForOperation(
                 configuredSources.PhysicalSourcePaths, operationAuthorization!);
+
+            string? authorizedBackupManifestHash = null;
+            if (executableRequest.RequestKind == HorseIdentityMigrationAdmissionKind.PendingV2)
+            {
+                var seal = await journal.GetPendingSealAsync(operationId).ConfigureAwait(false);
+                if (seal is null) return 4;
+                var backupReceipt = await HorseIdentityMigrationManagedBackup.ForJournal(journal)
+                    .ValidateAsync(operationId, configuredSources, journal).ConfigureAwait(false);
+                if (!string.Equals(seal.BackupManifestHash, backupReceipt.ManifestHash, StringComparison.Ordinal))
+                    return 4;
+                authorizedBackupManifestHash = backupReceipt.ManifestHash;
+            }
 
             var claim = await journal.ClaimWorkflowAsync(operationId, DateTimeOffset.UtcNow).ConfigureAwait(false);
             if (!claim.Succeeded) return 4;
@@ -96,20 +121,13 @@ internal static class HorseIdentityMigrationRuntimeMode
             var operation = await journal.GetClaimedStagedRequestAsync(operationId).ConfigureAwait(false);
             if (operation is null) return 4;
 
-            var collection = ReadCollectionOptions(builder);
-            var schedule = ReadScheduleOptions(builder);
-            var queue = ReadQueueOptions(builder);
-            var services = new ServiceCollection().AddLogging().AddEventFlow(options => options
-                .AddDefaults(typeof(HorseAggregate).Assembly)
-                .AddDefaults(typeof(RaceAggregate).Assembly)).BuildServiceProvider();
+            var (services, engine) = CreateStoreEngine(builder);
             using (services)
             {
-                var readers = new TypedHorseIdentityStoreReaders(builder.Configuration,
-                    Options.Create(collection), Options.Create(schedule), Options.Create(queue), builder.Environment,
-                    services.GetRequiredService<IEventJsonSerializer>(), services.GetRequiredService<IDomainEventFactory>());
-                var engine = new TypedHorseIdentityStoreEngine(readers);
                 var result = await engine.ExecuteOwnedAsync(operation.OperationId, operation.Manifest, journal,
-                    CancellationToken.None).ConfigureAwait(false);
+                    CancellationToken.None, authorizedSourceSetHash: operationAuthorization!.SourceSetHash,
+                    authorizedBackupManifestHash: authorizedBackupManifestHash)
+                    .ConfigureAwait(false);
                 return result.Status == TypedHorseIdentityExecutionStatus.Completed && result.CanWrite ? 0 : 5;
             }
         }
@@ -126,6 +144,7 @@ internal static class HorseIdentityMigrationRuntimeMode
 
         var operation = await journal.GetStatusAsync(operationId).ConfigureAwait(false);
         if (operation?.Status != HorseIdentityMigrationOperationStatus.Staged) return 4;
+        if (await journal.GetPendingRequestAsync(operationId).ConfigureAwait(false) is not null) return 4;
         if (await journal.GetExecutionIntentAsync(operationId).ConfigureAwait(false) is not null) return 4;
         if (!(await journal.ClaimWorkflowAsync(operationId, DateTimeOffset.UtcNow).ConfigureAwait(false)).Succeeded)
             return 4;
@@ -266,8 +285,11 @@ internal static class HorseIdentityMigrationRuntimeMode
                 var operation = await journal.GetStatusAsync(parsed, cancellationToken).ConfigureAwait(false);
                 if (operation is null) return Results.NotFound();
                 var saved = await journal.GetSavedRequestAsync(parsed, cancellationToken).ConfigureAwait(false);
+                var pending = saved is null
+                    ? await journal.GetPendingRequestAsync(parsed, cancellationToken).ConfigureAwait(false)
+                    : null;
                 var intent = await journal.GetExecutionIntentAsync(parsed, cancellationToken).ConfigureAwait(false);
-                return Results.Ok(HorseIdentityMigrationEndpoints.ToPublic(operation, saved, intent));
+                return Results.Ok(HorseIdentityMigrationEndpoints.ToPublic(operation, saved, pending, intent));
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
                 or InvalidDataException or SqliteException)
@@ -300,6 +322,19 @@ internal static class HorseIdentityMigrationRuntimeMode
                     return redirectToLogin(context);
                 };
             });
+    }
+
+    internal static (ServiceProvider Services, TypedHorseIdentityStoreEngine Engine) CreateStoreEngine(
+        WebApplicationBuilder builder)
+    {
+        var services = new ServiceCollection().AddLogging().AddEventFlow(options => options
+            .AddDefaults(typeof(HorseAggregate).Assembly)
+            .AddDefaults(typeof(RaceAggregate).Assembly)).BuildServiceProvider();
+        var readers = new TypedHorseIdentityStoreReaders(builder.Configuration,
+            Options.Create(ReadCollectionOptions(builder)), Options.Create(ReadScheduleOptions(builder)),
+            Options.Create(ReadQueueOptions(builder)), builder.Environment,
+            services.GetRequiredService<IEventJsonSerializer>(), services.GetRequiredService<IDomainEventFactory>());
+        return (services, new TypedHorseIdentityStoreEngine(readers));
     }
 
     private static void SetNoStore(HttpResponse response)
@@ -420,8 +455,11 @@ internal static class HorseIdentityMigrationRuntimeMode
 
         Environment.ExitCode = HorseIdentityMigrationSupervisor.VerifyReadyExitCode;
         context.RequestServices.GetRequiredService<IHostApplicationLifetime>().StopApplication();
-        return HorseIdentityMigrationEndpoints.ToPublic(operation,
-            await journal.GetSavedRequestAsync(operationId, CancellationToken.None).ConfigureAwait(false), intent);
+        var saved = await journal.GetSavedRequestAsync(operationId, CancellationToken.None).ConfigureAwait(false);
+        var pending = saved is null
+            ? await journal.GetPendingRequestAsync(operationId, CancellationToken.None).ConfigureAwait(false)
+            : null;
+        return HorseIdentityMigrationEndpoints.ToPublic(operation, saved, pending, intent);
     }
 
     internal static HorseIdentityMigrationJournal CreateJournal(WebApplicationBuilder builder)

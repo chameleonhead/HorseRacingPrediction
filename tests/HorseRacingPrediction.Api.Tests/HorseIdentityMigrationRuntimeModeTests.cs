@@ -9,6 +9,7 @@ using EventFlow.Extensions;
 using HorseRacingPrediction.Contracts.Common;
 using HorseRacingPrediction.Api.Identity;
 using HorseRacingPrediction.Api.IdentityMigration;
+using HorseRacingPrediction.Api.Endpoints.IdentityMigration;
 using HorseRacingPrediction.Application.Commands.Horses;
 using HorseRacingPrediction.Application.Commands.Predictions;
 using HorseRacingPrediction.Contracts.Identity;
@@ -36,6 +37,51 @@ namespace HorseRacingPrediction.Api.Tests;
 [TestClass]
 public sealed class HorseIdentityMigrationRuntimeModeTests
 {
+    [TestMethod]
+    public async Task PendingPublicStatusRetainsKindAndManifestAfterSeal()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "horse-migration-status-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var manifest = Manifest();
+            var requestHash = HorseIdentityMigrationExecutionPolicy.ComputePendingImmutableRequestHash(manifest);
+            var operationId = Guid.NewGuid();
+            var journal = new HorseIdentityMigrationJournal(directory, []);
+            Assert.IsTrue((await journal.StagePendingWithRequestKeyAsync(operationId, manifest, Guid.NewGuid(),
+                requestHash, DateTimeOffset.UtcNow)).Succeeded);
+            Assert.IsTrue((await journal.CreateExecutionIntentAsync(operationId, requestHash,
+                DateTimeOffset.UtcNow)).Succeeded);
+            foreach (var phase in new[]
+            {
+                HorseIdentityMigrationExecutionPhase.Preparing,
+                HorseIdentityMigrationExecutionPhase.Draining,
+                HorseIdentityMigrationExecutionPhase.StoppingApi,
+                HorseIdentityMigrationExecutionPhase.ApiExited,
+                HorseIdentityMigrationExecutionPhase.BackedUp,
+            })
+                Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId, phase,
+                    DateTimeOffset.UtcNow)).Succeeded);
+            Assert.IsTrue((await journal.SealPendingRequestAsync(operationId, requestHash,
+                new string('1', 64), new string('2', 64), new string('3', 64), DateTimeOffset.UtcNow)).Succeeded);
+
+            var saved = await journal.GetSavedRequestAsync(operationId);
+            var pending = await journal.GetPendingRequestAsync(operationId);
+            var intent = await journal.GetExecutionIntentAsync(operationId);
+            var response = HorseIdentityMigrationEndpoints.ToPublic(
+                (await journal.GetStatusAsync(operationId))!, saved, pending, intent);
+
+            Assert.AreEqual(HorseIdentityMigrationAdmissionKind.PendingV2, response.RequestKind);
+            Assert.IsNotNull(response.SavedManifest);
+            Assert.IsNull(response.PreviewFingerprint);
+            Assert.AreEqual(HorseIdentityMigrationExecutionPhase.BackedUp.ToString(), response.ExecutionPhase);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [TestMethod]
     public async Task FixedCommandRejectsMissingMalformedAndExtraArgumentsBeforeCreatingHostState()
     {
@@ -386,6 +432,120 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
     }
 
     [TestMethod]
+    public async Task StandaloneFixedCommandRejectsPendingRequestWithoutClaimOrIntent()
+    {
+        await using var stores = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
+        var sourcePaths = new[] { stores.EventStorePath, stores.CollectionPath, stores.SchedulePath };
+        var journal = new HorseIdentityMigrationJournal(Path.GetDirectoryName(stores.CollectionPath)!, sourcePaths);
+        var manifest = Manifest();
+        var operationId = Guid.NewGuid();
+        var requestHash = HorseIdentityMigrationExecutionPolicy.ComputePendingImmutableRequestHash(manifest);
+        Assert.IsTrue((await journal.StagePendingWithRequestKeyAsync(operationId, manifest, Guid.NewGuid(), requestHash,
+            DateTimeOffset.UtcNow)).Succeeded);
+        var before = await stores.SourceSnapshotAsync();
+
+        var result = await RunMigrationCommandAsync(stores,
+            [HorseIdentityMigrationRuntimeMode.CommandName, operationId.ToString("D")]);
+
+        Assert.AreEqual(4, result.ExitCode,
+            "The standalone legacy command must not claim or fingerprint-bind a pending-only request.");
+        Assert.IsNull(await journal.GetExecutionIntentAsync(operationId));
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.Staged,
+            (await journal.GetStatusAsync(operationId))!.Status);
+        Assert.AreEqual(before, await stores.SourceSnapshotAsync());
+        Assert.IsNull(await journal.GetSavedRequestAsync(operationId));
+    }
+
+    [TestMethod]
+    public Task PendingPrivateChildRejectsMissingBackupBeforeClaim() =>
+        AssertPendingPrivateChildRejectsBackupAsync(createBackup: false);
+
+    [TestMethod]
+    public Task PendingPrivateChildRejectsBackupManifestMismatchBeforeClaim() =>
+        AssertPendingPrivateChildRejectsBackupAsync(createBackup: true);
+
+    [TestMethod]
+    public async Task PendingPrivateChildWithValidatedBackupExecutesAndPassesReadonlyPostcheckOnLinux()
+    {
+        if (!OperatingSystem.IsLinux())
+            Assert.Inconclusive("Private-child parent-death authorization requires Linux prctl support.");
+
+        await using var stores = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
+        var manifest = Manifest();
+        var mapping = HorseIdentityMigrationManifestPolicy.Validate(manifest).Mappings.Single();
+        const string raceId = "202609190101";
+        const string ticketId = "predictionticket-00000000-0000-4000-8000-000000000201";
+        await stores.SeedHorseAsync(mapping.OldHorseId);
+        await stores.SeedSerializedHorseEventAsync(mapping.OldHorseId);
+        await stores.SeedJraResourceAsync(mapping.OldHorseId);
+        var oldEntryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, mapping.OldHorseId);
+        await ReplaceSupportedEventsWithCommandBusSeedAsync(stores, mapping.OldHorseId, raceId, ticketId, oldEntryId);
+
+        var sources = new HorseIdentityMigrationConfiguredSources(stores.EventStorePath, stores.CollectionPath,
+            stores.SchedulePath, LocalCollectionQueuePath: null);
+        var journal = new HorseIdentityMigrationJournal(Path.GetDirectoryName(stores.CollectionPath)!,
+            sources.PhysicalSourcePaths);
+        var backup = HorseIdentityMigrationManagedBackup.ForJournal(journal);
+        var operationId = Guid.NewGuid();
+        var requestHash = HorseIdentityMigrationExecutionPolicy.ComputePendingImmutableRequestHash(manifest);
+        Assert.IsTrue((await journal.StagePendingWithRequestKeyAsync(operationId, manifest, Guid.NewGuid(), requestHash,
+            DateTimeOffset.UtcNow)).Succeeded);
+        Assert.IsTrue((await journal.CreateExecutionIntentAsync(operationId, requestHash, DateTimeOffset.UtcNow)).Succeeded);
+        foreach (var phase in new[]
+        {
+            HorseIdentityMigrationExecutionPhase.Preparing,
+            HorseIdentityMigrationExecutionPhase.Draining,
+            HorseIdentityMigrationExecutionPhase.StoppingApi,
+        })
+            Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId, phase, DateTimeOffset.UtcNow)).Succeeded);
+
+        using var controlLease = HorseIdentityMigrationMaintenanceOwnership.AcquireSupervisorControlLease(
+            sources.PhysicalSourcePaths);
+        var bootstrap = controlLease.IssueApiBootstrapAuthorization();
+        using (var sourceOwnership = HorseIdentityMigrationRuntimeOwnership.Acquire(sources.PhysicalSourcePaths))
+            await HorseIdentityMigrationMaintenanceOwnership.InstallMaintenanceGatesAsync(sourceOwnership, bootstrap,
+                operationId, requestHash, journal);
+
+        Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId,
+            HorseIdentityMigrationExecutionPhase.ApiExited, DateTimeOffset.UtcNow)).Succeeded);
+        var receipt = await backup.CreateAsync(operationId, sources, journal);
+        Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId,
+            HorseIdentityMigrationExecutionPhase.BackedUp, DateTimeOffset.UtcNow)).Succeeded);
+        var engine = stores.CreateEngineWithEventFlow(queueProvider: "Sqs");
+        var preview = await engine.InspectPreviewAsync(manifest, CancellationToken.None);
+        Assert.IsTrue(preview.CanStage);
+        Assert.IsNotNull(preview.Fingerprint);
+        var sourceSetHash = HorseIdentityMigrationRuntimeOwnership.ComputeSourceSetHash(sources.PhysicalSourcePaths);
+        Assert.IsTrue((await journal.SealPendingRequestAsync(operationId, requestHash, preview.Fingerprint!,
+            sourceSetHash, receipt.ManifestHash, DateTimeOffset.UtcNow)).Succeeded);
+        Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId,
+            HorseIdentityMigrationExecutionPhase.Applying, DateTimeOffset.UtcNow)).Succeeded);
+        var authorization = await controlLease.IssueOperationAuthorizationAsync(operationId, requestHash, journal);
+
+        var child = await RunMigrationCommandAsync(stores,
+            [HorseIdentityMigrationRuntimeMode.CommandName, operationId.ToString("D")],
+            privateAuthorization: authorization.SerializeForPrivateEnvironment());
+
+        Assert.AreEqual(0, child.ExitCode,
+            $"A validated private child must execute the sealed operation; output: {child.Output}");
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.Succeeded,
+            (await journal.GetStatusAsync(operationId))!.Status);
+        await using (var eventStore = new SqliteConnection(
+                         $"Data Source={stores.EventStorePath};Mode=ReadOnly;Pooling=False"))
+        {
+            await eventStore.OpenAsync();
+            await using var command = eventStore.CreateCommand();
+            command.CommandText = "SELECT HorseId FROM Horses;";
+            Assert.AreEqual(mapping.DestinationHorseId, await command.ExecuteScalarAsync());
+        }
+        var verifier = new HorseIdentityMigrationPostVerification(backup,
+            stores.EventFlowServices.GetRequiredService<EventFlow.EventStores.IEventJsonSerializer>(),
+            stores.EventFlowServices.GetRequiredService<EventFlow.EventStores.IDomainEventFactory>());
+        await verifier.VerifyAsync(operationId, sources, journal,
+            HorseIdentityMigrationManifestPolicy.Validate(manifest).Mappings, CancellationToken.None);
+    }
+
+    [TestMethod]
     public async Task FixedCommandRunsClaimedOperationAndSuccessfulGuidRetryReturnsReceiptWithoutRewriting()
     {
         await using var stores = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
@@ -534,7 +694,7 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
 
     private static async Task<CliResult> RunMigrationCommandAsync(
         HorseIdentityMigrationStoreEngineTests.StoreFixture stores, IReadOnlyList<string> arguments,
-        TimeSpan? timeout = null, bool configureIsolatedAws = false)
+        TimeSpan? timeout = null, bool configureIsolatedAws = false, string? privateAuthorization = null)
     {
         var process = new Process
         {
@@ -557,6 +717,9 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
         process.StartInfo.Environment["PredictionScheduling__StateDirectory"] = Path.GetDirectoryName(stores.SchedulePath)!;
         process.StartInfo.Environment["PredictionScheduling__StoreFileName"] = Path.GetFileName(stores.SchedulePath);
         process.StartInfo.Environment["CollectionQueue__Provider"] = "Sqs";
+        if (privateAuthorization is not null)
+            process.StartInfo.Environment[HorseIdentityMigrationMaintenanceCapability.PrivateEnvironmentVariable] =
+                privateAuthorization;
         if (configureIsolatedAws)
         {
             process.StartInfo.Environment["AWS_REGION"] = "ap-northeast-1";
@@ -608,6 +771,71 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
             }
             process.Dispose();
         }
+    }
+
+    private static async Task AssertPendingPrivateChildRejectsBackupAsync(bool createBackup)
+    {
+        if (!OperatingSystem.IsLinux())
+            Assert.Inconclusive("Private-child parent-death authorization requires Linux prctl support.");
+
+        await using var stores = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
+        var sources = new HorseIdentityMigrationConfiguredSources(stores.EventStorePath, stores.CollectionPath,
+            stores.SchedulePath, LocalCollectionQueuePath: null);
+        var journal = new HorseIdentityMigrationJournal(Path.GetDirectoryName(stores.CollectionPath)!,
+            sources.PhysicalSourcePaths);
+        var manifest = Manifest();
+        var operationId = Guid.NewGuid();
+        var requestHash = HorseIdentityMigrationExecutionPolicy.ComputePendingImmutableRequestHash(manifest);
+        Assert.IsTrue((await journal.StagePendingWithRequestKeyAsync(operationId, manifest, Guid.NewGuid(), requestHash,
+            DateTimeOffset.UtcNow)).Succeeded);
+        Assert.IsTrue((await journal.CreateExecutionIntentAsync(operationId, requestHash, DateTimeOffset.UtcNow)).Succeeded);
+        foreach (var phase in new[]
+        {
+            HorseIdentityMigrationExecutionPhase.Preparing,
+            HorseIdentityMigrationExecutionPhase.Draining,
+            HorseIdentityMigrationExecutionPhase.StoppingApi,
+        })
+            Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId, phase, DateTimeOffset.UtcNow)).Succeeded);
+
+        using var controlLease = HorseIdentityMigrationMaintenanceOwnership.AcquireSupervisorControlLease(
+            sources.PhysicalSourcePaths);
+        var bootstrap = controlLease.IssueApiBootstrapAuthorization();
+        using (var sourceOwnership = HorseIdentityMigrationRuntimeOwnership.Acquire(sources.PhysicalSourcePaths))
+            await HorseIdentityMigrationMaintenanceOwnership.InstallMaintenanceGatesAsync(sourceOwnership, bootstrap,
+                operationId, requestHash, journal);
+
+        Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId,
+            HorseIdentityMigrationExecutionPhase.ApiExited, DateTimeOffset.UtcNow)).Succeeded);
+        Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId,
+            HorseIdentityMigrationExecutionPhase.BackedUp, DateTimeOffset.UtcNow)).Succeeded);
+
+        string? actualBackupManifestHash = null;
+        if (createBackup)
+        {
+            var receipt = await HorseIdentityMigrationManagedBackup.ForJournal(journal)
+                .CreateAsync(operationId, sources, journal);
+            actualBackupManifestHash = receipt.ManifestHash;
+        }
+        var sealedBackupManifestHash = new string('D', 64);
+        Assert.IsFalse(string.Equals(actualBackupManifestHash, sealedBackupManifestHash, StringComparison.Ordinal));
+        Assert.IsTrue((await journal.SealPendingRequestAsync(operationId, requestHash, new string('A', 64),
+            HorseIdentityMigrationRuntimeOwnership.ComputeSourceSetHash(sources.PhysicalSourcePaths),
+            sealedBackupManifestHash, DateTimeOffset.UtcNow)).Succeeded);
+        Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId,
+            HorseIdentityMigrationExecutionPhase.Applying, DateTimeOffset.UtcNow)).Succeeded);
+        var authorization = await controlLease.IssueOperationAuthorizationAsync(operationId, requestHash, journal);
+
+        var result = await RunMigrationCommandAsync(stores,
+            [HorseIdentityMigrationRuntimeMode.CommandName, operationId.ToString("D")],
+            privateAuthorization: authorization.SerializeForPrivateEnvironment());
+
+        Assert.AreEqual(createBackup ? 4 : 5, result.ExitCode,
+            "A receipt-manifest conflict returns 4 after valid private authorization; a missing receipt fails validation with 5.");
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.Staged, (await journal.GetStatusAsync(operationId))!.Status);
+        Assert.AreEqual(HorseIdentityMigrationExecutionPhase.Applying,
+            (await journal.GetExecutionIntentAsync(operationId))!.Phase,
+            "The supervisor's seal phase remains Applying, and the child must not claim the operation.");
+        Assert.IsNull(await journal.GetClaimedStagedRequestAsync(operationId));
     }
 
     private sealed record CliResult(int ExitCode, string Output, bool TimedOut = false, int ProcessId = 0,

@@ -9,6 +9,7 @@ using HorseRacingPrediction.Contracts.Identity;
 using HorseRacingPrediction.Domain.Horses;
 using HorseRacingPrediction.Domain.Races;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.Builder;
 
 namespace HorseRacingPrediction.Api.IdentityMigration;
 
@@ -130,7 +131,7 @@ internal static class HorseIdentityMigrationSupervisor
 
             if (exitCode == HorseIdentityMigrationPreparationService.ApplyReadyExitCode)
             {
-                if (!await ApplyPreparedOperationAsync(sources, paths, journal, controlLease, stopping.Token)
+                if (!await ApplyPreparedOperationAsync(builder, sources, paths, journal, controlLease, stopping.Token)
                         .ConfigureAwait(false))
                     return 5;
                 if (stopping.IsCancellationRequested) return 143;
@@ -164,7 +165,7 @@ internal static class HorseIdentityMigrationSupervisor
     }
 
     private static async Task<bool> ApplyPreparedOperationAsync(
-        HorseIdentityMigrationConfiguredSources sources, IReadOnlyList<string> paths,
+        WebApplicationBuilder builder, HorseIdentityMigrationConfiguredSources sources, IReadOnlyList<string> paths,
         HorseIdentityMigrationJournal journal,
         HorseIdentityMigrationMaintenanceOwnership.HorseIdentityMigrationSupervisorControlLease controlLease,
         CancellationToken stoppingToken)
@@ -183,14 +184,36 @@ internal static class HorseIdentityMigrationSupervisor
 
         var backup = HorseIdentityMigrationManagedBackup.ForJournal(journal);
         stoppingToken.ThrowIfCancellationRequested();
-        await CreateOrValidateBackupAsync(backup, intent.OperationId, sources, journal, stoppingToken)
+        var backupReceipt = await CreateOrValidateBackupAsync(backup, intent.OperationId, sources, journal, stoppingToken)
             .ConfigureAwait(false);
         stoppingToken.ThrowIfCancellationRequested();
         EnsureSourceFilesystemCapacity(sources.PhysicalSourcePaths);
         if (!(await journal.AdvanceExecutionIntentAsync(intent.OperationId, HorseIdentityMigrationExecutionPhase.BackedUp,
-                DateTimeOffset.UtcNow).ConfigureAwait(false)).Succeeded
-            || !(await journal.AdvanceExecutionIntentAsync(intent.OperationId, HorseIdentityMigrationExecutionPhase.Applying,
                 DateTimeOffset.UtcNow).ConfigureAwait(false)).Succeeded)
+            return false;
+
+        var executableRequest = await journal.GetExecutableRequestAsync(intent.OperationId, stoppingToken)
+            .ConfigureAwait(false);
+        if (executableRequest is null
+            || !string.Equals(executableRequest.ImmutableRequestHash, intent.ImmutableRequestHash, StringComparison.Ordinal))
+            return false;
+        if (executableRequest.RequestKind == HorseIdentityMigrationAdmissionKind.PendingV2)
+        {
+            var sourceSetHash = HorseIdentityMigrationRuntimeOwnership.ComputeSourceSetHash(paths);
+            var (services, engine) = HorseIdentityMigrationRuntimeMode.CreateStoreEngine(builder);
+            HorseIdentityMigrationPreview census;
+            using (services)
+                census = await engine.InspectPreviewAsync(executableRequest.Manifest, stoppingToken).ConfigureAwait(false);
+            if (!census.CanStage || census.Fingerprint is null) return false;
+            stoppingToken.ThrowIfCancellationRequested();
+            var sealedResult = await journal.SealPendingRequestAsync(intent.OperationId,
+                executableRequest.ImmutableRequestHash, census.Fingerprint, sourceSetHash,
+                backupReceipt.ManifestHash, DateTimeOffset.UtcNow, stoppingToken).ConfigureAwait(false);
+            if (!sealedResult.Succeeded) return false;
+        }
+
+        if (!(await journal.AdvanceExecutionIntentAsync(intent.OperationId, HorseIdentityMigrationExecutionPhase.Applying,
+                DateTimeOffset.UtcNow, stoppingToken).ConfigureAwait(false)).Succeeded)
             return false;
 
         var operationAuthorization = await controlLease.IssueOperationAuthorizationAsync(intent.OperationId,
@@ -257,9 +280,9 @@ internal static class HorseIdentityMigrationSupervisor
         HorseIdentityMigrationJournal journal, HorseIdentityMigrationManagedBackup backup,
         CancellationToken cancellationToken)
     {
-        var saved = await journal.GetSavedRequestAsync(operationId, cancellationToken).ConfigureAwait(false)
+        var request = await journal.GetExecutableRequestAsync(operationId, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidDataException("The saved migration request is unavailable.");
-        var validation = HorseIdentityMigrationManifestPolicy.Validate(saved.Manifest);
+        var validation = HorseIdentityMigrationManifestPolicy.Validate(request.Manifest);
         if (!validation.IsValid) throw new InvalidDataException("The saved migration mapping is invalid.");
         using var services = new ServiceCollection().AddLogging().AddEventFlow(options => options
             .AddDefaults(typeof(HorseAggregate).Assembly).AddDefaults(typeof(RaceAggregate).Assembly))
@@ -270,7 +293,7 @@ internal static class HorseIdentityMigrationSupervisor
             .ConfigureAwait(false);
     }
 
-    internal static async Task CreateOrValidateBackupAsync(HorseIdentityMigrationManagedBackup backup,
+    internal static async Task<HorseIdentityMigrationBackupReceipt> CreateOrValidateBackupAsync(HorseIdentityMigrationManagedBackup backup,
         Guid operationId, HorseIdentityMigrationConfiguredSources sources, HorseIdentityMigrationJournal journal,
         CancellationToken cancellationToken)
     {
@@ -278,9 +301,8 @@ internal static class HorseIdentityMigrationSupervisor
             ?? throw new IOException("The migration journal has no state directory.");
         var packagePath = Path.Combine(stateDirectory, "backups", $"horse-id-migration-{operationId:N}");
         if (Directory.Exists(packagePath) || File.Exists(packagePath))
-            await backup.ValidateAsync(operationId, sources, journal, cancellationToken).ConfigureAwait(false);
-        else
-            await backup.CreateAsync(operationId, sources, journal, cancellationToken).ConfigureAwait(false);
+            return await backup.ValidateAsync(operationId, sources, journal, cancellationToken).ConfigureAwait(false);
+        return await backup.CreateAsync(operationId, sources, journal, cancellationToken).ConfigureAwait(false);
     }
 
     private static OwnedChild StartFixedCliChild(Guid operationId,

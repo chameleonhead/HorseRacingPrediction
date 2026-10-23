@@ -306,6 +306,9 @@ public sealed class HorseIdentityMigrationPostVerificationTests
         var manifest = new HorseIdentityMigrationManifest(
             [new HorseIdentityMigrationManifestEntry(OldHorseId, "jra-horse:2024100828", HypothesisAccepted: true)]);
         Assert.IsTrue((await journal.StageAsync(operationId, manifest, DateTimeOffset.UtcNow)).Succeeded);
+        var fingerprint = new string('B', 64);
+        Assert.IsTrue((await journal.BindStandaloneRequestAsync(operationId, manifest, fingerprint,
+            DateTimeOffset.UtcNow)).Succeeded);
         Assert.IsTrue((await journal.ClaimWorkflowAsync(operationId, DateTimeOffset.UtcNow)).Succeeded);
         var snapshot = await fixture.CreateEngineWithEventFlow("Local")
             .InspectExecutionInputsAsync(manifest, CancellationToken.None);

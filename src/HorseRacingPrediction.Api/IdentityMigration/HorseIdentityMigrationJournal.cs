@@ -95,6 +95,32 @@ internal sealed record HorseIdentityMigrationPendingRequest(
     HorseIdentityMigrationManifest Manifest,
     string ImmutableRequestHash);
 
+internal sealed record HorseIdentityMigrationExecutableRequest(
+    HorseIdentityMigrationManifest Manifest,
+    string ImmutableRequestHash,
+    HorseIdentityMigrationAdmissionKind RequestKind,
+    string? PreviewFingerprint);
+
+internal sealed record HorseIdentityMigrationPendingSeal(
+    Guid OperationId,
+    string ImmutableRequestHash,
+    string FullFingerprint,
+    string SourceSetHash,
+    string BackupManifestHash,
+    DateTimeOffset SealedAt);
+
+internal sealed record HorseIdentityMigrationPendingSealOutcome(
+    HorseIdentityMigrationPendingSeal? Seal,
+    HorseIdentityMigrationJournalReason Reason)
+{
+    internal bool Succeeded => Reason == HorseIdentityMigrationJournalReason.None && Seal is not null;
+}
+
+internal sealed record HorseIdentityMigrationRequestIdentity(
+    string ImmutableRequestHash,
+    HorseIdentityMigrationAdmissionKind RequestKind,
+    string? PreviewFingerprint);
+
 internal enum HorseIdentityMigrationStartupState
 {
     Ready,
@@ -126,6 +152,7 @@ internal sealed class HorseIdentityMigrationJournal
     private const long FailureStatusReserveBytes = 136 * 1024;
     private const long RequestKeyCapacityReservationBytes = 512;
     private const long ExecutionIntentCapacityReservationBytes = 512;
+    private const long PendingSealCapacityReservationBytes = 768;
     private const int MaximumSqliteSectorSizeBytes = 64 * 1024;
     private const int RollbackJournalRecordOverheadBytes = 8;
     private const int RollbackJournalHeaderBytes = 24;
@@ -540,6 +567,98 @@ internal sealed class HorseIdentityMigrationJournal
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return new(manifest, expectedHash);
+    }
+
+    internal async Task<HorseIdentityMigrationExecutableRequest?> GetExecutableRequestAsync(
+        Guid operationId, CancellationToken cancellationToken = default)
+    {
+        var saved = await GetSavedRequestAsync(operationId, cancellationToken).ConfigureAwait(false);
+        if (saved is not null)
+            return new(saved.Manifest, saved.ImmutableRequestHash, HorseIdentityMigrationAdmissionKind.BoundV1,
+                saved.PreviewFingerprint);
+
+        var pending = await GetPendingRequestAsync(operationId, cancellationToken).ConfigureAwait(false);
+        return pending is null ? null : new(pending.Manifest, pending.ImmutableRequestHash,
+            HorseIdentityMigrationAdmissionKind.PendingV2, PreviewFingerprint: null);
+    }
+
+    internal async Task<HorseIdentityMigrationPendingSeal?> GetPendingSealAsync(
+        Guid operationId, CancellationToken cancellationToken = default)
+    {
+        if (operationId == Guid.Empty || !File.Exists(_databasePath)) return null;
+        await using var connection = await OpenReadOnlyAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: true);
+        var seal = await HasPendingSealTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false)
+            ? await ReadPendingSealAsync(connection, transaction, operationId, cancellationToken).ConfigureAwait(false)
+            : null;
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return seal;
+    }
+
+    internal async Task<HorseIdentityMigrationPendingSealOutcome> SealPendingRequestAsync(
+        Guid operationId, string immutableRequestHash, string fullFingerprint, string sourceSetHash,
+        string backupManifestHash, DateTimeOffset sealedAt, CancellationToken cancellationToken = default)
+    {
+        if (operationId == Guid.Empty || !IsSha256Hash(immutableRequestHash) || !IsSha256Hash(fullFingerprint)
+            || !IsSha256Hash(sourceSetHash) || !IsSha256Hash(backupManifestHash))
+            return new(null, HorseIdentityMigrationJournalReason.RequestConflict);
+
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction();
+        var existing = await ReadPendingSealAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        if (existing is not null)
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return SealMatches(existing, immutableRequestHash, fullFingerprint, sourceSetHash, backupManifestHash)
+                ? new(existing, HorseIdentityMigrationJournalReason.None)
+                : new(existing, HorseIdentityMigrationJournalReason.RequestConflict);
+        }
+
+        var request = await ReadExecutableRequestIdentityAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        var intent = await ReadExecutionIntentAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        var operation = await ReadOperationAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        if (request is null || request.RequestKind != HorseIdentityMigrationAdmissionKind.PendingV2
+            || request.PreviewFingerprint is not null
+            || !string.Equals(request.ImmutableRequestHash, immutableRequestHash, StringComparison.Ordinal)
+            || operation?.Status != HorseIdentityMigrationOperationStatus.Staged
+            || intent?.Phase != HorseIdentityMigrationExecutionPhase.BackedUp
+            || !string.Equals(intent.ImmutableRequestHash, immutableRequestHash, StringComparison.Ordinal))
+            return new(null, HorseIdentityMigrationJournalReason.StaleOperation);
+
+        if (!await HasCapacityAsync(connection, transaction, PendingSealCapacityReservationBytes, cancellationToken)
+                .ConfigureAwait(false))
+            return new(null, HorseIdentityMigrationJournalReason.CapacityExceeded);
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "INSERT INTO migration_pending_seals (operation_id, immutable_request_hash, full_fingerprint, source_set_hash, backup_manifest_hash, sealed_utc) VALUES ($id, $request, $fingerprint, $source, $backup, $sealed);";
+            command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            command.Parameters.AddWithValue("$request", immutableRequestHash);
+            command.Parameters.AddWithValue("$fingerprint", fullFingerprint);
+            command.Parameters.AddWithValue("$source", sourceSetHash);
+            command.Parameters.AddWithValue("$backup", backupManifestHash);
+            command.Parameters.AddWithValue("$sealed", sealedAt.ToUniversalTime().ToString("O"));
+            try
+            {
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+            {
+                return new(null, HorseIdentityMigrationJournalReason.OwnershipBusy);
+            }
+        }
+
+        var seal = await ReadPendingSealAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return seal is null
+            ? new(null, HorseIdentityMigrationJournalReason.StaleOperation)
+            : new(seal, HorseIdentityMigrationJournalReason.None);
     }
 
     internal async Task<HorseIdentityMigrationRequestKeyRecord?> GetByRequestKeyAsync(
@@ -988,6 +1107,8 @@ internal sealed class HorseIdentityMigrationJournal
             .ConfigureAwait(false);
         var requestHash = await ReadRequestKeyForOperationAsync(connection, transaction, operationId, cancellationToken)
             .ConfigureAwait(false);
+        var requestKind = await ReadRequestKindForOperationAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
         if (current is null || operation is null
             || requestHash is null
             || !string.Equals(requestHash, current.ImmutableRequestHash, StringComparison.Ordinal)
@@ -1001,6 +1122,16 @@ internal sealed class HorseIdentityMigrationJournal
                     || (nextPhase != HorseIdentityMigrationExecutionPhase.Applying
                         && operation.Status != HorseIdentityMigrationOperationStatus.Succeeded))))
             return new(current, HorseIdentityMigrationJournalReason.StaleOperation);
+
+        if (nextPhase == HorseIdentityMigrationExecutionPhase.Applying
+            && requestKind == HorseIdentityMigrationAdmissionKind.PendingV2)
+        {
+            var seal = await ReadPendingSealAsync(connection, transaction, operationId, cancellationToken)
+                .ConfigureAwait(false);
+            if (seal is null || !string.Equals(seal.ImmutableRequestHash, current.ImmutableRequestHash,
+                    StringComparison.Ordinal))
+                return new(current, HorseIdentityMigrationJournalReason.StaleOperation);
+        }
 
         await using (var command = connection.CreateCommand())
         {
@@ -1550,6 +1681,15 @@ internal sealed class HorseIdentityMigrationJournal
         return await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null;
     }
 
+    private static async Task<bool> HasPendingSealTableAsync(
+        SqliteConnection connection, SqliteTransaction? transaction, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'migration_pending_seals';";
+        return await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null;
+    }
+
     private async Task<(string ImmutableRequestHash, string? PreviewFingerprint,
         HorseIdentityMigrationAdmissionKind RequestKind, Guid OperationId)?> ReadRequestKeyAsync(
         SqliteConnection connection,
@@ -1624,6 +1764,62 @@ internal sealed class HorseIdentityMigrationJournal
         command.CommandText = "SELECT immutable_request_hash FROM migration_request_keys WHERE operation_id = $id;";
         command.Parameters.AddWithValue("$id", operationId.ToString("D"));
         return (string?)await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<HorseIdentityMigrationRequestIdentity?> ReadExecutableRequestIdentityAsync(
+        SqliteConnection connection, SqliteTransaction transaction, Guid operationId,
+        CancellationToken cancellationToken)
+    {
+        if (!await HasRequestKeyTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false))
+            return null;
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT immutable_request_hash, preview_fingerprint, request_kind FROM migration_request_keys WHERE operation_id = $id;";
+        command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) return null;
+        var hash = reader.GetString(0);
+        var fingerprint = reader.IsDBNull(1) ? null : reader.GetString(1);
+        if (!Enum.TryParse<HorseIdentityMigrationAdmissionKind>(reader.GetString(2), ignoreCase: false,
+                out var kind) || !Enum.IsDefined(kind) || !IsSha256Hash(hash)
+            || (fingerprint is not null && !IsSha256Hash(fingerprint)))
+            throw new InvalidDataException("Migration journal executable request identity is corrupt.");
+        return new(hash, kind, fingerprint);
+    }
+
+    private static bool SealMatches(HorseIdentityMigrationPendingSeal seal, string immutableRequestHash,
+        string fullFingerprint, string sourceSetHash, string backupManifestHash) =>
+        string.Equals(seal.ImmutableRequestHash, immutableRequestHash, StringComparison.Ordinal)
+        && string.Equals(seal.FullFingerprint, fullFingerprint, StringComparison.Ordinal)
+        && string.Equals(seal.SourceSetHash, sourceSetHash, StringComparison.Ordinal)
+        && string.Equals(seal.BackupManifestHash, backupManifestHash, StringComparison.Ordinal);
+
+    private static async Task<HorseIdentityMigrationPendingSeal?> ReadPendingSealAsync(
+        SqliteConnection connection, SqliteTransaction? transaction, Guid operationId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT immutable_request_hash, full_fingerprint, source_set_hash, backup_manifest_hash, sealed_utc FROM migration_pending_seals WHERE operation_id = $id;";
+        command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) return null;
+        try
+        {
+            var requestHash = reader.GetString(0);
+            var fingerprint = reader.GetString(1);
+            var sourceSetHash = reader.GetString(2);
+            var backupManifestHash = reader.GetString(3);
+            var sealedAt = DateTimeOffset.Parse(reader.GetString(4), System.Globalization.CultureInfo.InvariantCulture);
+            if (!IsSha256Hash(requestHash) || !IsSha256Hash(fingerprint) || !IsSha256Hash(sourceSetHash)
+                || !IsSha256Hash(backupManifestHash))
+                throw new InvalidDataException("Pending migration seal is corrupt.");
+            return new(operationId, requestHash, fingerprint, sourceSetHash, backupManifestHash, sealedAt);
+        }
+        catch (Exception exception) when (exception is FormatException or InvalidOperationException or IndexOutOfRangeException)
+        {
+            throw new InvalidDataException("Pending migration seal is corrupt.", exception);
+        }
     }
 
     private async Task<HorseIdentityMigrationExecutionIntent?> ReadExecutionIntentAsync(
@@ -1962,6 +2158,15 @@ internal sealed class HorseIdentityMigrationJournal
                 created_utc TEXT NOT NULL,
                 updated_utc TEXT NOT NULL,
                 phase INTEGER NOT NULL,
+                FOREIGN KEY (operation_id) REFERENCES migration_operations(operation_id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS migration_pending_seals (
+                operation_id TEXT PRIMARY KEY NOT NULL,
+                immutable_request_hash TEXT NOT NULL,
+                full_fingerprint TEXT NOT NULL,
+                source_set_hash TEXT NOT NULL,
+                backup_manifest_hash TEXT NOT NULL,
+                sealed_utc TEXT NOT NULL,
                 FOREIGN KEY (operation_id) REFERENCES migration_operations(operation_id) ON DELETE CASCADE
             );
             CREATE UNIQUE INDEX IF NOT EXISTS IX_migration_execution_intents_single_active

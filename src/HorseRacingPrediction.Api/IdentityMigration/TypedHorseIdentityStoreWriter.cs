@@ -28,7 +28,9 @@ internal sealed class TypedHorseIdentityStoreWriter(
     HorseIdentityMigrationJournal journal,
     Func<CancellationToken, Task>? beforeFirstWrite = null,
     Func<CancellationToken, Task>? afterPageCommit = null,
-    TimeProvider? timeProvider = null)
+    TimeProvider? timeProvider = null,
+    string? authorizedSourceSetHash = null,
+    string? authorizedBackupManifestHash = null)
 {
     private const int PageSize = 128;
     private static readonly TimeSpan ExecutionTimeout = TimeSpan.FromMinutes(30);
@@ -51,6 +53,9 @@ internal sealed class TypedHorseIdentityStoreWriter(
             cancellationToken, deadlineSource.Token);
         var operationToken = operationSource.Token;
         executionBudget.EnsureWithinBounds(operationToken);
+        if (!await HasValidPendingSealAsync(operationId, validation.Mappings, operationToken).ConfigureAwait(false))
+            return new(TypedHorseIdentityExecutionStatus.RejectedBeforeWrite,
+                HorseIdentityMigrationJournalReason.RequestConflict, 0, CanWrite: false);
         var lease = await journal.TryAcquireExecutionAsync(operationId, executionTimeProvider.GetUtcNow(), operationToken)
             .ConfigureAwait(false);
         if (lease is null)
@@ -73,6 +78,12 @@ internal sealed class TypedHorseIdentityStoreWriter(
                     return new(TypedHorseIdentityExecutionStatus.RejectedBeforeWrite,
                         HorseIdentityMigrationJournalReason.RequestConflict, verifiedPages, CanWrite: false);
                 }
+                if (!await HasValidPendingSealAsync(operationId, validation.Mappings, operationToken).ConfigureAwait(false))
+                {
+                    await lease.MarkPartialAsync(executionTimeProvider.GetUtcNow(), operationToken).ConfigureAwait(false);
+                    return new(TypedHorseIdentityExecutionStatus.RejectedBeforeWrite,
+                        HorseIdentityMigrationJournalReason.RequestConflict, verifiedPages, CanWrite: false);
+                }
                 var snapshot = await engine.InspectExecutionInputsAsync(manifest, operationToken)
                     .ConfigureAwait(false);
                 executionBudget.EnsureWithinBounds(operationToken);
@@ -82,6 +93,13 @@ internal sealed class TypedHorseIdentityStoreWriter(
                     await lease.MarkPartialAsync(executionTimeProvider.GetUtcNow(), operationToken).ConfigureAwait(false);
                     return new(TypedHorseIdentityExecutionStatus.RejectedBeforeWrite, blocker.Value,
                         verifiedPages, CanWrite: false);
+                }
+                if (!await HasValidPendingSealAsync(operationId, validation.Mappings, operationToken, snapshot)
+                        .ConfigureAwait(false))
+                {
+                    await lease.MarkPartialAsync(executionTimeProvider.GetUtcNow(), operationToken).ConfigureAwait(false);
+                    return new(TypedHorseIdentityExecutionStatus.RejectedBeforeWrite,
+                        HorseIdentityMigrationJournalReason.RequestConflict, verifiedPages, CanWrite: false);
                 }
                 executionBudget.AddPreviouslyScanned(snapshot.TypedReferences!.InspectedRows,
                     snapshot.TypedReferences.InspectedBytes, operationToken);
@@ -128,6 +146,9 @@ internal sealed class TypedHorseIdentityStoreWriter(
                             throw new InvalidDataException("Prepared page checkpoint was rejected.");
                     }
 
+                    if (!await HasValidPendingSealAsync(operationId, validation.Mappings, operationToken)
+                            .ConfigureAwait(false))
+                        throw new InvalidDataException("The pending migration seal changed before writing.");
                     if (beforeFirstWrite is not null)
                         await beforeFirstWrite(operationToken).ConfigureAwait(false);
                     executionBudget.EnsureWithinBounds(operationToken);
@@ -247,6 +268,30 @@ internal sealed class TypedHorseIdentityStoreWriter(
         }
         catch (Exception) { }
     }
+
+    private async Task<bool> HasValidPendingSealAsync(Guid operationId,
+        IReadOnlyList<HorseIdentityMigrationMapping> mappings, CancellationToken cancellationToken,
+        MigrationStoreReadSnapshot? snapshot = null)
+    {
+        var request = await journal.GetExecutableRequestAsync(operationId, cancellationToken).ConfigureAwait(false);
+        if (request is null) return false;
+        if (request.RequestKind != HorseIdentityMigrationAdmissionKind.PendingV2) return true;
+        if (authorizedSourceSetHash is null || !IsSha256(authorizedSourceSetHash)
+            || authorizedBackupManifestHash is null || !IsSha256(authorizedBackupManifestHash)) return false;
+        var manifest = new HorseIdentityMigrationManifest(mappings.Select(mapping =>
+            (HorseIdentityMigrationManifestEntry?)new(mapping.OldHorseId, mapping.JraIdentity, true)).ToArray());
+        var expectedRequestHash = HorseIdentityMigrationExecutionPolicy.ComputePendingImmutableRequestHash(manifest);
+        var seal = await journal.GetPendingSealAsync(operationId, cancellationToken).ConfigureAwait(false);
+        return seal is not null
+            && FixedHashEquals(request.ImmutableRequestHash, expectedRequestHash)
+            && FixedHashEquals(request.ImmutableRequestHash, seal.ImmutableRequestHash)
+            && FixedHashEquals(authorizedSourceSetHash, seal.SourceSetHash)
+            && FixedHashEquals(authorizedBackupManifestHash, seal.BackupManifestHash)
+            && (snapshot is null || FixedHashEquals(seal.FullFingerprint,
+                TypedHorseIdentityStoreEngine.BuildPreviewFingerprint(mappings, snapshot)));
+    }
+
+    private static bool IsSha256(string value) => value.Length == 64 && value.All(Uri.IsHexDigit);
 
     internal static HorseIdentityMigrationJournalReason? FindPreflightBlocker(MigrationStoreReadSnapshot snapshot)
     {

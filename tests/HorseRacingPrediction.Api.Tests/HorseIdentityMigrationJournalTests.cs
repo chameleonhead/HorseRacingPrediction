@@ -99,6 +99,101 @@ public sealed class HorseIdentityMigrationJournalTests
     }
 
     [TestMethod]
+    public async Task PendingSealIsAtomicIdempotentAndRequiredOnlyAtApplying()
+    {
+        using var fixture = new Fixture();
+        var operationId = Guid.NewGuid();
+        var manifest = Manifest(23);
+        var requestKey = Guid.NewGuid();
+        var requestHash = HorseIdentityMigrationExecutionPolicy.ComputePendingImmutableRequestHash(manifest);
+        Assert.IsTrue((await fixture.Journal.StagePendingWithRequestKeyAsync(operationId, manifest, requestKey,
+            requestHash, Now)).Succeeded);
+        var executable = await fixture.Journal.GetExecutableRequestAsync(operationId);
+        Assert.IsNotNull(executable);
+        Assert.AreEqual(HorseIdentityMigrationAdmissionKind.PendingV2, executable.RequestKind);
+        Assert.AreEqual(requestHash, executable.ImmutableRequestHash);
+        Assert.IsNull(executable.PreviewFingerprint);
+        Assert.IsTrue((await fixture.Journal.CreateExecutionIntentAsync(operationId, requestHash, Now)).Succeeded);
+
+        foreach (var phase in new[]
+        {
+            HorseIdentityMigrationExecutionPhase.Preparing,
+            HorseIdentityMigrationExecutionPhase.Draining,
+            HorseIdentityMigrationExecutionPhase.StoppingApi,
+            HorseIdentityMigrationExecutionPhase.ApiExited,
+            HorseIdentityMigrationExecutionPhase.BackedUp,
+        })
+            Assert.IsTrue((await fixture.Journal.AdvanceExecutionIntentAsync(operationId, phase, Now)).Succeeded);
+
+        var fingerprint = new string('1', 64);
+        var sourceHash = new string('2', 64);
+        var backupHash = new string('3', 64);
+        var concurrentSeals = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ =>
+            fixture.Journal.SealPendingRequestAsync(operationId, requestHash, fingerprint,
+                sourceHash, backupHash, Now)));
+        Assert.IsTrue(concurrentSeals.All(outcome => outcome.Succeeded),
+            string.Join(';', concurrentSeals.Select(outcome => outcome.Reason)));
+        Assert.AreEqual(1, concurrentSeals.Select(outcome => outcome.Seal).Distinct().Count(),
+            "Concurrent identical seal attempts must converge on one immutable durable record.");
+        var seal = concurrentSeals[0];
+        var sameSeal = await fixture.Journal.SealPendingRequestAsync(operationId, requestHash, fingerprint,
+            sourceHash, backupHash, Now.AddMinutes(1));
+        Assert.IsTrue(sameSeal.Succeeded, "An identical retry must return the durable seal.");
+        Assert.AreEqual(seal.Seal, sameSeal.Seal);
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.RequestConflict,
+            (await fixture.Journal.SealPendingRequestAsync(operationId, requestHash, fingerprint,
+                sourceHash, new string('4', 64), Now)).Reason);
+        Assert.IsTrue((await fixture.Journal.AdvanceExecutionIntentAsync(operationId,
+            HorseIdentityMigrationExecutionPhase.Applying, Now)).Succeeded);
+
+        var pendingAfterSeal = await fixture.Journal.GetPendingRequestAsync(operationId);
+        var executableAfterSeal = await fixture.Journal.GetExecutableRequestAsync(operationId);
+        Assert.IsNotNull(pendingAfterSeal);
+        Assert.IsNotNull(executableAfterSeal);
+        Assert.AreEqual(requestHash, pendingAfterSeal.ImmutableRequestHash);
+        Assert.AreEqual(requestHash, executableAfterSeal.ImmutableRequestHash,
+            "Sealing adds full evidence without changing the immutable pending request identity.");
+        Assert.AreEqual(HorseIdentityMigrationAdmissionKind.PendingV2, executableAfterSeal.RequestKind);
+        Assert.IsNull(await fixture.Journal.GetSavedRequestAsync(operationId),
+            "The strict BoundV1 reader must not reinterpret a sealed pending request.");
+    }
+
+    [TestMethod]
+    public async Task PendingCannotSealBeforeIntentAndBackedUpOrAdvanceToApplyingWithoutSeal()
+    {
+        using var fixture = new Fixture();
+        var operationId = Guid.NewGuid();
+        var manifest = Manifest(24);
+        var requestHash = HorseIdentityMigrationExecutionPolicy.ComputePendingImmutableRequestHash(manifest);
+        Assert.IsTrue((await fixture.Journal.StagePendingWithRequestKeyAsync(operationId, manifest, Guid.NewGuid(),
+            requestHash, Now)).Succeeded);
+        var fingerprint = new string('5', 64);
+        var sourceHash = new string('6', 64);
+        var backupHash = new string('7', 64);
+
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.StaleOperation,
+            (await fixture.Journal.SealPendingRequestAsync(operationId, requestHash, fingerprint, sourceHash,
+                backupHash, Now)).Reason);
+        Assert.IsTrue((await fixture.Journal.CreateExecutionIntentAsync(operationId, requestHash, Now)).Succeeded);
+        foreach (var phase in new[]
+        {
+            HorseIdentityMigrationExecutionPhase.Preparing,
+            HorseIdentityMigrationExecutionPhase.Draining,
+            HorseIdentityMigrationExecutionPhase.StoppingApi,
+            HorseIdentityMigrationExecutionPhase.ApiExited,
+            HorseIdentityMigrationExecutionPhase.BackedUp,
+        })
+            Assert.IsTrue((await fixture.Journal.AdvanceExecutionIntentAsync(operationId, phase, Now)).Succeeded);
+
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.StaleOperation,
+            (await fixture.Journal.AdvanceExecutionIntentAsync(operationId,
+                HorseIdentityMigrationExecutionPhase.Applying, Now)).Reason);
+        Assert.AreEqual(HorseIdentityMigrationExecutionPhase.BackedUp,
+            (await fixture.Journal.GetExecutionIntentAsync(operationId))!.Phase);
+        Assert.IsNull(await fixture.Journal.GetPendingSealAsync(operationId));
+    }
+
+    [TestMethod]
     public async Task SameRequestKeyCannotCoalesceBoundV1AndPendingV2OrLaunderPendingThroughStandaloneBinding()
     {
         using var fixture = new Fixture();

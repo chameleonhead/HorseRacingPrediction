@@ -1,7 +1,10 @@
 using System.Text.Json;
+using EventFlow.Aggregates;
+using EventFlow.EventStores;
 using HorseRacingPrediction.Api.IdentityMigration;
 using HorseRacingPrediction.Api.Identity;
 using HorseRacingPrediction.Application.Queries.ReadModels;
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Contracts.Common;
 using HorseRacingPrediction.Contracts.Identity;
 using Microsoft.Data.Sqlite;
@@ -147,7 +150,7 @@ public sealed class HorseIdentityMigrationStoreWriterTests
         var destination = HorseIdentityMigrationManifestPolicy.Validate(manifest).Mappings.Single().DestinationHorseId;
         var journal = CreateJournal(fixture);
         var operationId = Guid.NewGuid();
-        Assert.IsTrue((await journal.StageAsync(operationId, manifest, DateTimeOffset.UtcNow)).Succeeded);
+        await StageBoundV1Async(journal, operationId, manifest);
         Assert.IsTrue((await journal.ClaimWorkflowAsync(operationId, DateTimeOffset.UtcNow)).Succeeded);
         var engine = new TypedHorseIdentityStoreEngine(fixture.CreateReadersWithEventFlow("Local"));
 
@@ -206,6 +209,200 @@ public sealed class HorseIdentityMigrationStoreWriterTests
     }
 
     [TestMethod]
+    public async Task PendingExecutionWithoutValidatedBackupProofIsRejectedBeforeLeaseOrSourceWrite()
+    {
+        await using var fixture = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        var manifest = Manifest();
+        var journal = CreateJournal(fixture);
+        var operationId = Guid.NewGuid();
+        var requestHash = HorseIdentityMigrationExecutionPolicy.ComputePendingImmutableRequestHash(manifest);
+        Assert.IsTrue((await journal.StagePendingWithRequestKeyAsync(operationId, manifest, Guid.NewGuid(),
+            requestHash, DateTimeOffset.UtcNow)).Succeeded);
+        Assert.IsTrue((await journal.CreateExecutionIntentAsync(operationId, requestHash, DateTimeOffset.UtcNow)).Succeeded);
+        foreach (var phase in new[]
+        {
+            HorseIdentityMigrationExecutionPhase.Preparing,
+            HorseIdentityMigrationExecutionPhase.Draining,
+            HorseIdentityMigrationExecutionPhase.StoppingApi,
+            HorseIdentityMigrationExecutionPhase.ApiExited,
+            HorseIdentityMigrationExecutionPhase.BackedUp,
+        })
+            Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId, phase, DateTimeOffset.UtcNow)).Succeeded);
+        var sourceSetHash = HorseIdentityMigrationRuntimeOwnership.ComputeSourceSetHash(
+            [fixture.EventStorePath, fixture.CollectionPath, fixture.SchedulePath, fixture.QueuePath]);
+        Assert.IsTrue((await journal.SealPendingRequestAsync(operationId, requestHash, new string('A', 64),
+            sourceSetHash, new string('B', 64), DateTimeOffset.UtcNow)).Succeeded);
+        Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId,
+            HorseIdentityMigrationExecutionPhase.Applying, DateTimeOffset.UtcNow)).Succeeded);
+        var before = await fixture.SourceSnapshotAsync();
+        var engine = new TypedHorseIdentityStoreEngine(fixture.CreateReadersWithEventFlow("Local"));
+
+        var result = await engine.ExecuteOwnedAsync(operationId, manifest, journal, CancellationToken.None,
+            authorizedSourceSetHash: sourceSetHash);
+
+        Assert.AreEqual(TypedHorseIdentityExecutionStatus.RejectedBeforeWrite, result.Status);
+        Assert.IsFalse(result.CanWrite);
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.Staged,
+            (await journal.GetStatusAsync(operationId))!.Status);
+        Assert.AreEqual(before, await fixture.SourceSnapshotAsync(),
+            "The centralized pending-seal gate must run before ownership acquisition and all source writes.");
+        Assert.IsFalse(File.Exists(journal.LockPath), "A rejected pending request must not acquire the lease lock.");
+    }
+
+    [TestMethod]
+    public async Task PendingSourceDriftAfterSealIsRejectedBeforeAnyBusinessWrite()
+    {
+        await using var fixture = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        await fixture.SeedJraResourceAsync(OldHorseId);
+        await fixture.SeedInterleavedTicketStreamAcrossPageBoundaryAsync(
+            DeterministicIdGenerator.BuildRaceEntryId(RaceId, OldHorseId));
+        _ = new LocalCollectionQueue(fixture.QueuePath);
+        await fixture.ExecuteAsync(fixture.CollectionPath, $$"""
+            UPDATE collection_resources
+            SET AttributesJson='{"requestedByHorseId":"{{OldHorseId}}","userNote":"before seal"}'
+            WHERE Type='Horse' AND Provider='JRA' AND ResourceId='{{OldHorseId}}';
+            """);
+        var queueOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        queueOptions.Converters.Add(new HorseRacingPrediction.Contracts.Common.Time.JstStoredDateTimeOffsetJsonConverter());
+        var queueBody = JsonSerializer.Serialize(new HorseRacingPrediction.CollectionOperations.CollectionPlatform
+            .CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "pending drift fixture"), queueOptions);
+        await fixture.SeedLocalQueueMessageAsync(queueBody);
+        await fixture.ExecuteAsync(fixture.SchedulePath, """
+            INSERT INTO prediction_candidates
+                (RaceId, Status, FirstQueuedAt, AvailableAt, LeaseToken, LeaseExpiresAt, LastError, UpdatedAt)
+            VALUES ('pending-drift-race', 0, '2026-10-14T00:00:00+09:00',
+                    '2026-10-14T00:00:00+09:00', NULL, NULL, 'preserve error', '2026-10-14T00:00:00+09:00');
+            """);
+        var manifest = Manifest();
+        var journal = CreateJournal(fixture);
+        var operationId = Guid.NewGuid();
+        var requestHash = HorseIdentityMigrationExecutionPolicy.ComputePendingImmutableRequestHash(manifest);
+        Assert.IsTrue((await journal.StagePendingWithRequestKeyAsync(operationId, manifest, Guid.NewGuid(),
+            requestHash, DateTimeOffset.UtcNow)).Succeeded);
+        var engine = new TypedHorseIdentityStoreEngine(fixture.CreateReadersWithEventFlow("Local"));
+        var preSealPreview = await engine.InspectPreviewAsync(manifest, CancellationToken.None);
+        Assert.IsTrue(preSealPreview.CanStage,
+            $"Blockers: {string.Join(',', preSealPreview.Blockers)}; schemas: {string.Join(',', preSealPreview.Stores.Select(item => item.Surface + ":" + item.Status))}");
+        Assert.IsNotNull(preSealPreview.Fingerprint);
+        Assert.IsTrue((await journal.CreateExecutionIntentAsync(operationId, requestHash, DateTimeOffset.UtcNow)).Succeeded);
+        foreach (var phase in new[]
+        {
+            HorseIdentityMigrationExecutionPhase.Preparing,
+            HorseIdentityMigrationExecutionPhase.Draining,
+            HorseIdentityMigrationExecutionPhase.StoppingApi,
+            HorseIdentityMigrationExecutionPhase.ApiExited,
+            HorseIdentityMigrationExecutionPhase.BackedUp,
+        })
+            Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId, phase, DateTimeOffset.UtcNow)).Succeeded);
+        var sourcePaths = new[] { fixture.EventStorePath, fixture.CollectionPath, fixture.SchedulePath, fixture.QueuePath };
+        var sourceSetHash = HorseIdentityMigrationRuntimeOwnership.ComputeSourceSetHash(sourcePaths);
+        var backupManifestHash = new string('B', 64);
+        Assert.IsTrue((await journal.SealPendingRequestAsync(operationId, requestHash, preSealPreview.Fingerprint!,
+            sourceSetHash, backupManifestHash, DateTimeOffset.UtcNow)).Succeeded);
+        Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId,
+            HorseIdentityMigrationExecutionPhase.Applying, DateTimeOffset.UtcNow)).Succeeded);
+
+        await fixture.ExecuteAsync(fixture.CollectionPath, $$"""
+            UPDATE collection_resources
+            SET AttributesJson='{"requestedByHorseId":"{{OldHorseId}}","userNote":"changed after seal"}'
+            WHERE Type='Horse' AND Provider='JRA' AND ResourceId='{{OldHorseId}}';
+            """);
+        var afterDrift = await fixture.SourceSnapshotAsync();
+        Assert.IsTrue((await journal.ClaimWorkflowAsync(operationId, DateTimeOffset.UtcNow)).Succeeded);
+
+        var result = await engine.ExecuteOwnedAsync(operationId, manifest, journal, CancellationToken.None,
+            authorizedSourceSetHash: sourceSetHash, authorizedBackupManifestHash: backupManifestHash);
+
+        Assert.AreEqual(TypedHorseIdentityExecutionStatus.RejectedBeforeWrite, result.Status);
+        Assert.IsFalse(result.CanWrite);
+        Assert.AreEqual(afterDrift, await fixture.SourceSnapshotAsync(),
+            "The complete fresh fingerprint must match the sealed census before the writer can plan or mutate pages.");
+        await using var connection = new SqliteConnection($"Data Source={fixture.CollectionPath};Pooling=False;Mode=ReadOnly");
+        await connection.OpenAsync();
+        Assert.AreEqual("{\"requestedByHorseId\":\"" + OldHorseId + "\",\"userNote\":\"changed after seal\"}",
+            await ScalarAsync(connection, "SELECT AttributesJson FROM collection_resources WHERE ResourceId='" + OldHorseId + "';"));
+    }
+
+    [TestMethod]
+    public async Task PendingUnchangedSourcesExecuteAgainstSealedPreviewAndReachReadonlyPostcheck()
+    {
+        await using var fixture = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
+        await fixture.SeedHorseAsync(OldHorseId);
+        await fixture.SeedSerializedHorseEventAsync(OldHorseId);
+        await fixture.SeedJraResourceAsync(OldHorseId);
+        var oldEntryId = DeterministicIdGenerator.BuildRaceEntryId(RaceId, OldHorseId);
+        await fixture.SeedInterleavedTicketStreamAcrossPageBoundaryAsync(oldEntryId);
+        await HorseIdentityMigrationRuntimeModeTests.ReplaceSupportedEventsWithCommandBusSeedAsync(
+            fixture, OldHorseId, RaceId, TicketAggregateId, oldEntryId);
+        await fixture.ExecuteAsync(fixture.CollectionPath, $$"""
+            UPDATE collection_resources
+            SET AttributesJson='{"requestedByHorseId":"{{OldHorseId}}","userNote":"preserve"}'
+            WHERE Type='Horse' AND Provider='JRA' AND ResourceId='{{OldHorseId}}';
+            """);
+        var queueOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        queueOptions.Converters.Add(new HorseRacingPrediction.Contracts.Common.Time.JstStoredDateTimeOffsetJsonConverter());
+        var queueBody = JsonSerializer.Serialize(new HorseRacingPrediction.CollectionOperations.CollectionPlatform
+            .CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "pending happy fixture"), queueOptions);
+        await fixture.SeedLocalQueueMessageAsync(queueBody);
+        await fixture.ExecuteAsync(fixture.SchedulePath, """
+            INSERT INTO prediction_candidates
+                (RaceId, Status, FirstQueuedAt, AvailableAt, LeaseToken, LeaseExpiresAt, LastError, UpdatedAt)
+            VALUES ('pending-happy-race', 0, '2026-10-14T00:00:00+09:00',
+                    '2026-10-14T00:00:00+09:00', NULL, NULL, 'preserve error', '2026-10-14T00:00:00+09:00');
+            """);
+
+        var manifest = Manifest();
+        var journal = CreateJournal(fixture);
+        var operationId = Guid.NewGuid();
+        var requestHash = HorseIdentityMigrationExecutionPolicy.ComputePendingImmutableRequestHash(manifest);
+        Assert.IsTrue((await journal.StagePendingWithRequestKeyAsync(operationId, manifest, Guid.NewGuid(),
+            requestHash, DateTimeOffset.UtcNow)).Succeeded);
+        Assert.IsTrue((await journal.CreateExecutionIntentAsync(operationId, requestHash, DateTimeOffset.UtcNow)).Succeeded);
+        foreach (var phase in new[]
+        {
+            HorseIdentityMigrationExecutionPhase.Preparing,
+            HorseIdentityMigrationExecutionPhase.Draining,
+            HorseIdentityMigrationExecutionPhase.StoppingApi,
+            HorseIdentityMigrationExecutionPhase.ApiExited,
+        })
+            Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId, phase, DateTimeOffset.UtcNow)).Succeeded);
+
+        var sources = new HorseIdentityMigrationConfiguredSources(fixture.EventStorePath, fixture.CollectionPath,
+            fixture.SchedulePath, fixture.QueuePath);
+        var backup = HorseIdentityMigrationManagedBackup.ForJournal(journal);
+        var receipt = await backup.CreateAsync(operationId, sources, journal);
+        Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId,
+            HorseIdentityMigrationExecutionPhase.BackedUp, DateTimeOffset.UtcNow)).Succeeded);
+        var engine = new TypedHorseIdentityStoreEngine(fixture.CreateReadersWithEventFlow("Local"));
+        var preview = await engine.InspectPreviewAsync(manifest, CancellationToken.None);
+        Assert.IsTrue(preview.CanStage);
+        Assert.IsNotNull(preview.Fingerprint);
+        Assert.IsTrue((await journal.SealPendingRequestAsync(operationId, requestHash, preview.Fingerprint!,
+            HorseIdentityMigrationRuntimeOwnership.ComputeSourceSetHash(sources.PhysicalSourcePaths),
+            receipt.ManifestHash, DateTimeOffset.UtcNow)).Succeeded);
+        Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId,
+            HorseIdentityMigrationExecutionPhase.Applying, DateTimeOffset.UtcNow)).Succeeded);
+        Assert.IsTrue((await journal.ClaimWorkflowAsync(operationId, DateTimeOffset.UtcNow)).Succeeded);
+
+        var execution = await engine.ExecuteOwnedAsync(operationId, manifest, journal, CancellationToken.None,
+            authorizedSourceSetHash: HorseIdentityMigrationRuntimeOwnership.ComputeSourceSetHash(sources.PhysicalSourcePaths),
+            authorizedBackupManifestHash: receipt.ManifestHash);
+
+        Assert.AreEqual(TypedHorseIdentityExecutionStatus.Completed, execution.Status);
+        Assert.IsTrue(execution.CanWrite);
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.Succeeded,
+            (await journal.GetStatusAsync(operationId))!.Status);
+        var verifier = new HorseIdentityMigrationPostVerification(backup,
+            fixture.EventFlowServices.GetRequiredService<IEventJsonSerializer>(),
+            fixture.EventFlowServices.GetRequiredService<IDomainEventFactory>());
+        await verifier.VerifyAsync(operationId, sources, journal,
+            HorseIdentityMigrationManifestPolicy.Validate(manifest).Mappings, CancellationToken.None);
+    }
+
+    [TestMethod]
     public async Task FullPlanFreshnessFailurePrecedesEveryDomainWrite()
     {
         await using var fixture = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
@@ -214,7 +411,7 @@ public sealed class HorseIdentityMigrationStoreWriterTests
         var manifest = Manifest();
         var journal = CreateJournal(fixture);
         var operationId = Guid.NewGuid();
-        Assert.IsTrue((await journal.StageAsync(operationId, manifest, DateTimeOffset.UtcNow)).Succeeded);
+        await StageBoundV1Async(journal, operationId, manifest);
         Assert.IsTrue((await journal.ClaimWorkflowAsync(operationId, DateTimeOffset.UtcNow)).Succeeded);
         var engine = new TypedHorseIdentityStoreEngine(fixture.CreateReadersWithEventFlow());
 
@@ -245,7 +442,7 @@ public sealed class HorseIdentityMigrationStoreWriterTests
             """);
         var journal = CreateJournal(fixture);
         var operationId = Guid.NewGuid();
-        Assert.IsTrue((await journal.StageAsync(operationId, manifest, DateTimeOffset.UtcNow)).Succeeded);
+        await StageBoundV1Async(journal, operationId, manifest);
         Assert.IsTrue((await journal.ClaimWorkflowAsync(operationId, DateTimeOffset.UtcNow)).Succeeded);
         var engine = new TypedHorseIdentityStoreEngine(fixture.CreateReadersWithEventFlow());
 
@@ -269,7 +466,7 @@ public sealed class HorseIdentityMigrationStoreWriterTests
         var manifest = Manifest();
         var journal = CreateJournal(fixture);
         var operationId = Guid.NewGuid();
-        Assert.IsTrue((await journal.StageAsync(operationId, manifest, DateTimeOffset.UtcNow)).Succeeded);
+        await StageBoundV1Async(journal, operationId, manifest);
         Assert.IsTrue((await journal.ClaimWorkflowAsync(operationId, DateTimeOffset.UtcNow)).Succeeded);
         var engine = new TypedHorseIdentityStoreEngine(fixture.CreateReadersWithEventFlow());
 
@@ -305,7 +502,7 @@ public sealed class HorseIdentityMigrationStoreWriterTests
         var destination = HorseIdentityMigrationManifestPolicy.Validate(manifest).Mappings.Single().DestinationHorseId;
         var journal = CreateJournal(fixture);
         var operationId = Guid.NewGuid();
-        Assert.IsTrue((await journal.StageAsync(operationId, manifest, DateTimeOffset.UtcNow)).Succeeded);
+        await StageBoundV1Async(journal, operationId, manifest);
         Assert.IsTrue((await journal.ClaimWorkflowAsync(operationId, DateTimeOffset.UtcNow)).Succeeded);
         var engine = new TypedHorseIdentityStoreEngine(fixture.CreateReadersWithEventFlow());
 
@@ -336,7 +533,7 @@ public sealed class HorseIdentityMigrationStoreWriterTests
         var manifest = Manifest();
         var journal = CreateJournal(fixture);
         var operationId = Guid.NewGuid();
-        Assert.IsTrue((await journal.StageAsync(operationId, manifest, DateTimeOffset.UtcNow)).Succeeded);
+        await StageBoundV1Async(journal, operationId, manifest);
         Assert.IsTrue((await journal.ClaimWorkflowAsync(operationId, DateTimeOffset.UtcNow)).Succeeded);
         var engine = new TypedHorseIdentityStoreEngine(fixture.CreateReadersWithEventFlow());
         var clock = new AdvancingTimeProvider(DateTimeOffset.UtcNow);
@@ -364,7 +561,7 @@ public sealed class HorseIdentityMigrationStoreWriterTests
         var destination = HorseIdentityMigrationManifestPolicy.Validate(manifest).Mappings.Single().DestinationHorseId;
         var journal = CreateJournal(fixture);
         var operationId = Guid.NewGuid();
-        Assert.IsTrue((await journal.StageAsync(operationId, manifest, DateTimeOffset.UtcNow)).Succeeded);
+        await StageBoundV1Async(journal, operationId, manifest);
         Assert.IsTrue((await journal.ClaimWorkflowAsync(operationId, DateTimeOffset.UtcNow)).Succeeded);
         var engine = new TypedHorseIdentityStoreEngine(fixture.CreateReadersWithEventFlow());
         var clock = new AdvancingTimeProvider(DateTimeOffset.UtcNow);
@@ -426,7 +623,7 @@ public sealed class HorseIdentityMigrationStoreWriterTests
         var manifest = Manifest();
         var journal = CreateJournal(fixture);
         var operationId = Guid.NewGuid();
-        Assert.IsTrue((await journal.StageAsync(operationId, manifest, DateTimeOffset.UtcNow)).Succeeded);
+        await StageBoundV1Async(journal, operationId, manifest);
         Assert.IsTrue((await journal.ClaimWorkflowAsync(operationId, DateTimeOffset.UtcNow)).Succeeded);
         var engine = new TypedHorseIdentityStoreEngine(fixture.CreateReadersWithEventFlow());
 
@@ -455,6 +652,15 @@ public sealed class HorseIdentityMigrationStoreWriterTests
         HorseIdentityMigrationStoreEngineTests.StoreFixture fixture) => new(
         Path.Combine(fixture.Root, "migration-journal"),
         [fixture.EventStorePath, fixture.CollectionPath, fixture.SchedulePath, fixture.QueuePath]);
+
+    private static async Task StageBoundV1Async(HorseIdentityMigrationJournal journal, Guid operationId,
+        HorseIdentityMigrationManifest manifest)
+    {
+        Assert.IsTrue((await journal.StageAsync(operationId, manifest, DateTimeOffset.UtcNow)).Succeeded);
+        var fingerprint = new string('A', 64);
+        Assert.IsTrue((await journal.BindStandaloneRequestAsync(operationId, manifest, fingerprint,
+            DateTimeOffset.UtcNow)).Succeeded);
+    }
 
     private static async Task<object?> ScalarAsync(SqliteConnection connection, string sql)
     {
