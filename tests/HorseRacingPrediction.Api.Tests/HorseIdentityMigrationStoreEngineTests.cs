@@ -359,6 +359,67 @@ CREATE UNIQUE INDEX "IX_resource_locations_ResourcePk_DefinitionId_Url" ON "reso
     }
 
     [TestMethod]
+    public async Task TargetReviewReadsOnlySelectedRootsAndReportsMissingDuplicateAndCollisionWithoutCensusClaims()
+    {
+        await using (var fixture = await StoreFixture.CreateAsync())
+        {
+            await fixture.SeedHorseAsync(OldHorseId);
+            await fixture.ExecuteAsync(fixture.EventStorePath, """
+                INSERT INTO EventEntity
+                    (GlobalSequenceNumber, AggregateId, AggregateName, AggregateSequenceNumber, BatchId, Data, Metadata)
+                VALUES (999, 'horse-unrelated-future-row', 'FutureAggregate', 1,
+                    'unrelated-batch', 'not-json', 'not-json');
+                """);
+            var before = await fixture.SourceSnapshotAsync();
+
+            var review = await fixture.CreateEngine().InspectTargetReviewAsync(Manifest(), CancellationToken.None);
+
+            Assert.IsTrue(review.CanSavePending, string.Join(',', review.Blockers));
+            Assert.AreEqual(HorseIdentityMigrationTargetReviewRootStatus.Present, review.Roots.Single().Status);
+            var json = JsonSerializer.Serialize(review, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            StringAssert.Contains(json, "\"roots\"");
+            Assert.IsFalse(json.Contains("fingerprint", StringComparison.OrdinalIgnoreCase));
+            Assert.IsFalse(json.Contains("inspectionDiagnostic", StringComparison.OrdinalIgnoreCase));
+            Assert.IsFalse(json.Contains("typedReferenceEvidence", StringComparison.OrdinalIgnoreCase));
+            Assert.AreEqual(before, await fixture.SourceSnapshotAsync(), "Point-target review is read-only.");
+        }
+
+        await using (var missing = await StoreFixture.CreateAsync())
+        {
+            var review = await missing.CreateEngine().InspectTargetReviewAsync(Manifest(), CancellationToken.None);
+            Assert.IsFalse(review.CanSavePending);
+            Assert.IsTrue(review.Blockers.Contains(HorseIdentityMigrationTargetReviewBlocker.SourceRootMissing));
+            Assert.AreEqual(HorseIdentityMigrationTargetReviewRootStatus.Missing, review.Roots.Single().Status);
+        }
+
+        await using (var duplicate = await StoreFixture.CreateAsync())
+        {
+            await duplicate.SeedHorseAsync(OldHorseId);
+            await duplicate.ExecuteAsync(duplicate.EventStorePath, """
+                DROP INDEX IF EXISTS IX_EventEntity_AggregateId_AggregateSequenceNumber;
+                INSERT INTO EventEntity
+                    (GlobalSequenceNumber, AggregateId, AggregateName, AggregateSequenceNumber, BatchId, Data, Metadata)
+                SELECT 2, AggregateId, AggregateName, AggregateSequenceNumber, 'duplicate-first-event', Data, Metadata
+                FROM EventEntity WHERE AggregateId = 'horse-11111111-1111-4111-8111-111111111111';
+                """);
+            var review = await duplicate.CreateEngine().InspectTargetReviewAsync(Manifest(), CancellationToken.None);
+            Assert.IsFalse(review.CanSavePending);
+            Assert.IsTrue(review.Blockers.Contains(HorseIdentityMigrationTargetReviewBlocker.DuplicateSource));
+            Assert.AreEqual(HorseIdentityMigrationTargetReviewRootStatus.Duplicate, review.Roots.Single().Status);
+        }
+
+        await using (var collision = await StoreFixture.CreateAsync())
+        {
+            await collision.SeedHorseAsync(OldHorseId);
+            await collision.SeedHorseAsync(DestinationHorseId());
+            var review = await collision.CreateEngine().InspectTargetReviewAsync(Manifest(), CancellationToken.None);
+            Assert.IsFalse(review.CanSavePending);
+            Assert.IsTrue(review.Blockers.Contains(HorseIdentityMigrationTargetReviewBlocker.DestinationCollision));
+            Assert.AreEqual(HorseIdentityMigrationTargetReviewRootStatus.DestinationCollision, review.Roots.Single().Status);
+        }
+    }
+
+    [TestMethod]
     public async Task TypedClosureEmitsBoundedImmutablePageEvidence()
     {
         await using var fixture = await StoreFixture.CreateAsync();

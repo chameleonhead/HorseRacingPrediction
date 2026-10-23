@@ -17,6 +17,7 @@ internal static class HorseIdentityMigrationEndpoints
     private const string OperationsPath = "/v2/admin/horse-id-migration-operations";
     private const string RequestsPath = "/v2/admin/horse-id-migration-requests";
     private const string SchemaDiagnosticsPath = "/v2/admin/horse-id-migration-schema-diagnostics";
+    private const string TargetReviewKind = "TargetReviewV2";
 
     internal static void Map(IEndpointRouteBuilder endpoints)
     {
@@ -35,12 +36,29 @@ internal static class HorseIdentityMigrationEndpoints
         SetNoStore(response);
         using var deadline = CreateDeadline(cancellationToken);
         var inspectionProgress = new HorseIdentityMigrationInspectionProgress();
+        var kinds = request.Query["kind"];
+        if (kinds.Count > 1 || (kinds.Count == 1 && !string.Equals(kinds[0], TargetReviewKind, StringComparison.Ordinal)))
+            return Error(StatusCodes.Status400BadRequest, "UnknownPreviewKind");
         try
         {
             var parsed = await ReadBodyAsync<HorseIdentityMigrationManifest>(request, deadline.Token).ConfigureAwait(false);
             if (!parsed.Success) return Error(parsed.StatusCode, parsed.ErrorCode!);
             if (!HorseIdentityMigrationManifestPolicy.Validate(parsed.Value).IsValid)
                 return Error(StatusCodes.Status400BadRequest, "InvalidManifest");
+            if (kinds.Count == 1)
+            {
+                HorseIdentityMigrationTargetReview review;
+                try
+                {
+                    review = await engine.InspectTargetReviewAsync(parsed.Value, deadline.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (deadline.IsCancellationRequested
+                    && !cancellationToken.IsCancellationRequested)
+                {
+                    review = new(false, [HorseIdentityMigrationTargetReviewBlocker.ReadUnavailable], [], []);
+                }
+                return Results.Ok(review);
+            }
             var preview = await engine.InspectPreviewAsync(parsed.Value, deadline.Token, inspectionProgress)
                 .ConfigureAwait(false);
             if (deadline.IsCancellationRequested)
@@ -124,17 +142,22 @@ internal static class HorseIdentityMigrationEndpoints
         var parsed = await ReadBodyAsync<HorseIdentityMigrationStageRequest>(request, cancellationToken).ConfigureAwait(false);
         if (!parsed.Success) return Error(parsed.StatusCode, parsed.ErrorCode!);
         var body = parsed.Value;
-        if (body?.Manifest is null || string.IsNullOrWhiteSpace(body.PreviewFingerprint)
-            || body.PreviewFingerprint.Length != 64
-            || !body.PreviewFingerprint.All(Uri.IsHexDigit)
-            || !HorseIdentityMigrationExecutionPolicy.IsValidRequestKey(body.RequestKey))
+        var requestKind = body?.RequestKind ?? HorseIdentityMigrationAdmissionKind.BoundV1;
+        if (body?.Manifest is null || !HorseIdentityMigrationExecutionPolicy.IsDefinedAdmissionKind(body.RequestKind)
+            || !Enum.IsDefined(requestKind)
+            || !HorseIdentityMigrationExecutionPolicy.IsValidRequestKey(body.RequestKey)
+            || (requestKind == HorseIdentityMigrationAdmissionKind.BoundV1
+                && (string.IsNullOrWhiteSpace(body.PreviewFingerprint) || body.PreviewFingerprint.Length != 64
+                    || !body.PreviewFingerprint.All(Uri.IsHexDigit)))
+            || (requestKind == HorseIdentityMigrationAdmissionKind.PendingV2 && body.PreviewFingerprint is not null))
             return Error(StatusCodes.Status400BadRequest, "InvalidRequest");
 
         var validation = HorseIdentityMigrationManifestPolicy.Validate(body.Manifest);
         if (!validation.IsValid) return Error(StatusCodes.Status400BadRequest, "InvalidManifest");
 
-        var immutableRequestHash = HorseIdentityMigrationExecutionPolicy
-            .ComputeImmutableRequestHash(body.Manifest, body.PreviewFingerprint);
+        var immutableRequestHash = requestKind == HorseIdentityMigrationAdmissionKind.PendingV2
+            ? HorseIdentityMigrationExecutionPolicy.ComputePendingImmutableRequestHash(body.Manifest)
+            : HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(body.Manifest, body.PreviewFingerprint!);
 
         try
         {
@@ -150,9 +173,69 @@ internal static class HorseIdentityMigrationEndpoints
                     prior = null;
                 }
                 if (prior is not null)
-                    return string.Equals(prior.ImmutableRequestHash, immutableRequestHash, StringComparison.Ordinal)
-                        ? Results.Ok(HorseIdentityMigrationPublicMapper.ToPublic(prior.Operation))
+                    return prior.RequestKind == requestKind
+                        && string.Equals(prior.ImmutableRequestHash, immutableRequestHash, StringComparison.Ordinal)
+                        ? Results.Ok(HorseIdentityMigrationPublicMapper.ToPublic(prior.Operation) with
+                        {
+                            SavedManifest = body.Manifest,
+                            PreviewFingerprint = prior.PreviewFingerprint,
+                            RequestKind = prior.RequestKind,
+                        })
                         : Error(StatusCodes.Status409Conflict, "RequestConflict");
+            }
+
+            if (requestKind == HorseIdentityMigrationAdmissionKind.PendingV2)
+            {
+                HorseIdentityMigrationTargetReview targetReviewFresh;
+                try
+                {
+                    targetReviewFresh = await engine.InspectTargetReviewAsync(body.Manifest, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception exception) when (IsUnavailable(exception) && body.RequestKey is { } failedRequestKey)
+                {
+                    var replay = await WaitForRequestReplayAsync(journal, failedRequestKey, immutableRequestHash,
+                        requestKind, body.Manifest, body.PreviewFingerprint, cancellationToken).ConfigureAwait(false);
+                    if (replay is not null) return replay;
+                    throw;
+                }
+
+                if (!targetReviewFresh.CanSavePending)
+                {
+                    if (targetReviewFresh.Blockers.Contains(HorseIdentityMigrationTargetReviewBlocker.ReadUnavailable))
+                        return Error(StatusCodes.Status503ServiceUnavailable, "Unavailable");
+                    if (targetReviewFresh.Blockers.Contains(HorseIdentityMigrationTargetReviewBlocker.InvalidManifest))
+                        return Error(StatusCodes.Status400BadRequest, "InvalidManifest");
+                    return Error(StatusCodes.Status409Conflict, "TargetReviewStale");
+                }
+
+                var pendingOperationId = Guid.NewGuid();
+                var pendingRequestKey = body.RequestKey ?? Guid.NewGuid();
+                var pendingOutcome = await journal.StagePendingWithRequestKeyAsync(pendingOperationId,
+                    body.Manifest, pendingRequestKey, immutableRequestHash, timeProvider.GetUtcNow(), cancellationToken)
+                    .ConfigureAwait(false);
+                if (!pendingOutcome.Succeeded || pendingOutcome.Operation is null)
+                    return Error(pendingOutcome.Reason switch
+                    {
+                        HorseIdentityMigrationJournalReason.RequestConflict => StatusCodes.Status409Conflict,
+                        HorseIdentityMigrationJournalReason.CapacityExceeded or HorseIdentityMigrationJournalReason.OwnershipBusy
+                            => StatusCodes.Status429TooManyRequests,
+                        _ => StatusCodes.Status503ServiceUnavailable,
+                    }, pendingOutcome.Reason switch
+                    {
+                        HorseIdentityMigrationJournalReason.RequestConflict => "RequestConflict",
+                        HorseIdentityMigrationJournalReason.CapacityExceeded => "CapacityExceeded",
+                        HorseIdentityMigrationJournalReason.OwnershipBusy => "Busy",
+                        _ => "Unavailable",
+                    });
+
+                var pendingResponse = HorseIdentityMigrationPublicMapper.ToPublic(pendingOutcome.Operation) with
+                {
+                    SavedManifest = body.Manifest,
+                    RequestKind = requestKind,
+                };
+                return pendingOutcome.Operation.OperationId == pendingOperationId
+                    ? Results.Created($"/api/v2/admin/horse-id-migration-operations/{pendingOperationId:D}", pendingResponse)
+                    : Results.Ok(pendingResponse);
             }
 
             HorseIdentityMigrationPreview fresh;
@@ -163,7 +246,7 @@ internal static class HorseIdentityMigrationEndpoints
             catch (Exception exception) when (IsUnavailable(exception) && body.RequestKey is { } failedRequestKey)
             {
                 var replay = await WaitForRequestReplayAsync(journal, failedRequestKey, immutableRequestHash,
-                    cancellationToken).ConfigureAwait(false);
+                    requestKind, body.Manifest, body.PreviewFingerprint, cancellationToken).ConfigureAwait(false);
                 if (replay is not null) return replay;
                 throw;
             }
@@ -176,7 +259,8 @@ internal static class HorseIdentityMigrationEndpoints
                     if (body.RequestKey is { } unavailableRequestKey)
                     {
                         var replay = await WaitForRequestReplayAsync(journal, unavailableRequestKey,
-                            immutableRequestHash, cancellationToken).ConfigureAwait(false);
+                            immutableRequestHash, requestKind, body.Manifest, body.PreviewFingerprint,
+                            cancellationToken).ConfigureAwait(false);
                         if (replay is not null) return replay;
                     }
                     return Error(StatusCodes.Status503ServiceUnavailable, "Unavailable");
@@ -203,7 +287,7 @@ internal static class HorseIdentityMigrationEndpoints
                     && body.RequestKey is { } busyRequestKey)
                 {
                     var replay = await WaitForRequestReplayAsync(journal, busyRequestKey, immutableRequestHash,
-                        cancellationToken).ConfigureAwait(false);
+                        requestKind, body.Manifest, body.PreviewFingerprint, cancellationToken).ConfigureAwait(false);
                     if (replay is not null) return replay;
                 }
                 return Error(outcome.Reason switch
@@ -225,6 +309,7 @@ internal static class HorseIdentityMigrationEndpoints
             {
                 SavedManifest = body.Manifest,
                 PreviewFingerprint = body.PreviewFingerprint,
+                RequestKind = requestKind,
             };
             return outcome.Operation.OperationId == operationId
                 ? Results.Created($"/api/v2/admin/horse-id-migration-operations/{operationId:D}", operationResponse)
@@ -239,7 +324,7 @@ internal static class HorseIdentityMigrationEndpoints
             if (body.RequestKey is { } failedRequestKey)
             {
                 var replay = await WaitForRequestReplayAsync(journal, failedRequestKey, immutableRequestHash,
-                    cancellationToken).ConfigureAwait(false);
+                    requestKind, body.Manifest, body.PreviewFingerprint, cancellationToken).ConfigureAwait(false);
                 if (replay is not null) return replay;
             }
             return Error(StatusCodes.Status503ServiceUnavailable, "Unavailable");
@@ -258,8 +343,11 @@ internal static class HorseIdentityMigrationEndpoints
             var operation = await journal.GetStatusAsync(parsed, cancellationToken).ConfigureAwait(false);
             if (operation is null) return Results.NotFound();
             var saved = await journal.GetSavedRequestAsync(parsed, cancellationToken).ConfigureAwait(false);
+            var pending = saved is null
+                ? await journal.GetPendingRequestAsync(parsed, cancellationToken).ConfigureAwait(false)
+                : null;
             var intent = await journal.GetExecutionIntentAsync(parsed, cancellationToken).ConfigureAwait(false);
-            return Results.Ok(ToPublic(operation, saved, intent));
+            return Results.Ok(ToPublic(operation, saved, pending, intent));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -281,15 +369,19 @@ internal static class HorseIdentityMigrationEndpoints
         try
         {
             var record = await journal.GetByRequestKeyAsync(parsed, cancellationToken).ConfigureAwait(false);
-            return record is null
-                ? Results.NotFound()
-                : Results.Ok(HorseIdentityMigrationPublicMapper.ToPublic(record.Operation) with
-                {
-                    SavedManifest = record.PreviewFingerprint is null ? null :
-                        (await journal.GetSavedRequestAsync(record.Operation.OperationId, cancellationToken)
-                            .ConfigureAwait(false))?.Manifest,
-                    PreviewFingerprint = record.PreviewFingerprint,
-                });
+            if (record is null) return Results.NotFound();
+            var saved = record.RequestKind == HorseIdentityMigrationAdmissionKind.BoundV1
+                ? await journal.GetSavedRequestAsync(record.Operation.OperationId, cancellationToken).ConfigureAwait(false)
+                : null;
+            var pending = record.RequestKind == HorseIdentityMigrationAdmissionKind.PendingV2
+                ? await journal.GetPendingRequestAsync(record.Operation.OperationId, cancellationToken).ConfigureAwait(false)
+                : null;
+            return Results.Ok(HorseIdentityMigrationPublicMapper.ToPublic(record.Operation) with
+            {
+                SavedManifest = saved?.Manifest ?? pending?.Manifest,
+                PreviewFingerprint = saved?.PreviewFingerprint,
+                RequestKind = record.RequestKind,
+            });
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -331,9 +423,12 @@ internal static class HorseIdentityMigrationEndpoints
             var operation = await journal.GetStatusAsync(parsed, CancellationToken.None).ConfigureAwait(false);
             if (operation is null) return Error(StatusCodes.Status503ServiceUnavailable, "Unavailable");
             var saved = await journal.GetSavedRequestAsync(parsed, CancellationToken.None).ConfigureAwait(false);
+            var pending = saved is null
+                ? await journal.GetPendingRequestAsync(parsed, CancellationToken.None).ConfigureAwait(false)
+                : null;
             var intent = await journal.GetExecutionIntentAsync(parsed, CancellationToken.None).ConfigureAwait(false);
             return Results.Accepted($"/api/v2/admin/horse-id-migration-operations/{parsed:D}",
-                ToPublic(operation, saved, intent));
+                ToPublic(operation, saved, pending, intent));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -379,19 +474,30 @@ internal static class HorseIdentityMigrationEndpoints
 
     internal static HorseIdentityMigrationOperationResponse ToPublic(
         HorseIdentityMigrationJournalOperation operation, HorseIdentityMigrationSavedRequest? saved,
+        HorseIdentityMigrationPendingRequest? pending = null,
         HorseIdentityMigrationExecutionIntent? intent = null) =>
         HorseIdentityMigrationPublicMapper.ToPublic(operation) with
         {
-            SavedManifest = saved?.Manifest,
+            SavedManifest = saved?.Manifest ?? pending?.Manifest,
             PreviewFingerprint = saved?.PreviewFingerprint,
+            RequestKind = saved is not null ? HorseIdentityMigrationAdmissionKind.BoundV1
+                : pending is not null ? HorseIdentityMigrationAdmissionKind.PendingV2 : null,
             ExecutionPhase = intent?.Phase.ToString(),
             ExecutionUpdatedAt = intent?.UpdatedAt,
         };
+
+    // Keep the existing internal call shape used by the standalone supervisor.
+    internal static HorseIdentityMigrationOperationResponse ToPublic(
+        HorseIdentityMigrationJournalOperation operation, HorseIdentityMigrationSavedRequest? saved,
+        HorseIdentityMigrationExecutionIntent? intent) => ToPublic(operation, saved, pending: null, intent);
 
     private static async Task<IResult?> WaitForRequestReplayAsync(
         HorseIdentityMigrationJournal journal,
         Guid requestKey,
         string immutableRequestHash,
+        HorseIdentityMigrationAdmissionKind requestKind,
+        HorseIdentityMigrationManifest manifest,
+        string? previewFingerprint,
         CancellationToken cancellationToken)
     {
         for (var attempt = 0; attempt < 5; attempt++)
@@ -400,8 +506,14 @@ internal static class HorseIdentityMigrationEndpoints
             {
                 var prior = await journal.GetByRequestKeyAsync(requestKey, cancellationToken).ConfigureAwait(false);
                 if (prior is not null)
-                    return string.Equals(prior.ImmutableRequestHash, immutableRequestHash, StringComparison.Ordinal)
-                        ? Results.Ok(HorseIdentityMigrationPublicMapper.ToPublic(prior.Operation))
+                    return prior.RequestKind == requestKind
+                        && string.Equals(prior.ImmutableRequestHash, immutableRequestHash, StringComparison.Ordinal)
+                        ? Results.Ok(HorseIdentityMigrationPublicMapper.ToPublic(prior.Operation) with
+                        {
+                            SavedManifest = manifest,
+                            PreviewFingerprint = prior.PreviewFingerprint ?? previewFingerprint,
+                            RequestKind = prior.RequestKind,
+                        })
                         : Error(StatusCodes.Status409Conflict, "RequestConflict");
             }
             catch (SqliteException)

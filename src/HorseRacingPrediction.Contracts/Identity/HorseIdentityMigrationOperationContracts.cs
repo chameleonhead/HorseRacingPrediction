@@ -8,7 +8,17 @@ public sealed record HorseIdentityMigrationStageRequest(
     string? PreviewFingerprint)
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public HorseIdentityMigrationAdmissionKind? RequestKind { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Guid? RequestKey { get; init; }
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<HorseIdentityMigrationAdmissionKind>))]
+public enum HorseIdentityMigrationAdmissionKind
+{
+    BoundV1,
+    PendingV2,
 }
 
 /// <summary>Safe, bounded public view of a staged or previously executed migration.</summary>
@@ -27,6 +37,9 @@ public sealed record HorseIdentityMigrationOperationResponse(
     /// <summary>The source preview fingerprint captured when the request was staged.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? PreviewFingerprint { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public HorseIdentityMigrationAdmissionKind? RequestKind { get; init; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ExecutionPhase { get; init; }

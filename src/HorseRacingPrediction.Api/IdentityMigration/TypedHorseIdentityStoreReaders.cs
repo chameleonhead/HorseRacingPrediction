@@ -176,6 +176,19 @@ internal sealed class TypedHorseIdentityStoreReaders(
         return new(schemas, roots, typedReferences.IsComplete, typedReferences);
     }
 
+    internal async Task<IReadOnlyList<MigrationRootProbe>> InspectSelectedRootsAsync(
+        IReadOnlyList<HorseIdentityMigrationMapping> mappings,
+        CancellationToken cancellationToken)
+    {
+        var configured = ResolveConfiguredStores();
+        var eventStore = configured.Single(store => store.Surface == MigrationStoreSurface.EventStore);
+        var collection = configured.Single(store => store.Surface == MigrationStoreSurface.CollectionPlatform);
+        if (eventStore.Path is null || collection.Path is null)
+            throw new IOException("Selected migration root stores are not configured.");
+        return await InspectRootsAsync(eventStore.Path, collection.Path, mappings, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     internal async Task<HorseIdentityMigrationSchemaDiagnostics> InspectSchemaDiagnosticsAsync(
         CancellationToken cancellationToken)
     {

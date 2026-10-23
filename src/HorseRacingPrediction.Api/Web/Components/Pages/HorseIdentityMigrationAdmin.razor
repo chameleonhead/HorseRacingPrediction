@@ -115,7 +115,7 @@
 
 <section class="entity-section migration-candidates" aria-labelledby="migration-candidates-heading">
     <h2 id="migration-candidates-heading">確認する候補</h2>
-    <p>初期状態ではすべて未選択です。同じ名前だけでは対応を選びません。候補を追加する場合は登録済みの旧IDを明示的に選び、JRA馬番号を入力してください。</p>
+    <p>候補はまだありません。同じ名前だけでは対応を選びません。候補を追加する場合は登録済みの旧IDを明示的に選び、JRA馬番号を入力してください。</p>
     <section class="migration-candidate-search" aria-labelledby="candidate-search-heading">
         <h3 id="candidate-search-heading">登録馬から候補を追加</h3>
         <div class="migration-candidate-search-fields">
@@ -210,16 +210,6 @@
             </article>
         }
     </div>
-    @if (RemovedPresets.Count > 0)
-    {
-        <div class="migration-removed-presets" aria-label="外した参考候補">
-            @foreach (var preset in RemovedPresets)
-            {
-                <FluentButton Appearance="@Appearance.Outline" OnClick="@(() => RestorePreset(preset))" Disabled="@busy">参考候補を再追加: @preset.Name</FluentButton>
-            }
-        </div>
-    }
-
     @if (errorMessage is not null)
     {
         <p class="migration-error" role="alert">@errorMessage</p>
@@ -244,15 +234,52 @@
     }
     <div class="migration-actions">
         <span class="migration-selection-count">@SelectedCandidates.Count 件を選択 / @Candidates.Count 件（最大16件）</span>
-        <FluentButton Appearance="@Appearance.Accent" OnClick="PreviewAsync" Disabled="@(!CanPreview)">
-            @(busy && busyMessage == "読み取り専用プレビューを確認しています…" ? "プレビュー中…" : "選択内容をプレビュー")
+        <FluentButton Appearance="@Appearance.Accent" OnClick="ReviewTargetsAsync" Disabled="@(!CanPreview)">
+            @(busy && busyMessage == "選択した登録ルートを確認しています…" ? "確認中…" : "選択内容を確認")
+        </FluentButton>
+        <FluentButton Appearance="@Appearance.Outline" OnClick="FullPreviewAsync" Disabled="@(!CanPreview)">
+            @(busy && busyMessage == "全件の読み取り専用プレビューを確認しています…" ? "全件確認中…" : "全件プレビュー（任意）")
         </FluentButton>
     </div>
 
+    @if (targetReview is not null)
+    {
+        <section class="migration-preview" aria-labelledby="migration-target-review-heading">
+            <h3 id="migration-target-review-heading">選択した登録ルートの確認</h3>
+            <p class="migration-warning" role="status">全データの検証は未実施です。収集停止後、書き込み前に全件検証します。この確認は選択した旧IDと変換先の登録ルートだけを読み取り、全体状態や実行可否を示しません。</p>
+            @if (targetReview.Blockers.Count > 0)
+            {
+                <ul class="migration-blockers" aria-label="対象確認の阻害理由">
+                    @foreach (var blocker in targetReview.Blockers)
+                    {
+                        <li>@TargetReviewBlockerLabel(blocker)</li>
+                    }
+                </ul>
+            }
+            <ul class="migration-mappings">
+                @foreach (var mapping in targetReview.Mappings)
+                {
+                    <li><strong>@mapping.OldHorseId</strong> → @mapping.JraIdentity <span>（変換先 @mapping.DestinationHorseId）</span></li>
+                }
+            </ul>
+            <ul class="migration-roots" aria-label="選択した登録ルートの結果">
+                @foreach (var root in targetReview.Roots)
+                {
+                    <li><strong>@root.OldHorseId</strong> → @root.DestinationHorseId — @TargetReviewRootLabel(root.Status)</li>
+                }
+            </ul>
+            <div class="migration-actions">
+                <FluentButton Appearance="@Appearance.Accent" OnClick="OpenStageConfirmation" Disabled="@(!CanStage)">内容を確認して依頼を保存</FluentButton>
+            </div>
+        </section>
+    }
+
     @if (preview is not null)
     {
-        <section class="migration-preview" aria-labelledby="migration-preview-heading">
-            <h3 id="migration-preview-heading">読み取り専用プレビュー</h3>
+        <details class="migration-preview">
+            <summary>任意の全件読み取り専用プレビュー</summary>
+            <section aria-labelledby="migration-preview-heading">
+            <h3 id="migration-preview-heading">全件読み取り専用プレビュー</h3>
             @if (IsPreviewReady(preview))
             {
                 <p class="migration-preview-ready" role="status">表示された候補と保存状態を確認してください。プレビューは実行依頼の保存可否を示し、実行の開始やバックアップの作成を示すものではありません。</p>
@@ -369,10 +396,8 @@
             }
 
             <p class="migration-warning">このプレビューは保存先ごとの現在の証拠です。実行時の一貫したバックアップを保証しません。実行依頼後の workflow が、実際の設定済み保存先と SQLite の WAL 状態を別途確認します。対象外または未対応のデータは自動推測・書換えしません。</p>
-            <div class="migration-actions">
-                <FluentButton Appearance="@Appearance.Accent" OnClick="OpenStageConfirmation" Disabled="@(!CanStage)">この固定内容を実行依頼として保存</FluentButton>
-            </div>
-        </section>
+            </section>
+        </details>
     }
 </section>
 
@@ -400,6 +425,10 @@
                 <dt>依頼 GUID</dt><dd><code>@operation.OperationId.ToString("D")</code></dd>
                 <dt>状態</dt><dd><RaceOpsStatusBadge Label="@StatusLabel(operation)" Tone="@StatusTone(operation)" /></dd>
                 <dt>理由コード</dt><dd>@operation.Reason</dd>
+                @if (operation.RequestKind == HorseIdentityMigrationAdmissionKind.PendingV2)
+                {
+                    <dt>依頼方式</dt><dd>停止後に全件検証する方式</dd>
+                }
                 <dt>更新時刻 (UTC)</dt><dd>@operation.UpdatedAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</dd>
                 @if (!string.IsNullOrWhiteSpace(operation.ExecutionPhase))
                 {
@@ -428,6 +457,26 @@
                         <p>保存時のプレビュー fingerprint <code>@operation.PreviewFingerprint</code></p>
                     }
                 </section>
+            }
+            @if (operation.RequestKind == HorseIdentityMigrationAdmissionKind.PendingV2
+                && operation.ExecutionPhase != "Verified")
+            {
+                @if (operation.ExecutionPhase is null)
+                {
+                    <p class="migration-warning" role="status">全データの検証は未実施です。保存・再接続では実行を開始しません。</p>
+                }
+                else if (operation.ExecutionPhase is "DataSucceeded" or "Verifying")
+                {
+                    <p class="migration-warning" role="status">データ移行後の全件読み取り専用検証を実行中です。状態と実行段階を確認してください。</p>
+                }
+                else if (operation.ExecutionPhase == "Failed")
+                {
+                    <p class="migration-warning" role="alert">実行が失敗または停止しました。状態と実行段階を確認し、別の承認済み手順に従ってください。</p>
+                }
+                else
+                {
+                    <p class="migration-warning" role="status">全件検証は実行開始後の手順です。現在の状態と実行段階を確認してください。</p>
+                }
             }
             @if (executeUncertain)
             {
@@ -472,13 +521,13 @@
 <FluentDialog Hidden="@(!confirmStage)" HiddenChanged="@(hidden => confirmStage = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="migration-stage-title" Style="width:min(680px, calc(100vw - 32px));">
     <FluentDialogHeader ShowDismiss="@(!busy)"><h2 id="migration-stage-title">実行依頼を保存しますか？</h2></FluentDialogHeader>
     <FluentDialogBody>
-        <p>選択した @SelectedCandidates.Count 件の旧IDとJRA識別子の対応仮説、および確認済みプレビューを保存します。</p>
-        <p>この操作では元の保存データを変更せず、移行も開始しません。保存後に表示される固定内容を確認してから、別の明示的な操作で実行します。</p>
+        <p>選択した @SelectedCandidates.Count 件の旧IDとJRA識別子の対応仮説を、全件検証待ちの依頼として保存します。</p>
+        <p class="migration-warning">保存する依頼には全データの検証結果を含めません。この操作では元の保存データを変更せず、移行も開始しません。後で別の明示操作を行った後、書き込み前に全件検証します。</p>
         <ul>@foreach (var candidate in SelectedCandidates){<li><strong>@candidate.OldHorseId</strong> → @candidate.JraIdentity</li>}</ul>
     </FluentDialogBody>
     <FluentDialogFooter>
         <FluentButton OnClick="CloseStageConfirmation" Disabled="@busy">戻って確認</FluentButton>
-        <FluentButton Appearance="@Appearance.Accent" OnClick="StageAsync" Disabled="@(!CanStage)">@(busy && busyMessage == "実行依頼を保存しています…" ? "保存中…" : "この内容を実行依頼として保存")</FluentButton>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="StageAsync" Disabled="@(!CanStage)">@(busy && busyMessage == "実行依頼を保存しています…" ? "保存中…" : "全件検証待ちとして保存")</FluentButton>
     </FluentDialogFooter>
 </FluentDialog>
 
@@ -486,31 +535,26 @@
     <FluentDialogHeader ShowDismiss="@(!busy)"><h2 id="migration-execute-title">保存済み依頼を実行しますか？</h2></FluentDialogHeader>
     <FluentDialogBody>
         <p>依頼 @operation?.OperationId.ToString("D") に保存された内容だけを実行します。画面上で編集した候補は送信しません。</p>
+        @if (operation?.RequestKind == HorseIdentityMigrationAdmissionKind.PendingV2)
+        {
+            <p class="migration-warning">この方式では、開始後、書き込み前に停止・バックアップ・全件検証を行います。確認結果が不足または不一致なら書き込みません。</p>
+        }
         <p>実行前に <a href="/jobs">収集管理</a> でパイプライン全体を明示的に一時停止してください。実行中の処理があれば、最大10分の完了待ちと、一時停止を確定してから15分間の待機が必要です。</p>
         <p>処理中はAPIが一時的に接続できなくなることがあります。同じURLへ戻ってログインし、この保存済み依頼の状態を手動で更新してください。成功後もパイプラインは停止したままです。再開や再試行は別の明示操作です。</p>
         <p>開始後は再読込や状態確認から再実行されません。通信が切れた場合は、再送せず状態を手動で確認してください。</p>
     </FluentDialogBody>
     <FluentDialogFooter>
         <FluentButton OnClick="CloseExecuteConfirmation" Disabled="@busy">戻って確認</FluentButton>
-        <FluentButton Appearance="@Appearance.Accent" OnClick="ExecuteAsync" Disabled="@(!CanExecute)">@(busy && busyMessage == "保存済み依頼を開始しています…" ? "開始中…" : "この依頼を実行")</FluentButton>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="ExecuteAsync" Disabled="@(!CanExecute)">@(busy && busyMessage == "保存済み依頼を開始しています…" ? "開始中…" : operation?.RequestKind == HorseIdentityMigrationAdmissionKind.PendingV2 ? "収集停止後に全件検証・移行" : "この依頼を実行")</FluentButton>
     </FluentDialogFooter>
 </FluentDialog>
 
 @code {
-    private static readonly IReadOnlyList<MigrationCandidate> Presets =
-    [
-        new("horse-d198b3e2-771f-5dcb-94dc-a739e98b6119", "jra-horse:2024100828", "ナムラアラバイ",
-            "表示名が一致する候補", "生年月日とプロフィールの根拠が不足しています。", true, null),
-        new("horse-ba9e991c-56e3-5ecd-a392-69d125afed42", "jra-horse:2024108210", "ノヴァアクレイム",
-            "表示名が一致する候補", "生年月日とプロフィールの根拠が不足しています。", true, null),
-        new("horse-923a0fdb-5c66-57ea-93a4-94dee4998b67", "jra-horse:2023102553", "ボクマダネムイヨ",
-            "legacy normalized-name candidate も異なります。", "生年月日とプロフィールの根拠が不足しています。", true, null),
-    ];
-
-    private readonly List<MigrationCandidate> Candidates = Presets.Select(CloneCandidate).ToList();
+    private readonly List<MigrationCandidate> Candidates = [];
 
     private readonly HashSet<string> selected = new(StringComparer.Ordinal);
     private HorseIdentityMigrationPreview? preview;
+    private HorseIdentityMigrationTargetReview? targetReview;
     private HorseIdentityMigrationOperationResponse? operation;
     private string operationIdInput = string.Empty;
     private string requestKeyInput = string.Empty;
@@ -545,11 +589,10 @@
     public string? RequestKeyQuery { get; set; }
 
     private IReadOnlyList<MigrationCandidate> SelectedCandidates => Candidates.Where(candidate => selected.Contains(candidate.OldHorseId)).ToArray();
-    private IReadOnlyList<MigrationCandidate> RemovedPresets => Presets.Where(preset => Candidates.All(candidate => candidate.OldHorseId != preset.OldHorseId)).ToArray();
     private bool CanPreview => interactiveReady && !busy && SelectedCandidates.Count > 0
         && SelectedCandidates.All(candidate => candidate.HypothesisAccepted && IsCanonicalJraIdentity(candidate.JraIdentity));
     private bool CanStage => interactiveReady && !busy && string.IsNullOrWhiteSpace(requestKeyInput)
-        && preview is { } current && IsPreviewReady(current)
+        && targetReview is { CanSavePending: true }
         && SelectedCandidates.Count > 0 && SelectedCandidates.All(candidate => candidate.HypothesisAccepted);
     private bool CanReadStatus => interactiveReady && !busy
         && (Guid.TryParseExact(operationIdInput.Trim(), "D", out var id) && id != Guid.Empty
@@ -560,8 +603,12 @@
         {
             var current = operation;
             return interactiveReady && !busy && !executeUncertain && string.IsNullOrWhiteSpace(requestKeyInput)
-                && current is { Status: "AwaitingActions", ExecutionPhase: null, PreviewFingerprint.Length: 64 }
-                && current.PreviewFingerprint!.All(Uri.IsHexDigit)
+                && current is { Status: "AwaitingActions", ExecutionPhase: null }
+                && (current.RequestKind == HorseIdentityMigrationAdmissionKind.PendingV2
+                    ? current.PreviewFingerprint is null
+                    : current.RequestKind == HorseIdentityMigrationAdmissionKind.BoundV1
+                        && current.PreviewFingerprint is { Length: 64 } fingerprint
+                        && fingerprint.All(Uri.IsHexDigit))
                 && HorseIdentityMigrationManifestPolicy.Validate(current.SavedManifest).IsValid;
         }
     }
@@ -663,9 +710,11 @@
         ClearPreviewForEdit();
         try
         {
+            var exactHorseId = IsExactHorseId(requestedQuery);
             var result = await Api.SearchHorsesAsync(new SearchHorsesRequest
             {
-                Query = requestedQuery,
+                Query = exactHorseId ? null : requestedQuery,
+                HorseId = exactHorseId ? requestedQuery : null,
                 Page = 1,
                 PageSize = 50,
             });
@@ -712,7 +761,7 @@
         var horseNumber = jraHorseNumber;
         Candidates.Add(new MigrationCandidate(horse.HorseId, $"jra-horse:{horseNumber}", horse.RegisteredName,
             "登録馬として選択されています（JRA対応を証明するものではありません）。",
-            "この対応は未確認の仮説です。保存された登録・初回登録・source証拠を確認してください。", false, horse));
+            "この対応は未確認の仮説です。保存された登録・初回登録・source証拠を確認してください。", horse));
         jraHorseNumber = string.Empty;
         selectedHorseId = null;
         candidateInputError = null;
@@ -727,14 +776,6 @@
         ClearPreviewForEdit();
     }
 
-    private void RestorePreset(MigrationCandidate preset)
-    {
-        if (busy || Candidates.Count >= HorseIdentityMigrationManifest.MaximumEntries
-            || Candidates.Any(candidate => candidate.OldHorseId == preset.OldHorseId)) return;
-        Candidates.Add(CloneCandidate(preset));
-        ClearPreviewForEdit();
-    }
-
     private void SetHypothesisAccepted(MigrationCandidate candidate, bool value)
     {
         candidate.HypothesisAccepted = value;
@@ -744,6 +785,7 @@
     private void ClearPreviewForEdit()
     {
         preview = null;
+        targetReview = null;
         confirmStage = false;
         errorMessage = null;
         successMessage = null;
@@ -756,18 +798,54 @@
         ClearPreviewForEdit();
     }
 
-    private async Task PreviewAsync()
+    private async Task ReviewTargetsAsync()
     {
         if (!CanPreview) return;
         busy = true;
-        busyMessage = "読み取り専用プレビューを確認しています…";
+        busyMessage = "選択した登録ルートを確認しています…";
+        errorMessage = null;
+        successMessage = null;
+        targetReview = null;
+        preview = null;
+        try
+        {
+            targetReview = await Api.ReviewHorseIdentityMigrationTargetsAsync(BuildManifest());
+            if (targetReview is null)
+                errorMessage = "対象確認を受け取れませんでした。選択内容を保持しています。";
+        }
+        catch (HttpRequestException exception)
+        {
+            errorMessage = exception.StatusCode switch
+            {
+                HttpStatusCode.BadRequest => "入力内容を確認できませんでした。候補の選択を確認してください。",
+                HttpStatusCode.TooManyRequests => "対象確認の容量上限に達したか、処理が混み合っています。選択内容は保持されています。",
+                HttpStatusCode.ServiceUnavailable => "選択した登録ルートを確認できませんでした。必要な場合に明示的に再確認してください。",
+                _ => "対象確認を完了できませんでした。選択内容は保持されています。",
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            errorMessage = "対象確認を完了できませんでした。選択内容は保持されています。必要な場合は明示的に再確認してください。";
+        }
+        finally
+        {
+            busy = false;
+            busyMessage = null;
+        }
+    }
+
+    private async Task FullPreviewAsync()
+    {
+        if (!CanPreview) return;
+        busy = true;
+        busyMessage = "全件の読み取り専用プレビューを確認しています…";
         errorMessage = null;
         successMessage = null;
         preview = null;
         try
         {
             preview = await Api.PreviewHorseIdentityMigrationAsync(BuildManifest());
-            if (preview is null) errorMessage = "プレビュー結果を受け取れませんでした。選択内容を保持しています。";
+            if (preview is null) errorMessage = "全件プレビューを受け取れませんでした。選択内容を保持しています。";
         }
         catch (HttpRequestException exception)
         {
@@ -776,12 +854,12 @@
                 HttpStatusCode.BadRequest => "入力内容を確認できませんでした。候補の選択を確認してください。",
                 HttpStatusCode.TooManyRequests => "プレビューの容量上限に達したか、処理が混み合っています。選択内容は保持されています。",
                 HttpStatusCode.ServiceUnavailable => "設定された保存先を確認できませんでした。時間をおいて明示的に再度プレビューしてください。",
-                _ => "プレビューを完了できませんでした。選択内容は保持されています。",
+                _ => "全件プレビューを完了できませんでした。選択内容は保持されています。",
             };
         }
         catch (OperationCanceledException)
         {
-            errorMessage = "プレビューを完了できませんでした。選択内容は保持されています。必要な場合は明示的に再度確認してください。";
+            errorMessage = "全件プレビューを完了できませんでした。選択内容は保持されています。必要な場合は明示的に再度確認してください。";
         }
         finally
         {
@@ -802,7 +880,7 @@
 
     private async Task StageAsync()
     {
-        if (!CanStage || preview?.Fingerprint is not { Length: 64 } fingerprint) return;
+        if (!CanStage || targetReview is not { CanSavePending: true }) return;
         busy = true;
         busyMessage = "実行依頼を保存しています…";
         errorMessage = null;
@@ -817,7 +895,7 @@
             operation = null;
             stageRequestRejected = false;
             RememberRequestKey(requestKey);
-            var response = await Api.StageHorseIdentityMigrationAsync(BuildManifest(), fingerprint, requestKey);
+            var response = await Api.StagePendingHorseIdentityMigrationAsync(BuildManifest(), requestKey);
             if (response is null)
             {
                 errorMessage = "受付結果を受け取れませんでした。再送はしていません。URLに保存された受付照会キーで状態を手動確認してください。";
@@ -839,7 +917,7 @@
             errorMessage = exception.StatusCode switch
             {
                 HttpStatusCode.BadRequest => "実行依頼の内容を受け付けられませんでした。候補とプレビューを確認し、受付照会キーで状態を手動確認してください。",
-                HttpStatusCode.Conflict => "保存先の状態がプレビュー後に変わりました。最新の状態をもう一度プレビューしてください。拒否された受付照会キーを破棄して再プレビューできます。",
+                HttpStatusCode.Conflict => "選択した登録ルートの状態が確認後に変わりました。対象をもう一度確認してください。拒否された受付照会キーを破棄して再確認できます。",
                 HttpStatusCode.TooManyRequests => "実行依頼を確認できませんでした。自動再試行はしていません。受付照会キーで状態を手動確認してください。",
                 HttpStatusCode.ServiceUnavailable => "実行依頼を確認できませんでした。自動再試行はしていません。受付照会キーで状態を手動確認してください。",
                 _ => "実行依頼の受付結果を確認できませんでした。再送はしていません。受付照会キーで状態を手動確認してください。",
@@ -867,7 +945,7 @@
         operation = null;
         preview = null;
         confirmStage = false;
-        errorMessage = "受付は拒否され、保存済み依頼はありません。候補を確認し、もう一度プレビューしてください。";
+        errorMessage = "受付は拒否され、保存済み依頼はありません。候補を確認し、選択した対象を再確認してください。";
         successMessage = null;
         ClearRequestLocatorFromUrl();
     }
@@ -995,15 +1073,34 @@
 
     private static bool IsCanonicalJraIdentity(string? value) => IdentityMigrationPreflightPolicy.IsCanonicalJraIdentity(value);
 
-    private static MigrationCandidate CloneCandidate(MigrationCandidate candidate) => new(candidate.OldHorseId,
-        candidate.JraIdentity, candidate.Name, candidate.EvidenceNote, candidate.Limitations, candidate.IsPreset,
-        candidate.SourceHorse);
-
     private static string DiagnosticUrl(string horseId) =>
         $"/settings/identity-diagnostics/horses/{Uri.EscapeDataString(horseId)}";
 
     private static string HorseSummary(HorseSummaryDto horse) =>
         $"{horse.RegisteredName} · {horse.HorseId} · 生年月日 {horse.BirthDate?.ToString("yyyy-MM-dd") ?? "—"}";
+
+    private static bool IsExactHorseId(string value) => value.StartsWith("horse-", StringComparison.Ordinal)
+        && Guid.TryParseExact(value.AsSpan("horse-".Length), "D", out _);
+
+    private static string TargetReviewBlockerLabel(HorseIdentityMigrationTargetReviewBlocker blocker) => blocker switch
+    {
+        HorseIdentityMigrationTargetReviewBlocker.InvalidManifest => "選択内容を確認できません。候補を選び直してください。",
+        HorseIdentityMigrationTargetReviewBlocker.ReadUnavailable => "選択した登録ルートを読み取れません。",
+        HorseIdentityMigrationTargetReviewBlocker.SourceRootMissing => "選択した旧IDの登録ルートが見つかりません。",
+        HorseIdentityMigrationTargetReviewBlocker.DuplicateSource => "選択した旧IDに重複した登録ルートがあります。",
+        HorseIdentityMigrationTargetReviewBlocker.DestinationCollision => "変換先に既存の登録ルートがあり、競合しています。",
+        _ => "選択した登録ルートを確認できません。",
+    };
+
+    private static string TargetReviewRootLabel(HorseIdentityMigrationTargetReviewRootStatus status) => status switch
+    {
+        HorseIdentityMigrationTargetReviewRootStatus.Present => "旧IDの登録ルートを確認",
+        HorseIdentityMigrationTargetReviewRootStatus.Missing => "旧IDの登録ルートなし",
+        HorseIdentityMigrationTargetReviewRootStatus.Duplicate => "旧IDの登録ルートが重複",
+        HorseIdentityMigrationTargetReviewRootStatus.DestinationCollision => "変換先の登録ルートが競合",
+        HorseIdentityMigrationTargetReviewRootStatus.Unavailable => "登録ルートの状態を確認できません",
+        _ => "確認できない状態",
+    };
 
     private static string HistoryVersions(IReadOnlyList<int> versions) =>
         versions.Count == 0 ? "なし/未確認" : string.Join(", ", versions);
@@ -1208,7 +1305,7 @@
     };
 
     private sealed record MigrationCandidate(string OldHorseId, string JraIdentity, string Name,
-        string EvidenceNote, string Limitations, bool IsPreset, HorseSummaryDto? SourceHorse)
+        string EvidenceNote, string Limitations, HorseSummaryDto? SourceHorse)
     {
         public bool HypothesisAccepted { get; set; }
     }

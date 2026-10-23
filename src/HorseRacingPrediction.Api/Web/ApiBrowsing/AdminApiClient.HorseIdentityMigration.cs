@@ -13,6 +13,11 @@ public sealed partial class AdminApiClient
         HorseIdentityMigrationManifest manifest, CancellationToken cancellationToken = default)
         => PostJsonAsync<HorseIdentityMigrationPreview>(HorseIdentityMigrationPreviewPath, manifest, cancellationToken);
 
+    public Task<HorseIdentityMigrationTargetReview?> ReviewHorseIdentityMigrationTargetsAsync(
+        HorseIdentityMigrationManifest manifest, CancellationToken cancellationToken = default)
+        => PostJsonAsync<HorseIdentityMigrationTargetReview>(
+            HorseIdentityMigrationPreviewPath + "?kind=TargetReviewV2", manifest, cancellationToken);
+
     public Task<HorseIdentityMigrationOperationResponse?> StageHorseIdentityMigrationAsync(
         HorseIdentityMigrationManifest manifest, string previewFingerprint,
         CancellationToken cancellationToken = default)
@@ -24,6 +29,16 @@ public sealed partial class AdminApiClient
         => PostJsonAsync<HorseIdentityMigrationOperationResponse>(HorseIdentityMigrationOperationsPath,
             new HorseIdentityMigrationStageRequest(manifest, previewFingerprint) { RequestKey = requestKey },
             cancellationToken);
+
+    public Task<HorseIdentityMigrationOperationResponse?> StagePendingHorseIdentityMigrationAsync(
+        HorseIdentityMigrationManifest manifest, Guid? requestKey = null,
+        CancellationToken cancellationToken = default)
+        => PostJsonAsync<HorseIdentityMigrationOperationResponse>(HorseIdentityMigrationOperationsPath,
+            new HorseIdentityMigrationStageRequest(manifest, null)
+            {
+                RequestKind = HorseIdentityMigrationAdmissionKind.PendingV2,
+                RequestKey = requestKey,
+            }, cancellationToken);
 
     public Task<HorseIdentityMigrationOperationResponse?> GetHorseIdentityMigrationRequestAsync(
         Guid requestKey, CancellationToken cancellationToken = default)

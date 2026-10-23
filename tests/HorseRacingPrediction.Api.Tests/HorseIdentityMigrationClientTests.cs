@@ -32,6 +32,7 @@ public sealed class HorseIdentityMigrationClientTests
         var response = new HorseIdentityMigrationOperationResponse(operationId, "AwaitingActions", "None",
             DateTimeOffset.Parse("2026-10-15T00:00:00Z"), DateTimeOffset.Parse("2026-10-15T00:00:00Z"), []);
         HorseIdentityMigrationManifest? receivedPreviewManifest = null;
+        HorseIdentityMigrationManifest? receivedTargetReviewManifest = null;
         HorseIdentityMigrationStageRequest? receivedStage = null;
         var executeCount = 0;
         var builder = WebApplication.CreateBuilder();
@@ -46,8 +47,18 @@ public sealed class HorseIdentityMigrationClientTests
         var routes = app.MapGroup("/api").AddEndpointFilter<ApiKeyEndpointFilter>();
         routes.MapPost("/v2/admin/horse-id-migration-previews", async (HttpRequest request) =>
         {
-            receivedPreviewManifest = await JsonSerializer.DeserializeAsync<HorseIdentityMigrationManifest>(request.Body,
+            var manifestBody = await JsonSerializer.DeserializeAsync<HorseIdentityMigrationManifest>(request.Body,
                 new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            if (request.Query["kind"] == "TargetReviewV2")
+            {
+                receivedTargetReviewManifest = manifestBody;
+                return Results.Ok(new HorseIdentityMigrationTargetReview(true, [],
+                    [new("horse-11111111-1111-4111-8111-111111111111", "jra-horse:2024100828",
+                        "horse-4f4ef3a7-9c3c-4878-b7d4-1689b1d2cced")],
+                    [new("horse-11111111-1111-4111-8111-111111111111", "horse-4f4ef3a7-9c3c-4878-b7d4-1689b1d2cced",
+                        HorseIdentityMigrationTargetReviewRootStatus.Present)]));
+            }
+            receivedPreviewManifest = manifestBody;
             return Results.Ok(preview);
         });
         routes.MapPost("/v2/admin/horse-id-migration-operations", async (HttpRequest request) =>
@@ -86,6 +97,16 @@ public sealed class HorseIdentityMigrationClientTests
         Assert.IsNotNull(observedStableStage);
         Assert.AreEqual(operationId, observedStableStage.OperationId);
         Assert.AreEqual(requestKey, receivedStage.RequestKey);
+
+        var targetReview = await client.ReviewHorseIdentityMigrationTargetsAsync(manifest);
+        Assert.IsNotNull(targetReview);
+        Assert.IsTrue(targetReview.CanSavePending);
+        Assert.AreEqual(manifest.Entries![0], receivedTargetReviewManifest!.Entries![0]);
+        var pendingStage = await client.StagePendingHorseIdentityMigrationAsync(manifest, requestKey: Guid.NewGuid());
+        Assert.IsNotNull(pendingStage);
+        Assert.AreEqual(HorseIdentityMigrationAdmissionKind.PendingV2, receivedStage!.RequestKind);
+        Assert.IsNull(receivedStage.PreviewFingerprint);
+        Assert.AreEqual(manifest.Entries![0], receivedStage.Manifest!.Entries![0]);
 
         var observedRequest = await client.GetHorseIdentityMigrationRequestAsync(requestKey);
         Assert.IsNotNull(observedRequest);

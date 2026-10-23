@@ -70,9 +70,11 @@ public sealed class HorseIdentityMigrationAdminBrowserTests
                 { Timeout = (float)RequestTimeout.TotalMilliseconds });
                 Assert.IsNotNull(migrationDocumentBody, "The approved Settings link must load the normal page document.");
                 var prerenderedHtml = WebUtility.HtmlDecode(await migrationDocumentBody.WaitAsync(RequestTimeout));
-                Assert.IsTrue(HasDisabledPrerenderedCandidateCheckbox(prerenderedHtml),
-                    "Candidate selection must remain disabled until its interactive handler is ready.");
-                Assert.IsTrue(await page.GetByText("生年月日とプロフィールの根拠が不足しています。").First.IsVisibleAsync());
+                Assert.IsTrue(HasDisabledPrerenderedHorseSearchButton(prerenderedHtml),
+                    "The generic search action must remain disabled until its interactive handler is ready.");
+                Assert.IsFalse(Regex.IsMatch(prerenderedHtml, @"<fluent-checkbox\b", RegexOptions.IgnoreCase),
+                    "The default request must be empty; no candidate selection is present before the operator adds one.");
+                Assert.IsTrue(await page.GetByText("候補はまだありません。", new() { Exact = false }).IsVisibleAsync());
 
                 await page.GetByRole(AriaRole.Button, new() { Name = "保存先を診断" }).ClickAsync();
                 await page.GetByText("診断の読み取りは完了しました", new() { Exact = false }).WaitForAsync(new LocatorWaitForOptions
@@ -80,14 +82,11 @@ public sealed class HorseIdentityMigrationAdminBrowserTests
                 Assert.IsTrue(await page.GetByText("候補を選ばずに保存先の構造だけを確認できます。", new() { Exact = false }).IsVisibleAsync());
                 Assert.IsTrue(await page.GetByRole(AriaRole.Button, new() { Name = "安全な診断JSONをコピー" }).IsVisibleAsync());
 
-                await page.WaitForFunctionAsync("""
-                    () => {
-                        const checkbox = document.querySelector('.migration-grid fluent-checkbox');
-                        return checkbox && !checkbox.hasAttribute('disabled') && checkbox.getAttribute('aria-disabled') !== 'true';
-                    }
-                    """, new PageWaitForFunctionOptions { Timeout = (float)RequestTimeout.TotalMilliseconds });
-                await page.GetByLabel("登録馬名またはIDで検索").FillAsync("Fixture Horse");
-                await page.GetByRole(AriaRole.Button, new() { Name = "登録馬を検索" }).ClickAsync();
+                var searchButton = page.GetByRole(AriaRole.Button, new() { Name = "登録馬を検索" });
+                await Assertions.Expect(searchButton).ToBeEnabledAsync(new LocatorAssertionsToBeEnabledOptions
+                { Timeout = (float)RequestTimeout.TotalMilliseconds });
+                await page.GetByLabel("登録馬名またはIDで検索").FillAsync(AddedHorseId);
+                await searchButton.ClickAsync();
                 var horseSelector = page.GetByRole(AriaRole.Combobox, new() { Name = "追加する旧ID" });
                 await horseSelector.FocusAsync();
                 Assert.IsTrue(await horseSelector.EvaluateAsync<bool>("element => document.activeElement === element || (element.shadowRoot !== null && element.shadowRoot.activeElement !== null)"),
@@ -97,7 +96,7 @@ public sealed class HorseIdentityMigrationAdminBrowserTests
                 await Assertions.Expect(horseSelector).ToHaveAttributeAsync("current-value", AddedHorseId,
                     new LocatorAssertionsToHaveAttributeOptions { Timeout = (float)RequestTimeout.TotalMilliseconds });
                 Assert.AreEqual(AddedHorseId, await horseSelector.GetAttributeAsync("current-value"),
-                    "Keyboard selection must choose the explicit registered HorseId, not the matching preset display name.");
+                    "Keyboard selection must choose the exact registered HorseId returned by the real search endpoint.");
                 var jraInput = page.GetByLabel("JRA馬番号（半角数字10桁）");
                 await jraInput.FocusAsync();
                 await jraInput.PressSequentiallyAsync(AddedJraNumber);
@@ -122,17 +121,13 @@ public sealed class HorseIdentityMigrationAdminBrowserTests
                 await acceptHypothesis.PressAsync("Space");
                 await Assertions.Expect(acceptHypothesis).ToBeCheckedAsync(new LocatorAssertionsToBeCheckedOptions
                 { Timeout = (float)RequestTimeout.TotalMilliseconds });
-                var previewButton = page.GetByRole(AriaRole.Button, new() { Name = "選択内容をプレビュー" });
-                await Assertions.Expect(previewButton).ToBeEnabledAsync(new LocatorAssertionsToBeEnabledOptions
+                var reviewButton = page.GetByRole(AriaRole.Button, new() { Name = "選択内容を確認" });
+                await Assertions.Expect(reviewButton).ToBeEnabledAsync(new LocatorAssertionsToBeEnabledOptions
                 { Timeout = (float)RequestTimeout.TotalMilliseconds });
-                await previewButton.ClickAsync();
-                await page.GetByText("表示された候補と保存状態を確認してください").WaitForAsync(new LocatorWaitForOptions
+                await reviewButton.ClickAsync();
+                await page.GetByText("選択した登録ルートの確認").WaitForAsync(new LocatorWaitForOptions
                 { Timeout = (float)RequestTimeout.TotalMilliseconds });
-                Assert.IsTrue(await page.GetByText("対象行").First.IsVisibleAsync());
-                await AssertGridCellsAreFullyVisibleAsync(page.Locator(".migration-candidates .migration-grid"));
-                var previewGrids = page.Locator(".migration-preview .migration-grid");
-                for (var index = 0; index < await previewGrids.CountAsync(); index++)
-                    await AssertGridCellsAreFullyVisibleAsync(previewGrids.Nth(index));
+                Assert.IsTrue(await page.GetByText("全データの検証は未実施です", new() { Exact = false }).IsVisibleAsync());
                 var candidateGrid = page.Locator(".migration-candidates .migration-grid");
                 Assert.IsTrue(await candidateGrid.GetByText(AddedHorseId, new() { Exact = true }).IsVisibleAsync());
                 Assert.IsTrue(await candidateGrid.GetByText($"Fixture Horse → jra-horse:{AddedJraNumber}", new() { Exact = true }).IsVisibleAsync());
@@ -140,8 +135,8 @@ public sealed class HorseIdentityMigrationAdminBrowserTests
                 await page.ScreenshotAsync(new PageScreenshotOptions
                 { Path = Path.Combine(screenshotDirectory, "desktop-preview.png") });
 
-                await page.GetByRole(AriaRole.Button, new() { Name = "この固定内容を実行依頼として保存" }).ClickAsync();
-                var confirmSaveButton = page.GetByRole(AriaRole.Button, new() { Name = "この内容を実行依頼として保存" });
+                await page.GetByRole(AriaRole.Button, new() { Name = "内容を確認して依頼を保存" }).ClickAsync();
+                var confirmSaveButton = page.GetByRole(AriaRole.Button, new() { Name = "全件検証待ちとして保存" });
                 await Assertions.Expect(confirmSaveButton).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions
                 { Timeout = (float)RequestTimeout.TotalMilliseconds });
                 await confirmSaveButton.ClickAsync();
@@ -156,24 +151,18 @@ public sealed class HorseIdentityMigrationAdminBrowserTests
                 await page.SetViewportSizeAsync(390, 844);
                 Assert.IsTrue(await page.EvaluateAsync<bool>("() => document.documentElement.scrollWidth <= window.innerWidth"),
                     "The mobile saved-operation screen must not overflow horizontally.");
-                Assert.IsTrue(await page.Locator(".migration-cards").First.IsVisibleAsync());
+                Assert.IsTrue(await page.Locator(".migration-candidates .migration-cards").IsVisibleAsync());
                 Assert.IsFalse(await page.Locator(".migration-grid").First.IsVisibleAsync());
                 await Assertions.Expect(page.Locator(".migration-candidates .migration-cards").GetByText(AddedHorseId, new() { Exact = true }))
                     .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = (float)RequestTimeout.TotalMilliseconds });
                 await AssertTextFitsItsMobileCellAsync(
                     page.Locator(".migration-candidates .migration-cards").GetByText(AddedHorseId, new() { Exact = true }));
-                var hasVisibleFullFingerprint = await page.Locator(".migration-preview .migration-cards dd").EvaluateAllAsync<bool>("""
-                    cells => cells.some(cell => {
-                        const value = cell.textContent.trim();
-                        if (!/^[A-Fa-f0-9]{64}$/.test(value)) return false;
-                        const rect = cell.getBoundingClientRect();
-                        const style = getComputedStyle(cell);
-                        return rect.width > 0 && rect.height > 0 && style.whiteSpace !== 'nowrap'
-                            && cell.scrollWidth <= cell.clientWidth + 1 && cell.scrollHeight <= cell.clientHeight + 1;
-                    })
+                var pendingReviewFingerprints = await page.Locator(".migration-preview").EvaluateAllAsync<int>("""
+                    roots => roots.flatMap(root => Array.from(root.querySelectorAll('*')))
+                        .filter(element => /^[A-Fa-f0-9]{64}$/.test(element.textContent.trim())).length
                     """);
-                Assert.IsTrue(hasVisibleFullFingerprint,
-                    "At 390px, a complete 64-character preview hash must remain visible and wrap within its card cell.");
+                Assert.AreEqual(0, pendingReviewFingerprints,
+                    "The root-only pending review must not invent or display a full-manifest fingerprint.");
                 await page.Locator(".migration-candidates").ScrollIntoViewIfNeededAsync();
                 await page.ScreenshotAsync(new PageScreenshotOptions
                 { Path = Path.Combine(screenshotDirectory, "mobile-preview.png") });
@@ -189,7 +178,8 @@ public sealed class HorseIdentityMigrationAdminBrowserTests
                 await page.SetViewportSizeAsync(390, 844);
                 Assert.IsTrue(await page.EvaluateAsync<bool>("() => document.documentElement.scrollWidth <= window.innerWidth"),
                     "The mobile status/reconnect screen must not overflow horizontally.");
-                Assert.IsTrue(await page.Locator(".migration-cards").First.IsVisibleAsync());
+                Assert.IsTrue(await page.GetByText("候補はまだありません。", new() { Exact = false }).IsVisibleAsync(),
+                    "Reload must not restore presets or auto-fetch the saved manifest as editable candidates.");
                 Assert.IsFalse(await page.Locator(".migration-grid").First.IsVisibleAsync());
 
                 await page.GetByRole(AriaRole.Button, new() { Name = "状態を更新" }).ClickAsync();
@@ -200,6 +190,10 @@ public sealed class HorseIdentityMigrationAdminBrowserTests
                 Assert.IsTrue(await page.GetByRole(AriaRole.Button, new() { Name = "この保存済み依頼を実行" }).IsVisibleAsync(),
                     "Execution must become available only after an explicit status read restores the saved receipt.");
                 Assert.AreEqual(0, CountEndpoint(endpointLog, "POST", "/api/v2/admin/horse-id-migration-operations/{operationId}/execute"));
+                var savedRequestHorse = page.Locator(".migration-saved-request").GetByText(AddedHorseId, new() { Exact = true });
+                await Assertions.Expect(savedRequestHorse).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions
+                { Timeout = (float)RequestTimeout.TotalMilliseconds });
+                await AssertTextFitsItsMobileCellAsync(savedRequestHorse);
                 await page.GetByText("手動操作待ち").ScrollIntoViewIfNeededAsync();
                 await page.ScreenshotAsync(new PageScreenshotOptions
                 { Path = Path.Combine(screenshotDirectory, "mobile-receipt-status.png") });
@@ -305,16 +299,14 @@ public sealed class HorseIdentityMigrationAdminBrowserTests
         await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
     }
 
-    private static bool HasDisabledPrerenderedCandidateCheckbox(string html)
+    private static bool HasDisabledPrerenderedHorseSearchButton(string html)
     {
         foreach (Match match in Regex.Matches(html,
-                     @"<(?<tag>fluent-checkbox|button)\b(?<attributes>[^>]*)>(?<content>.*?)</\k<tag>\s*>",
+                     @"<(?<tag>fluent-button|button)\b(?<attributes>[^>]*)>(?<content>.*?)</\k<tag>\s*>",
                      RegexOptions.IgnoreCase | RegexOptions.Singleline))
         {
             var attributes = match.Groups["attributes"].Value;
-            var candidate = attributes.Contains("ナムラアラバイ", StringComparison.Ordinal)
-                || match.Groups["content"].Value.Contains("ナムラアラバイ", StringComparison.Ordinal);
-            if (!candidate) continue;
+            if (!match.Groups["content"].Value.Contains("登録馬を検索", StringComparison.Ordinal)) continue;
             return Regex.IsMatch(attributes, @"(?:^|\s)disabled(?:\s|=|$)", RegexOptions.IgnoreCase)
                 || Regex.IsMatch(attributes, "aria-disabled\\s*=\\s*[\\\"']true[\\\"']", RegexOptions.IgnoreCase);
         }

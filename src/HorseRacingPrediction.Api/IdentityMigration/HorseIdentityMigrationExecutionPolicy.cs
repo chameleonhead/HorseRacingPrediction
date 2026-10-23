@@ -60,6 +60,35 @@ internal static class HorseIdentityMigrationExecutionPolicy
         return Convert.ToHexString(SHA256.HashData(payload));
     }
 
+    internal static string ComputePendingImmutableRequestHash(HorseIdentityMigrationManifest? manifest)
+    {
+        ArgumentNullException.ThrowIfNull(manifest);
+
+        var canonicalEntries = (manifest.Entries ?? Array.Empty<HorseIdentityMigrationManifestEntry?>())
+            .Select(entry => entry is null
+                ? new CanonicalManifestEntry(false, null, null, false)
+                : new CanonicalManifestEntry(true, entry.OldHorseId, entry.JraIdentity, entry.HypothesisAccepted))
+            .OrderBy(entry => entry.OldHorseId, StringComparer.Ordinal)
+            .ThenBy(entry => entry.JraIdentity, StringComparer.Ordinal)
+            .ThenBy(entry => entry.HypothesisAccepted)
+            .ToArray();
+        var payload = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            Version = 2,
+            RequestKind = HorseIdentityMigrationAdmissionKind.PendingV2,
+            Manifest = new
+            {
+                manifest.IsOverLimit,
+                EntriesPresent = manifest.Entries is not null,
+                Entries = canonicalEntries,
+            },
+        }, JsonOptions);
+        return Convert.ToHexString(SHA256.HashData(payload));
+    }
+
+    internal static bool IsDefinedAdmissionKind(HorseIdentityMigrationAdmissionKind? kind) =>
+        kind is null or HorseIdentityMigrationAdmissionKind.BoundV1 or HorseIdentityMigrationAdmissionKind.PendingV2;
+
     internal static bool IsValidRequestKey(Guid? requestKey) => requestKey is null || requestKey != Guid.Empty;
 
     internal static bool CanCreateIntent(

@@ -136,6 +136,76 @@ public sealed class HorseIdentityMigrationEndpointsTests
     }
 
     [TestMethod]
+    public async Task PendingTargetReviewAndSaveUseRealHttpClientWithoutClaimingFullValidation()
+    {
+        await using var stores = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
+        await stores.SeedHorseAsync(OldHorseId);
+        await stores.SeedSerializedHorseEventAsync(OldHorseId);
+        var before = await stores.SourceSnapshotAsync();
+        await using var app = await StartApiAsync(stores);
+        using var transport = app.GetTestClient();
+        var client = new AdminApiClient(transport,
+            new AdminApiBaseAddressResolver(app.Services.GetRequiredService<IServer>()),
+            Options.Create(new ApiKeyOptions { HeaderName = "X-Api-Key", Key = TestApplicationFactory.TestApiKey }));
+        var manifest = Manifest();
+
+        var review = await client.ReviewHorseIdentityMigrationTargetsAsync(manifest);
+        Assert.IsNotNull(review);
+        Assert.IsTrue(review.CanSavePending, string.Join(',', review.Blockers));
+        Assert.AreEqual(HorseIdentityMigrationTargetReviewRootStatus.Present, review.Roots.Single().Status);
+        var reviewJson = JsonSerializer.Serialize(review, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.DoesNotContain("Fingerprint", reviewJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("InspectedRows", reviewJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Stores", reviewJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UnknownObjectCount", reviewJson, StringComparison.OrdinalIgnoreCase);
+
+        var requestKey = Guid.NewGuid();
+        var staged = await client.StagePendingHorseIdentityMigrationAsync(manifest, requestKey);
+        Assert.IsNotNull(staged);
+        Assert.AreEqual(HorseIdentityMigrationAdmissionKind.PendingV2, staged.RequestKind);
+        Assert.IsNull(staged.PreviewFingerprint);
+        Assert.AreEqual(JsonSerializer.Serialize(manifest.Entries), JsonSerializer.Serialize(staged.SavedManifest?.Entries));
+        var replay = await client.StagePendingHorseIdentityMigrationAsync(manifest, requestKey);
+        Assert.AreEqual(staged.OperationId, replay?.OperationId);
+        Assert.AreEqual(HorseIdentityMigrationAdmissionKind.PendingV2, replay?.RequestKind);
+
+        var byKey = await client.GetHorseIdentityMigrationRequestAsync(requestKey);
+        Assert.IsNotNull(byKey);
+        Assert.AreEqual(staged.OperationId, byKey.OperationId);
+        Assert.AreEqual(HorseIdentityMigrationAdmissionKind.PendingV2, byKey.RequestKind);
+        Assert.IsNull(byKey.PreviewFingerprint);
+        Assert.AreEqual(JsonSerializer.Serialize(manifest.Entries), JsonSerializer.Serialize(byKey.SavedManifest?.Entries));
+        var byStatus = await client.GetHorseIdentityMigrationOperationAsync(staged.OperationId);
+        Assert.AreEqual(HorseIdentityMigrationAdmissionKind.PendingV2, byStatus?.RequestKind);
+        Assert.IsNull(byStatus?.PreviewFingerprint);
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Ready,
+            (await GetJournal(stores).InspectStartupGuardAsync(DateTimeOffset.UtcNow)).State);
+
+        using var changedKind = await transport.PostAsJsonAsync("/api/v2/admin/horse-id-migration-operations",
+            new HorseIdentityMigrationStageRequest(manifest, new string('A', 64))
+            {
+                RequestKind = HorseIdentityMigrationAdmissionKind.BoundV1,
+                RequestKey = requestKey,
+            });
+        Assert.AreEqual(HttpStatusCode.Conflict, changedKind.StatusCode);
+        using var pendingWithFingerprint = await transport.PostAsJsonAsync("/api/v2/admin/horse-id-migration-operations",
+            new HorseIdentityMigrationStageRequest(manifest, new string('A', 64))
+            {
+                RequestKind = HorseIdentityMigrationAdmissionKind.PendingV2,
+                RequestKey = Guid.NewGuid(),
+            });
+        Assert.AreEqual(HttpStatusCode.BadRequest, pendingWithFingerprint.StatusCode);
+        using var unknownPreview = await transport.PostAsJsonAsync(
+            "/api/v2/admin/horse-id-migration-previews?kind=UnknownV9", manifest);
+        Assert.AreEqual(HttpStatusCode.BadRequest, unknownPreview.StatusCode);
+        const string unknownKindJson = "{\"manifest\":{\"entries\":[{\"oldHorseId\":\"horse-11111111-1111-4111-8111-111111111111\",\"jraIdentity\":\"jra-horse:2024100828\",\"hypothesisAccepted\":true}]},\"requestKind\":\"FutureV9\"}";
+        using var unknownRequestKind = await transport.PostAsync("/api/v2/admin/horse-id-migration-operations",
+            new StringContent(unknownKindJson, Encoding.UTF8, "application/json"));
+        Assert.AreEqual(HttpStatusCode.BadRequest, unknownRequestKind.StatusCode);
+        Assert.AreEqual(before, await stores.SourceSnapshotAsync());
+    }
+
+    [TestMethod]
     public async Task LostAdmissionResponseCanReplayThroughTheRealClientWithSavedManifestAndFingerprint()
     {
         await using var stores = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();

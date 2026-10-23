@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Buffers.Binary;
+using System.Text.Json;
 using HorseRacingPrediction.Api.Identity;
 using HorseRacingPrediction.Api.IdentityMigration;
 using HorseRacingPrediction.Contracts.Identity;
@@ -66,6 +67,73 @@ public sealed class HorseIdentityMigrationJournalTests
         Assert.IsNotNull(lookup);
         Assert.AreEqual(first.Operation.OperationId, lookup.Operation.OperationId);
         Assert.AreEqual(fingerprint, lookup.PreviewFingerprint);
+    }
+
+    [TestMethod]
+    public async Task PendingRequestSurvivesFreshJournalReadbackAndDoesNotBlockStartupOrAcquireFingerprint()
+    {
+        using var fixture = new Fixture();
+        var manifest = Manifest(21);
+        var requestKey = Guid.NewGuid();
+        var pendingHash = HorseIdentityMigrationExecutionPolicy.ComputePendingImmutableRequestHash(manifest);
+        var staged = await fixture.Journal.StagePendingWithRequestKeyAsync(Guid.NewGuid(), manifest, requestKey,
+            pendingHash, Now);
+        Assert.IsTrue(staged.Succeeded);
+
+        var freshJournal = new HorseIdentityMigrationJournal(fixture.Directory, []);
+        var guard = await freshJournal.InspectStartupGuardAsync(Now.AddMinutes(1));
+        var key = await freshJournal.GetByRequestKeyAsync(requestKey);
+        var pending = await freshJournal.GetPendingRequestAsync(staged.Operation!.OperationId);
+
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Ready, guard.State,
+            "A staged pending request is not an interrupted execution and does not block normal API startup.");
+        Assert.IsNotNull(key);
+        Assert.AreEqual(HorseIdentityMigrationAdmissionKind.PendingV2, key.RequestKind);
+        Assert.IsNull(key.PreviewFingerprint);
+        Assert.IsNotNull(pending);
+        Assert.AreEqual(pendingHash, pending.ImmutableRequestHash);
+        Assert.AreEqual(JsonSerializer.Serialize(manifest.Entries), JsonSerializer.Serialize(pending.Manifest.Entries));
+        Assert.IsNull(await freshJournal.GetSavedRequestAsync(staged.Operation.OperationId),
+            "The strict bound-v1 reader must not reinterpret a pending request as fingerprint-bound.");
+        Assert.IsNull(await freshJournal.GetExecutionIntentAsync(staged.Operation.OperationId));
+    }
+
+    [TestMethod]
+    public async Task SameRequestKeyCannotCoalesceBoundV1AndPendingV2OrLaunderPendingThroughStandaloneBinding()
+    {
+        using var fixture = new Fixture();
+        var manifest = Manifest(22);
+        var requestKey = Guid.NewGuid();
+        var fingerprint = new string('7', 64);
+        var boundHash = HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(manifest, fingerprint);
+        var bound = await fixture.Journal.StageWithRequestKeyAsync(Guid.NewGuid(), manifest, requestKey,
+            boundHash, fingerprint, Now);
+        Assert.IsTrue(bound.Succeeded);
+
+        var pendingHash = HorseIdentityMigrationExecutionPolicy.ComputePendingImmutableRequestHash(manifest);
+        Assert.AreNotEqual(boundHash, pendingHash);
+        var asPending = await fixture.Journal.StagePendingWithRequestKeyAsync(Guid.NewGuid(), manifest, requestKey,
+            pendingHash, Now.AddMinutes(1));
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.RequestConflict, asPending.Reason);
+        Assert.AreEqual(bound.Operation!.OperationId, asPending.Operation!.OperationId);
+
+        var original = await fixture.Journal.GetByRequestKeyAsync(requestKey);
+        Assert.IsNotNull(original);
+        Assert.AreEqual(HorseIdentityMigrationAdmissionKind.BoundV1, original.RequestKind);
+        Assert.AreEqual(boundHash, original.ImmutableRequestHash);
+        Assert.AreEqual(fingerprint, original.PreviewFingerprint);
+
+        var pendingKey = Guid.NewGuid();
+        var pending = await fixture.Journal.StagePendingWithRequestKeyAsync(Guid.NewGuid(), manifest, pendingKey,
+            pendingHash, Now.AddMinutes(2));
+        Assert.IsTrue(pending.Succeeded);
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.RequestConflict,
+            (await fixture.Journal.BindStandaloneRequestAsync(pending.Operation!.OperationId, manifest, fingerprint,
+                Now.AddMinutes(3))).Reason,
+            "The old standalone bind path must not convert PendingV2 into BoundV1.");
+        Assert.AreEqual(HorseIdentityMigrationAdmissionKind.PendingV2,
+            (await fixture.Journal.GetByRequestKeyAsync(pendingKey))!.RequestKind);
+        Assert.IsNull(await fixture.Journal.GetSavedRequestAsync(pending.Operation.OperationId));
     }
 
     [TestMethod]

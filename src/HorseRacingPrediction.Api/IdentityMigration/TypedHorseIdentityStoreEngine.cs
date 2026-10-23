@@ -135,6 +135,63 @@ internal sealed class TypedHorseIdentityStoreEngine(TypedHorseIdentityStoreReade
         return BoundPreviewSummary(preview);
     }
 
+    internal async Task<HorseIdentityMigrationTargetReview> InspectTargetReviewAsync(
+        HorseIdentityMigrationManifest? manifest,
+        CancellationToken cancellationToken)
+    {
+        var validation = HorseIdentityMigrationManifestPolicy.Validate(manifest);
+        if (!validation.IsValid)
+            return new(false, [HorseIdentityMigrationTargetReviewBlocker.InvalidManifest], [], []);
+
+        IReadOnlyList<MigrationRootProbe> roots;
+        try
+        {
+            roots = await readers.InspectSelectedRootsAsync(validation.Mappings, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is SqliteException or InvalidDataException or IOException)
+        {
+            return new(false, [HorseIdentityMigrationTargetReviewBlocker.ReadUnavailable], [], []);
+        }
+
+        var blockers = new List<HorseIdentityMigrationTargetReviewBlocker>();
+        foreach (var root in roots)
+        {
+            var blocker = root.SourceStatus switch
+            {
+                MigrationRootStatus.Missing => HorseIdentityMigrationTargetReviewBlocker.SourceRootMissing,
+                MigrationRootStatus.Duplicate => HorseIdentityMigrationTargetReviewBlocker.DuplicateSource,
+                MigrationRootStatus.TargetCollision => HorseIdentityMigrationTargetReviewBlocker.DestinationCollision,
+                MigrationRootStatus.UnknownShape or MigrationRootStatus.Unavailable =>
+                    HorseIdentityMigrationTargetReviewBlocker.ReadUnavailable,
+                _ => (HorseIdentityMigrationTargetReviewBlocker?)null,
+            };
+            if (blocker is { } value && !blockers.Contains(value)) blockers.Add(value);
+        }
+
+        var mappings = validation.Mappings.OrderBy(item => item.OldHorseId, StringComparer.Ordinal)
+            .Select(item => new HorseIdentityMigrationPreviewMapping(item.OldHorseId,
+                item.JraIdentity, item.DestinationHorseId)).ToArray();
+        var reviewedRoots = roots.OrderBy(item => item.OldHorseId, StringComparer.Ordinal)
+            .Select(item => new HorseIdentityMigrationTargetReviewRoot(item.OldHorseId, item.DestinationHorseId,
+                item.SourceStatus switch
+                {
+                    MigrationRootStatus.Present => HorseIdentityMigrationTargetReviewRootStatus.Present,
+                    MigrationRootStatus.Missing => HorseIdentityMigrationTargetReviewRootStatus.Missing,
+                    MigrationRootStatus.Duplicate => HorseIdentityMigrationTargetReviewRootStatus.Duplicate,
+                    MigrationRootStatus.TargetCollision => HorseIdentityMigrationTargetReviewRootStatus.DestinationCollision,
+                    _ => HorseIdentityMigrationTargetReviewRootStatus.Unavailable,
+                })).ToArray();
+        var canSave = roots.Count == validation.Mappings.Count
+            && roots.All(item => item.SourceStatus == MigrationRootStatus.Present && !item.HasTargetCollision)
+            && blockers.Count == 0;
+        return new(canSave, blockers, mappings, reviewedRoots);
+    }
+
     internal static HorseIdentityMigrationPreview BoundPreviewSummary(HorseIdentityMigrationPreview preview)
     {
         if (JsonSerializer.SerializeToUtf8Bytes(preview, new JsonSerializerOptions(JsonSerializerDefaults.Web)).Length

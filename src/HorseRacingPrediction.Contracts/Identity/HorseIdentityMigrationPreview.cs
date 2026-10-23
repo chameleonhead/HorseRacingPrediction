@@ -22,6 +22,38 @@ public sealed record HorseIdentityMigrationPreview(
     public HorseIdentityMigrationInspectionDiagnostic? InspectionDiagnostic { get; init; }
 }
 
+/// <summary>Bounded point-read review of only the selected migration roots; it is not full-store evidence.</summary>
+public sealed record HorseIdentityMigrationTargetReview(
+    bool CanSavePending,
+    IReadOnlyList<HorseIdentityMigrationTargetReviewBlocker> Blockers,
+    IReadOnlyList<HorseIdentityMigrationPreviewMapping> Mappings,
+    IReadOnlyList<HorseIdentityMigrationTargetReviewRoot> Roots);
+
+[JsonConverter(typeof(JsonStringEnumConverter<HorseIdentityMigrationTargetReviewBlocker>))]
+public enum HorseIdentityMigrationTargetReviewBlocker
+{
+    InvalidManifest,
+    ReadUnavailable,
+    SourceRootMissing,
+    DuplicateSource,
+    DestinationCollision,
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<HorseIdentityMigrationTargetReviewRootStatus>))]
+public enum HorseIdentityMigrationTargetReviewRootStatus
+{
+    Present,
+    Missing,
+    Duplicate,
+    DestinationCollision,
+    Unavailable,
+}
+
+public sealed record HorseIdentityMigrationTargetReviewRoot(
+    string OldHorseId,
+    string DestinationHorseId,
+    HorseIdentityMigrationTargetReviewRootStatus Status);
+
 [JsonConverter(typeof(JsonStringEnumConverter<HorseIdentityMigrationInspectionPhase>))]
 public enum HorseIdentityMigrationInspectionPhase
 {
