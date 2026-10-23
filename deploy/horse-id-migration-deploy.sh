@@ -6,6 +6,7 @@ HRP_MIGRATION_MAX_JOURNAL_BYTES=$((64 * 1024 * 1024))
 HRP_MIGRATION_CLI_TIMEOUT_SECONDS=${HRP_MIGRATION_CLI_TIMEOUT_SECONDS:-$((30 * 60))}
 HRP_MIGRATION_CHILD_GRACE_SECONDS=${HRP_MIGRATION_CHILD_GRACE_SECONDS:-10}
 HRP_MIGRATION_CONTAINER_NAME=
+HRP_MIGRATION_SOURCE_LOCK_FDS=()
 
 horse_id_migration_validate_guid() {
   local operation_id=${1-}
@@ -37,6 +38,250 @@ horse_id_migration_require_tools() {
     echo "Migration guard requires Python sqlite3; refusing deployment without installing packages." >&2
     return 1
   }
+}
+
+horse_id_migration_require_recovery_tools() {
+  local utility
+  for utility in flock realpath stat tr wc; do
+    command -v "$utility" >/dev/null 2>&1 || {
+      echo "API startup recovery requires the existing $utility utility." >&2
+      return 1
+    }
+  done
+}
+
+# Hold the application's existing per-source FileShare.None gates while the API
+# is stopped. Each pair is a physical host path followed by the exact path seen
+# by the API (for the deployed Compose bind these are /opt/.../data/x and
+# /data/x). Do not unlink gates: their inode and validated path identity are the
+# cross-process protocol shared with HorseIdentityMigrationRuntimeOwnership.
+horse_id_migration_acquire_source_ownership() {
+  local physical logical gate expected actual fd source_name control owner source_set_hash gate_identity fd_identity
+  local -a pairs=("$@")
+  local -a logical_paths=()
+  local index
+  if (( ${#pairs[@]} == 0 || ${#pairs[@]} % 2 != 0 )); then
+    echo "Source ownership requires physical/API path pairs." >&2
+    return 1
+  fi
+  for (( index=1; index<${#pairs[@]}; index+=2 )); do logical_paths+=("${pairs[index]}"); done
+  source_set_hash=$(printf '%s\0' "${logical_paths[@]}" | "${HRP_PYTHON3:-python3}" -c \
+    'import hashlib,sys; p=[x.decode("utf-8") for x in sys.stdin.buffer.read().split(b"\0") if x]; k=lambda x:x.encode("utf-16-be"); s=sorted(p,key=k); valid=all(x.startswith("/") and not x.endswith("/") and not any(part in (".","..") for part in x.split("/")) and not any(ch.isspace() for ch in x) for x in p); sys.exit(1) if not valid or len(set(p))!=len(p) or p!=s else None; print(hashlib.sha256("\n".join(p).encode("utf-8")).hexdigest().upper())') || {
+    echo "Could not compute the configured source identity." >&2
+    return 1
+  }
+
+  for (( index=0; index<${#pairs[@]}; index+=2 )); do
+    physical=${pairs[index]}
+    logical=${pairs[index+1]}
+    if [[ "$logical" != /* || "$logical" == *"/../"* || "$logical" == */.. ||
+          ! -f "$physical" || -L "$physical" || "$(realpath -e -- "$physical" 2>/dev/null)" != "$physical" ||
+          "$(stat -c %h -- "$physical" 2>/dev/null)" != 1 ]]; then
+      echo "Configured source ownership path is invalid." >&2
+      horse_id_migration_release_source_ownership
+      return 1
+    fi
+    source_name=${physical##*/}
+    gate="${physical%/*}/.${source_name}.horse-identity-migration.lock"
+    expected="HorseIdentityMigrationSourceOwnership:v1:$(printf '%s' "$logical" | sha256sum | cut -d' ' -f1 | tr '[:lower:]' '[:upper:]')"
+    if [[ ! -f "$gate" || -L "$gate" || "$(stat -c %h -- "$gate" 2>/dev/null)" != 1 ||
+          "$(realpath -e -- "$gate" 2>/dev/null)" != "$gate" ||
+          "$(stat -c %s -- "$gate" 2>/dev/null)" != "$(( ${#expected} + 1 ))" ]]; then
+      echo "Source ownership gate is not a regular unaliased file." >&2
+      horse_id_migration_release_source_ownership
+      return 1
+    fi
+    exec {fd}<"$gate" || {
+      echo "Could not open the existing source ownership gate." >&2
+      horse_id_migration_release_source_ownership
+      return 1
+    }
+    gate_identity=$(stat -Lc '%d:%i:%h:%s' -- "$gate" 2>/dev/null) || {
+      horse_id_migration_release_source_ownership
+      return 1
+    }
+    fd_identity=$(stat -Lc '%d:%i:%h:%s' -- "/proc/$$/fd/$fd" 2>/dev/null) || {
+      horse_id_migration_release_source_ownership
+      return 1
+    }
+    if [[ "$gate_identity" != "$fd_identity" ]]; then
+      eval "exec ${fd}>&-"
+      echo "Source ownership gate identity changed while opening it." >&2
+      horse_id_migration_release_source_ownership
+      return 1
+    fi
+    if ! flock -n "$fd"; then
+      eval "exec ${fd}>&-"
+      echo "A configured source is held by another process." >&2
+      horse_id_migration_release_source_ownership
+      return 1
+    fi
+    HRP_MIGRATION_SOURCE_LOCK_FDS+=("$fd")
+    if [[ ! -f "$gate" || -L "$gate" || "$(stat -c %h -- "$gate" 2>/dev/null)" != 1 ||
+          "$(realpath -e -- "$gate" 2>/dev/null)" != "$gate" ]]; then
+      echo "Source ownership gate changed while acquiring it." >&2
+      horse_id_migration_release_source_ownership
+      return 1
+    fi
+    gate_identity=$(stat -Lc '%d:%i:%h:%s' -- "$gate" 2>/dev/null) || gate_identity=
+    fd_identity=$(stat -Lc '%d:%i:%h:%s' -- "/proc/$$/fd/$fd" 2>/dev/null) || fd_identity=
+    if [[ -z "$gate_identity" || "$gate_identity" != "$fd_identity" ]]; then
+      echo "Source ownership gate identity changed while acquiring it." >&2
+      horse_id_migration_release_source_ownership
+      return 1
+    fi
+    if [[ "$(stat -c %s -- "$gate" 2>/dev/null)" != "$(( ${#expected} + 1 ))" ]]; then
+      echo "Source ownership gate size is invalid." >&2
+      horse_id_migration_release_source_ownership
+      return 1
+    fi
+    actual=$(<"$gate")
+    if [[ "$actual" != "$expected" || "$(wc -l < "$gate")" != 1 ]]; then
+      echo "Source ownership gate identity is invalid." >&2
+      horse_id_migration_release_source_ownership
+      return 1
+    fi
+    if [[ -e "${physical%/*}/.${source_name}.horse-identity-migration.maintenance" ]]; then
+      echo "An active migration maintenance gate exists for a configured source." >&2
+      horse_id_migration_release_source_ownership
+      return 1
+    fi
+
+    control="${physical%/*}/.${source_name}.horse-identity-migration.supervisor-control.lock"
+    owner="${physical%/*}/.${source_name}.horse-identity-migration.supervisor-control.owner"
+    if [[ ! -f "$control" || -L "$control" || "$(stat -c %h -- "$control" 2>/dev/null)" != 1 ||
+          "$(realpath -e -- "$control" 2>/dev/null)" != "$control" ]]; then
+      echo "Supervisor control lock is not a regular unaliased file." >&2
+      horse_id_migration_release_source_ownership
+      return 1
+    fi
+    exec {fd}<"$control" || {
+      echo "Could not open the supervisor control lock." >&2
+      horse_id_migration_release_source_ownership
+      return 1
+    }
+    if ! flock -n "$fd"; then
+      eval "exec ${fd}>&-"
+      echo "An active supervisor control owner exists." >&2
+      horse_id_migration_release_source_ownership
+      return 1
+    fi
+    HRP_MIGRATION_SOURCE_LOCK_FDS+=("$fd")
+    expected="HorseIdentityMigrationSupervisorControl:v1:$(printf '%s' "$logical" | sha256sum | cut -d' ' -f1 | tr '[:lower:]' '[:upper:]')"
+    if [[ "$(stat -c %s -- "$control" 2>/dev/null)" != "$(( ${#expected} + 1 ))" ]]; then
+      echo "Supervisor control lock size is invalid." >&2
+      horse_id_migration_release_source_ownership
+      return 1
+    fi
+    gate_identity=$(stat -Lc '%d:%i:%h:%s' -- "$control" 2>/dev/null) || {
+      horse_id_migration_release_source_ownership
+      return 1
+    }
+    fd_identity=$(stat -Lc '%d:%i:%h:%s' -- "/proc/$$/fd/$fd" 2>/dev/null) || {
+      horse_id_migration_release_source_ownership
+      return 1
+    }
+    if [[ "$gate_identity" != "$fd_identity" ]]; then
+      echo "Supervisor control lock identity changed while opening it." >&2
+      horse_id_migration_release_source_ownership
+      return 1
+    fi
+    actual=$(<"$control")
+    if [[ "$actual" != "$expected" || "$(wc -l < "$control")" != 1 ]]; then
+      echo "Supervisor control lock identity is invalid." >&2
+      horse_id_migration_release_source_ownership
+      return 1
+    fi
+    if [[ -e "$owner" ]]; then
+      if [[ -L "$owner" || ! -f "$owner" || "$(stat -c %h -- "$owner" 2>/dev/null)" != 1 ||
+            "$(stat -c %s -- "$owner" 2>/dev/null)" -lt 1 || "$(stat -c %s -- "$owner" 2>/dev/null)" -gt 1024 ||
+            "$(realpath -e -- "$owner" 2>/dev/null)" != "$owner" ]] ||
+         ! "${HRP_PYTHON3:-python3}" - "$owner" "$source_set_hash" <<'PY'
+import os, re, stat, sys
+from pathlib import Path
+try:
+    p = Path(sys.argv[1])
+    expected_source_set_hash = sys.argv[2]
+    fd = os.open(p, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
+    try:
+        info = os.fstat(fd)
+        path_info = os.stat(p, follow_symlinks=False)
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size < 1 or info.st_size > 1024
+                or (info.st_dev, info.st_ino) != (path_info.st_dev, path_info.st_ino)):
+            raise ValueError()
+        raw = os.read(fd, 1025)
+        after = os.fstat(fd)
+        if len(raw) != info.st_size or after.st_size != info.st_size or (after.st_dev, after.st_ino) != (info.st_dev, info.st_ino):
+            raise ValueError()
+    finally:
+        os.close(fd)
+    if not raw:
+        raise ValueError()
+    fields = raw.decode('ascii').split('\n')
+    if len(fields) != 8 or fields[0] != 'v1' or fields[1] not in ('api-bootstrap','cli-operation','readonly-reverify'):
+        raise ValueError()
+    if fields[4] != expected_source_set_hash or not re.fullmatch(r'[0-9A-Fa-f]{64}', fields[7]):
+        raise ValueError()
+    if not fields[5].isdigit() or not fields[6].isdigit() or int(fields[5]) <= 0 or int(fields[6]) <= 0:
+        raise ValueError()
+    if fields[1] == 'api-bootstrap':
+        if fields[2:4] != ['-','-']:
+            raise ValueError()
+    elif not re.fullmatch(r'[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}', fields[2]) or not re.fullmatch(r'[0-9A-Fa-f]{64}', fields[3]):
+        raise ValueError()
+except (OSError, UnicodeError, ValueError):
+    raise SystemExit(1)
+PY
+      then
+        echo "Supervisor owner record is active or invalid." >&2
+        horse_id_migration_release_source_ownership
+        return 1
+      fi
+    fi
+  done
+}
+
+horse_id_migration_acquire_journal_operation_lock() {
+  local journal_path=${1:?journal database path is required}
+  local lock_path="${journal_path%/*}/horse-identity-migration-operation.lock"
+  local fd
+  if [[ ! -f "$lock_path" || -L "$lock_path" || "$(stat -c %h -- "$lock_path" 2>/dev/null)" != 1 ||
+        "$(realpath -e -- "$lock_path" 2>/dev/null)" != "$lock_path" || "$(stat -c %s -- "$lock_path" 2>/dev/null)" != 0 ]]; then
+    echo "Journal operation lock is not a regular unaliased file." >&2
+    return 1
+  fi
+  exec {fd}<"$lock_path" || return 1
+  local path_identity fd_identity
+  path_identity=$(stat -Lc '%d:%i:%h:%s' -- "$lock_path" 2>/dev/null) || path_identity=
+  fd_identity=$(stat -Lc '%d:%i:%h:%s' -- "/proc/$$/fd/$fd" 2>/dev/null) || fd_identity=
+  if [[ -z "$path_identity" || "$path_identity" != "$fd_identity" ]]; then
+    eval "exec ${fd}>&-"
+    echo "Journal operation lock identity changed while opening it." >&2
+    return 1
+  fi
+  if ! flock -n "$fd"; then
+    eval "exec ${fd}>&-"
+    echo "An active journal operation owner exists." >&2
+    return 1
+  fi
+  path_identity=$(stat -Lc '%d:%i:%h:%s' -- "$lock_path" 2>/dev/null) || path_identity=
+  fd_identity=$(stat -Lc '%d:%i:%h:%s' -- "/proc/$$/fd/$fd" 2>/dev/null) || fd_identity=
+  if [[ -z "$path_identity" || "$path_identity" != "$fd_identity" ]]; then
+    eval "exec ${fd}>&-"
+    echo "Journal operation lock identity changed while acquiring it." >&2
+    return 1
+  fi
+  HRP_MIGRATION_SOURCE_LOCK_FDS+=("$fd")
+}
+
+horse_id_migration_release_source_ownership() {
+  local index fd
+  for (( index=${#HRP_MIGRATION_SOURCE_LOCK_FDS[@]}-1; index>=0; index-- )); do
+    fd=${HRP_MIGRATION_SOURCE_LOCK_FDS[index]}
+    flock -u "$fd" 2>/dev/null || true
+    eval "exec ${fd}>&-"
+  done
+  HRP_MIGRATION_SOURCE_LOCK_FDS=()
 }
 
 horse_id_migration_check_image_capability() {
@@ -80,6 +325,294 @@ try:
 except (OSError, URLError, ValueError, json.JSONDecodeError):
     print("Cannot confirm the persisted collection pause; refusing API stop.", file=sys.stderr)
     raise SystemExit(1)
+PY
+}
+
+horse_id_migration_assert_api_startup_blocked() {
+  local api_base_url=${1:?API base URL is required}
+  local api_key=${2:?API key is required}
+  local python_command=${HRP_PYTHON3:-python3}
+  HRP_RECOVERY_API_KEY="$api_key" "$python_command" - "$api_base_url" <<'PY'
+import json
+import os
+import sys
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener
+
+base = sys.argv[1]
+api_key = os.environ.pop("HRP_RECOVERY_API_KEY", "")
+if urlparse(base).scheme != "https" or not api_key:
+    raise SystemExit(1)
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+opener = build_opener(NoRedirect())
+request = Request(base.rstrip("/") + "/api/v2/admin/collection/operations/runtime-status",
+                  headers={"X-Api-Key": api_key})
+status, payload = 0, b""
+try:
+    with opener.open(request, timeout=10) as response:
+        status, payload = response.status, response.read(65537)
+except HTTPError as response:
+    status, payload = response.code, response.read(65537)
+except (OSError, URLError):
+    status, payload = 0, b""
+try:
+    value = json.loads(payload) if len(payload) <= 65536 else None
+except (UnicodeError, json.JSONDecodeError):
+    value = None
+if (status != 503 or not isinstance(value, dict) or value.get("status") != 503
+        or value.get("title") != "Application startup is blocked by migration state."):
+    print("Expected authenticated migration-blocked API response was not observed.", file=sys.stderr)
+    raise SystemExit(1)
+PY
+}
+
+# Inspect persisted collection state without constructing CollectionPlatformStore
+# or running its schema migrator. The helper deliberately understands only the
+# deployed collection schema version and known state values.
+horse_id_migration_assert_recovery_collection_state() {
+  local database=${1:?collection database path is required}
+  local python_command=${HRP_PYTHON3:-python3}
+  timeout --signal=TERM --kill-after=5s 60s "$python_command" - "$database" <<'PY'
+import sqlite3
+import stat
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+def fail():
+    print("Persisted collection pause or work state is unknown or unsafe; refusing API startup recovery.", file=sys.stderr)
+    raise SystemExit(1)
+
+try:
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or path.is_symlink():
+        fail()
+    resolved = path.resolve(strict=True)
+    connection = sqlite3.connect(resolved.as_uri() + "?mode=ro", uri=True, timeout=5)
+    try:
+        connection.execute("PRAGMA query_only=ON")
+        if connection.execute("PRAGMA query_only").fetchone() != (1,):
+            fail()
+        if connection.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:
+            fail()
+        tables = {row[0] for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        required = {"collection_schema_history", "collection_platform_controls",
+                    "collection_tasks", "collection_execution_leases"}
+        if not required.issubset(tables):
+            fail()
+        schema_version = connection.execute("SELECT MAX(version) FROM collection_schema_history").fetchone()
+        if schema_version != (25,):
+            fail()
+        expected_columns = {
+            "collection_platform_controls": {"ControlId", "IsPaused"},
+            "collection_tasks": {"Status"},
+            "collection_execution_leases": {"Status"},
+        }
+        for table, columns in expected_columns.items():
+            actual = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
+            if not columns.issubset(actual):
+                fail()
+        pipeline = connection.execute(
+            "SELECT IsPaused, typeof(IsPaused) FROM collection_platform_controls WHERE ControlId='pipeline'").fetchall()
+        if pipeline != [(1, "integer")]:
+            fail()
+        task_states = {row[0] for row in connection.execute("SELECT DISTINCT Status FROM collection_tasks")}
+        known_tasks = {"Pending", "Ready", "Running", "RetryWaiting", "WaitingDiscovery",
+                       "Succeeded", "Failed", "Cancelled", "DeadLetter"}
+        if not task_states.issubset(known_tasks):
+            fail()
+        if connection.execute("SELECT 1 FROM collection_tasks WHERE Status='Running' LIMIT 1").fetchone() is not None:
+            fail()
+        lease_states = {row[0] for row in connection.execute("SELECT DISTINCT Status FROM collection_execution_leases")}
+        if not lease_states.issubset({"StartPending", "Running", "Completed", "Expired"}):
+            fail()
+        if connection.execute(
+            "SELECT 1 FROM collection_execution_leases WHERE Status IN ('StartPending','Running') LIMIT 1").fetchone() is not None:
+            fail()
+    finally:
+        connection.close()
+except SystemExit:
+    raise
+except (OSError, sqlite3.Error, ValueError, TypeError, RuntimeError):
+    fail()
+print("PASS code=RECOVERY_QUIESCENT")
+PY
+}
+
+horse_id_migration_assert_recovery_api_ready() {
+  local api_base_url=${1:?API base URL is required}
+  local api_key=${2:?API key is required}
+  local python_command=${HRP_PYTHON3:-python3}
+  HRP_RECOVERY_API_KEY="$api_key" "$python_command" - "$api_base_url" <<'PY'
+import json
+import os
+import sys
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener
+
+base = sys.argv[1].rstrip("/")
+api_key = os.environ.pop("HRP_RECOVERY_API_KEY", "")
+if urlparse(base).scheme != "https" or not api_key:
+    raise SystemExit(1)
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+opener = build_opener(NoRedirect())
+def get(path, authenticated=False):
+    headers = {"X-Api-Key": api_key} if authenticated else {}
+    request = Request(base + path, headers=headers)
+    with opener.open(request, timeout=10) as response:
+        if response.status != 200:
+            raise ValueError()
+        payload = response.read(1024 * 1024 + 1)
+    if len(payload) > 1024 * 1024:
+        raise ValueError()
+    return json.loads(payload)
+
+try:
+    pipeline = get("/api/v2/admin/collection/pipeline-state", True)
+    tasks = get("/api/v2/admin/collection/tasks?statuses=Running&pageSize=1", True)
+    if (not isinstance(pipeline, dict) or not isinstance(pipeline.get("pipeline"), dict)
+        or pipeline["pipeline"].get("isPaused") is not True
+        or not isinstance(tasks, dict) or not isinstance(tasks.get("page"), dict)
+        or not isinstance(tasks["page"].get("items"), list) or tasks["page"]["items"]):
+        raise ValueError()
+except (OSError, URLError, HTTPError, ValueError, TypeError, json.JSONDecodeError):
+    print("API startup recovery readiness or paused-state readback failed.", file=sys.stderr)
+    raise SystemExit(1)
+print("PASS code=RECOVERY_API_READY_PAUSED")
+PY
+}
+
+# Wait only for transport/application startup. Once Swagger responds, the
+# authenticated paused-state readback is performed once and fails immediately
+# on an unexpected state rather than retrying a potentially unsafe API.
+horse_id_migration_wait_recovery_swagger() {
+  local api_base_url=${1:?API base URL is required}
+  local python_command=${HRP_PYTHON3:-python3}
+  timeout --signal=TERM --kill-after=5s 280s "$python_command" - "$api_base_url" <<'PY'
+import json
+import sys
+import time
+from urllib.error import HTTPError, URLError
+from urllib.request import urlopen
+
+url = sys.argv[1].rstrip("/") + "/swagger/v1/swagger.json"
+for attempt in range(18):
+    try:
+        with urlopen(url, timeout=5) as response:
+            if response.status == 200:
+                payload = response.read(1024 * 1024 + 1)
+                if len(payload) > 1024 * 1024 or not isinstance(json.loads(payload), dict):
+                    raise SystemExit("Swagger response was malformed.")
+                print("PASS code=RECOVERY_SWAGGER_READY")
+                raise SystemExit(0)
+    except HTTPError as response:
+        if response.code not in (502, 503, 504):
+            raise SystemExit("API returned a non-retryable startup response.")
+    except (OSError, URLError, TimeoutError):
+        pass
+    if attempt < 17:
+        time.sleep(10)
+raise SystemExit("API Swagger did not become ready within the bounded startup window.")
+PY
+}
+
+# Change only the two validated image coordinates in the remote Compose .env.
+# All unrelated bytes are preserved, the replacement is atomic and private,
+# and a concurrent configuration replacement fails closed.
+horse_id_migration_update_recovery_env() {
+  local env_file=${1:?Compose environment file is required}
+  local image_name=${2:?target image name is required}
+  local image_tag=${3:?target image tag is required}
+  local python_command=${HRP_PYTHON3:-python3}
+  timeout --signal=TERM --kill-after=5s 30s "$python_command" - "$env_file" "$image_name" "$image_tag" <<'PY'
+import os
+import re
+import stat
+import sys
+import tempfile
+from pathlib import Path
+
+path = Path(sys.argv[1])
+image_name, image_tag = sys.argv[2:]
+if not re.fullmatch(r"ghcr\.io/[a-z0-9._-]+/horse-racing-prediction-api", image_name):
+    raise SystemExit("Recovery image name is invalid.")
+if not re.fullmatch(r"sha-[0-9a-f]{40}", image_tag):
+    raise SystemExit("Recovery image tag is invalid.")
+try:
+    before = path.lstat()
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or path.is_symlink() or before.st_size > 1024 * 1024:
+        raise ValueError()
+    read_fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        opened = os.fstat(read_fd)
+        if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1 or
+                (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino) or
+                opened.st_size != before.st_size or opened.st_size > 1024 * 1024):
+            raise ValueError()
+        original = os.read(read_fd, 1024 * 1024 + 1)
+        after_read = os.fstat(read_fd)
+        if (len(original) != before.st_size or b"\x00" in original or
+                (after_read.st_dev, after_read.st_ino, after_read.st_size) !=
+                (opened.st_dev, opened.st_ino, opened.st_size)):
+            raise ValueError()
+    finally:
+        os.close(read_fd)
+    text = original.decode("utf-8", errors="strict")
+    lines = text.splitlines(keepends=True)
+    values = {"IMAGE_NAME": image_name, "IMAGE_TAG": image_tag}
+    found = set()
+    output = []
+    for line in lines:
+        content = line.rstrip("\r\n")
+        match = re.match(r"^(?:export\s+)?(IMAGE_NAME|IMAGE_TAG)\s*=", content)
+        if match:
+            key = match.group(1)
+            if key in found:
+                raise ValueError()
+            found.add(key)
+            ending = line[len(content):]
+            output.append(f"{key}={values[key]}{ending}")
+        else:
+            output.append(line)
+    ending = "\r\n" if b"\r\n" in original else "\n"
+    for key in ("IMAGE_NAME", "IMAGE_TAG"):
+        if key not in found:
+            if output and not output[-1].endswith(("\n", "\r")):
+                output[-1] += ending
+            output.append(f"{key}={values[key]}{ending}")
+    replacement = "".join(output).encode("utf-8")
+    current = path.lstat()
+    if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (
+            current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns):
+        raise ValueError()
+    fd, temp_name = tempfile.mkstemp(prefix=".env.recovery.", dir=str(path.parent))
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "wb", closefd=True) as stream:
+            stream.write(replacement)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp_name, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except Exception:
+        try:
+            os.unlink(temp_name)
+        except OSError:
+            pass
+        raise
+except (OSError, UnicodeError, ValueError):
+    raise SystemExit("Compose image configuration could not be safely updated.")
 PY
 }
 

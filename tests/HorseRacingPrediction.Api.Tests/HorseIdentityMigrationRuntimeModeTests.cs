@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 using EventFlow;
 using EventFlow.EntityFramework;
@@ -370,6 +371,229 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
         finally
         {
             await RuntimeFixture.StopAsync(child);
+        }
+    }
+
+    [TestMethod]
+    public async Task DeployHelperSourceLeaseInteroperatesWithRealApiOnLinux()
+    {
+        if (!OperatingSystem.IsLinux())
+            Assert.Inconclusive("The deploy helper uses the Linux source-lock protocol used by the production runner.");
+
+        using var fixture = new RuntimeFixture();
+        var sources = new[]
+        {
+            fixture.EventStorePath, fixture.CollectionStorePath, fixture.ScheduleStorePath, fixture.QueueStorePath,
+        };
+        foreach (var source in sources)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+            await File.WriteAllBytesAsync(source, []);
+        }
+        var sourceHashes = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        using (var api = fixture.StartApiProcess(maintenanceMode: true))
+        {
+            try
+            {
+                using var client = await fixture.WaitForHealthAsync(api);
+                using var swagger = await client.GetAsync("/swagger/v1/swagger.json");
+                Assert.AreEqual(HttpStatusCode.OK, swagger.StatusCode);
+
+                var rejected = await RunDeployHelperLeaseAsync(sources, fixture.Journal.DatabasePath);
+                Assert.AreNotEqual(0, rejected.ExitCode,
+                    "The actual deploy helper must reject the same source lock inode while the .NET API owns it.");
+                StringAssert.Contains(rejected.Output, "held by another process");
+            }
+            finally
+            {
+                await RuntimeFixture.StopAsync(api);
+            }
+        }
+        foreach (var source in sources)
+            sourceHashes[source] = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source)));
+
+        var controlPaths = sources.Select(HorseIdentityMigrationMaintenanceOwnership.GetControlLockPath).ToArray();
+        Assert.IsTrue(controlPaths.All(path => !File.Exists(path)));
+        var missingControl = await RunDeployHelperLeaseAsync(sources, fixture.Journal.DatabasePath);
+        Assert.AreNotEqual(0, missingControl.ExitCode);
+        StringAssert.Contains(missingControl.Output, "Supervisor control lock is not a regular unaliased file.");
+        Assert.IsTrue(controlPaths.All(path => !File.Exists(path)),
+            "The helper must not create missing supervisor control locks.");
+        using (var controlLease = HorseIdentityMigrationMaintenanceOwnership.AcquireSupervisorControlLease(sources))
+        {
+            _ = controlLease.IssueApiBootstrapAuthorization();
+            var heldControl = await RunDeployHelperLeaseAsync(sources, fixture.Journal.DatabasePath);
+            Assert.AreNotEqual(0, heldControl.ExitCode);
+            StringAssert.Contains(heldControl.Output, "An active supervisor control owner exists.");
+        }
+
+        var journalLockPath = fixture.Journal.LockPath;
+        Assert.IsTrue(File.Exists(journalLockPath));
+        File.Delete(journalLockPath);
+        var missingJournalLock = await RunDeployHelperLeaseAsync(sources, fixture.Journal.DatabasePath);
+        Assert.AreNotEqual(0, missingJournalLock.ExitCode);
+        Assert.IsFalse(File.Exists(journalLockPath), "The helper must not recreate a missing journal operation lock.");
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Ready,
+            (await fixture.Journal.InspectStartupGuardAsync(DateTimeOffset.UtcNow)).State,
+            "The existing journal API must restore its own operation lock before the positive interop case.");
+
+        using var lease = StartDeployHelperLease(sources, fixture.Journal.DatabasePath);
+        await lease.WaitUntilReadyAsync();
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Ready,
+            (await fixture.Journal.InspectStartupGuardAsync(DateTimeOffset.UtcNow)).State,
+            "The helper-held source/control lease must not itself hold the journal operation lock.");
+        using var blockedApi = fixture.StartApiProcess(maintenanceMode: true);
+        try
+        {
+            using var blockedClient = await fixture.WaitForHealthAsync(blockedApi);
+            blockedClient.DefaultRequestHeaders.Add("X-Test-Horse-Key", fixture.ApiKey);
+            using var blockedStatus = await blockedClient.GetAsync(
+                "/api/v2/admin/collection/operations/runtime-status");
+            Assert.AreEqual(HttpStatusCode.ServiceUnavailable, blockedStatus.StatusCode,
+                "The helper-held lease must block the real API without bootstrapping configured stores.");
+            foreach (var source in sources)
+                Assert.AreEqual(sourceHashes[source],
+                    Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source))),
+                    "A blocked API must not mutate any configured source store.");
+        }
+        finally
+        {
+            await RuntimeFixture.StopAsync(blockedApi);
+            await lease.ReleaseAsync();
+        }
+
+        using var resumedApi = fixture.StartApiProcess(maintenanceMode: true);
+        try
+        {
+            using var resumedClient = await fixture.WaitForHealthAsync(resumedApi);
+            using var swagger = await resumedClient.GetAsync("/swagger/v1/swagger.json");
+            Assert.AreEqual(HttpStatusCode.OK, swagger.StatusCode,
+                "After the helper releases its lock, a fresh API process must acquire the same source set and start.");
+        }
+        finally
+        {
+            await RuntimeFixture.StopAsync(resumedApi);
+        }
+    }
+
+    private static async Task<DeployHelperLeaseResult> RunDeployHelperLeaseAsync(
+        IReadOnlyList<string> sourcePaths, string journalPath)
+    {
+        using var lease = StartDeployHelperLease(sourcePaths, journalPath, acquireJournalOperationLock: true);
+        await lease.WaitForExitAsync();
+        return new(lease.ExitCode, lease.Output);
+    }
+
+    private static DeployHelperLease StartDeployHelperLease(IReadOnlyList<string> sourcePaths, string journalPath,
+        bool acquireJournalOperationLock = false)
+    {
+        var repositoryRoot = RuntimeFixture.FindRepositoryRoot();
+        var helperPath = Path.Combine(repositoryRoot, "deploy", "horse-id-migration-deploy.sh");
+        const string script = "source \"$HRP_DEPLOY_HELPER_PATH\"\n" +
+            "horse_id_migration_acquire_source_ownership \"$@\" || exit $?\n" +
+            "if [[ \"$HRP_TEST_ACQUIRE_JOURNAL_LOCK\" == 1 ]]; then horse_id_migration_acquire_journal_operation_lock \"$HRP_TEST_JOURNAL_PATH\" || exit $?; fi\n" +
+            "echo SOURCE_LOCK_READY\n" +
+            "IFS= read -r release_signal || true\n" +
+            "horse_id_migration_release_source_ownership\n";
+        var process = new Process
+        {
+            StartInfo = new ProcessStartInfo("bash")
+            {
+                WorkingDirectory = repositoryRoot,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            },
+            EnableRaisingEvents = true,
+        };
+        process.StartInfo.ArgumentList.Add("--noprofile");
+        process.StartInfo.ArgumentList.Add("--norc");
+        process.StartInfo.ArgumentList.Add("-c");
+        process.StartInfo.ArgumentList.Add(script);
+        process.StartInfo.ArgumentList.Add("deploy-helper-lock-test");
+        process.StartInfo.Environment["HRP_DEPLOY_HELPER_PATH"] = helperPath;
+        process.StartInfo.Environment["HRP_TEST_JOURNAL_PATH"] = journalPath;
+        process.StartInfo.Environment["HRP_TEST_ACQUIRE_JOURNAL_LOCK"] = acquireJournalOperationLock ? "1" : "0";
+        foreach (var source in sourcePaths.Order(StringComparer.Ordinal))
+        {
+            process.StartInfo.ArgumentList.Add(source);
+            process.StartInfo.ArgumentList.Add(source);
+        }
+        var lease = new DeployHelperLease(process);
+        lease.Start();
+        return lease;
+    }
+
+    private sealed record DeployHelperLeaseResult(int ExitCode, string Output);
+
+    private sealed class DeployHelperLease : IDisposable
+    {
+        private readonly Process _process;
+        private readonly StringBuilder _output = new();
+        private readonly TaskCompletionSource<bool> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly object _outputLock = new();
+
+        internal DeployHelperLease(Process process)
+        {
+            _process = process;
+            _process.OutputDataReceived += (_, eventArgs) => Capture(eventArgs.Data);
+            _process.ErrorDataReceived += (_, eventArgs) => Capture(eventArgs.Data);
+        }
+
+        internal string Output { get { lock (_outputLock) return _output.ToString(); } }
+        internal int ExitCode => _process.ExitCode;
+
+        internal void Start()
+        {
+            if (!_process.Start()) throw new InvalidOperationException("Deploy helper lease child did not start.");
+            _process.BeginOutputReadLine();
+            _process.BeginErrorReadLine();
+        }
+
+        internal async Task WaitUntilReadyAsync()
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await _ready.Task.WaitAsync(timeout.Token);
+        }
+
+        internal async Task WaitForExitAsync()
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await _process.WaitForExitAsync(timeout.Token);
+        }
+
+        internal async Task ReleaseAsync()
+        {
+            if (!_process.HasExited)
+            {
+                _process.StandardInput.WriteLine("release");
+                _process.StandardInput.Close();
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await _process.WaitForExitAsync(timeout.Token);
+            }
+        }
+
+        private void Capture(string? line)
+        {
+            if (line is null) return;
+            lock (_outputLock)
+            {
+                if (_output.Length < 4096) _output.AppendLine(line);
+            }
+            if (line == "SOURCE_LOCK_READY") _ready.TrySetResult(true);
+        }
+
+        public void Dispose()
+        {
+            if (!_process.HasExited)
+            {
+                _process.Kill(entireProcessTree: true);
+                _process.WaitForExit(10000);
+            }
+            _process.Dispose();
         }
     }
 
@@ -1012,7 +1236,7 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
             await process.WaitForExitAsync(timeout.Token);
         }
 
-        private static string FindRepositoryRoot()
+        internal static string FindRepositoryRoot()
         {
             var directory = new DirectoryInfo(AppContext.BaseDirectory);
             while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "HorseRacingPrediction.sln")))

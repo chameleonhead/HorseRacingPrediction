@@ -75,6 +75,7 @@ require 'yaml'
 workflow = YAML.safe_load_file(ARGV.fetch(0), aliases: false)
 events = workflow['on'] || workflow[true]
 raise 'workflow_dispatch input is not optional string' unless events.dig('workflow_dispatch','inputs','horse_id_migration_operation_id').then { |v| v && v['required'] == false && v['type'] == 'string' }
+raise 'recovery input contract is missing' unless events.dig('workflow_dispatch','inputs','api_startup_recovery') == {'description'=>'Restore the API only from the expected blocked deployment; leaves collection paused','required'=>false,'default'=>false,'type'=>'boolean'} && events.dig('workflow_dispatch','inputs','expected_deployed_sha') == {'description'=>'Exact currently deployed API commit SHA required for API startup recovery','required'=>false,'type'=>'string'}
 raise 'verification runner must be Ubuntu 24.04' unless workflow.dig('jobs','verify','runs-on') == 'ubuntu-24.04'
 verify_steps = workflow.dig('jobs','verify','steps')
 guard_step = verify_steps.find { |s| s['name'] == 'Verify horse identity migration deploy guard' }
@@ -82,6 +83,28 @@ raise 'migration guard tests need a finite step timeout' unless guard_step && gu
 raise 'build must depend on verification' unless Array(workflow.dig('jobs','build-and-push','needs')).include?('verify')
 early_validation = verify_steps.find { |s| s['name'] == 'Validate optional migration request before publishing or deployment' }
 raise 'pre-publish validation must reject GUID.Empty' unless early_validation && early_validation['run'].include?('00000000-0000-0000-0000-000000000000')
+raise 'recovery input validation must be default-off, manual-only, SHA-bound, and migration-exclusive' unless early_validation['run'].include?('API_STARTUP_RECOVERY') && early_validation['run'].include?('EXPECTED_DEPLOYED_SHA') && early_validation['run'].include?('workflow_dispatch') && early_validation['run'].include?('HORSE_ID_MIGRATION_OPERATION_ID')
+recovery = workflow.dig('jobs','recover-api-startup')
+raise 'API recovery must be a manual API-only route after verified build' unless recovery && recovery['if'].to_s.include?('api_startup_recovery') && Array(recovery['needs']).sort == ['build-and-push','verify'] && recovery['environment'] == 'production' && recovery['timeout-minutes'] == 50
+raise 'normal deploy paths must exclude API recovery without changing their requirements' unless workflow.dig('jobs','deploy')['if'].to_s.include?('api_startup_recovery') && workflow.dig('jobs','deploy-collector-lambda')['if'].to_s.include?('api_startup_recovery')
+upload = recovery['steps'].find { |s| s['name'] == 'Upload only the verified recovery helper' }
+recovery_step_index = recovery['steps'].index { |s| s['name'] == 'Recover only the exact blocked API image' }
+raise 'recovery must upload only the helper from the checked-out exact SHA before invoking it' unless upload && upload['uses'] == 'appleboy/scp-action@v1.0.0' && upload.dig('with','source') == 'deploy/horse-id-migration-deploy.sh' && upload.dig('with','strip_components') == 1 && recovery_step_index && recovery['steps'].index(upload) < recovery_step_index
+recovery_script = recovery.dig('steps').find { |s| s['name'] == 'Recover only the exact blocked API image' }.dig('with','script')
+fixed_success_call = '( horse_id_migration_run_fixed_command "$verified_success_guid" "$target_image" "$APP_DIRECTORY/.env" )'
+recovery_lines = recovery_script.lines.map(&:strip)
+fixed_branch = recovery_lines.index('if [ -n "$verified_success_guid" ]; then')
+raise 'recovery must execute the fixed-success verifier exactly once only for a nonempty GUID' unless recovery_script.scan('horse_id_migration_run_fixed_command').length == 1 && recovery_script.split(fixed_success_call, -1).length - 1 == 1 && fixed_branch && recovery_lines[fixed_branch + 1] == fixed_success_call && recovery_lines[fixed_branch + 2] == 'fi'
+recovery_order = ['expected_current_image=', 'horse_id_migration_assert_api_startup_blocked', 'docker compose --env-file .env pull api', 'horse_id_migration_check_image_capability', 'recovery_started=true', 'docker compose --env-file .env stop api', 'horse_id_migration_configured_store_paths', 'horse_id_migration_acquire_source_ownership', 'horse_id_migration_acquire_journal_operation_lock', 'horse_id_migration_assert_recovery_collection_state', 'sleep 900', 'horse_id_migration_assert_recovery_collection_state', 'horse_id_migration_journal_preflight', 'horse_id_migration_copy_store_set', 'RECOVERY-METADATA', 'horse_id_migration_update_recovery_env', 'horse_id_migration_release_source_ownership', fixed_success_call, 'docker compose --env-file .env up -d --no-deps --force-recreate api', 'horse_id_migration_wait_recovery_swagger', 'horse_id_migration_assert_recovery_api_ready']
+recovery_positions = recovery_order.each_with_object([]) do |needle, positions|
+  positions << recovery_script.index(needle, positions.last || 0)
+end
+backup_i = recovery_script.index('horse_id_migration_copy_store_set')
+release_i = recovery_script.index('horse_id_migration_release_source_ownership', backup_i)
+raise 'API recovery must verify, stop, hold real ownership through full quiescence and backup, then update/preserve configuration, verify prior receipt in an isolated child, and start/read back exact API' unless recovery_positions.all? && recovery_positions.each_cons(2).all? { |a,b| a < b } && backup_i < release_i && release_i < recovery_script.index('( horse_id_migration_run_fixed_command')
+cleanup_body = recovery_script[recovery_script.index('recovery_cleanup()')...recovery_script.index('trap recovery_cleanup EXIT')]
+raise 'recovery failure cleanup must stop the API before releasing held ownership' unless cleanup_body.index('docker compose --env-file .env stop api') < cleanup_body.index('horse_id_migration_release_source_ownership')
+raise 'API recovery must not change Lambda, Terraform, queue, resume, or external credential settings' if recovery_script.match?(/terraform|lambda|sqs|resume|AWS_ROLE_TO_ASSUME|GITHUB_TOKEN/i)
 deploy = workflow.dig('jobs','deploy')
 raise 'deploy must wait for the collector Lambda transition' unless Array(deploy['needs']).include?('deploy-collector-lambda')
 steps = deploy['steps']
@@ -125,12 +148,34 @@ import sys,yaml
 w=yaml.safe_load(open(sys.argv[1],encoding='utf-8'))
 events=w.get('on',w.get(True))
 assert events['workflow_dispatch']['inputs']['horse_id_migration_operation_id']=={'description':'Existing staged horse-identity migration GUID; leave empty for a normal deploy','required':False,'type':'string'}
+assert events['workflow_dispatch']['inputs']['api_startup_recovery']=={'description':'Restore the API only from the expected blocked deployment; leaves collection paused','required':False,'default':False,'type':'boolean'}
+assert events['workflow_dispatch']['inputs']['expected_deployed_sha']=={'description':'Exact currently deployed API commit SHA required for API startup recovery','required':False,'type':'string'}
 assert w['jobs']['verify']['runs-on']=='ubuntu-24.04'
 verify=w['jobs']['verify']['steps']
 guard_test=next(s for s in verify if s.get('name')=='Verify horse identity migration deploy guard')
 assert guard_test['timeout-minutes']==3 and 'verify' in w['jobs']['build-and-push']['needs']
 early_validation=next(s for s in verify if s.get('name')=='Validate optional migration request before publishing or deployment')
 assert '00000000-0000-0000-0000-000000000000' in early_validation['run']
+assert all(x in early_validation['run'] for x in ('API_STARTUP_RECOVERY','EXPECTED_DEPLOYED_SHA','workflow_dispatch','HORSE_ID_MIGRATION_OPERATION_ID'))
+recovery=w['jobs']['recover-api-startup']; assert 'api_startup_recovery' in recovery['if'] and sorted(recovery['needs'])==['build-and-push','verify'] and recovery['environment']=='production' and recovery['timeout-minutes']==50
+assert 'api_startup_recovery' in w['jobs']['deploy']['if'] and 'api_startup_recovery' in w['jobs']['deploy-collector-lambda']['if']
+upload=next((s for s in recovery['steps'] if s.get('name')=='Upload only the verified recovery helper'),None); recovery_step_index=next((i for i,s in enumerate(recovery['steps']) if s.get('name')=='Recover only the exact blocked API image'),None)
+assert upload and upload['uses']=='appleboy/scp-action@v1.0.0' and upload['with']['source']=='deploy/horse-id-migration-deploy.sh' and upload['with']['strip_components']==1 and recovery_step_index is not None and recovery['steps'].index(upload)<recovery_step_index
+recovery_script=next(s for s in recovery['steps'] if s.get('name')=='Recover only the exact blocked API image')['with']['script']
+fixed_success_call='( horse_id_migration_run_fixed_command "$verified_success_guid" "$target_image" "$APP_DIRECTORY/.env" )'
+assert recovery_script.count('horse_id_migration_run_fixed_command')==1 and recovery_script.count(fixed_success_call)==1
+recovery_lines=recovery_script.splitlines(); fixed_branch=next(i for i,line in enumerate(recovery_lines) if line.strip()=='if [ -n "$verified_success_guid" ]; then')
+assert recovery_lines[fixed_branch+1].strip()==fixed_success_call and recovery_lines[fixed_branch+2].strip()=='fi'
+recovery_order=('expected_current_image=','horse_id_migration_assert_api_startup_blocked','docker compose --env-file .env pull api','horse_id_migration_check_image_capability','recovery_started=true','docker compose --env-file .env stop api','horse_id_migration_configured_store_paths','horse_id_migration_acquire_source_ownership','horse_id_migration_acquire_journal_operation_lock','horse_id_migration_assert_recovery_collection_state','sleep 900','horse_id_migration_assert_recovery_collection_state','horse_id_migration_journal_preflight','horse_id_migration_copy_store_set','RECOVERY-METADATA','horse_id_migration_update_recovery_env','horse_id_migration_release_source_ownership',fixed_success_call,'docker compose --env-file .env up -d --no-deps --force-recreate api','horse_id_migration_wait_recovery_swagger','horse_id_migration_assert_recovery_api_ready')
+recovery_positions=[]
+for n in recovery_order:
+    recovery_positions.append(recovery_script.index(n,recovery_positions[-1] if recovery_positions else 0))
+assert recovery_positions==sorted(recovery_positions)
+backup_i=recovery_script.index('horse_id_migration_copy_store_set'); release_i=recovery_script.index('horse_id_migration_release_source_ownership',backup_i)
+assert backup_i<release_i<recovery_script.index('( horse_id_migration_run_fixed_command')
+cleanup_body=recovery_script[recovery_script.index('recovery_cleanup()'):recovery_script.index('trap recovery_cleanup EXIT')]
+assert cleanup_body.index('docker compose --env-file .env stop api')<cleanup_body.index('horse_id_migration_release_source_ownership')
+assert not any(x in recovery_script.lower() for x in ('terraform','lambda','sqs','resume','aws_role_to_assume','github_token'))
 deploy=w['jobs']['deploy']
 assert 'deploy-collector-lambda' in deploy['needs'] and deploy['timeout-minutes']==50
 steps=deploy['steps']; names=[s.get('name') for s in steps]
@@ -161,6 +206,98 @@ $helperBashPath = ConvertTo-BashPath $helperPath
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("hrp-migration-deploy-test-" + [guid]::NewGuid().ToString('N'))
 [void](New-Item -ItemType Directory -Path $tempRoot)
 $tempBashPath = ConvertTo-BashPath $tempRoot
+$recoveryStateSeed = @'
+import sqlite3,sys
+path,version,control,pause,task,lease=sys.argv[1:]
+db=sqlite3.connect(path)
+db.executescript('''
+CREATE TABLE collection_schema_history(version INTEGER NOT NULL PRIMARY KEY, applied_at TEXT NOT NULL);
+CREATE TABLE collection_platform_controls(ControlId TEXT NOT NULL PRIMARY KEY, IsPaused INTEGER NOT NULL);
+CREATE TABLE collection_tasks(Status TEXT NOT NULL);
+CREATE TABLE collection_execution_leases(Status TEXT NOT NULL);
+''')
+db.execute('INSERT INTO collection_schema_history VALUES (?,?)',(int(version),'2026-10-24T00:00:00Z'))
+if control != 'missing': db.execute('INSERT INTO collection_platform_controls VALUES (?,?)',('pipeline',int(pause)))
+if task != 'empty': db.execute('INSERT INTO collection_tasks VALUES (?)',(task,))
+if lease != 'empty': db.execute('INSERT INTO collection_execution_leases VALUES (?)',(lease,))
+db.commit();db.close()
+'@
+
+function New-RecoveryStateFixture([string] $Name, [string] $Version = '25', [string] $Control = 'present', [string] $Pause = '1', [string] $Task = 'empty', [string] $Lease = 'empty') {
+    $path = Join-Path $tempRoot "$Name.db"
+    & $pythonCommand -c $recoveryStateSeed $path $Version $Control $Pause $Task $Lease
+    if ($LASTEXITCODE -ne 0) { throw "Could not seed recovery state fixture $Name." }
+    return $path
+}
+
+function Test-RecoveryState([string] $Path, [bool] $Expected) {
+    $before = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+    $pathBash = ConvertTo-BashPath $Path
+    $result = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+export HRP_PYTHON3=$(Quote-Bash $pythonBashPath)
+horse_id_migration_assert_recovery_collection_state $(Quote-Bash $pathBash)
+"@
+    if ($Expected) {
+        Assert-Case ($result.ExitCode -eq 0 -and $result.Output -match 'PASS code=RECOVERY_QUIESCENT') "Valid paused collection state must pass read-only inspection. $($result.Output)"
+    }
+    else {
+        Assert-Case ($result.ExitCode -ne 0) "Unsafe or unknown collection state must fail closed. $($result.Output)"
+        Assert-Case ($result.Output -notmatch [regex]::Escape($Path) -and $result.Output -notmatch 'Traceback|sqlite3\.') 'Collection state failures must not expose paths or SQLite internals.'
+    }
+    $after = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+    Assert-Case ($before -eq $after) 'Recovery state inspection must leave SQLite bytes unchanged.'
+    return $result
+}
+
+function Write-OwnershipMarkers([string] $Source, [string] $Logical, [string] $RuntimeGate, [string] $ControlGate) {
+    $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($Logical)))
+    [IO.File]::WriteAllText($RuntimeGate, "HorseIdentityMigrationSourceOwnership:v1:$hash`n", [Text.Encoding]::ASCII)
+    [IO.File]::WriteAllText($ControlGate, "HorseIdentityMigrationSupervisorControl:v1:$hash`n", [Text.Encoding]::ASCII)
+}
+
+function Invoke-SourceOwnership([string] $SourceBash, [string] $Logical, [bool] $Expected) {
+    $result = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+export HRP_PYTHON3=$(Quote-Bash $pythonBashPath)
+if horse_id_migration_acquire_source_ownership $(Quote-Bash $SourceBash) $(Quote-Bash $Logical); then
+  horse_id_migration_release_source_ownership
+  exit 0
+fi
+exit 90
+"@
+    if ($Expected) { Assert-Case ($result.ExitCode -eq 0) "Valid existing ownership files must pass. $($result.Output)" }
+    else { Assert-Case ($result.ExitCode -eq 90) "Invalid ownership files must fail without helper setup. $($result.Output)" }
+    return $result
+}
+
+function Invoke-JournalOperationLock([string] $JournalBash, [bool] $Expected) {
+    $result = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+if horse_id_migration_acquire_journal_operation_lock $(Quote-Bash $JournalBash); then
+  horse_id_migration_release_source_ownership
+  exit 0
+fi
+exit 90
+"@
+    if ($Expected) { Assert-Case ($result.ExitCode -eq 0) "Existing empty journal lock must interoperate. $($result.Output)" }
+    else { Assert-Case ($result.ExitCode -eq 90) "Missing, corrupt, or aliased journal lock must fail closed. $($result.Output)" }
+    return $result
+}
+
+function Invoke-RecoveryEnvUpdate([string] $Path, [string] $ImageName, [string] $ImageTag) {
+    $pathBash = ConvertTo-BashPath $Path
+    Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+export HRP_PYTHON3=$(Quote-Bash $pythonBashPath)
+horse_id_migration_update_recovery_env $(Quote-Bash $pathBash) $(Quote-Bash $ImageName) $(Quote-Bash $ImageTag)
+"@
+}
+
 $seedPython = @'
 import sqlite3, sys
 path, mode, count = sys.argv[1], sys.argv[2], int(sys.argv[3])
@@ -218,6 +355,224 @@ printf 'RESULT=%s\n' "`$result"
 }
 
 try {
+    if (-not $IsWindows) {
+        $ownershipRoot = Join-Path $tempRoot 'ownership-locks'
+        [void](New-Item -ItemType Directory -Path $ownershipRoot)
+        $sourcePath = Join-Path $ownershipRoot 'fixture.db'
+        [IO.File]::WriteAllBytes($sourcePath, [byte[]]::new(0))
+        $logicalPath = '/data/fixture.db'
+        $runtimeGate = Join-Path $ownershipRoot '.fixture.db.horse-identity-migration.lock'
+        $controlGate = Join-Path $ownershipRoot '.fixture.db.horse-identity-migration.supervisor-control.lock'
+        Write-OwnershipMarkers $sourcePath $logicalPath $runtimeGate $controlGate
+        $sourceBash = ConvertTo-BashPath $sourcePath
+        $journalDatabase = Join-Path $ownershipRoot 'horse-identity-migration-journal.db'
+        [IO.File]::WriteAllBytes($journalDatabase, [byte[]]::new(0))
+        $journalLock = Join-Path $ownershipRoot 'horse-identity-migration-operation.lock'
+        [IO.File]::WriteAllBytes($journalLock, [byte[]]::new(0))
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $true)
+
+        $runtimeBytes = [IO.File]::ReadAllBytes($runtimeGate)
+        [void](Invoke-Bash "rm -- $(Quote-Bash (ConvertTo-BashPath $runtimeGate))")
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        Assert-Case (-not (Test-Path -LiteralPath $runtimeGate)) 'A missing runtime gate must not be recreated.'
+        [void](Invoke-Bash ": > $(Quote-Bash (ConvertTo-BashPath $runtimeGate))")
+        Assert-Case (Test-Path -LiteralPath $runtimeGate) 'The empty runtime gate fixture was not created.'
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        $emptyRuntime = Invoke-Bash "stat -c %s -- $(Quote-Bash (ConvertTo-BashPath $runtimeGate))"
+        Assert-Case ($emptyRuntime.ExitCode -eq 0 -and $emptyRuntime.Output.Trim() -eq '0') 'An empty runtime gate must not be initialized.'
+        [IO.File]::WriteAllBytes($runtimeGate, $runtimeBytes)
+        $runtimeCorrupt = [IO.File]::ReadAllBytes($runtimeGate); $runtimeCorrupt[0] = [byte]([int]$runtimeCorrupt[0] -bxor 1)
+        [IO.File]::WriteAllBytes($runtimeGate, $runtimeCorrupt)
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        [IO.File]::WriteAllBytes($runtimeGate, $runtimeBytes)
+        $runtimeTooLarge = [byte[]]::new(1025); [IO.File]::WriteAllBytes($runtimeGate, $runtimeTooLarge)
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        [IO.File]::WriteAllBytes($runtimeGate, $runtimeBytes)
+        $runtimeAlias = "$runtimeGate.alias"
+        $runtimeAliasBash = ConvertTo-BashPath $runtimeAlias
+        $runtimeGateBash = ConvertTo-BashPath $runtimeGate
+        $aliasRuntime = Invoke-Bash "mv -- $(Quote-Bash $runtimeGateBash) $(Quote-Bash $runtimeAliasBash); ln -s -- $(Quote-Bash $runtimeAliasBash) $(Quote-Bash $runtimeGateBash)"
+        Assert-Case ($aliasRuntime.ExitCode -eq 0) 'Could not create the runtime gate symlink fixture.'
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        [void](Invoke-Bash "rm -- $(Quote-Bash $runtimeGateBash); mv -- $(Quote-Bash $runtimeAliasBash) $(Quote-Bash $runtimeGateBash)")
+        $hardRuntime = Invoke-Bash "ln -- $(Quote-Bash $runtimeGateBash) $(Quote-Bash $runtimeAliasBash)"
+        Assert-Case ($hardRuntime.ExitCode -eq 0) 'Could not create the runtime gate hard-link fixture.'
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        [void](Invoke-Bash "rm -- $(Quote-Bash $runtimeAliasBash)")
+
+        $controlBytes = [IO.File]::ReadAllBytes($controlGate)
+        [void](Invoke-Bash "rm -- $(Quote-Bash (ConvertTo-BashPath $controlGate))")
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        Assert-Case (-not (Test-Path -LiteralPath $controlGate)) 'A missing supervisor control lock must not be created.'
+        [void](Invoke-Bash ": > $(Quote-Bash (ConvertTo-BashPath $controlGate))")
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        $emptyControl = Invoke-Bash "stat -c %s -- $(Quote-Bash (ConvertTo-BashPath $controlGate))"
+        Assert-Case ($emptyControl.ExitCode -eq 0 -and $emptyControl.Output.Trim() -eq '0') 'An empty supervisor control lock must not be initialized.'
+        [IO.File]::WriteAllBytes($controlGate, $controlBytes)
+        $controlCorrupt = [IO.File]::ReadAllBytes($controlGate); $controlCorrupt[0] = [byte]([int]$controlCorrupt[0] -bxor 1)
+        [IO.File]::WriteAllBytes($controlGate, $controlCorrupt)
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        [IO.File]::WriteAllBytes($controlGate, $controlBytes)
+        $controlTooLarge = [byte[]]::new(1025); [IO.File]::WriteAllBytes($controlGate, $controlTooLarge)
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        [IO.File]::WriteAllBytes($controlGate, $controlBytes)
+        $controlAlias = "$controlGate.alias"
+        $controlAliasBash = ConvertTo-BashPath $controlAlias
+        $controlGateBash = ConvertTo-BashPath $controlGate
+        $aliasControl = Invoke-Bash "mv -- $(Quote-Bash $controlGateBash) $(Quote-Bash $controlAliasBash); ln -s -- $(Quote-Bash $controlAliasBash) $(Quote-Bash $controlGateBash)"
+        Assert-Case ($aliasControl.ExitCode -eq 0) 'Could not create the supervisor control lock symlink fixture.'
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        [void](Invoke-Bash "rm -- $(Quote-Bash $controlGateBash); mv -- $(Quote-Bash $controlAliasBash) $(Quote-Bash $controlGateBash)")
+        $hardControl = Invoke-Bash "ln -- $(Quote-Bash $controlGateBash) $(Quote-Bash $controlAliasBash)"
+        Assert-Case ($hardControl.ExitCode -eq 0) 'Could not create the supervisor control lock hard-link fixture.'
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        [void](Invoke-Bash "rm -- $(Quote-Bash $controlAliasBash)")
+        $journalBash = ConvertTo-BashPath $journalDatabase
+        [void](Invoke-Bash "rm -- $(Quote-Bash (ConvertTo-BashPath $journalLock))")
+        [void](Invoke-JournalOperationLock $journalBash $false)
+        Assert-Case (-not (Test-Path -LiteralPath $journalLock)) 'A missing journal operation lock must not be recreated.'
+        [void](Invoke-Bash ": > $(Quote-Bash (ConvertTo-BashPath $journalLock))")
+        [void](Invoke-JournalOperationLock $journalBash $true)
+        [IO.File]::WriteAllText($journalLock, 'unexpected', [Text.Encoding]::ASCII)
+        [void](Invoke-JournalOperationLock $journalBash $false)
+        Assert-Case ((Get-Content -Raw -LiteralPath $journalLock) -eq 'unexpected') 'A nonempty journal operation lock must remain unchanged on rejection.'
+        [IO.File]::WriteAllBytes($journalLock, [byte[]]::new(0))
+        $journalAlias = "$journalLock.alias"
+        $journalAliasBash = ConvertTo-BashPath $journalAlias
+        $journalLockBash = ConvertTo-BashPath $journalLock
+        $journalSymlink = Invoke-Bash "mv -- $(Quote-Bash $journalLockBash) $(Quote-Bash $journalAliasBash); ln -s -- $(Quote-Bash $journalAliasBash) $(Quote-Bash $journalLockBash)"
+        Assert-Case ($journalSymlink.ExitCode -eq 0) 'Could not create the journal operation lock symlink fixture.'
+        [void](Invoke-JournalOperationLock $journalBash $false)
+        [void](Invoke-Bash "rm -- $(Quote-Bash $journalLockBash); mv -- $(Quote-Bash $journalAliasBash) $(Quote-Bash $journalLockBash)")
+        $aliasJournal = Invoke-Bash "ln -- $(Quote-Bash $journalLockBash) $(Quote-Bash $journalAliasBash)"
+        Assert-Case ($aliasJournal.ExitCode -eq 0) 'Could not create the journal operation lock alias fixture.'
+        [void](Invoke-JournalOperationLock $journalBash $false)
+        [void](Invoke-Bash "rm -- $(Quote-Bash $journalAliasBash)")
+    Write-Output 'PASS source, control, and journal lock identity/no-reconstruction cases'
+    }
+
+    $recoveryEnvPath = Join-Path $tempRoot 'recovery.env'
+    $recoveryCanary = 'RECOVERY_TEST_CANARY_NOT_FOR_OUTPUT'
+    $recoveryImage = 'ghcr.io/example/horse-racing-prediction-api'
+    $recoveryTag = 'sha-' + ('a' * 40)
+    $originalEnv = "IMAGE_NAME=ghcr.io/old/horse-racing-prediction-api`nAPI_KEY=$recoveryCanary`nIMAGE_TAG=sha-old`nOTHER_SETTING=keep-me`n"
+    [IO.File]::WriteAllText($recoveryEnvPath, $originalEnv, [Text.UTF8Encoding]::new($false))
+    $envUpdate = Invoke-RecoveryEnvUpdate $recoveryEnvPath $recoveryImage $recoveryTag
+    $updatedEnv = [IO.File]::ReadAllText($recoveryEnvPath)
+    Assert-Case ($envUpdate.ExitCode -eq 0) 'A valid recovery image configuration should update.'
+    Assert-Case ($updatedEnv -eq "IMAGE_NAME=$recoveryImage`nAPI_KEY=$recoveryCanary`nIMAGE_TAG=$recoveryTag`nOTHER_SETTING=keep-me`n") 'Recovery configuration must change only the two image coordinates.'
+    Assert-Case (($envUpdate.Output -notmatch [regex]::Escape($recoveryCanary)) -and ((Invoke-Bash "stat -c %a -- $(Quote-Bash (ConvertTo-BashPath $recoveryEnvPath))").Output.Trim() -eq '600')) 'Recovery configuration must remain private and never echo unrelated secret-like values.'
+    [IO.File]::AppendAllText($recoveryEnvPath, "IMAGE_TAG=duplicate`n")
+    $duplicateEnvHash = (Get-FileHash -LiteralPath $recoveryEnvPath -Algorithm SHA256).Hash
+    $duplicateEnv = Invoke-RecoveryEnvUpdate $recoveryEnvPath $recoveryImage $recoveryTag
+    Assert-Case ($duplicateEnv.ExitCode -ne 0 -and (Get-FileHash -LiteralPath $recoveryEnvPath -Algorithm SHA256).Hash -eq $duplicateEnvHash) 'Duplicate image settings must fail without changing configuration.'
+    [IO.File]::WriteAllText($recoveryEnvPath, $originalEnv, [Text.UTF8Encoding]::new($false))
+    $invalidTag = Invoke-RecoveryEnvUpdate $recoveryEnvPath $recoveryImage 'latest'
+    Assert-Case ($invalidTag.ExitCode -ne 0 -and [IO.File]::ReadAllText($recoveryEnvPath) -eq $originalEnv) 'A non-SHA recovery tag must fail without changing configuration.'
+    Write-Output 'PASS recovery image configuration atomicity, preservation, and output safety cases'
+
+    if (-not $IsWindows) {
+        $redirectCert = ConvertTo-BashPath (Join-Path $tempRoot 'recovery-redirect.crt')
+        $redirectKey = ConvertTo-BashPath (Join-Path $tempRoot 'recovery-redirect.key')
+        $redirectPort = ConvertTo-BashPath (Join-Path $tempRoot 'recovery-redirect.port')
+        $redirectHit = ConvertTo-BashPath (Join-Path $tempRoot 'recovery-redirect-auth-header-seen')
+        $redirectRequests = ConvertTo-BashPath (Join-Path $tempRoot 'recovery-redirect-origin-requests')
+        $redirectMode = ConvertTo-BashPath (Join-Path $tempRoot 'recovery-redirect-mode')
+        $redirectPortQuoted = Quote-Bash $redirectPort
+        $redirectCanary = 'REDIRECT_AUTH_CANARY_NEVER_PRINT'
+        $redirectTest = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+export HRP_PYTHON3=$(Quote-Bash $pythonBashPath)
+openssl req -x509 -newkey rsa:2048 -nodes -keyout $(Quote-Bash $redirectKey) -out $(Quote-Bash $redirectCert) -subj /CN=localhost -addext subjectAltName=DNS:localhost,IP:127.0.0.1 -days 1 >/dev/null 2>&1
+python3 - $(Quote-Bash $redirectCert) $(Quote-Bash $redirectKey) $(Quote-Bash $redirectPort) $(Quote-Bash $redirectHit) $(Quote-Bash $redirectRequests) $(Quote-Bash $redirectMode) <<'PY' >/dev/null 2>&1 &
+import http.server, ssl, sys
+cert,key,port_file,hit_file,requests_file,mode_file=sys.argv[1:]
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        mode=open(mode_file,encoding='ascii').read().strip()
+        with open(requests_file,'a',encoding='ascii') as f:
+            f.write(self.path+'|'+('key' if self.headers.get('X-Api-Key') else 'no-key')+'\n')
+        if mode == 'redirect':
+            if self.path == '/collect':
+                if self.headers.get('X-Api-Key'):
+                    with open(hit_file,'w',encoding='ascii') as f: f.write('header-forwarded')
+                self.send_response(200); self.end_headers(); self.wfile.write(b'{"status":503}')
+            else:
+                self.send_response(302); self.send_header('Location',f'https://127.0.0.1:{self.server.server_port}/collect'); self.end_headers()
+        elif self.path == '/api/v2/admin/collection/operations/runtime-status':
+            self.send_response(503); self.send_header('Content-Type','application/json'); self.end_headers()
+            self.wfile.write(b'{"status":503,"title":"Application startup is blocked by migration state."}')
+        elif self.path == '/swagger/v1/swagger.json':
+            self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers(); self.wfile.write(b'{}')
+        elif self.path == '/api/v2/admin/collection/pipeline-state':
+            self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers()
+            self.wfile.write(b'{"pipeline":{"isPaused":true}}')
+        elif self.path.startswith('/api/v2/admin/collection/tasks?'):
+            self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers()
+            self.wfile.write(b'{"page":{"items":[]}}')
+        else:
+            self.send_response(404); self.end_headers()
+    def log_message(self,fmt,*args): pass
+server=http.server.HTTPServer(('127.0.0.1',0),Handler)
+context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); context.load_cert_chain(cert,key)
+server.socket=context.wrap_socket(server.socket,server_side=True)
+with open(port_file,'w',encoding='ascii') as f: f.write(str(server.server_port))
+server.serve_forever()
+PY
+server_pid=`$!
+cleanup_redirect_server() { kill "`$server_pid" 2>/dev/null || true; wait "`$server_pid" 2>/dev/null || true; }
+trap cleanup_redirect_server EXIT
+for attempt in `$(seq 1 30); do [ -s $(Quote-Bash $redirectPort) ] && break; sleep 0.1; done
+[ -s $(Quote-Bash $redirectPort) ] || exit 70
+export SSL_CERT_FILE=$(Quote-Bash $redirectCert)
+base="https://127.0.0.1:`$(cat $redirectPortQuoted)"
+printf 'redirect\n' > $(Quote-Bash $redirectMode)
+set +e
+blocked_output=`$(horse_id_migration_assert_api_startup_blocked "`$base" $(Quote-Bash $redirectCanary) 2>&1); blocked_status=`$?
+ready_output=`$(horse_id_migration_assert_recovery_api_ready "`$base" $(Quote-Bash $redirectCanary) 2>&1); ready_status=`$?
+set -e
+test "`$blocked_status" -ne 0 && test "`$ready_status" -ne 0
+test ! -e $(Quote-Bash $redirectHit)
+test "`$(wc -l < $(Quote-Bash $redirectRequests))" -eq 2
+grep -Fx '/api/v2/admin/collection/operations/runtime-status|key' $(Quote-Bash $redirectRequests) >/dev/null
+grep -Fx '/api/v2/admin/collection/pipeline-state|key' $(Quote-Bash $redirectRequests) >/dev/null
+case "`$blocked_output`$ready_output" in *$(Quote-Bash $redirectCanary)*|*127.0.0.1*|*redirect*) exit 71;; esac
+printf 'success\n' > $(Quote-Bash $redirectMode)
+blocked_success=`$(horse_id_migration_assert_api_startup_blocked "`$base" $(Quote-Bash $redirectCanary) 2>&1)
+printf 'PASS code=RECOVERY_API_BLOCKED\n'
+swagger_success=`$(horse_id_migration_wait_recovery_swagger "`$base")
+ready_success=`$(horse_id_migration_assert_recovery_api_ready "`$base" $(Quote-Bash $redirectCanary) 2>&1)
+test "`$(wc -l < $(Quote-Bash $redirectRequests))" -eq 6
+grep -Fx '/api/v2/admin/collection/operations/runtime-status|key' $(Quote-Bash $redirectRequests) >/dev/null
+grep -Fx '/swagger/v1/swagger.json|no-key' $(Quote-Bash $redirectRequests) >/dev/null
+grep -Fx '/api/v2/admin/collection/pipeline-state|key' $(Quote-Bash $redirectRequests) >/dev/null
+grep -Fx '/api/v2/admin/collection/tasks?statuses=Running&pageSize=1|key' $(Quote-Bash $redirectRequests) >/dev/null
+case "`$blocked_success` `$swagger_success` `$ready_success" in *$(Quote-Bash $redirectCanary)*|*127.0.0.1*) exit 72;; esac
+test ! -e $(Quote-Bash $redirectHit)
+printf '%s\n%s\n%s\n' "`$blocked_success" "`$swagger_success" "`$ready_success"
+"@ 20000
+        Assert-Case ($redirectTest.ExitCode -eq 0) "Authenticated recovery helpers must reject redirects without forwarding credentials or logging test values. $($redirectTest.Output)"
+        Assert-Case (($redirectTest.Output -match 'PASS code=RECOVERY_API_BLOCKED') -and ($redirectTest.Output -match 'PASS code=RECOVERY_SWAGGER_READY') -and ($redirectTest.Output -match 'PASS code=RECOVERY_API_READY_PAUSED')) "Recovery helper positive controls must reach the trusted TLS origin and validate blocked/ready responses. $($redirectTest.Output)"
+        Write-Output 'PASS trusted TLS positive controls, origin request counts, redirect refusal, and secret-canary cases'
+    }
+
+    $safeRecoveryState = New-RecoveryStateFixture 'recovery-state-safe'
+    [void](Test-RecoveryState $safeRecoveryState $true)
+    foreach ($case in @(
+        @{ Name = 'recovery-state-unpaused'; Control = 'present'; Pause = '0'; Task = 'empty'; Lease = 'empty'; Version = '25' },
+        @{ Name = 'recovery-state-no-pipeline'; Control = 'missing'; Pause = '1'; Task = 'empty'; Lease = 'empty'; Version = '25' },
+        @{ Name = 'recovery-state-running-task'; Control = 'present'; Pause = '1'; Task = 'Running'; Lease = 'empty'; Version = '25' },
+        @{ Name = 'recovery-state-running-lease'; Control = 'present'; Pause = '1'; Task = 'empty'; Lease = 'Running'; Version = '25' },
+        @{ Name = 'recovery-state-pending-lease'; Control = 'present'; Pause = '1'; Task = 'empty'; Lease = 'StartPending'; Version = '25' },
+        @{ Name = 'recovery-state-unknown-task'; Control = 'present'; Pause = '1'; Task = 'Unexpected'; Lease = 'empty'; Version = '25' },
+        @{ Name = 'recovery-state-unknown-lease'; Control = 'present'; Pause = '1'; Task = 'empty'; Lease = 'Unexpected'; Version = '25' },
+        @{ Name = 'recovery-state-schema-version'; Control = 'present'; Pause = '1'; Task = 'empty'; Lease = 'empty'; Version = '24' }
+    )) {
+        $path = New-RecoveryStateFixture $case.Name $case.Version $case.Control $case.Pause $case.Task $case.Lease
+        [void](Test-RecoveryState $path $false)
+    }
+
     $guid = '00000000-0000-0000-0000-000000000001'
     $fresh = Test-Preflight 'fresh' 'empty' 0
     Assert-Case ($fresh.ExitCode -eq 0 -and $fresh.Output -match 'RESULT=\r?\n') "Fresh install must be allowed without an operation GUID. Exit=$($fresh.ExitCode); output=$($fresh.Output)"
@@ -294,9 +649,18 @@ horse_id_migration_journal_preflight $(Quote-Bash (ConvertTo-BashPath $largeMark
     $data = Join-Path $tempRoot 'backup-data'
     $backup = Join-Path $tempRoot 'backup-out'
     [void](New-Item -ItemType Directory -Path $data)
-    foreach ($store in @('eventstore','collection-platform','prediction-executions')) {
-        [IO.File]::WriteAllText((Join-Path $data "$store.db"), "source-$store")
-    }
+    $seedBackupStores = @'
+import sqlite3,sys
+from pathlib import Path
+root=Path(sys.argv[1])
+for name in ('eventstore','collection-platform','prediction-executions'):
+    db=sqlite3.connect(root/(name+'.db'))
+    db.execute('CREATE TABLE fixture (value TEXT NOT NULL)')
+    db.execute('INSERT INTO fixture VALUES (?)',(name,))
+    db.commit(); db.close()
+'@
+    & $pythonCommand -c $seedBackupStores (ConvertTo-BashPath $data)
+    if ($LASTEXITCODE -ne 0) { throw 'Could not seed real SQLite backup fixtures.' }
     [IO.File]::WriteAllBytes((Join-Path $data 'eventstore.db-wal'), [byte[]]::new(0))
     [IO.File]::WriteAllText((Join-Path $data 'eventstore.db-shm'), 'shm')
     [IO.File]::WriteAllText((Join-Path $data 'collection-platform.db-journal'), '')
@@ -312,11 +676,23 @@ horse_id_migration_assert_quiescent_stores $(Quote-Bash (ConvertTo-BashPath $dat
     }
     $manifestCheck = & $pythonCommand -c "import hashlib,pathlib,sys; p=pathlib.Path(sys.argv[1]); rows=(p/'SHA256SUMS').read_text().splitlines(); assert rows; [(lambda h,n: (_ for _ in ()).throw(AssertionError(n)) if hashlib.sha256((p/n).read_bytes()).hexdigest()!=h else None)(line.split('  ',1)[0],line.split('  ',1)[1]) for line in rows]" $backup 2>&1
     Assert-Case ($LASTEXITCODE -eq 0) 'Backup hash manifest must match every copied file.'
+    $backupSqliteCheckScript = @'
+import sqlite3,sys
+from pathlib import Path
+root=Path(sys.argv[1])
+for name in ('eventstore.db','collection-platform.db','prediction-executions.db'):
+    db=sqlite3.connect(root/name)
+    assert db.execute('PRAGMA integrity_check').fetchall()==[('ok',)]
+    db.close()
+'@
+    $backupSqliteCheck = & $pythonCommand -c $backupSqliteCheckScript $backup 2>&1
+    Assert-Case ($LASTEXITCODE -eq 0) 'Backup must preserve readable SQLite content, not merely copy arbitrary bytes.'
 
     $badWalData = Join-Path $tempRoot 'bad-wal-data'
     $badWalBackup = Join-Path $tempRoot 'bad-wal-backup'
     [void](New-Item -ItemType Directory -Path $badWalData)
-    [IO.File]::WriteAllText((Join-Path $badWalData 'eventstore.db'), 'db')
+    & $pythonCommand -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('CREATE TABLE fixture (value TEXT)'); c.commit(); c.close()" (Join-Path $badWalData 'eventstore.db')
+    if ($LASTEXITCODE -ne 0) { throw 'Could not seed bad-WAL SQLite fixture.' }
     [IO.File]::WriteAllText((Join-Path $badWalData 'eventstore.db-wal'), 'pending')
     $badWal = Invoke-Bash @"
 set -euo pipefail
@@ -324,6 +700,14 @@ set -euo pipefail
 horse_id_migration_copy_store_set $(Quote-Bash (ConvertTo-BashPath $badWalData)) $(Quote-Bash (ConvertTo-BashPath $badWalBackup)) yes eventstore.db
 "@
     Assert-Case ($badWal.ExitCode -ne 0) 'Non-empty WAL must block backup/apply.'
+    $wouldStartApi = Join-Path $tempRoot 'bad-wal-api-started'
+    $badWalOrder = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+horse_id_migration_copy_store_set $(Quote-Bash (ConvertTo-BashPath $badWalData)) $(Quote-Bash (ConvertTo-BashPath (Join-Path $tempRoot 'bad-wal-order-backup'))) yes eventstore.db
+: > $(Quote-Bash (ConvertTo-BashPath $wouldStartApi))
+"@
+    Assert-Case ($badWalOrder.ExitCode -ne 0 -and -not (Test-Path -LiteralPath $wouldStartApi)) 'A failed SQLite backup must prevent the subsequent API-start boundary.'
 
     $stubBin = Join-Path $tempRoot 'bin'
     [void](New-Item -ItemType Directory -Path $stubBin)
@@ -592,6 +976,10 @@ if horse_id_migration_run_fixed_command $(Quote-Bash $guid) example/api:sha-test
         $previous = $position
     }
     Assert-Case ($helper -match 'paths\.append\("horse-identity-migration-journal\.db"\)') 'Rendered store set must include the fixed migration journal.'
+    $sourceOwnershipHelper = [regex]::Match($helper, '(?s)horse_id_migration_acquire_source_ownership\(\) \{(?<body>.*?)\r?\n\}')
+    $journalLockHelper = [regex]::Match($helper, '(?s)horse_id_migration_acquire_journal_operation_lock\(\) \{(?<body>.*?)\r?\n\}')
+    Assert-Case ($sourceOwnershipHelper.Success -and $sourceOwnershipHelper.Groups['body'].Value.IndexOf('stat -c %s', [StringComparison]::Ordinal) -lt $sourceOwnershipHelper.Groups['body'].Value.IndexOf('actual=$(<"$gate")', [StringComparison]::Ordinal)) 'Runtime/control gate exact-size metadata must be checked before shell content reads.'
+    Assert-Case ($journalLockHelper.Success -and $journalLockHelper.Groups['body'].Value.IndexOf('stat -c %s', [StringComparison]::Ordinal) -lt $journalLockHelper.Groups['body'].Value.IndexOf('exec {fd}<', [StringComparison]::Ordinal)) 'Journal operation lock exact-size metadata must be checked before opening it.'
     Assert-Case ($remoteScript -match 'horse_id_migration_configured_store_paths') 'Backup members must be derived from the rendered Compose configuration.'
     Assert-Case ($remoteScript -match 'if \[ -z "\$HORSE_ID_MIGRATION_OPERATION_ID" \].*docker image prune') 'Migration failure path must not prune/rollback to an old image.'
     Assert-Case ($workflow -match 'horse_id_migration_operation_id:[\s\S]*required: false[\s\S]*type: string') 'Workflow dispatch migration GUID must remain optional.'
