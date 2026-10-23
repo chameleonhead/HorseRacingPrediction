@@ -426,6 +426,8 @@ public sealed class CollectionCompatibleStoppedModeRestartTests
         environment["ApiKey__Key"] = localApiKey;
         environment["ConnectionStrings__EventStore"] = $"Data Source={eventStorePath};Pooling=False";
         environment["CollectionPlatform__StateDirectory"] = stateDirectory;
+        environment["PredictionScheduling__StateDirectory"] = Path.Combine(temporaryRoot, "prediction-scheduling-state");
+        environment["PredictionScheduling__StoreFileName"] = "prediction-executions.db";
         if (maintenanceMode) environment["CollectionPlatform__MaintenanceMode"] = "true";
         else environment.Remove("CollectionPlatform__MaintenanceMode");
         environment["CollectionQueue__Enabled"] = enableOtherAutomaticServices ? "true" : "false";

@@ -194,7 +194,7 @@ public sealed class CollectionRuntimeStatusBrowserTests
         Process process;
         try
         {
-            process = StartApiProcess(repositoryRoot, apiStateDirectory, eventStorePath,
+            process = StartApiProcess(repositoryRoot, apiStateDirectory, eventStorePath, temporaryRoot,
                 dataProtectionDirectory, localApiKey, baseAddress,
                 () => Interlocked.Increment(ref runtimeStatusRequestCount), RememberSanitizedLog);
         }
@@ -410,7 +410,7 @@ public sealed class CollectionRuntimeStatusBrowserTests
     }
 
     private static Process StartApiProcess(string repositoryRoot,
-        string stateDirectory, string eventStorePath, string dataProtectionDirectory,
+        string stateDirectory, string eventStorePath, string temporaryRoot, string dataProtectionDirectory,
         string localApiKey, Uri baseAddress, Action onRuntimeStatusRequest,
         Action<string?> rememberSanitizedLog)
     {
@@ -440,6 +440,8 @@ public sealed class CollectionRuntimeStatusBrowserTests
         environment["ApiKey__Key"] = localApiKey;
         environment["ConnectionStrings__EventStore"] = $"Data Source={eventStorePath};Pooling=False";
         environment["CollectionPlatform__StateDirectory"] = stateDirectory;
+        environment["PredictionScheduling__StateDirectory"] = Path.Combine(temporaryRoot, "prediction-scheduling-state");
+        environment["PredictionScheduling__StoreFileName"] = "prediction-executions.db";
         environment["DataProtection__KeysDirectory"] = dataProtectionDirectory;
         environment["CollectionQueue__Enabled"] = "false";
         environment["CollectionOrchestration__BackgroundSchedulersEnabled"] = "false";

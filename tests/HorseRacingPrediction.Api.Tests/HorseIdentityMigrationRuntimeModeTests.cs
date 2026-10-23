@@ -374,6 +374,46 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
     }
 
     [TestMethod]
+    public async Task NormalHostResumesAfterIsolatedScheduleOwnershipIsReleased()
+    {
+        using var fixture = new RuntimeFixture();
+        using (var heldScheduleOwnership = HorseIdentityMigrationRuntimeOwnership.Acquire(
+                   [fixture.ScheduleStorePath]))
+        {
+            using var blockedChild = fixture.StartApiProcess(maintenanceMode: true);
+            try
+            {
+                using var blockedClient = await fixture.WaitForHealthAsync(blockedChild);
+                blockedClient.DefaultRequestHeaders.Add("X-Test-Horse-Key", fixture.ApiKey);
+                using var blockedRuntime = await blockedClient.GetAsync("/api/v2/admin/collection/operations/runtime-status");
+                Assert.AreEqual(HttpStatusCode.ServiceUnavailable, blockedRuntime.StatusCode,
+                    "A held schedule source must keep the normal host on the journal-only blocked surface.");
+                Assert.IsFalse(File.Exists(fixture.EventStorePath));
+                Assert.IsFalse(File.Exists(fixture.CollectionStorePath));
+                Assert.IsFalse(File.Exists(fixture.ScheduleStorePath));
+                Assert.IsFalse(File.Exists(fixture.QueueStorePath));
+            }
+            finally
+            {
+                await RuntimeFixture.StopAsync(blockedChild);
+            }
+        }
+
+        using var normalChild = fixture.StartApiProcess(maintenanceMode: true);
+        try
+        {
+            using var normalClient = await fixture.WaitForHealthAsync(normalChild);
+            using var swagger = await normalClient.GetAsync("/swagger/v1/swagger.json");
+            Assert.AreEqual(HttpStatusCode.OK, swagger.StatusCode,
+                "A fresh host must resume normal startup after the isolated schedule ownership is released.");
+        }
+        finally
+        {
+            await RuntimeFixture.StopAsync(normalChild);
+        }
+    }
+
+    [TestMethod]
     public async Task InProcessHostShutdownDisposesItsSourceOwnership()
     {
         var root = Path.Combine(Path.GetTempPath(), $"horse-source-host-disposal-{Guid.NewGuid():N}");
