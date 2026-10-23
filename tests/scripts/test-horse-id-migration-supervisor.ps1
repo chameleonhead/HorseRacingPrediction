@@ -11,12 +11,16 @@ if ($smokeModeCount -gt 1) {
     throw 'Wrapper, observer, and fast-lifecycle smoke modes are mutually exclusive.'
 }
 if ($FastLifecycleSmokeOnly) {
+    $harnessMode = 'fast-lifecycle-smoke-only'
     Write-Output 'MODE aged-pause FAST lifecycle preflight (not a 900-second timing proof)'
 } elseif ($WrapperSmokeOnly) {
+    $harnessMode = 'wrapper-smoke-only'
     Write-Output 'MODE bounded process-wrapper smoke'
 } elseif ($ObserverSmokeOnly) {
+    $harnessMode = 'observer-smoke-only'
     Write-Output 'MODE fixed-CLI observer smoke'
 } else {
+    $harnessMode = 'real-900-second-lifecycle'
     Write-Output 'MODE full real 900-second lifecycle gate'
 }
 $ErrorActionPreference = 'Stop'
@@ -32,12 +36,15 @@ $happyContainer = "hrp-horse-id-supervisor-happy-$runId"
 $crashContainer = "hrp-horse-id-supervisor-crash-$runId"
 $happyData = Join-Path $tempRoot 'happy-data'
 $crashData = Join-Path $tempRoot 'crash-data'
+$evidenceRoot = Join-Path $tempRoot 'evidence'
+$evidenceTranscript = Join-Path $evidenceRoot 'lifecycle.jsonl'
 $testProject = Join-Path $repositoryRoot 'tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj'
 $fixtureMethod = 'FullyQualifiedName~ExportProductionContainerFixtureWhenRequested'
 $oldHorseId = 'horse-11111111-1111-4111-8111-111111111111'
 $jraIdentity = 'jra-horse:2024100828'
 $maxOutputCharacters = 64 * 1024
 $harnessSucceeded = $false
+$sensitiveValues = [Collections.Generic.List[string]]::new()
 
 Add-Type -TypeDefinition @'
 using System;
@@ -251,6 +258,87 @@ function Get-SourceFileFingerprint([string] $DataDirectory) {
         $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $_
         "$([IO.Path]::GetFileName($_))=$($hash.Hash)"
     }) -join "`n"
+}
+
+function Add-EvidenceEvent([string] $Event, [string] $OperationId = '', [string] $Phase = '',
+    [string] $Status = '', [string] $Detail = '') {
+    $entry = [ordered]@{
+        timestampUtc = [DateTimeOffset]::UtcNow.ToString('O')
+        event = $Event
+        operationId = $OperationId
+        phase = $Phase
+        status = $Status
+        detail = $Detail
+    }
+    [IO.File]::AppendAllText($evidenceTranscript, (([pscustomobject]$entry | ConvertTo-Json -Compress) + "`n"),
+        [Text.UTF8Encoding]::new($false))
+}
+
+function Test-PendingPrewriteBlockedStatus($Status) {
+    return ($null -ne $Status -and
+        [string]$Status.requestKind -ceq 'PendingV2' -and
+        $null -eq $Status.previewFingerprint -and
+        [string]$Status.executionPhase -ceq 'Applying' -and
+        [string]$Status.status -ceq 'AwaitingActions')
+}
+
+function Test-PendingPrewriteBlockedStatusCounterexamples {
+    $valid = [pscustomobject]@{
+        requestKind = 'PendingV2'
+        previewFingerprint = $null
+        executionPhase = 'Applying'
+        status = 'AwaitingActions'
+    }
+    if (-not (Test-PendingPrewriteBlockedStatus $valid)) {
+        throw 'The exact post-restart PendingV2/Applying/AwaitingActions oracle rejected its valid response.'
+    }
+
+    $invalidResponses = @(
+        [pscustomobject]@{ Name = 'Running status'; Value = [pscustomobject]@{
+            requestKind = 'PendingV2'; previewFingerprint = $null; executionPhase = 'Applying'; status = 'Running' } },
+        [pscustomobject]@{ Name = 'Interrupted status'; Value = [pscustomobject]@{
+            requestKind = 'PendingV2'; previewFingerprint = $null; executionPhase = 'Applying'; status = 'Interrupted' } },
+        [pscustomobject]@{ Name = 'Succeeded status'; Value = [pscustomobject]@{
+            requestKind = 'PendingV2'; previewFingerprint = $null; executionPhase = 'Applying'; status = 'Succeeded' } },
+        [pscustomobject]@{ Name = 'unknown status'; Value = [pscustomobject]@{
+            requestKind = 'PendingV2'; previewFingerprint = $null; executionPhase = 'Applying'; status = 'FutureStatus' } },
+        [pscustomobject]@{ Name = 'missing request kind'; Value = [pscustomobject]@{
+            previewFingerprint = $null; executionPhase = 'Applying'; status = 'AwaitingActions' } },
+        [pscustomobject]@{ Name = 'unknown request kind'; Value = [pscustomobject]@{
+            requestKind = 'FutureKind'; previewFingerprint = $null; executionPhase = 'Applying'; status = 'AwaitingActions' } },
+        [pscustomobject]@{ Name = 'non-null fingerprint'; Value = [pscustomobject]@{
+            requestKind = 'PendingV2'; previewFingerprint = ('A' * 64); executionPhase = 'Applying'; status = 'AwaitingActions' } },
+        [pscustomobject]@{ Name = 'wrong phase'; Value = [pscustomobject]@{
+            requestKind = 'PendingV2'; previewFingerprint = $null; executionPhase = 'BackedUp'; status = 'AwaitingActions' } },
+        [pscustomobject]@{ Name = 'missing response'; Value = $null }
+    )
+    foreach ($case in $invalidResponses) {
+        if (Test-PendingPrewriteBlockedStatus $case.Value) {
+            throw "The post-restart prewrite oracle accepted an invalid response: $($case.Name)."
+        }
+    }
+    Write-Output "PASS exact post-restart prewrite-status oracle: positive plus $($invalidResponses.Count) rejection cases"
+}
+
+function Get-SourceHashes {
+    $relativePaths = @(
+        'tests/scripts/test-horse-id-migration-supervisor.ps1',
+        'src/HorseRacingPrediction.Api/IdentityMigration/HorseIdentityMigrationJournal.cs',
+        'src/HorseRacingPrediction.Api/IdentityMigration/HorseIdentityMigrationPreparationService.cs',
+        'src/HorseRacingPrediction.Api/IdentityMigration/HorseIdentityMigrationSupervisor.cs',
+        'src/HorseRacingPrediction.Api/IdentityMigration/HorseIdentityMigrationRuntimeMode.cs',
+        'src/HorseRacingPrediction.Api/IdentityMigration/TypedHorseIdentityStoreEngine.cs',
+        'src/HorseRacingPrediction.Api/IdentityMigration/TypedHorseIdentityStoreWriter.cs'
+    )
+    $hashes = [ordered]@{}
+    foreach ($relativePath in $relativePaths) {
+        $path = Join-Path $repositoryRoot $relativePath
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            throw "Cannot record the required source identity; missing file: $relativePath"
+        }
+        $hashes[$relativePath] = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash
+    }
+    return $hashes
 }
 
 function Invoke-Docker([string[]] $Arguments, [int] $TimeoutSeconds = 60) {
@@ -811,19 +899,32 @@ function Wait-ForStoppedCliAfterBackup([string] $Container, [string] $DataDirect
     throw 'The owned fixed CLI was not observed stopped under PID 1 after API exit and complete backup.'
 }
 
-function Stage-Operation([string] $BaseUrl, [string] $ApiKey) {
+function Stage-Operation([string] $BaseUrl, [string] $ApiKey, [string] $RootName) {
     $manifest = @{ entries = @(@{
         oldHorseId = $oldHorseId
         jraIdentity = $jraIdentity
         hypothesisAccepted = $true
     }) }
-    $preview = Invoke-Api $BaseUrl '/api/v2/admin/horse-id-migration-previews' 'POST' $manifest $ApiKey
-    if (-not $preview.canStage -or -not $preview.fingerprint) {
-        throw "The isolated seeded migration fixture was not stageable: $($preview | ConvertTo-Json -Depth 8 -Compress)"
+    $review = Invoke-Api $BaseUrl '/api/v2/admin/horse-id-migration-previews?kind=TargetReviewV2' 'POST' $manifest $ApiKey
+    if (-not $review.canSavePending -or @($review.blockers).Count -ne 0) {
+        $blockers = @($review.blockers) -join ','
+        throw "The isolated seeded migration fixture failed point review for $RootName (canSavePending=$($review.canSavePending), blockers=$blockers)."
     }
+    $requestKey = [guid]::NewGuid().ToString('D')
     $staged = Invoke-Api $BaseUrl '/api/v2/admin/horse-id-migration-operations' 'POST' `
-        @{ manifest = $manifest; previewFingerprint = $preview.fingerprint } $ApiKey
-    return [string]$staged.operationId
+        @{ requestKind = 'PendingV2'; manifest = $manifest; requestKey = $requestKey; previewFingerprint = $null } $ApiKey
+    $operationId = [string]$staged.operationId
+    if ([string]$staged.requestKind -ne 'PendingV2' -or $null -ne $staged.previewFingerprint) {
+        throw "The $RootName stage response did not preserve PendingV2 with a null preview fingerprint."
+    }
+    $readback = Invoke-Api $BaseUrl "/api/v2/admin/horse-id-migration-operations/$operationId" -ApiKey $ApiKey
+    if ([string]$readback.requestKind -ne 'PendingV2' -or $null -ne $readback.previewFingerprint) {
+        throw "The $RootName journal readback did not preserve PendingV2 with a null preview fingerprint."
+    }
+    Add-EvidenceEvent -Event 'pending-stage-readback' -OperationId $operationId -Phase ([string]$readback.executionPhase) `
+        -Status ([string]$readback.status) `
+        -Detail "root=$RootName;requestKind=PendingV2;previewFingerprint=null;review=target-only;fullCensus=false"
+    return [pscustomobject]@{ OperationId = $operationId; RequestKey = $requestKey }
 }
 
 function Reset-DisposablePauseWindow([string] $BaseUrl, [string] $ApiKey, [string] $PauseTimestampPath) {
@@ -887,12 +988,19 @@ try {
     }
     [void](New-Item -ItemType Directory -Path $tempRoot)
     Assert-DisposablePath $tempRoot
+    [void](New-Item -ItemType Directory -Path $evidenceRoot)
     [void](New-Item -ItemType Directory -Path $happyData)
     [void](New-Item -ItemType Directory -Path $crashData)
+    $gitPath = (Get-Command git -ErrorAction Stop).Source
+    $gitRevision = (Invoke-External $gitPath @('rev-parse', 'HEAD') 30).Trim()
+    $sourceHashes = Get-SourceHashes
+    Add-EvidenceEvent -Event 'run-start' -Detail ("mode=$harnessMode;revision=$gitRevision;sourceHashes=" +
+        (ConvertTo-Json -InputObject $sourceHashes -Compress))
     Test-TaskChildrenParserCounterexample
     Test-FixedCliObserverCounterexamples
     Test-Pid1ApiSnapshotCounterexamples
     Test-PreparationWindowCounterexamples
+    Test-PendingPrewriteBlockedStatusCounterexamples
     Test-ExternalProcessWrapper
     if ($WrapperSmokeOnly) {
         Write-Output 'PASS bounded process wrapper stdout/stderr, EOF, timeout, and owned-tree cleanup smoke'
@@ -901,6 +1009,9 @@ try {
     }
 
     Invoke-Docker @('build', '--file', (Join-Path $repositoryRoot 'Dockerfile'), '--tag', $image, $repositoryRoot) 1800 | Out-Null
+    $imageIdentity = (Invoke-Docker @('image', 'inspect', '--format', '{{.Id}}', $image)).Trim()
+    if ($imageIdentity -notmatch '^sha256:[0-9a-f]{64}$') { throw 'The production test image did not expose a valid immutable image identity.' }
+    Add-EvidenceEvent -Event 'image-built' -Detail "imageId=$imageIdentity"
     Test-FixedCliObserverProcReadCounterexamples $image
     if ($ObserverSmokeOnly) {
         Write-Output 'PASS fixed CLI observer proc-read churn, post-stop ambiguity, and exact PID/start liveness counterexamples'
@@ -925,6 +1036,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $happyData 'pause-start.txt') -Destination (Join-Path $crashData 'pause-start.txt')
 
     $apiKey = 'local-supervisor-' + [guid]::NewGuid().ToString('N')
+    $sensitiveValues.Add($apiKey)
     $published = Invoke-Docker @(
         'run', '-d', '--name', $happyContainer, '--label', "hrp.test.run=$runId", '--restart=no',
         '--publish', '127.0.0.1::8080',
@@ -949,7 +1061,10 @@ try {
         Assert-AgedDisposablePauseWindow $happyUrl $apiKey (Join-Path $happyData 'pause-start.txt')
     }
     $initialChild = Assert-Pid1ApiShape $happyContainer '--internal-api-child'
-    $happyOperationId = Stage-Operation $happyUrl $apiKey
+    $happyAdmission = Stage-Operation $happyUrl $apiKey 'happy'
+    $happyOperationId = $happyAdmission.OperationId
+    Add-EvidenceEvent -Event 'happy-execute-requested' -OperationId $happyOperationId -Phase 'IntentRecorded' `
+        -Status 'InProgress' -Detail 'requestKind=PendingV2'
     if (-not $FastLifecycleSmokeOnly) {
         Reset-DisposablePauseWindow $happyUrl $apiKey (Join-Path $happyData 'pause-start.txt')
     }
@@ -990,6 +1105,11 @@ try {
     if ($status.status -ne 'Succeeded' -or $status.executionPhase -ne 'Verified') {
         throw "The production-image happy path did not complete as Verified within its bound."
     }
+    if ([string]$status.requestKind -ne 'PendingV2' -or $null -ne $status.previewFingerprint) {
+        throw 'The successful PendingV2 lifecycle lost its request kind or acquired a preview fingerprint.'
+    }
+    Add-EvidenceEvent -Event 'happy-verified' -OperationId $happyOperationId -Phase ([string]$status.executionPhase) `
+        -Status ([string]$status.status) -Detail 'requestKind=PendingV2;previewFingerprint=null'
     if (-not $observedChildModes.Contains('fixed-cli')) {
         throw 'The production-image path did not expose the supervised fixed CLI as the sole child of PID 1.'
     }
@@ -997,13 +1117,18 @@ try {
     if ($finalChild.ProcessId -eq $initialChild.ProcessId) {
         throw 'The original API child was not exited/reaped before the paused API restart.'
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $happyData "backups/horse-id-migration-$($happyOperationId.Replace('-', ''))"))) {
+    $happyBackupDirectory = Join-Path $happyData "backups/horse-id-migration-$($happyOperationId.Replace('-', ''))"
+    $happyReceiptPath = Join-Path $happyBackupDirectory 'receipt.json'
+    if (-not (Test-Path -LiteralPath $happyReceiptPath)) {
         throw 'The complete managed backup package is absent after the successful process handoff.'
     }
+    Add-EvidenceEvent -Event 'happy-backup' -OperationId $happyOperationId -Phase ([string]$status.executionPhase) `
+        -Status 'Present' -Detail ("receiptSha256=" + (Get-FileHash -Algorithm SHA256 -LiteralPath $happyReceiptPath).Hash)
 
     Invoke-Docker @('rm', '--force', $happyContainer) | Out-Null
 
     $crashKey = 'local-supervisor-crash-' + [guid]::NewGuid().ToString('N')
+    $sensitiveValues.Add($crashKey)
     [void](Invoke-Docker @(
         'run', '-d', '--name', $crashContainer, '--label', "hrp.test.run=$runId", '--restart', 'on-failure:1',
         '--publish', '127.0.0.1::8080',
@@ -1027,7 +1152,10 @@ try {
     if ($FastLifecycleSmokeOnly) {
         Assert-AgedDisposablePauseWindow $crashUrl $crashKey (Join-Path $crashData 'pause-start.txt')
     }
-    $crashOperationId = Stage-Operation $crashUrl $crashKey
+    $crashAdmission = Stage-Operation $crashUrl $crashKey 'crash'
+    $crashOperationId = $crashAdmission.OperationId
+    Add-EvidenceEvent -Event 'crash-execute-requested' -OperationId $crashOperationId -Phase 'IntentRecorded' `
+        -Status 'InProgress' -Detail 'requestKind=PendingV2'
     if (-not $FastLifecycleSmokeOnly) {
         Reset-DisposablePauseWindow $crashUrl $crashKey (Join-Path $crashData 'pause-start.txt')
     }
@@ -1041,6 +1169,11 @@ try {
     $stoppedCli = Wait-ForStoppedCliAfterBackup $crashContainer $crashData $crashOperationId $crashCli `
         $stoppedCliTimeoutSeconds
     $crashSourceFingerprint = Get-SourceFileFingerprint $crashData
+    $crashReceiptPath = Join-Path $crashData "backups/horse-id-migration-$($crashOperationId.Replace('-', ''))/receipt.json"
+    if (-not (Test-Path -LiteralPath $crashReceiptPath)) { throw 'The crash boundary has no managed backup receipt.' }
+    $crashReceiptHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $crashReceiptPath).Hash
+    Add-EvidenceEvent -Event 'crash-child-stopped-after-backup' -OperationId $crashOperationId `
+        -Status 'Stopped' -Detail "receiptSha256=$crashReceiptHash;sourceFingerprint=$crashSourceFingerprint"
     $beforeKill = Get-ContainerProcessSnapshot $crashContainer
     if (($beforeKill.Children.Count -ne 1) -or
         ($beforeKill.Children[0].ProcessId -ne $stoppedCli.ProcessId) -or
@@ -1055,9 +1188,17 @@ try {
     Wait-Api $crashUrl $crashKey
     $blockedChild = Assert-Pid1ApiShape $crashContainer '--internal-blocked-child'
     $blockedStatus = Invoke-Api $crashUrl "/api/v2/admin/horse-id-migration-operations/$crashOperationId" -ApiKey $crashKey
-    if ($blockedStatus.executionPhase -ne 'Applying' -or $blockedStatus.status -eq 'Succeeded') {
-        throw 'After the fixed child crash, restart must remain journal-only at Applying without replay.'
+    # This oracle is observed after restart, not at SIGSTOP. Public AwaitingActions maps to persisted Staged;
+    # the journal only advances Staged to Running while granting the writer lease, before physical writes.
+    # An abandoned Running operation becomes Interrupted and is never restored to Staged/AwaitingActions.
+    if (-not (Test-PendingPrewriteBlockedStatus $blockedStatus)) {
+        throw 'After the fixed child crash, restart must remain Applying/AwaitingActions: Applying is sealed before child launch, and AwaitingActions proves the writer lease/status transition was never acquired.'
     }
+    Add-EvidenceEvent -Event 'crash-restarted-blocked' -OperationId $crashOperationId `
+        -Phase ([string]$blockedStatus.executionPhase) -Status ([string]$blockedStatus.status) `
+        -Detail ("requestKind=PendingV2;previewFingerprint=null;blockedChild=present;postRestartObserved=Applying+AwaitingActions;writerLeaseNotAcquired=true;restartCount=" +
+            (Invoke-Docker @('inspect', $crashContainer, '--format', '{{.RestartCount}}')).Trim() +
+            ";statusReadback=$($blockedStatus.status);blockedSourceFingerprint=$crashSourceFingerprint")
     $gatePaths = @(
         (Join-Path $crashData '.eventstore.db.horse-identity-migration.maintenance'),
         (Join-Path $crashData '.collection-platform.db.horse-identity-migration.maintenance'),
@@ -1065,13 +1206,15 @@ try {
     if (@($gatePaths | Where-Object { -not (Test-Path -LiteralPath $_) }).Count -ne 0) {
         throw 'Crash restart cleared or lost a maintenance gate before explicit verification.'
     }
+    Add-EvidenceEvent -Event 'crash-maintenance-gates' -OperationId $crashOperationId `
+        -Phase ([string]$blockedStatus.executionPhase) -Status 'Present' -Detail 'gateCount=3'
     if ((Get-SourceFileFingerprint $crashData) -cne $crashSourceFingerprint) {
         throw 'The killed fixed child changed a durable source or SQLite WAL/SHM file before blocked restart.'
     }
     Start-Sleep -Seconds 5
     $again = Invoke-Api $crashUrl "/api/v2/admin/horse-id-migration-operations/$crashOperationId" -ApiKey $crashKey
-    if ($again.executionPhase -ne 'Applying' -or $again.status -eq 'Succeeded') {
-        throw 'The blocked restart attempted to replay or advance an interrupted Applying operation.'
+    if (-not (Test-PendingPrewriteBlockedStatus $again)) {
+        throw 'The blocked restart attempted to replay or advance an Applying operation before acquiring its writer lease.'
     }
     if ((Get-SourceFileFingerprint $crashData) -cne $crashSourceFingerprint) {
         throw 'The blocked restart mutated source or SQLite WAL/SHM files after the owned CLI was stopped.'
@@ -1084,6 +1227,8 @@ try {
     if ($termExitCode -cne '143' -or $termState -cne 'exited|143') {
         throw "The disposable PID-1 supervisor did not report the expected graceful TERM exit (wait='$termExitCode', state='$termState')."
     }
+    Add-EvidenceEvent -Event 'crash-terminated' -OperationId $crashOperationId -Phase 'Applying' `
+        -Status 'Exited' -Detail "waitExit=$termExitCode;state=$termState;sourceFingerprint=$crashSourceFingerprint"
     $harnessSucceeded = $true
     if ($FastLifecycleSmokeOnly) {
         Write-Output 'PASS aged-pause FAST lifecycle preflight: production image PID-1/API/fixed-CLI handoff, backup/postcheck, killed-child blocked restart, and bounded cleanup; real 900-second timing remains unproven'
@@ -1098,7 +1243,16 @@ finally {
         }
         try { Invoke-Docker @('image', 'rm', '--force', $image) | Out-Null } catch { }
         Assert-DisposablePath $tempRoot
-        if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force }
+        foreach ($disposableDataPath in @($happyData, $crashData, (Join-Path $tempRoot 'process-tree-probe'),
+            (Join-Path $tempRoot 'stalled-child.pid'))) {
+            Assert-DisposablePath $disposableDataPath
+            if (Test-Path -LiteralPath $disposableDataPath) {
+                Remove-Item -LiteralPath $disposableDataPath -Recurse -Force
+            }
+        }
+        Add-EvidenceEvent -Event 'run-complete' -Status 'Passed' `
+            -Detail "mode=$harnessMode;revision=$gitRevision;imageId=$imageIdentity"
+        Write-Output "PRESERVED_SUCCESS_EVIDENCE root=$tempRoot transcript=$evidenceTranscript"
     }
     else {
         if (Test-Path -LiteralPath $tempRoot) {
@@ -1108,6 +1262,11 @@ finally {
                 try {
                     Invoke-Docker @('update', '--restart=no', $container) | Out-Null
                     $logs = Invoke-Docker @('logs', '--tail', '200', $container) 30
+                    foreach ($sensitiveValue in $sensitiveValues) {
+                        if (-not [string]::IsNullOrEmpty($sensitiveValue)) {
+                            $logs = $logs.Replace($sensitiveValue, '[REDACTED]')
+                        }
+                    }
                     [IO.File]::WriteAllText((Join-Path $failureEvidence "$container.log"), $logs)
                     $state = Invoke-Docker @('inspect', $container, '--format', '{{.State.Status}}|{{.State.ExitCode}}|{{.RestartCount}}')
                     [IO.File]::WriteAllText((Join-Path $failureEvidence "$container.state"), $state)
