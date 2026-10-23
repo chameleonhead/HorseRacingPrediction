@@ -1,6 +1,7 @@
 param(
     [string] $Bash = 'C:\Program Files\Git\bin\bash.exe',
-    [string] $Python = 'python3'
+    [string] $Python = 'python3',
+    [switch] $PythonSemanticOnly
 )
 $ErrorActionPreference = 'Stop'
 
@@ -69,7 +70,7 @@ function Assert-Case([bool] $Condition, [string] $Message) {
 
 $pythonCommand = (Get-Command $Python -ErrorAction Stop).Source
 $ruby = Get-Command ruby -ErrorAction SilentlyContinue
-if ($ruby) {
+if ($ruby -and -not $PythonSemanticOnly) {
     $yamlSemanticScript = @'
 require 'yaml'
 workflow = YAML.safe_load_file(ARGV.fetch(0), aliases: false)
@@ -86,6 +87,26 @@ raise 'pre-publish validation must reject GUID.Empty' unless early_validation &&
 raise 'recovery input validation must be default-off, manual-only, SHA-bound, and migration-exclusive' unless early_validation['run'].include?('API_STARTUP_RECOVERY') && early_validation['run'].include?('EXPECTED_DEPLOYED_SHA') && early_validation['run'].include?('workflow_dispatch') && early_validation['run'].include?('HORSE_ID_MIGRATION_OPERATION_ID')
 recovery = workflow.dig('jobs','recover-api-startup')
 raise 'API recovery must be a manual API-only route after verified build' unless recovery && recovery['if'].to_s.include?('api_startup_recovery') && Array(recovery['needs']).sort == ['build-and-push','verify'] && recovery['environment'] == 'production' && recovery['timeout-minutes'] == 50
+diagnostic = workflow.dig('jobs','diagnose-api-startup')
+raise 'read-only diagnosis must be an independent bounded manual job' unless diagnostic && diagnostic['if'].to_s.include?('api_startup_recovery') && !diagnostic.key?('needs') && diagnostic['environment'] == 'production' && diagnostic['timeout-minutes'] == 8
+diagnostic_steps = diagnostic['steps']
+validation_index = diagnostic_steps.index { |s| s['name'] == 'Validate read-only API diagnosis inputs' }
+classify_index = diagnostic_steps.index { |s| s['name'] == 'Classify the expected API container without inspecting its data' }
+upload_index = diagnostic_steps.index { |s| s['name'] == 'Stage bounded diagnostic helper outside the application directory' }
+diagnostic_step = diagnostic_steps.find { |s| s['name'] == 'Diagnose the exact stopped API without changing production state' }
+raise 'diagnosis must validate inputs before SSH and classify before any helper upload' unless validation_index && classify_index && upload_index && diagnostic_step && validation_index < classify_index && classify_index < upload_index && upload_index < diagnostic_steps.index(diagnostic_step)
+raise 'running expected image must skip helper upload and data diagnosis' unless diagnostic_steps[upload_index]['if'].to_s.include?('steps.classify.outputs.stdout') && diagnostic_steps[upload_index]['if'].to_s.include?('DIAGNOSTIC code=STOPPED') && diagnostic_step['if'].to_s.include?('DIAGNOSTIC code=STOPPED')
+classify_step = diagnostic_steps[classify_index]
+raise 'container classification must capture only the fixed state result and avoid data/helper reads' unless classify_step['id'] == 'classify' && classify_step.dig('with','capture_stdout') == true && classify_step.dig('with','command_timeout') == '30s' && classify_step.dig('with','script').include?('running) echo "DIAGNOSTIC code=NOT_APPLICABLE') && classify_step.dig('with','script').include?('exited) echo "DIAGNOSTIC code=STOPPED') && !classify_step.dig('with','script').match?(/horse_id_migration_|docker logs|docker exec|sqlite/i)
+raise 'diagnostic helper must be staged outside the application directory from the exact checkout' unless diagnostic_steps[upload_index]['uses'] == 'appleboy/scp-action@v1.0.0' && diagnostic_steps[upload_index].dig('with','source') == 'deploy/horse-id-migration-deploy.sh' && diagnostic_steps[upload_index].dig('with','target').to_s.start_with?('/tmp/hrp-api-diagnostic-')
+diagnostic_script = diagnostic_step.dig('with','script')
+running_branch = diagnostic_script.index('if [ "$state" = "running" ]; then')
+diagnostic_helper = diagnostic_script.index('horse_id_migration_diagnose_startup_journal')
+diagnostic_backup = diagnostic_script.index('horse_id_migration_verify_recovery_backup')
+raise 'matching running API must exit not-applicable before journal or backup reads' unless running_branch && diagnostic_helper && diagnostic_backup && running_branch < diagnostic_script.index('exit 0', running_branch) && diagnostic_script.index('exit 0', running_branch) < diagnostic_script.index('. "$DIAGNOSTIC_HELPER"') && diagnostic_script.index('. "$DIAGNOSTIC_HELPER"') < diagnostic_helper && diagnostic_helper < diagnostic_backup
+raise 'diagnostic path must not start, stop, pull, exec, or mutate service/database configuration' if diagnostic_script.match?(/docker compose[^\n]*(?:\bstop\b|\bup\b|\bpull\b|\bexec\b)|\b(?:sqlite3|UPDATE|INSERT|DELETE|ALTER TABLE|CREATE TABLE|flock)\b|horse_id_migration_(?:acquire|update|copy|release|journal_preflight)/i)
+raise 'diagnostic must call bounded read-only journal, backup, and safe log functions' unless diagnostic_script.include?('horse_id_migration_diagnose_startup_journal') && diagnostic_script.include?('horse_id_migration_verify_recovery_backup') && diagnostic_script.include?('horse_id_migration_sanitize_startup_logs')
+raise 'diagnostic must preserve both log streams, pipe failures, and still attempt journal/backup evidence before failing' unless diagnostic_script.include?('set -euo pipefail') && diagnostic_script.include?('docker logs --tail 200 "$container" 2>&1 | head') && diagnostic_script.include?('logs_status=$?') && diagnostic_script.index('logs_status=') < diagnostic_script.index('horse_id_migration_diagnose_startup_journal') && diagnostic_script.index('horse_id_migration_verify_recovery_backup') < diagnostic_script.index('[ "$logs_status" -eq 0 ]')
 raise 'normal deploy paths must exclude API recovery without changing their requirements' unless workflow.dig('jobs','deploy')['if'].to_s.include?('api_startup_recovery') && workflow.dig('jobs','deploy-collector-lambda')['if'].to_s.include?('api_startup_recovery')
 upload = recovery['steps'].find { |s| s['name'] == 'Upload only the verified recovery helper' }
 recovery_step_index = recovery['steps'].index { |s| s['name'] == 'Recover only the exact blocked API image' }
@@ -144,7 +165,7 @@ puts 'PASS parsed workflow semantics'
 }
 else {
     $yamlSemanticScript = @'
-import sys,yaml
+import re,sys,yaml
 w=yaml.safe_load(open(sys.argv[1],encoding='utf-8'))
 events=w.get('on',w.get(True))
 assert events['workflow_dispatch']['inputs']['horse_id_migration_operation_id']=={'description':'Existing staged horse-identity migration GUID; leave empty for a normal deploy','required':False,'type':'string'}
@@ -158,6 +179,15 @@ early_validation=next(s for s in verify if s.get('name')=='Validate optional mig
 assert '00000000-0000-0000-0000-000000000000' in early_validation['run']
 assert all(x in early_validation['run'] for x in ('API_STARTUP_RECOVERY','EXPECTED_DEPLOYED_SHA','workflow_dispatch','HORSE_ID_MIGRATION_OPERATION_ID'))
 recovery=w['jobs']['recover-api-startup']; assert 'api_startup_recovery' in recovery['if'] and sorted(recovery['needs'])==['build-and-push','verify'] and recovery['environment']=='production' and recovery['timeout-minutes']==50
+diagnostic=w['jobs']['diagnose-api-startup']; assert 'api_startup_recovery' in diagnostic['if'] and 'needs' not in diagnostic and diagnostic['environment']=='production' and diagnostic['timeout-minutes']==8
+diagnostic_steps=diagnostic['steps']; validation_index=next(i for i,s in enumerate(diagnostic_steps) if s.get('name')=='Validate read-only API diagnosis inputs'); classify_index=next(i for i,s in enumerate(diagnostic_steps) if s.get('name')=='Classify the expected API container without inspecting its data'); upload_index=next(i for i,s in enumerate(diagnostic_steps) if s.get('name')=='Stage bounded diagnostic helper outside the application directory'); diagnostic_step=next(s for s in diagnostic_steps if s.get('name')=='Diagnose the exact stopped API without changing production state'); assert validation_index<classify_index<upload_index<diagnostic_steps.index(diagnostic_step)
+assert 'steps.classify.outputs.stdout' in diagnostic_steps[upload_index]['if'] and 'DIAGNOSTIC code=STOPPED' in diagnostic_steps[upload_index]['if'] and 'DIAGNOSTIC code=STOPPED' in diagnostic_step['if']
+classify_step=diagnostic_steps[classify_index]; classify_script=classify_step['with']['script']; assert classify_step['id']=='classify' and classify_step['with']['capture_stdout'] is True and classify_step['with']['command_timeout']=='30s' and 'running) echo "DIAGNOSTIC code=NOT_APPLICABLE' in classify_script and 'exited) echo "DIAGNOSTIC code=STOPPED' in classify_script and not re.search(r'horse_id_migration_|docker logs|docker exec|sqlite',classify_script,re.I)
+assert diagnostic_steps[upload_index]['uses']=='appleboy/scp-action@v1.0.0' and diagnostic_steps[upload_index]['with']['source']=='deploy/horse-id-migration-deploy.sh' and diagnostic_steps[upload_index]['with']['target'].startswith('/tmp/hrp-api-diagnostic-')
+diagnostic_script=diagnostic_step['with']['script']; running_branch=diagnostic_script.index('if [ "$state" = "running" ]; then'); helper_read=diagnostic_script.index('. "$DIAGNOSTIC_HELPER"'); journal_read=diagnostic_script.index('horse_id_migration_diagnose_startup_journal'); backup_read=diagnostic_script.index('horse_id_migration_verify_recovery_backup'); running_exit=diagnostic_script.index('exit 0',running_branch); assert running_branch<running_exit<helper_read<journal_read<backup_read
+assert not re.search(r'docker compose[^\n]*(?:\bstop\b|\bup\b|\bpull\b|\bexec\b)|\b(?:sqlite3|UPDATE|INSERT|DELETE|ALTER TABLE|CREATE TABLE|flock)\b|horse_id_migration_(?:acquire|update|copy|release|journal_preflight)',diagnostic_script,re.I)
+assert all(x in diagnostic_script for x in ('horse_id_migration_diagnose_startup_journal','horse_id_migration_verify_recovery_backup','horse_id_migration_sanitize_startup_logs'))
+assert 'set -euo pipefail' in diagnostic_script and 'docker logs --tail 200 "$container" 2>&1 | head' in diagnostic_script and 'logs_status=$?' in diagnostic_script and diagnostic_script.index('horse_id_migration_verify_recovery_backup')<diagnostic_script.index('[ "$logs_status" -eq 0 ]')
 assert 'api_startup_recovery' in w['jobs']['deploy']['if'] and 'api_startup_recovery' in w['jobs']['deploy-collector-lambda']['if']
 upload=next((s for s in recovery['steps'] if s.get('name')=='Upload only the verified recovery helper'),None); recovery_step_index=next((i for i,s in enumerate(recovery['steps']) if s.get('name')=='Recover only the exact blocked API image'),None)
 assert upload and upload['uses']=='appleboy/scp-action@v1.0.0' and upload['with']['source']=='deploy/horse-id-migration-deploy.sh' and upload['with']['strip_components']==1 and recovery_step_index is not None and recovery['steps'].index(upload)<recovery_step_index
@@ -199,6 +229,7 @@ print('PASS parsed workflow semantics')
 '@
     $yamlResult = & $pythonCommand -c $yamlSemanticScript $workflowPath 2>&1
     Assert-Case ($LASTEXITCODE -eq 0) "Parsed workflow semantic validation requires Ruby or PyYAML: $(($yamlResult -join "`n"))"
+    if ($PythonSemanticOnly) { return }
 }
 
 $pythonBashPath = ConvertTo-BashPath $pythonCommand
@@ -354,7 +385,162 @@ printf 'RESULT=%s\n' "`$result"
     return Invoke-Bash $payload
 }
 
+$diagnosticJournalSeed = @'
+import sqlite3,sys
+path=sys.argv[1]
+db=sqlite3.connect(path)
+db.executescript('''
+CREATE TABLE migration_operations (operation_id TEXT PRIMARY KEY NOT NULL, request_hash TEXT NOT NULL, request_json TEXT NOT NULL, status INTEGER NOT NULL, reason INTEGER NOT NULL, created_utc TEXT NOT NULL, updated_utc TEXT NOT NULL, terminal_utc TEXT NULL, results_json TEXT NOT NULL, workflow_claimed INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE migration_pages (operation_id TEXT NOT NULL, page_identity TEXT NOT NULL, surface INTEGER NOT NULL, table_name TEXT NOT NULL, row_count INTEGER NOT NULL, membership_hash TEXT NOT NULL, before_hash TEXT NOT NULL, expected_after_hash TEXT NOT NULL, state INTEGER NOT NULL, updated_utc TEXT NOT NULL, PRIMARY KEY(operation_id,page_identity));
+CREATE TABLE migration_required_pages (operation_id TEXT NOT NULL, page_identity TEXT NOT NULL, surface INTEGER NOT NULL, table_name TEXT NOT NULL, row_count INTEGER NOT NULL, membership_hash TEXT NOT NULL, before_hash TEXT NOT NULL, expected_after_hash TEXT NOT NULL, evidence_bytes INTEGER NOT NULL, PRIMARY KEY(operation_id,page_identity));
+CREATE TABLE migration_request_keys (request_key TEXT PRIMARY KEY NOT NULL, immutable_request_hash TEXT NOT NULL, preview_fingerprint TEXT NULL, request_kind TEXT NOT NULL DEFAULT 'BoundV1', operation_id TEXT NOT NULL UNIQUE);
+CREATE TABLE migration_execution_intents (operation_id TEXT PRIMARY KEY NOT NULL, immutable_request_hash TEXT NOT NULL, created_utc TEXT NOT NULL, updated_utc TEXT NOT NULL, phase INTEGER NOT NULL);
+CREATE TABLE migration_pending_seals (operation_id TEXT PRIMARY KEY NOT NULL, immutable_request_hash TEXT NOT NULL, full_fingerprint TEXT NOT NULL, source_set_hash TEXT NOT NULL, backup_manifest_hash TEXT NOT NULL, sealed_utc TEXT NOT NULL);
+''')
+db.commit();db.close()
+'@
+
+function New-DiagnosticJournalFixture([string] $Name) {
+    $directory = Join-Path $tempRoot $Name
+    [void](New-Item -ItemType Directory -Path $directory)
+    [IO.File]::WriteAllBytes((Join-Path $directory 'horse-identity-migration-initialized.marker'), [Text.Encoding]::ASCII.GetBytes('horse-identity-migration-journal-v1'))
+    [IO.File]::WriteAllBytes((Join-Path $directory 'horse-identity-migration-operation.lock'), [byte[]]::new(0))
+    & $pythonCommand -c $diagnosticJournalSeed (Join-Path $directory 'horse-identity-migration-journal.db')
+    if ($LASTEXITCODE -ne 0) { throw "Could not seed read-only startup diagnostic fixture $Name." }
+    return $directory
+}
+
+function Invoke-StartupJournalDiagnostic([string] $Directory) {
+    $directoryBash = ConvertTo-BashPath $Directory
+    Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+export HRP_PYTHON3=$(Quote-Bash $pythonBashPath)
+horse_id_migration_diagnose_startup_journal $(Quote-Bash $directoryBash)
+"@
+}
+
+function Invoke-RecoveryBackupDiagnostic([string] $Directory, [string] $Sha, [string[]] $ExpectedMembers) {
+    $directoryBash = ConvertTo-BashPath $Directory
+    $memberArguments = ($ExpectedMembers | ForEach-Object { Quote-Bash $_ }) -join ' '
+    Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+export HRP_PYTHON3=$(Quote-Bash $pythonBashPath)
+horse_id_migration_verify_recovery_backup $(Quote-Bash $directoryBash) $(Quote-Bash $Sha) $memberArguments
+"@
+}
+
 try {
+    $diagnosticJournal = New-DiagnosticJournalFixture 'readonly-startup-journal'
+    $diagnosticJournalFiles = @(
+        (Join-Path $diagnosticJournal 'horse-identity-migration-initialized.marker'),
+        (Join-Path $diagnosticJournal 'horse-identity-migration-operation.lock'),
+        (Join-Path $diagnosticJournal 'horse-identity-migration-journal.db')
+    )
+    $journalHashesBefore = @($diagnosticJournalFiles | ForEach-Object { (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash })
+    $journalDiagnostic = Invoke-StartupJournalDiagnostic $diagnosticJournal
+    Assert-Case ($journalDiagnostic.ExitCode -eq 0 -and $journalDiagnostic.Output -match 'JOURNAL code=READY_SHAPE marker=1 integrity=ok schema=current staged=0 running=0') "Known ready journal shape must produce bounded read-only evidence. $($journalDiagnostic.Output)"
+    $journalHashesAfter = @($diagnosticJournalFiles | ForEach-Object { (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash })
+    Assert-Case (($journalHashesBefore -join ',') -eq ($journalHashesAfter -join ',')) 'Startup journal diagnostics must leave marker, lock, and SQLite bytes unchanged.'
+
+    $unknownJournal = Join-Path $tempRoot 'readonly-startup-journal-unknown'
+    [void](New-Item -ItemType Directory -Path $unknownJournal)
+    [IO.File]::WriteAllBytes((Join-Path $unknownJournal 'horse-identity-migration-initialized.marker'), [Text.Encoding]::ASCII.GetBytes('horse-identity-migration-journal-v1'))
+    [IO.File]::WriteAllBytes((Join-Path $unknownJournal 'horse-identity-migration-operation.lock'), [byte[]]::new(0))
+    & $pythonCommand -c 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("CREATE TABLE unrecognized(value TEXT)"); c.close()' (Join-Path $unknownJournal 'horse-identity-migration-journal.db')
+    Assert-Case ($LASTEXITCODE -eq 0) 'Could not create unknown journal schema fixture.'
+    $unknownHashBefore = (Get-FileHash -LiteralPath (Join-Path $unknownJournal 'horse-identity-migration-journal.db') -Algorithm SHA256).Hash
+    $unknownResult = Invoke-StartupJournalDiagnostic $unknownJournal
+    Assert-Case ($unknownResult.ExitCode -ne 0 -and $unknownResult.Output -match 'JOURNAL code=SCHEMA_UNKNOWN' -and $unknownResult.Output -notmatch 'unrecognized|CREATE TABLE|Traceback|sqlite3\.') 'Unknown journal schema must emit a bounded failure category without source data.'
+    Assert-Case ($unknownHashBefore -eq (Get-FileHash -LiteralPath (Join-Path $unknownJournal 'horse-identity-migration-journal.db') -Algorithm SHA256).Hash) 'Unknown-schema diagnostics must not mutate SQLite bytes.'
+
+    $sidecarJournal = New-DiagnosticJournalFixture 'readonly-startup-journal-sidecar'
+    [IO.File]::WriteAllBytes((Join-Path $sidecarJournal 'horse-identity-migration-journal.db-wal'), [byte[]]::new(0))
+    $sidecarResult = Invoke-StartupJournalDiagnostic $sidecarJournal
+    Assert-Case ($sidecarResult.ExitCode -eq 0 -and $sidecarResult.Output -match 'JOURNAL code=SQLITE_SIDECAR_PRESENT rollback=0 wal=1 shm=0') "SQLite sidecars must be reported without opening or changing the database. $($sidecarResult.Output)"
+
+    $backupData = Join-Path $tempRoot 'readonly-backup-data'
+    $backupRoot = Join-Path $backupData 'backups'
+    $backupDirectory = Join-Path $backupRoot 'api-startup-recovery-fixture-1'
+    [void](New-Item -ItemType Directory -Path $backupDirectory -Force)
+    $targetSha = 'a' * 40
+    $priorSha = 'b' * 40
+    [IO.File]::WriteAllText((Join-Path $backupDirectory 'RECOVERY-METADATA'), "expected_deployed_sha=$priorSha`ntarget_commit_sha=$targetSha`ncreated_utc=2026-10-24T00:00:00Z`n", [Text.Encoding]::ASCII)
+    $backupMember = Join-Path $backupDirectory 'journal.db'
+    [IO.File]::WriteAllBytes($backupMember, [Text.Encoding]::ASCII.GetBytes('fixture-backup-bytes'))
+    $memberHash = (Get-FileHash -LiteralPath $backupMember -Algorithm SHA256).Hash.ToLowerInvariant()
+    [IO.File]::WriteAllText((Join-Path $backupDirectory 'SHA256SUMS'), "$memberHash  journal.db`n", [Text.Encoding]::ASCII)
+    $backupHashesBefore = @((Get-FileHash -LiteralPath $backupMember -Algorithm SHA256).Hash, (Get-FileHash -LiteralPath (Join-Path $backupDirectory 'SHA256SUMS') -Algorithm SHA256).Hash, (Get-FileHash -LiteralPath (Join-Path $backupDirectory 'RECOVERY-METADATA') -Algorithm SHA256).Hash)
+    $backupDiagnostic = Invoke-RecoveryBackupDiagnostic $backupData $targetSha 'journal.db'
+    Assert-Case ($backupDiagnostic.ExitCode -eq 0 -and $backupDiagnostic.Output -match 'BACKUP code=VERIFIED matches=1 files=1 bytes=20') "Exact matching backup metadata and manifest must verify without exposing paths. $($backupDiagnostic.Output)"
+    $wrongBackup = Invoke-RecoveryBackupDiagnostic $backupData ('c' * 40) 'journal.db'
+    Assert-Case ($wrongBackup.ExitCode -ne 0 -and $wrongBackup.Output -match 'BACKUP code=MATCH_COUNT') 'Backup with a different target SHA must not be accepted.'
+    $incompleteBackup = Invoke-RecoveryBackupDiagnostic $backupData $targetSha @('journal.db', 'missing-configured-store.db')
+    Assert-Case ($incompleteBackup.ExitCode -ne 0 -and $incompleteBackup.Output -match 'BACKUP code=MEMBERSHIP_INCOMPLETE') 'Backup missing a configured member must fail closed.'
+    $secondBackupDirectory = Join-Path $backupRoot 'api-startup-recovery-fixture-2'
+    Copy-Item -LiteralPath $backupDirectory -Destination $secondBackupDirectory -Recurse
+    $multipleBackups = Invoke-RecoveryBackupDiagnostic $backupData $targetSha 'journal.db'
+    Assert-Case ($multipleBackups.ExitCode -eq 0 -and $multipleBackups.Output -match 'BACKUP code=VERIFIED matches=2 files=2 bytes=40') 'All bounded matching backups must be verified and counted without selecting one.'
+    Remove-Item -LiteralPath $secondBackupDirectory -Recurse -Force
+    [IO.File]::AppendAllText($backupMember, 'changed')
+    $changedBackup = Invoke-RecoveryBackupDiagnostic $backupData $targetSha 'journal.db'
+    Assert-Case ($changedBackup.ExitCode -ne 0 -and $changedBackup.Output -match 'BACKUP code=HASH_MISMATCH' -and $changedBackup.Output -notmatch [regex]::Escape($backupDirectory)) 'Changed backup bytes must be rejected without outputting paths.'
+    Assert-Case ($backupHashesBefore[1] -eq (Get-FileHash -LiteralPath (Join-Path $backupDirectory 'SHA256SUMS') -Algorithm SHA256).Hash -and $backupHashesBefore[2] -eq (Get-FileHash -LiteralPath (Join-Path $backupDirectory 'RECOVERY-METADATA') -Algorithm SHA256).Hash) 'Backup verification must not alter its manifest or metadata.'
+
+    $sanitizedLogs = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+export HRP_PYTHON3=$(Quote-Bash $pythonBashPath)
+horse_id_migration_sanitize_startup_logs <<'LOGS'
+Unhandled exception: InvalidDataException SQLite Error 14 secret-canary-DO-NOT-PRINT
+LOGS
+"@
+    Assert-Case ($sanitizedLogs.ExitCode -eq 0 -and $sanitizedLogs.Output -match 'InvalidDataException:1' -and $sanitizedLogs.Output -match 'sqlite_codes=14' -and $sanitizedLogs.Output -notmatch 'secret-canary|Unhandled exception|SQLite Error') 'Startup logs must emit only allowlisted exception/code categories.'
+    $sanitizedBothStreams = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+export HRP_PYTHON3=$(Quote-Bash $pythonBashPath)
+combined=`$( { printf 'stdout SecretCanary InvalidDataException\n'; printf 'stderr SqliteException SQLite Error 5\n' >&2; } 2>&1 | horse_id_migration_sanitize_startup_logs )
+printf '%s\n' "`$combined"
+"@
+    Assert-Case ($sanitizedBothStreams.ExitCode -eq 0 -and $sanitizedBothStreams.Output -match 'InvalidDataException:1' -and $sanitizedBothStreams.Output -match 'SqliteException:1' -and $sanitizedBothStreams.Output -match 'sqlite_codes=5' -and $sanitizedBothStreams.Output -notmatch 'SecretCanary|SQLite Error') 'Sanitizer must consume both real pipeline streams while emitting only allowlisted categories.'
+    $oversizedLogs = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+export HRP_PYTHON3=$(Quote-Bash $pythonBashPath)
+if python3 -c 'import sys; sys.stdout.write("x"*262145)' | horse_id_migration_sanitize_startup_logs; then exit 80; else status=`$?; test "`$status" -ne 0; fi
+"@
+    Assert-Case ($oversizedLogs.ExitCode -eq 0 -and $oversizedLogs.Output -match 'STARTUP_LOGS code=SANITIZER_LIMIT' -and $oversizedLogs.Output -notmatch 'xxxxx') 'Oversized log input must emit a fixed failure category and no content.'
+
+    $logsStubDirectory = Join-Path $tempRoot 'diagnostic-docker-stub'
+    [void](New-Item -ItemType Directory -Path $logsStubDirectory)
+    $dockerStubPath = Join-Path $logsStubDirectory 'docker'
+    [IO.File]::WriteAllText($dockerStubPath, "#!/usr/bin/env bash`nset -eu`nif [[ `"`$1`" == logs ]]; then echo 'stub log failure secret-canary' >&2; exit 42; fi`nexit 91`n")
+    $dockerStubBash = ConvertTo-BashPath $dockerStubPath
+    $logsStubBash = ConvertTo-BashPath $logsStubDirectory
+    [void](Invoke-Bash "chmod +x $(Quote-Bash $dockerStubBash)")
+    $failedLogsPipe = Invoke-Bash @"
+set -euo pipefail
+export PATH=$(Quote-Bash $logsStubBash):`$PATH HRP_PYTHON3=$(Quote-Bash $pythonBashPath)
+. $(Quote-Bash $helperBashPath)
+logs_status=0
+if timeout --signal=TERM --kill-after=1s 2s docker logs --tail 200 container 2>&1 | head -c 262145 | horse_id_migration_sanitize_startup_logs; then :; else logs_status=`$?; echo 'STARTUP_LOGS code=UNAVAILABLE'; fi
+test "`$logs_status" -ne 0
+"@ 8000
+    Assert-Case ($failedLogsPipe.ExitCode -eq 0 -and $failedLogsPipe.Output -match 'STARTUP_LOGS code=UNAVAILABLE' -and $failedLogsPipe.Output -notmatch 'secret-canary|stub log failure') 'Failed docker log retrieval must be a bounded failure, not an empty-log success or raw output.'
+    [IO.File]::WriteAllText($dockerStubPath, "#!/usr/bin/env bash`nset -eu`nif [[ `"`$1`" == logs ]]; then sleep 10; fi`nexit 0`n")
+    [void](Invoke-Bash "chmod +x $(Quote-Bash $dockerStubBash)")
+    $timedOutLogsPipe = Invoke-Bash @"
+set -euo pipefail
+export PATH=$(Quote-Bash $logsStubBash):`$PATH HRP_PYTHON3=$(Quote-Bash $pythonBashPath)
+. $(Quote-Bash $helperBashPath)
+logs_status=0
+if timeout --signal=TERM --kill-after=1s 1s docker logs --tail 200 container 2>&1 | head -c 262145 | horse_id_migration_sanitize_startup_logs; then :; else logs_status=`$?; echo 'STARTUP_LOGS code=UNAVAILABLE'; fi
+test "`$logs_status" -ne 0
+"@ 8000
+    Assert-Case ($timedOutLogsPipe.ExitCode -eq 0 -and $timedOutLogsPipe.Output -match 'STARTUP_LOGS code=UNAVAILABLE' -and $timedOutLogsPipe.Output -notmatch 'STARTUP_LOGS exceptions=none.*\n?$') 'Timed-out docker log retrieval must fail closed instead of appearing as empty successful logs.'
+
     if (-not $IsWindows) {
         $ownershipRoot = Join-Path $tempRoot 'ownership-locks'
         [void](New-Item -ItemType Directory -Path $ownershipRoot)

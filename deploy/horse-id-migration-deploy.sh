@@ -953,6 +953,384 @@ except (OSError, sqlite3.Error, ValueError, TypeError):
 PY
 }
 
+# Read-only incident evidence for a stopped API. This intentionally does not
+# call InspectStartupGuard: that path initializes/upgrades the journal and may
+# turn a Running operation into Interrupted.
+horse_id_migration_diagnose_startup_journal() {
+  local data_directory=${1:?data directory is required}
+  local python_command=${HRP_PYTHON3:-python3}
+  timeout --signal=TERM --kill-after=2s 30s "$python_command" - "$data_directory" <<'PY'
+import os
+import re
+import sqlite3
+import stat
+import sys
+from pathlib import Path
+from urllib.parse import quote
+
+data = Path(sys.argv[1])
+marker = data / "horse-identity-migration-initialized.marker"
+database = data / "horse-identity-migration-journal.db"
+lock = data / "horse-identity-migration-operation.lock"
+sidecars = [Path(str(database) + suffix) for suffix in ("-journal", "-wal", "-shm")]
+
+def report(code, **fields):
+    safe = " ".join(f"{key}={value}" for key, value in fields.items())
+    print(f"JOURNAL code={code}" + (f" {safe}" if safe else ""))
+
+def fail(code):
+    report(code)
+    raise SystemExit(0)
+
+def unknown(code):
+    report(code)
+    raise SystemExit(1)
+
+def regular(path, max_bytes):
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > max_bytes:
+        fail("UNSAFE_FILE_SHAPE")
+    return info.st_size
+
+def read_regular(path, max_bytes):
+    before = path.lstat()
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > max_bytes:
+        fail("UNSAFE_FILE_SHAPE")
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0))
+    try:
+        opened = os.fstat(fd)
+        if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1 or
+                (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns) !=
+                (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)):
+            fail("UNSAFE_FILE_RACE")
+        with os.fdopen(fd, "rb", closefd=False) as stream:
+            content = stream.read(max_bytes + 1)
+        after = os.fstat(fd)
+        if len(content) != before.st_size or len(content) > max_bytes or (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) != (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns):
+            fail("UNSAFE_FILE_RACE")
+        return content
+    finally:
+        os.close(fd)
+
+try:
+    if data.is_symlink() or not data.is_dir():
+        fail("DATA_DIRECTORY_SHAPE")
+    marker_size = regular(marker, 64)
+    database_size = regular(database, 64 * 1024 * 1024)
+    if marker_size is None and database_size is None:
+        report("ABSENT", marker=0, database=0)
+        raise SystemExit(0)
+    if marker_size is None or database_size is None:
+        fail("INITIALIZATION_INCOMPLETE")
+    marker_value = read_regular(marker, 64)
+    if marker_value != b"horse-identity-migration-journal-v1":
+        fail("MARKER_INVALID")
+    lock_size = regular(lock, 64)
+    if lock_size is None or lock_size != 0:
+        fail("OPERATION_LOCK_SHAPE")
+    sidecar_flags = []
+    for path in sidecars:
+        size = regular(path, 64 * 1024 * 1024)
+        sidecar_flags.append(0 if size is None else (1 if size == 0 else 2))
+    if any(sidecar_flags):
+        report("SQLITE_SIDECAR_PRESENT", rollback=sidecar_flags[0], wal=sidecar_flags[1], shm=sidecar_flags[2])
+        raise SystemExit(0)
+
+    database_fd = os.open(database, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0))
+    database_info = os.fstat(database_fd)
+    if not stat.S_ISREG(database_info.st_mode) or database_info.st_nlink != 1 or database_info.st_size != database_size:
+        os.close(database_fd)
+        fail("UNSAFE_DATABASE_RACE")
+    database_location = f"/proc/self/fd/{database_fd}" if sys.platform.startswith("linux") else str(database)
+    uri = "file:" + quote(database_location, safe="/:\\") + "?mode=ro"
+    connection = sqlite3.connect(uri, uri=True, timeout=2.0)
+    try:
+        connection.execute("PRAGMA query_only = ON")
+        connection.execute("PRAGMA busy_timeout = 2000")
+        integrity = connection.execute("PRAGMA quick_check(1)").fetchone()
+        if integrity != ("ok",):
+            fail("INTEGRITY_CHECK")
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        required = {"migration_operations", "migration_pages", "migration_required_pages"}
+        if not required.issubset(tables):
+            unknown("SCHEMA_UNKNOWN")
+
+        def columns(table):
+            return {row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')}
+
+        expected = {
+            "migration_operations": {"operation_id", "request_hash", "request_json", "status", "reason", "created_utc", "updated_utc", "terminal_utc", "results_json", "workflow_claimed"},
+            "migration_pages": {"operation_id", "page_identity", "surface", "table_name", "row_count", "membership_hash", "before_hash", "expected_after_hash", "state", "updated_utc"},
+            "migration_required_pages": {"operation_id", "page_identity", "surface", "table_name", "row_count", "membership_hash", "before_hash", "expected_after_hash", "evidence_bytes"},
+        }
+        actual = {name: columns(name) for name in required}
+        if any(not expected[name].issubset(actual[name]) for name in required):
+            unknown("SCHEMA_UNKNOWN")
+        if len(connection.execute("SELECT 1 FROM migration_operations LIMIT 4097").fetchall()) > 4096:
+            fail("ROW_LIMIT")
+
+        state_rows = connection.execute(
+            "SELECT status, reason, terminal_utc, workflow_claimed FROM migration_operations"
+        ).fetchall()
+        counts = [0] * 7
+        for status, reason, terminal, claimed in state_rows:
+            if not isinstance(status, int) or status not in range(7) or not isinstance(reason, int) or reason not in range(7):
+                fail("OPERATION_ENUM")
+            if not isinstance(claimed, int) or claimed not in (0, 1):
+                fail("WORKFLOW_CLAIM")
+            if status in (0, 1, 2) and reason != 0 or status in (5, 6) and reason != 6:
+                fail("OPERATION_REASON")
+            if status in (0, 1, 5, 6) and terminal is not None or status in (2, 3, 4) and terminal is None:
+                fail("OPERATION_TERMINAL")
+            counts[status] += 1
+        if counts[1] > 1:
+            fail("MULTIPLE_RUNNING")
+
+        page_count = connection.execute("SELECT COUNT(*) FROM migration_pages").fetchone()[0]
+        required_count = connection.execute("SELECT COUNT(*) FROM migration_required_pages").fetchone()[0]
+        if page_count > 1000000 or required_count > 1000000:
+            fail("PAGE_LIMIT")
+        incomplete = connection.execute("""
+            SELECT 1 FROM migration_operations o WHERE o.status=2 AND (
+              NOT EXISTS (SELECT 1 FROM migration_required_pages r WHERE r.operation_id=o.operation_id)
+              OR (SELECT COUNT(*) FROM migration_pages p WHERE p.operation_id=o.operation_id)
+                 <> (SELECT COUNT(*) FROM migration_required_pages r WHERE r.operation_id=o.operation_id)
+              OR EXISTS (SELECT 1 FROM migration_required_pages r
+                LEFT JOIN migration_pages p ON p.operation_id=r.operation_id AND p.page_identity=r.page_identity
+                WHERE r.operation_id=o.operation_id AND (p.page_identity IS NULL OR p.surface<>r.surface
+                  OR p.table_name<>r.table_name OR p.row_count<>r.row_count
+                  OR p.membership_hash<>r.membership_hash OR p.before_hash<>r.before_hash
+                  OR p.expected_after_hash<>r.expected_after_hash OR p.state<>2))
+            ) LIMIT 1
+        """).fetchone()
+        if incomplete:
+            fail("SUCCEEDED_EVIDENCE")
+        request_kind = "legacy"
+        if "migration_request_keys" in tables:
+            request_columns = columns("migration_request_keys")
+            if not {"request_key", "immutable_request_hash", "operation_id"}.issubset(request_columns):
+                unknown("REQUEST_SCHEMA_UNKNOWN")
+            if "request_kind" in request_columns:
+                request_kind = "current"
+                invalid_kind = connection.execute("SELECT 1 FROM migration_request_keys WHERE request_kind NOT IN ('BoundV1','PendingV2') LIMIT 1").fetchone()
+                if invalid_kind:
+                    fail("REQUEST_KIND")
+        else:
+            unknown("REQUEST_SCHEMA_UNKNOWN")
+        staged = connection.execute("SELECT COUNT(*) FROM migration_operations WHERE status=0").fetchone()[0]
+        blocked = counts[5] + counts[6]
+        code = "READY_SHAPE" if blocked == 0 and counts[1] == 0 else ("INTERRUPTED" if counts[5] else ("PARTIAL_UNVERIFIED" if counts[6] else "RUNNING"))
+        report(code, marker=1, integrity="ok", schema="current" if request_kind == "current" else "legacy-upgradable",
+               staged=staged, running=counts[1], succeeded=counts[2], rejected=counts[3], failed=counts[4],
+               interrupted=counts[5], partial=counts[6], pages=page_count, required_pages=required_count)
+        database_after = os.fstat(database_fd)
+        if (database_after.st_dev, database_after.st_ino, database_after.st_size, database_after.st_mtime_ns, database_after.st_ctime_ns) != (database_info.st_dev, database_info.st_ino, database_info.st_size, database_info.st_mtime_ns, database_info.st_ctime_ns):
+            report("UNSAFE_DATABASE_RACE")
+            raise SystemExit(1)
+    finally:
+        connection.close()
+        os.close(database_fd)
+except SystemExit:
+    raise
+except Exception:
+    report("READ_ONLY_VALIDATION_FAILED")
+    raise SystemExit(1)
+PY
+}
+
+horse_id_migration_verify_recovery_backup() {
+  local data_directory=${1:?data directory is required}
+  local expected_sha=${2:?expected SHA is required}
+  local python_command=${HRP_PYTHON3:-python3}
+  shift 2
+  local -a expected_members=("$@")
+  ((${#expected_members[@]} > 0)) || { echo "BACKUP code=EXPECTED_MEMBERS_MISSING"; return 1; }
+  local member
+  for member in "${expected_members[@]}"; do
+    [[ "$member" =~ ^[A-Za-z0-9._/-]{1,256}$ && "$member" != /* && "$member" != *..* ]] || {
+      echo "BACKUP code=EXPECTED_MEMBER_INVALID"
+      return 1
+    }
+  done
+  timeout --signal=TERM --kill-after=2s 180s "$python_command" - "$data_directory" "$expected_sha" "${expected_members[@]}" <<'PY'
+import hashlib
+import os
+import re
+import stat
+import sys
+from pathlib import Path
+
+data = Path(sys.argv[1])
+expected = sys.argv[2]
+expected_members = set(sys.argv[3:])
+root = data / "backups"
+prefix = "api-startup-recovery-"
+
+def result(code, **fields):
+    print("BACKUP code=" + code + " " + " ".join(f"{k}={v}" for k, v in fields.items()))
+
+def reject(code):
+    result(code)
+    raise SystemExit(1)
+
+def validate_parent_chain(path, stop):
+    current = path.parent
+    while current != stop:
+        info = current.lstat()
+        if not stat.S_ISDIR(info.st_mode):
+            reject("MEMBER_PARENT_SHAPE")
+        current = current.parent
+
+def safe_open(path, max_bytes):
+    validate_parent_chain(path, root)
+    before = path.lstat()
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > max_bytes:
+        reject("MEMBER_SHAPE")
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0))
+    opened = os.fstat(fd)
+    if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1 or
+            (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns) !=
+            (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)):
+        os.close(fd)
+        reject("MEMBER_RACE")
+    return fd, opened
+
+try:
+    if not re.fullmatch(r"[0-9a-f]{40}", expected):
+        reject("EXPECTED_SHA_INVALID")
+    data_info = data.lstat()
+    root_info = root.lstat()
+    if not stat.S_ISDIR(data_info.st_mode):
+        reject("DATA_SHAPE")
+    if not stat.S_ISDIR(root_info.st_mode):
+        reject("ROOT_SHAPE")
+    candidates = []
+    with os.scandir(root) as entries:
+        scanned = 0
+        for entry in entries:
+            scanned += 1
+            if scanned > 1024:
+                reject("CANDIDATE_SCAN_LIMIT")
+            if entry.name.startswith(prefix):
+                candidates.append(Path(entry.path))
+                if len(candidates) > 64:
+                    reject("CANDIDATE_LIMIT")
+    candidates.sort(key=lambda p: p.name)
+    if len(candidates) > 64:
+        reject("CANDIDATE_LIMIT")
+    matching_backups = []
+    for directory in candidates:
+        info = directory.lstat()
+        if not stat.S_ISDIR(info.st_mode):
+            reject("CANDIDATE_SHAPE")
+        metadata = directory / "RECOVERY-METADATA"
+        meta_info = metadata.lstat()
+        if not stat.S_ISREG(meta_info.st_mode) or meta_info.st_nlink != 1 or meta_info.st_size > 512:
+            reject("METADATA_SHAPE")
+        meta_fd, meta_opened = safe_open(metadata, 512)
+        try:
+            raw = os.read(meta_fd, 513)
+            meta_after = os.fstat(meta_fd)
+            if len(raw) != meta_opened.st_size or (meta_after.st_dev, meta_after.st_ino, meta_after.st_size, meta_after.st_mtime_ns, meta_after.st_ctime_ns) != (meta_opened.st_dev, meta_opened.st_ino, meta_opened.st_size, meta_opened.st_mtime_ns, meta_opened.st_ctime_ns):
+                reject("METADATA_RACE")
+        finally:
+            os.close(meta_fd)
+        text = raw.decode("ascii")
+        values = {}
+        for line in text.splitlines():
+            if "=" not in line:
+                reject("METADATA_FORMAT")
+            key, value = line.split("=", 1)
+            if key not in {"expected_deployed_sha", "target_commit_sha", "created_utc"} or key in values:
+                reject("METADATA_FORMAT")
+            values[key] = value
+        if set(values) != {"expected_deployed_sha", "target_commit_sha", "created_utc"} or not all(re.fullmatch(r"[0-9a-f]{40}", values[k]) for k in ("expected_deployed_sha", "target_commit_sha")):
+            reject("METADATA_FORMAT")
+        if not re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", values["created_utc"]):
+            reject("METADATA_FORMAT")
+        if values["target_commit_sha"] != expected:
+            continue
+        manifest = directory / "SHA256SUMS"
+        mi = manifest.lstat()
+        if not stat.S_ISREG(mi.st_mode) or mi.st_nlink != 1 or mi.st_size > 32768:
+            reject("MANIFEST_SHAPE")
+        manifest_fd, manifest_opened = safe_open(manifest, 32768)
+        try:
+            manifest_bytes = os.read(manifest_fd, 32769)
+            manifest_after = os.fstat(manifest_fd)
+            if len(manifest_bytes) != manifest_opened.st_size or (manifest_after.st_dev, manifest_after.st_ino, manifest_after.st_size, manifest_after.st_mtime_ns, manifest_after.st_ctime_ns) != (manifest_opened.st_dev, manifest_opened.st_ino, manifest_opened.st_size, manifest_opened.st_mtime_ns, manifest_opened.st_ctime_ns):
+                reject("MANIFEST_RACE")
+        finally:
+            os.close(manifest_fd)
+        lines = manifest_bytes.decode("ascii").splitlines()
+        if not lines or len(lines) > 128:
+            reject("MANIFEST_LIMIT")
+        seen = set()
+        required_seen = set()
+        total = 0
+        for line in lines:
+            match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9._/-]{1,256})", line)
+            if not match:
+                reject("MANIFEST_FORMAT")
+            digest, relative = match.groups()
+            rel = Path(relative)
+            if rel.is_absolute() or any(part in ("", ".", "..") for part in rel.parts) or relative in seen:
+                reject("MANIFEST_PATH")
+            seen.add(relative)
+            if relative in expected_members:
+                required_seen.add(relative)
+            elif not any(relative in {name + suffix for suffix in ("-wal", "-shm", "-journal")} for name in expected_members if name.endswith(".db")):
+                reject("MANIFEST_MEMBERSHIP")
+            target = directory / rel
+            fd, fi = safe_open(target, 4 * 1024 * 1024 * 1024)
+            total += fi.st_size
+            if total > 4 * 1024 * 1024 * 1024:
+                os.close(fd)
+                reject("BACKUP_SIZE_LIMIT")
+            h = hashlib.sha256()
+            try:
+                with os.fdopen(fd, "rb", closefd=False) as stream:
+                    for block in iter(lambda: stream.read(1024 * 1024), b""):
+                        h.update(block)
+                after = os.fstat(fd)
+                if (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) != (fi.st_dev, fi.st_ino, fi.st_size, fi.st_mtime_ns, fi.st_ctime_ns):
+                    reject("MEMBER_RACE")
+            finally:
+                os.close(fd)
+            if h.hexdigest() != digest:
+                reject("HASH_MISMATCH")
+        if not expected_members.issubset(required_seen):
+            reject("MEMBERSHIP_INCOMPLETE")
+        matching_backups.append((len(lines), total))
+    if not matching_backups:
+        reject("MATCH_COUNT")
+    result("VERIFIED", matches=len(matching_backups), files=sum(m[0] for m in matching_backups), bytes=sum(m[1] for m in matching_backups))
+except SystemExit:
+    raise
+except Exception:
+    reject("READ_ONLY_VALIDATION_FAILED")
+PY
+}
+
+horse_id_migration_sanitize_startup_logs() {
+  local python_command=${HRP_PYTHON3:-python3}
+  "$python_command" -c 'import re,sys
+try:
+ data=sys.stdin.buffer.read(262145)
+ if len(data)>262144: print("STARTUP_LOGS code=SANITIZER_LIMIT"); sys.exit(1)
+ text=data.decode("utf-8",errors="strict")
+ allowed=("InvalidDataException","SqliteException","IOException","UnauthorizedAccessException","InvalidOperationException","FormatException","ArgumentException","JsonException")
+ counts={name:len(re.findall(r"\b"+re.escape(name)+r"\b",text)) for name in allowed}
+ errors=",".join(f"{name}:{count}" for name,count in counts.items() if count) or "none"
+ sqlite=sorted(set(re.findall(r"(?:SQLite Error|SqliteErrorCode|SqliteExtendedErrorCode)[^0-9]{0,8}([0-9]{1,3})",text)))
+ print("STARTUP_LOGS exceptions="+errors+" sqlite_codes="+(",".join(sqlite) if sqlite else "none"))
+except Exception:
+ print("STARTUP_LOGS code=SANITIZER_FAILED"); sys.exit(1)'
+}
+
 horse_id_migration_cleanup_container() {
   if [[ -n "$HRP_MIGRATION_CONTAINER_NAME" ]]; then
     timeout --signal=TERM --kill-after="${HRP_MIGRATION_CHILD_GRACE_SECONDS}s" 30s \

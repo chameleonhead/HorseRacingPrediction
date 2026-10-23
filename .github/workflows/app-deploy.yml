@@ -43,6 +43,140 @@ env:
   APP_DIRECTORY: /opt/horse-racing-prediction/app
 
 jobs:
+  diagnose-api-startup:
+    if: github.event_name == 'workflow_dispatch' && inputs.api_startup_recovery == true
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate read-only API diagnosis inputs
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          API_STARTUP_RECOVERY: ${{ inputs.api_startup_recovery || false }}
+          EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha || '' }}
+          HORSE_ID_MIGRATION_OPERATION_ID: ${{ inputs.horse_id_migration_operation_id || '' }}
+        run: |
+          if [ "$EVENT_NAME" != "workflow_dispatch" ] || [ "$API_STARTUP_RECOVERY" != "true" ] || \
+             [[ ! "$EXPECTED_DEPLOYED_SHA" =~ ^[0-9a-f]{40}$ ]] || [ -n "$HORSE_ID_MIGRATION_OPERATION_ID" ]; then
+            echo "Read-only API diagnosis requires manual recovery mode, one exact SHA, and no migration request." >&2
+            exit 2
+          fi
+
+      - name: Classify the expected API container without inspecting its data
+        id: classify
+        uses: appleboy/ssh-action@v1.2.5
+        env:
+          EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
+          IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/horse-racing-prediction-api
+          APP_DIRECTORY: ${{ env.APP_DIRECTORY }}
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USERNAME }}
+          key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
+          command_timeout: 30s
+          capture_stdout: true
+          envs: EXPECTED_DEPLOYED_SHA,IMAGE_NAME,APP_DIRECTORY
+          script: |
+            set -eu
+            [[ "$EXPECTED_DEPLOYED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "DIAGNOSTIC code=INPUT_INVALID"; exit 2; }
+            [[ "$IMAGE_NAME" =~ ^ghcr\.io/[A-Za-z0-9_.-]+/horse-racing-prediction-api$ ]] || { echo "DIAGNOSTIC code=IMAGE_NAME_INVALID"; exit 2; }
+            cd "$APP_DIRECTORY"
+            test -f .env && test ! -L .env || { echo "DIAGNOSTIC code=CONFIG_UNAVAILABLE"; exit 1; }
+            expected_image="${IMAGE_NAME,,}:sha-$EXPECTED_DEPLOYED_SHA"
+            api_ids="$(docker compose --env-file .env ps --all -q api)" || { echo "DIAGNOSTIC code=CONTAINER_LOOKUP_FAILED"; exit 1; }
+            mapfile -t api_containers <<< "$api_ids"
+            if [ "${#api_containers[@]}" -ne 1 ] || [ -z "${api_containers[0]}" ]; then
+              echo "DIAGNOSTIC code=CONTAINER_COUNT_INVALID"; exit 1
+            fi
+            read -r image state < <(docker inspect --format '{{.Config.Image}} {{.State.Status}}' "${api_containers[0]}") || {
+              echo "DIAGNOSTIC code=CONTAINER_INSPECT_FAILED"; exit 1;
+            }
+            [ "$image" = "$expected_image" ] || { echo "DIAGNOSTIC code=IMAGE_MISMATCH"; exit 1; }
+            case "$state" in
+              running) echo "DIAGNOSTIC code=NOT_APPLICABLE state=running image_sha=$EXPECTED_DEPLOYED_SHA" ;;
+              exited) echo "DIAGNOSTIC code=STOPPED image_sha=$EXPECTED_DEPLOYED_SHA" ;;
+              *) echo "DIAGNOSTIC code=CONTAINER_STATE_UNSUPPORTED"; exit 1 ;;
+            esac
+
+      - name: Stage bounded diagnostic helper outside the application directory
+        if: contains(steps.classify.outputs.stdout, 'DIAGNOSTIC code=STOPPED')
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USERNAME }}
+          key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
+          source: deploy/horse-id-migration-deploy.sh
+          target: /tmp/hrp-api-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          strip_components: 1
+
+      - name: Diagnose the exact stopped API without changing production state
+        if: contains(steps.classify.outputs.stdout, 'DIAGNOSTIC code=STOPPED')
+        uses: appleboy/ssh-action@v1.2.5
+        timeout-minutes: 5
+        env:
+          EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
+          IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/horse-racing-prediction-api
+          APP_DIRECTORY: ${{ env.APP_DIRECTORY }}
+          DIAGNOSTIC_HELPER: /tmp/hrp-api-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}/horse-id-migration-deploy.sh
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USERNAME }}
+          key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
+          command_timeout: 4m
+          envs: EXPECTED_DEPLOYED_SHA,IMAGE_NAME,APP_DIRECTORY,DIAGNOSTIC_HELPER
+          script: |
+            set -euo pipefail
+            diagnostic_directory="${DIAGNOSTIC_HELPER%/*}"
+            cleanup_diagnostic_helper() { rm -f -- "$DIAGNOSTIC_HELPER"; rmdir -- "$diagnostic_directory" 2>/dev/null || true; }
+            trap cleanup_diagnostic_helper EXIT
+            trap 'exit 129' HUP
+            trap 'exit 130' INT
+            trap 'exit 143' TERM
+            [[ "$EXPECTED_DEPLOYED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "DIAGNOSTIC code=INPUT_INVALID"; exit 2; }
+            [[ "$IMAGE_NAME" =~ ^ghcr\.io/[A-Za-z0-9_.-]+/horse-racing-prediction-api$ ]] || { echo "DIAGNOSTIC code=IMAGE_NAME_INVALID"; exit 2; }
+            cd "$APP_DIRECTORY"
+            test -f .env && test ! -L .env || { echo "DIAGNOSTIC code=CONFIG_UNAVAILABLE"; exit 1; }
+            expected_image="${IMAGE_NAME,,}:sha-$EXPECTED_DEPLOYED_SHA"
+            api_ids="$(docker compose --env-file .env ps --all -q api)" || { echo "DIAGNOSTIC code=CONTAINER_LOOKUP_FAILED"; exit 1; }
+            mapfile -t api_containers <<< "$api_ids"
+            if [ "${#api_containers[@]}" -ne 1 ] || [ -z "${api_containers[0]}" ]; then
+              echo "DIAGNOSTIC code=CONTAINER_COUNT_INVALID"; exit 1
+            fi
+            container="${api_containers[0]}"
+            read -r image state exit_code oom_killed restart_count < <(docker inspect --format '{{.Config.Image}} {{.State.Status}} {{.State.ExitCode}} {{.State.OOMKilled}} {{.RestartCount}}' "$container") || {
+              echo "DIAGNOSTIC code=CONTAINER_INSPECT_FAILED"; exit 1;
+            }
+            [ "$image" = "$expected_image" ] || { echo "DIAGNOSTIC code=IMAGE_MISMATCH"; exit 1; }
+            if [ "$state" = "running" ]; then
+              echo "DIAGNOSTIC code=NOT_APPLICABLE state=running image_sha=$EXPECTED_DEPLOYED_SHA"
+              exit 0
+            fi
+            [ "$state" = "exited" ] || { echo "DIAGNOSTIC code=CONTAINER_STATE_UNSUPPORTED"; exit 1; }
+            [[ "$exit_code" =~ ^[0-9]{1,3}$ && "$restart_count" =~ ^[0-9]{1,6}$ && ( "$oom_killed" = "true" || "$oom_killed" = "false" ) ]] || {
+              echo "DIAGNOSTIC code=CONTAINER_METADATA_INVALID"; exit 1;
+            }
+            . "$DIAGNOSTIC_HELPER"
+            printf 'CONTAINER state=exited exit_code=%s oom=%s restarts=%s image_sha=%s\n' "$exit_code" "$oom_killed" "$restart_count" "$EXPECTED_DEPLOYED_SHA"
+            logs_status=0
+            if timeout --signal=TERM --kill-after=2s 15s docker logs --tail 200 "$container" 2>&1 | head -c 262145 | horse_id_migration_sanitize_startup_logs; then
+              :
+            else
+              logs_status=$?
+              echo "STARTUP_LOGS code=UNAVAILABLE"
+            fi
+            journal_status=0
+            horse_id_migration_diagnose_startup_journal "$APP_DIRECTORY/data" || journal_status=$?
+            configured_store_paths="$(horse_id_migration_configured_store_paths "$APP_DIRECTORY/data")" || { echo "BACKUP code=CONFIGURED_STORES_UNAVAILABLE"; exit 1; }
+            mapfile -t configured_stores <<< "$configured_store_paths"
+            for index in "${!configured_stores[@]}"; do configured_stores[$index]=${configured_stores[$index]%$'\r'}; done
+            backup_members=("${configured_stores[@]}" "horse-identity-migration-initialized.marker")
+            backup_status=0
+            horse_id_migration_verify_recovery_backup "$APP_DIRECTORY/data" "$EXPECTED_DEPLOYED_SHA" "${backup_members[@]}" || backup_status=$?
+            [ "$logs_status" -eq 0 ] && [ "$journal_status" -eq 0 ] && [ "$backup_status" -eq 0 ] || exit 1
+
   verify:
     runs-on: ubuntu-24.04
     steps:
