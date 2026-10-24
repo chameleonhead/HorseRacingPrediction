@@ -394,19 +394,45 @@ jobs:
             expected_current_image="$requested_image_name:sha-$EXPECTED_DEPLOYED_SHA"
             target_image="$requested_image_name:$requested_image_tag"
             unset IMAGE_NAME IMAGE_TAG
-            api_ids="$(docker compose --env-file .env ps --status running -q api)"
-            mapfile -t running_apis <<< "$api_ids"
-            [ "${#running_apis[@]}" -eq 1 ] && [ -n "${running_apis[0]}" ] || {
-              echo "Expected exactly one running API container before recovery." >&2
+            compose_config="$(docker compose --env-file .env config --format json)" || { echo "Could not read the current Compose project configuration safely." >&2; exit 1; }
+            expected_compose_project="$(python3 -c 'import json,sys; value=json.load(sys.stdin).get("name"); print(value if isinstance(value,str) else "")' <<< "$compose_config")" || {
+              echo "Could not parse the current Compose project identity safely." >&2
               exit 1
             }
-            current_image="$(docker inspect --format '{{.Config.Image}}' "${running_apis[0]}")"
-            [ "$current_image" = "$expected_current_image" ] || {
-              echo "Running API image does not match the operator-supplied expected SHA." >&2
+            unset compose_config
+            [ -n "$expected_compose_project" ] || { echo "Could not identify the current Compose project safely." >&2; exit 1; }
+            api_ids="$(docker compose --env-file .env ps --all -q api)"
+            mapfile -t api_containers <<< "$api_ids"
+            [ "${#api_containers[@]}" -eq 1 ] && [ -n "${api_containers[0]}" ] || {
+              echo "Expected exactly one existing Compose API container before recovery." >&2
               exit 1
             }
-            domain="${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}"
-            horse_id_migration_assert_api_startup_blocked "https://$domain" "$HORSE_RACING_API_KEY"
+            container_metadata="$(docker inspect --format '{{.Config.Image}} {{.State.Status}} {{index .Config.Labels "com.docker.compose.service"}} {{index .Config.Labels "com.docker.compose.project"}}' "${api_containers[0]}")" || {
+              echo "Could not inspect the existing Compose API container." >&2
+              exit 1
+            }
+            read -r current_image current_state compose_service compose_project extra_metadata <<< "$container_metadata"
+            [ -n "$current_image" ] && [ -n "$current_state" ] && [ -n "$compose_service" ] && [ -n "$compose_project" ] && [ -z "${extra_metadata:-}" ] || {
+              echo "Existing API container inspection returned incomplete or unexpected metadata." >&2
+              exit 1
+            }
+            [ "$current_image" = "$expected_current_image" ] && [ "$compose_service" = "api" ] && [ "$compose_project" = "$expected_compose_project" ] || {
+              echo "Existing API container is not the expected Compose-owned image." >&2
+              exit 1
+            }
+            case "$current_state" in
+              running)
+                domain="${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}"
+                horse_id_migration_assert_api_startup_blocked "https://$domain" "$HORSE_RACING_API_KEY"
+                ;;
+              exited)
+                echo "Verified the expected API container is stopped; blocked HTTP check is not applicable."
+                ;;
+              *)
+                echo "Existing API container is neither running nor safely stopped." >&2
+                exit 1
+                ;;
+            esac
             IMAGE_NAME="$requested_image_name"
             IMAGE_TAG="$requested_image_tag"
             export IMAGE_NAME IMAGE_TAG

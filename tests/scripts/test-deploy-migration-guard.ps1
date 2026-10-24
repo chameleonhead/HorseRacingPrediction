@@ -116,7 +116,14 @@ fixed_success_call = '( horse_id_migration_run_fixed_command "$verified_success_
 recovery_lines = recovery_script.lines.map(&:strip)
 fixed_branch = recovery_lines.index('if [ -n "$verified_success_guid" ]; then')
 raise 'recovery must execute the fixed-success verifier exactly once only for a nonempty GUID' unless recovery_script.scan('horse_id_migration_run_fixed_command').length == 1 && recovery_script.split(fixed_success_call, -1).length - 1 == 1 && fixed_branch && recovery_lines[fixed_branch + 1] == fixed_success_call && recovery_lines[fixed_branch + 2] == 'fi'
-recovery_order = ['expected_current_image=', 'horse_id_migration_assert_api_startup_blocked', 'docker compose --env-file .env pull api', 'horse_id_migration_check_image_capability', 'recovery_started=true', 'docker compose --env-file .env stop api', 'horse_id_migration_configured_store_paths', 'horse_id_migration_acquire_source_ownership', 'horse_id_migration_acquire_journal_operation_lock', 'horse_id_migration_assert_recovery_collection_state', 'sleep 900', 'horse_id_migration_assert_recovery_collection_state', 'horse_id_migration_journal_preflight', 'horse_id_migration_copy_store_set', 'RECOVERY-METADATA', 'horse_id_migration_update_recovery_env', 'horse_id_migration_release_source_ownership', fixed_success_call, 'docker compose --env-file .env up -d --no-deps --force-recreate api', 'horse_id_migration_wait_recovery_swagger', 'horse_id_migration_assert_recovery_api_ready']
+recovery_state_branch = recovery_script.index('case "$current_state" in')
+running_state_branch = recovery_script.index('running)', recovery_state_branch)
+running_blocked_check = recovery_script.index('horse_id_migration_assert_api_startup_blocked', running_state_branch)
+exited_state_branch = recovery_script.index('exited)', recovery_state_branch)
+unsupported_state_branch = recovery_script.index('Existing API container is neither running nor safely stopped.', exited_state_branch)
+raise 'recovery must resolve the exact Compose project and enumerate its API containers before branching on state' unless recovery_script.include?('compose_config=') && recovery_script.include?('docker compose --env-file .env config --format json') && recovery_script.include?('expected_compose_project=') && recovery_script.include?('python3 -c') && recovery_script.include?('docker compose --env-file .env ps --all -q api') && recovery_script.include?('{{.State.Status}}') && recovery_script.include?('com.docker.compose.service') && recovery_script.include?('com.docker.compose.project') && recovery_script.include?('[ "$compose_project" = "$expected_compose_project" ]') && recovery_script.index('container_metadata=') < recovery_state_branch
+raise 'running recovery must retain the blocked HTTP check while only a verified exited container skips it' unless running_state_branch < running_blocked_check && running_blocked_check < exited_state_branch && exited_state_branch < unsupported_state_branch && recovery_script.index('horse_id_migration_assert_api_startup_blocked') < exited_state_branch
+recovery_order = ['expected_current_image=', 'compose_config=', 'docker compose --env-file .env config --format json', 'expected_compose_project=', 'python3 -c', 'unset compose_config', 'docker compose --env-file .env ps --all -q api', 'container_metadata=', 'docker inspect', 'case "$current_state" in', 'horse_id_migration_assert_api_startup_blocked', 'docker compose --env-file .env pull api', 'horse_id_migration_check_image_capability', 'recovery_started=true', 'docker compose --env-file .env stop api', 'horse_id_migration_configured_store_paths', 'horse_id_migration_acquire_source_ownership', 'horse_id_migration_acquire_journal_operation_lock', 'horse_id_migration_assert_recovery_collection_state', 'sleep 900', 'horse_id_migration_assert_recovery_collection_state', 'horse_id_migration_journal_preflight', 'horse_id_migration_copy_store_set', 'RECOVERY-METADATA', 'horse_id_migration_update_recovery_env', 'horse_id_migration_release_source_ownership', fixed_success_call, 'docker compose --env-file .env up -d --no-deps --force-recreate api', 'horse_id_migration_wait_recovery_swagger', 'horse_id_migration_assert_recovery_api_ready']
 recovery_positions = recovery_order.each_with_object([]) do |needle, positions|
   positions << recovery_script.index(needle, positions.last || 0)
 end
@@ -196,7 +203,10 @@ fixed_success_call='( horse_id_migration_run_fixed_command "$verified_success_gu
 assert recovery_script.count('horse_id_migration_run_fixed_command')==1 and recovery_script.count(fixed_success_call)==1
 recovery_lines=recovery_script.splitlines(); fixed_branch=next(i for i,line in enumerate(recovery_lines) if line.strip()=='if [ -n "$verified_success_guid" ]; then')
 assert recovery_lines[fixed_branch+1].strip()==fixed_success_call and recovery_lines[fixed_branch+2].strip()=='fi'
-recovery_order=('expected_current_image=','horse_id_migration_assert_api_startup_blocked','docker compose --env-file .env pull api','horse_id_migration_check_image_capability','recovery_started=true','docker compose --env-file .env stop api','horse_id_migration_configured_store_paths','horse_id_migration_acquire_source_ownership','horse_id_migration_acquire_journal_operation_lock','horse_id_migration_assert_recovery_collection_state','sleep 900','horse_id_migration_assert_recovery_collection_state','horse_id_migration_journal_preflight','horse_id_migration_copy_store_set','RECOVERY-METADATA','horse_id_migration_update_recovery_env','horse_id_migration_release_source_ownership',fixed_success_call,'docker compose --env-file .env up -d --no-deps --force-recreate api','horse_id_migration_wait_recovery_swagger','horse_id_migration_assert_recovery_api_ready')
+state_branch=recovery_script.index('case "$current_state" in'); running_branch=recovery_script.index('running)',state_branch); blocked_check=recovery_script.index('horse_id_migration_assert_api_startup_blocked',running_branch); exited_branch=recovery_script.index('exited)',state_branch); unsupported_branch=recovery_script.index('Existing API container is neither running nor safely stopped.',exited_branch)
+assert 'compose_config=' in recovery_script and 'docker compose --env-file .env config --format json' in recovery_script and 'expected_compose_project=' in recovery_script and 'python3 -c' in recovery_script and 'docker compose --env-file .env ps --all -q api' in recovery_script and '{{.State.Status}}' in recovery_script and 'com.docker.compose.service' in recovery_script and 'com.docker.compose.project' in recovery_script and '[ "$compose_project" = "$expected_compose_project" ]' in recovery_script and recovery_script.index('container_metadata=')<state_branch
+assert running_branch<blocked_check<exited_branch<unsupported_branch and recovery_script.index('horse_id_migration_assert_api_startup_blocked')<exited_branch
+recovery_order=('expected_current_image=','compose_config=','docker compose --env-file .env config --format json','expected_compose_project=','python3 -c','unset compose_config','docker compose --env-file .env ps --all -q api','container_metadata=','docker inspect','case "$current_state" in','horse_id_migration_assert_api_startup_blocked','docker compose --env-file .env pull api','horse_id_migration_check_image_capability','recovery_started=true','docker compose --env-file .env stop api','horse_id_migration_configured_store_paths','horse_id_migration_acquire_source_ownership','horse_id_migration_acquire_journal_operation_lock','horse_id_migration_assert_recovery_collection_state','sleep 900','horse_id_migration_assert_recovery_collection_state','horse_id_migration_journal_preflight','horse_id_migration_copy_store_set','RECOVERY-METADATA','horse_id_migration_update_recovery_env','horse_id_migration_release_source_ownership',fixed_success_call,'docker compose --env-file .env up -d --no-deps --force-recreate api','horse_id_migration_wait_recovery_swagger','horse_id_migration_assert_recovery_api_ready')
 recovery_positions=[]
 for n in recovery_order:
     recovery_positions.append(recovery_script.index(n,recovery_positions[-1] if recovery_positions else 0))
@@ -232,11 +242,85 @@ print('PASS parsed workflow semantics')
     if ($PythonSemanticOnly) { return }
 }
 
+$eligibilityExtractor = @'
+import base64,sys,yaml
+w=yaml.safe_load(open(sys.argv[1],encoding='utf-8'))
+s=next(x for x in w['jobs']['recover-api-startup']['steps'] if x.get('name')=='Recover only the exact blocked API image')['with']['script']
+start=s.index('expected_current_image=')
+end=s.index('IMAGE_NAME="$requested_image_name"',start)
+print(base64.b64encode(s[start:end].encode()).decode())
+'@
+if ($ruby) {
+    $eligibilityExtractor = @'
+require 'yaml'
+require 'base64'
+w=YAML.safe_load_file(ARGV.fetch(0), aliases: false)
+s=w.dig('jobs','recover-api-startup','steps').find { |x| x['name']=='Recover only the exact blocked API image' }.dig('with','script')
+start=s.index('expected_current_image=') or abort 'recovery eligibility start missing'
+finish=s.index('IMAGE_NAME="$requested_image_name"',start) or abort 'recovery eligibility end missing'
+print Base64.strict_encode64(s[start...finish])
+'@
+    $eligibilityBase64 = & $ruby.Source -e $eligibilityExtractor $workflowPath 2>&1
+}
+else {
+    $eligibilityBase64 = & $pythonCommand -c $eligibilityExtractor $workflowPath 2>&1
+}
+Assert-Case ($LASTEXITCODE -eq 0 -and $eligibilityBase64.Count -eq 1) "Could not extract recovery container eligibility from parsed workflow: $(($eligibilityBase64 -join "`n"))"
+$eligibilitySnippet = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(($eligibilityBase64 -join '').Trim()))
+
 $pythonBashPath = ConvertTo-BashPath $pythonCommand
 $helperBashPath = ConvertTo-BashPath $helperPath
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("hrp-migration-deploy-test-" + [guid]::NewGuid().ToString('N'))
 [void](New-Item -ItemType Directory -Path $tempRoot)
 $tempBashPath = ConvertTo-BashPath $tempRoot
+
+function Invoke-RecoveryEligibilityCase([string] $ApiIds, [string] $Image, [string] $State, [string] $Service, [string] $ProjectLabel, [string] $ConfigProject, [int] $BlockedStatus) {
+    $payload = @"
+set -euo pipefail
+export IMAGE_NAME='ghcr.io/example/horse-racing-prediction-api' IMAGE_TAG='sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' EXPECTED_DEPLOYED_SHA='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' APP_DIRECTORY='/tmp/hrp-recovery-eligibility-test' DOMAIN_NAME='localhost' LIGHTSAIL_HOST='localhost' HORSE_RACING_API_KEY='test-only'
+requested_image_name=`$IMAGE_NAME
+requested_image_tag=`$IMAGE_TAG
+export MOCK_API_IDS=$(Quote-Bash $ApiIds) MOCK_IMAGE=$(Quote-Bash $Image) MOCK_STATE=$(Quote-Bash $State) MOCK_SERVICE=$(Quote-Bash $Service) MOCK_PROJECT_LABEL=$(Quote-Bash $ProjectLabel) MOCK_CONFIG_PROJECT=$(Quote-Bash $ConfigProject) MOCK_BLOCKED_STATUS=$(Quote-Bash ([string]$BlockedStatus)) MOCK_PYTHON=$(Quote-Bash $pythonBashPath)
+docker() {
+  case "`$1" in
+    compose)
+      if [ "`$4" = config ]; then printf '{"name":"%s"}\n' "`$MOCK_CONFIG_PROJECT"
+      else printf '%s\n' "`$MOCK_API_IDS"; fi
+      ;;
+    inspect) printf '%s %s %s %s\n' "`$MOCK_IMAGE" "`$MOCK_STATE" "`$MOCK_SERVICE" "`$MOCK_PROJECT_LABEL" ;;
+    *) return 90 ;;
+  esac
+}
+python3() { "`$MOCK_PYTHON" "`$@"; }
+horse_id_migration_assert_api_startup_blocked() { printf 'BLOCKED_HTTP_CHECK\n'; return "`$MOCK_BLOCKED_STATUS"; }
+$eligibilitySnippet
+printf 'ELIGIBILITY_COMPLETE\n'
+"@
+    return Invoke-Bash $payload
+}
+
+$expectedRecoveryImage = 'ghcr.io/example/horse-racing-prediction-api:sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+$runningEligibility = Invoke-RecoveryEligibilityCase 'api1' $expectedRecoveryImage 'running' 'api' 'project1' 'project1' 0
+Assert-Case ($runningEligibility.ExitCode -eq 0 -and $runningEligibility.Output -match 'BLOCKED_HTTP_CHECK') "Running API must retain the blocked HTTP check. $($runningEligibility.Output)"
+$stoppedEligibility = Invoke-RecoveryEligibilityCase 'api1' $expectedRecoveryImage 'exited' 'api' 'project1' 'project1' 0
+Assert-Case ($stoppedEligibility.ExitCode -eq 0 -and $stoppedEligibility.Output -notmatch 'BLOCKED_HTTP_CHECK' -and $stoppedEligibility.Output -match 'ELIGIBILITY_COMPLETE') "Only the exact stopped Compose API may skip the impossible blocked HTTP check. $($stoppedEligibility.Output)"
+foreach ($case in @(
+    @{ Name = 'missing-container'; Ids = ''; Image = $expectedRecoveryImage; State = 'exited'; Service = 'api'; Project = 'project1'; ConfigProject = 'project1'; Blocked = 0 },
+    @{ Name = 'multiple-containers'; Ids = "api1`napi2"; Image = $expectedRecoveryImage; State = 'exited'; Service = 'api'; Project = 'project1'; ConfigProject = 'project1'; Blocked = 0 },
+    @{ Name = 'wrong-image'; Ids = 'api1'; Image = 'ghcr.io/example/horse-racing-prediction-api:sha-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'; State = 'exited'; Service = 'api'; Project = 'project1'; ConfigProject = 'project1'; Blocked = 0 },
+    @{ Name = 'unowned-service'; Ids = 'api1'; Image = $expectedRecoveryImage; State = 'exited'; Service = 'other'; Project = 'project1'; ConfigProject = 'project1'; Blocked = 0 },
+    @{ Name = 'incomplete-inspection'; Ids = 'api1'; Image = $expectedRecoveryImage; State = 'exited'; Service = ''; Project = 'project1'; ConfigProject = 'project1'; Blocked = 0 },
+    @{ Name = 'wrong-compose-project'; Ids = 'api1'; Image = $expectedRecoveryImage; State = 'exited'; Service = 'api'; Project = 'project-other'; ConfigProject = 'project1'; Blocked = 0 },
+    @{ Name = 'missing-compose-project'; Ids = 'api1'; Image = $expectedRecoveryImage; State = 'exited'; Service = 'api'; Project = ''; ConfigProject = 'project1'; Blocked = 0 },
+    @{ Name = 'unsupported-state'; Ids = 'api1'; Image = $expectedRecoveryImage; State = 'created'; Service = 'api'; Project = 'project1'; ConfigProject = 'project1'; Blocked = 0 },
+    @{ Name = 'running-without-blocked-response'; Ids = 'api1'; Image = $expectedRecoveryImage; State = 'running'; Service = 'api'; Project = 'project1'; ConfigProject = 'project1'; Blocked = 1 }
+)) {
+    $result = Invoke-RecoveryEligibilityCase $case.Ids $case.Image $case.State $case.Service $case.Project $case.ConfigProject $case.Blocked
+    $mustCallBlocked = $case.Name -eq 'running-without-blocked-response'
+    Assert-Case ($result.ExitCode -ne 0 -and (($result.Output -match 'BLOCKED_HTTP_CHECK') -eq $mustCallBlocked) -and $result.Output -notmatch 'ELIGIBILITY_COMPLETE') "Recovery eligibility counterexample '$($case.Name)' was not rejected safely. $($result.Output)"
+}
+Write-Output 'PASS parsed recovery eligibility running/stopped branches and unsafe-container counterexamples'
+
 $recoveryStateSeed = @'
 import sqlite3,sys
 path,version,control,pause,task,lease=sys.argv[1:]
