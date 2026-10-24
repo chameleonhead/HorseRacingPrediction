@@ -120,6 +120,6 @@ HorseRacingPrediction.Predictor ─────┴──────────
 - Api は AWS Lightsail 単一インスタンス上で稼働する。Docker 化した Api を GHCR イメージとして GitHub Actions から配備し、Caddy でリバースプロキシする。SQLite はインスタンス上に永続化する（単一ノード前提、複数台構成・自動スケールは想定しない）
   - Terraform: `infra/lightsail`、アプリ実行環境: `deploy`（Docker Compose・Caddy 設定）
   - GitHub Actions: `.github/workflows/infra-deploy.yml`（インフラ）、`.github/workflows/app-deploy.yml`（アプリ）
-  - 通常のアプリ配備は稼働中APIでの収集停止確認を前提とする。起動ブロック中に永続状態を読み取り確認してAPIだけを復旧配備する[限定手順](changes/20261023_api-startup-recovery/README.md)は2026-10-24承認済み・実装検証中であり、配備検証までは利用可能な復旧経路として扱わない。追加Token、旧実行結果だけによる停止判定、ガードの無効化は行わない。
+  - 通常のアプリ配備は稼働中APIでの収集停止確認を前提とする。[限定復旧手順](changes/20261023_api-startup-recovery/README.md)は2026-10-24に実装・本番検証済み。既知の旧管理DBには既存行を保持して不足する正規の管理テーブルのみ追加する。停止済みAPIは所有者・期待イメージ・永続停止状態と実行数0・900秒待機と再確認・完全バックアップを確認して限定復旧する。未知形式は停止し、追加Token、DBリセット、ガード無効化、自動収集再開は行わない。API復旧と、業務データ移行・対象再取得・収集再開は別の運用結果として確認する。
 - Collector はローカル常駐、または AWS Lambda コンテナとして実行できる。Lambda 対応の詳細設計は [01-lambda-collector-architecture.md](01-lambda-collector-architecture.md) を参照
   - Terraform: `infra/collector-lambda`
