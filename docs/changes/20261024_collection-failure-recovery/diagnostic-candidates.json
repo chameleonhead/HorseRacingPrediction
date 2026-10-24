@@ -1,0 +1,295 @@
+{
+  "observedAt": "2026-10-24T20:51:43+09:00",
+  "state": "Diagnostic candidates only; real-world identity and migration approval not established",
+  "source": "Authenticated current failure groups plus exact-name current horse lookups and per-ID identity diagnostics",
+  "count": 41,
+  "candidates": [
+    {
+      "resourceId": "20261018:Kyoto:2",
+      "taskId": "2a3f7b49-46f0-4a44-9152-8d70d4a2ef4a",
+      "name": "アイゼンフォルク",
+      "oldHorseId": "horse-77e4ef89-ca04-59a6-828b-69e410e9d743",
+      "jraHorseId": "2024100725"
+    },
+    {
+      "resourceId": "20261017:Tokyo:7",
+      "taskId": "c0536cbd-ddda-41fa-ae29-a56ae231cf22",
+      "name": "アトラステソーロ",
+      "oldHorseId": "horse-af1c9e66-b2ee-5c35-8f44-985a69104e04",
+      "jraHorseId": "2023106749"
+    },
+    {
+      "resourceId": "20261017:Niigata:8",
+      "taskId": "1284b9b6-2b4c-4a3b-9d5e-133f920645be",
+      "name": "ウインロゼライト",
+      "oldHorseId": "horse-5995aa30-2871-58cd-ae72-d4f5e7f7627a",
+      "jraHorseId": "2022106212"
+    },
+    {
+      "resourceId": "20261017:Niigata:3",
+      "taskId": "895e5016-ca0e-4adb-a6d3-b7382c3b5cef",
+      "name": "ヴィヴァシャス",
+      "oldHorseId": "horse-ca98b0e0-a869-568a-80e6-8594b317f852",
+      "jraHorseId": "2022104391"
+    },
+    {
+      "resourceId": "20261018:Tokyo:2",
+      "taskId": "6d36c21a-6f51-4819-a81c-1348fa784cbf",
+      "name": "ヴェントリナ",
+      "oldHorseId": "horse-3ab0ddce-24d6-5f4d-9130-9294094f1e88",
+      "jraHorseId": "2024101041"
+    },
+    {
+      "resourceId": "20261017:Niigata:7",
+      "taskId": "64ed330d-2701-4406-8788-b1e5e2025be8",
+      "name": "ウルフ",
+      "oldHorseId": "horse-9e0508f5-a294-578c-9122-89361bc1c221",
+      "jraHorseId": "2023103636"
+    },
+    {
+      "resourceId": "20261018:Kyoto:7",
+      "taskId": "50d4e689-ee90-4f7b-890e-598a15b83737",
+      "name": "エイシンマールス",
+      "oldHorseId": "horse-8745f02a-3c6a-5b19-b0fd-ac6c9a7845a7",
+      "jraHorseId": "2022102624"
+    },
+    {
+      "resourceId": "20261017:Niigata:1",
+      "taskId": "9021c935-71fa-4bb6-ab4d-85189f5c0de6",
+      "name": "エコロテラ",
+      "oldHorseId": "horse-bf2eb275-9b82-51a0-b7f5-57be4c4c1ded",
+      "jraHorseId": "2024104541"
+    },
+    {
+      "resourceId": "20261017:Niigata:4",
+      "taskId": "c51c4635-cadf-4f73-b43a-1cb1e8c5b9e2",
+      "name": "カイトグート",
+      "oldHorseId": "horse-776a61d5-f2ce-59e3-a75e-c4741d474b12",
+      "jraHorseId": "2021106308"
+    },
+    {
+      "resourceId": "20261017:Tokyo:2",
+      "taskId": "a3775c3d-ced4-4044-b817-08f17a92990a",
+      "name": "キセキテキニキテル",
+      "oldHorseId": "horse-e227382d-3de6-5692-b7fc-7e866c5c3dca",
+      "jraHorseId": "2024103836"
+    },
+    {
+      "resourceId": "20261017:Tokyo:12",
+      "taskId": "31a32eac-68e4-402b-9597-9bd01289f58c",
+      "name": "グラスブランシュ",
+      "oldHorseId": "horse-c8633855-8426-5a13-8ae8-4554a913d2ae",
+      "jraHorseId": "2021103588"
+    },
+    {
+      "resourceId": "20261018:Tokyo:12",
+      "taskId": "554c41d5-a1d7-4a1a-a191-5436a36d6d0f",
+      "name": "グラニット",
+      "oldHorseId": "horse-24fecdf2-731e-58c4-8977-9d8c138e42a8",
+      "jraHorseId": "2020100810"
+    },
+    {
+      "resourceId": "20261018:Kyoto:8",
+      "taskId": "15e11efe-186e-4c16-bc4e-9f1b2f3a8128",
+      "name": "サトノブリジャール",
+      "oldHorseId": "horse-5fcf21b9-5961-51b8-b0fd-a15a4b277b31",
+      "jraHorseId": "2022105037"
+    },
+    {
+      "resourceId": "20261018:Niigata:6",
+      "taskId": "6e13b6ee-e8a8-403e-93c3-fb0958fdcbb0",
+      "name": "サラサチャチャチャ",
+      "oldHorseId": "horse-774fa472-7b20-5962-8220-dc8ec91f0533",
+      "jraHorseId": "2023102581"
+    },
+    {
+      "resourceId": "20261018:Kyoto:4",
+      "taskId": "784cfb3d-22af-4287-b987-afc35e07beb5",
+      "name": "ジーヴル",
+      "oldHorseId": "horse-3ccbef2e-afae-59ec-b94b-2001e3e09144",
+      "jraHorseId": "2022103521"
+    },
+    {
+      "resourceId": "20261017:Tokyo:3",
+      "taskId": "5d153af1-a6c5-4d88-9561-e596ce8a66aa",
+      "name": "シャイニーヒーロー",
+      "oldHorseId": "horse-350f22a1-d30f-5dbc-84f3-3191b046b5e9",
+      "jraHorseId": "2024101323"
+    },
+    {
+      "resourceId": "20261018:Tokyo:7",
+      "taskId": "a77d3c2f-ac4e-437e-9131-30ff2beb2f30",
+      "name": "スワローシチー",
+      "oldHorseId": "horse-d46627c9-5914-5449-9ea2-ef6165f3cc0f",
+      "jraHorseId": "2022106150"
+    },
+    {
+      "resourceId": "20261017:Kyoto:4",
+      "taskId": "838764d3-532b-45f2-b061-0320983e8ffd",
+      "name": "ソルトチューダ",
+      "oldHorseId": "horse-b4e43628-2ced-5373-8957-c9455f149f4e",
+      "jraHorseId": "2022105914"
+    },
+    {
+      "resourceId": "20261017:Niigata:6",
+      "taskId": "031e1849-0800-4619-9352-9fe7e1ec01ae",
+      "name": "ダーリンダーリン",
+      "oldHorseId": "horse-35f574c2-9818-5565-9e65-5c08ca4a78e6",
+      "jraHorseId": "2023100730"
+    },
+    {
+      "resourceId": "20261018:Tokyo:10",
+      "taskId": "29cf79e5-3fc4-4921-9a2c-753a66f9ec4e",
+      "name": "タイヨウフレア",
+      "oldHorseId": "horse-3e00aa70-dedb-562c-bb27-deba55189dd9",
+      "jraHorseId": "2022105844"
+    },
+    {
+      "resourceId": "20261017:Tokyo:8",
+      "taskId": "725640ad-86ee-4b04-9d2b-b0e0b7d8a659",
+      "name": "タガノヘラクレス",
+      "oldHorseId": "horse-000c6fb0-2f3e-5e02-b20f-25ede32f887f",
+      "jraHorseId": "2021106544"
+    },
+    {
+      "resourceId": "20261017:Niigata:10",
+      "taskId": "5725b66b-e215-4b22-a74c-cf49a6ad2787",
+      "name": "ダズリングダンス",
+      "oldHorseId": "horse-d2c380c2-ee3c-5820-8654-35867b7db47e",
+      "jraHorseId": "2020105957"
+    },
+    {
+      "resourceId": "20261018:Tokyo:11",
+      "taskId": "547fc347-1ec8-4172-9a1a-4401e95bb465",
+      "name": "ダブルジョーク",
+      "oldHorseId": "horse-4d877bfa-859d-5f3e-88b2-39e5b29b93e9",
+      "jraHorseId": "2020110026"
+    },
+    {
+      "resourceId": "20261018:Niigata:3",
+      "taskId": "ac42f578-e6cb-4760-a49a-f6323c4ddc28",
+      "name": "テムグリーン",
+      "oldHorseId": "horse-ea76dd7a-8d1d-5774-b260-00ba44f5838a",
+      "jraHorseId": "2024103517"
+    },
+    {
+      "resourceId": "20261017:Tokyo:6",
+      "taskId": "5a3612f3-8ff0-46e7-a463-060fb28169b1",
+      "name": "ナハトナナレオン",
+      "oldHorseId": "horse-1417794d-92ee-5768-855f-639044cb594b",
+      "jraHorseId": "2023102619"
+    },
+    {
+      "resourceId": "20261018:Tokyo:1",
+      "taskId": "263391ed-a2d7-4fe4-a161-42a0b09a014f",
+      "name": "ノーブルミント",
+      "oldHorseId": "horse-72764a3e-8f41-5aba-8720-c1f596d6e528",
+      "jraHorseId": "2024100566"
+    },
+    {
+      "resourceId": "20261018:Kyoto:11",
+      "taskId": "d4517345-42ca-48d0-af5d-ba8fc7d9a6b2",
+      "name": "バースデイフライト",
+      "oldHorseId": "horse-9f06fae6-26d6-5505-bc48-441a2918c96e",
+      "jraHorseId": "2023102906"
+    },
+    {
+      "resourceId": "20261024:Niigata:8",
+      "taskId": "01239d60-2979-4fb5-95c8-c2847da44aaa",
+      "name": "ビービーバザーク",
+      "oldHorseId": "horse-2091fbdf-ecef-531b-be24-86308a624f21",
+      "jraHorseId": "2022102397"
+    },
+    {
+      "resourceId": "20261017:Kyoto:7",
+      "taskId": "cab48b2c-b651-4960-a110-181b20acf360",
+      "name": "ビズロード",
+      "oldHorseId": "horse-8550d0ff-2de9-538c-847f-a001440172c9",
+      "jraHorseId": "2023100235"
+    },
+    {
+      "resourceId": "20261018:Kyoto:10",
+      "taskId": "c6b0db22-124d-4a32-95d5-11eda63ea673",
+      "name": "ビルンバウム",
+      "oldHorseId": "horse-69714d30-551a-55cd-aa18-12241af69369",
+      "jraHorseId": "2021104872"
+    },
+    {
+      "resourceId": "20261018:Kyoto:3",
+      "taskId": "00001c74-c0bc-4602-bf54-f57b3c142744",
+      "name": "フィオッコローザ",
+      "oldHorseId": "horse-8e766748-eb15-5cfe-9abb-a8e6731b91eb",
+      "jraHorseId": "2024106586"
+    },
+    {
+      "resourceId": "20261018:Niigata:12",
+      "taskId": "539b557e-4825-4bca-9a98-501cc2043dce",
+      "name": "フジフォンテ",
+      "oldHorseId": "horse-da14d949-c102-55f4-97dc-9582d5f2ae8f",
+      "jraHorseId": "2019105759"
+    },
+    {
+      "resourceId": "20261017:Kyoto:1",
+      "taskId": "c79d942d-a55d-4477-bfcd-928721e00dc9",
+      "name": "プライムウィザード",
+      "oldHorseId": "horse-5f227aa9-9ed3-545a-a73f-252470107f28",
+      "jraHorseId": "2024102623"
+    },
+    {
+      "resourceId": "20261017:Niigata:2",
+      "taskId": "aa47546d-5655-4803-bbda-9afb81a24dce",
+      "name": "フレンドミラノ",
+      "oldHorseId": "horse-f4a304f7-b6e5-5065-a789-2f89d6955392",
+      "jraHorseId": "2024100841"
+    },
+    {
+      "resourceId": "20261018:Niigata:9",
+      "taskId": "2b06e001-7a60-46c3-8b3b-07a1d0f73a8f",
+      "name": "ベルウッドバイオ",
+      "oldHorseId": "horse-e8b496d7-44f7-59fb-b451-8b275257185b",
+      "jraHorseId": "2023104069"
+    },
+    {
+      "resourceId": "20261018:Kyoto:12",
+      "taskId": "efe1941a-6790-4a04-bb9e-a9b69e1a05d0",
+      "name": "ホワイトガーベラ",
+      "oldHorseId": "horse-573a53b0-180b-5c78-803f-3e5c26fa4534",
+      "jraHorseId": "2019101295"
+    },
+    {
+      "resourceId": "20261017:Kyoto:10",
+      "taskId": "7c169f16-278d-4c0d-839c-1dd94591358d",
+      "name": "メイショウナルカミ",
+      "oldHorseId": "horse-83106a09-ff44-5fa5-926d-12afb5d8dda7",
+      "jraHorseId": "2023106560"
+    },
+    {
+      "resourceId": "20261017:Kyoto:8",
+      "taskId": "3b2e48f2-a3d6-4d6e-b40f-911e5d7c258f",
+      "name": "メモリーブック",
+      "oldHorseId": "horse-44fd7bdf-9cc1-5284-9dae-e548431124a8",
+      "jraHorseId": "2024102574"
+    },
+    {
+      "resourceId": "20261017:Niigata:9",
+      "taskId": "89a68830-c371-40c2-8784-6bc503bd92a8",
+      "name": "リアルショット",
+      "oldHorseId": "horse-722a99ac-dfcf-5bf9-88f5-99e3db0b7573",
+      "jraHorseId": "2022105598"
+    },
+    {
+      "resourceId": "20261018:Kyoto:9",
+      "taskId": "af761695-3472-47f1-8b93-318e2f8a7326",
+      "name": "リアンマヒナ",
+      "oldHorseId": "horse-77721068-aeab-5b64-bcdd-54bb4dec986f",
+      "jraHorseId": "2023104430"
+    },
+    {
+      "resourceId": "20261017:Tokyo:1",
+      "taskId": "e1fc3d05-59a9-42be-b13b-a1a2fa75a856",
+      "name": "ワレモコウ",
+      "oldHorseId": "horse-6400a611-1c23-57a3-9f51-ca152316f77a",
+      "jraHorseId": "2024102061"
+    }
+  ]
+}

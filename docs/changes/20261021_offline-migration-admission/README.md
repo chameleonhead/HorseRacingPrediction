@@ -4,7 +4,7 @@
 - Change record schema: 2
 - Owner: Lead
 - Created: 2026-10-21
-- Updated: 2026-10-23
+- Updated: 2026-10-24
 - JRA site contract impact: None
 
 ## Context and scope
@@ -12,6 +12,8 @@
 Approval2026-10-21: user「お願いします」explicitly accepts the preceding four-bullet summary of AC1–6/C1–4: pending-only UI save; authorized stop/backup/full validation beforewrite; preservation/idempotency/old compatibility; bounded downtime; tests/deploy/actual recovery. Later「全件でなくてもいいですが、決め打ちはやめてください」adds a generic-input constraint: no compiled business horse IDs/fixed three-target implementation. Remove production preset dependencies; operation may still use the previously approved3 mappings as user-selected input, never engine constants. Clarification pending only whether “not all” also requests narrower inspection; independently runnable genericadmission/UI work proceeds, existing complete reference-validation safeguards remain until explicitly changed.
 
 ## CURRENT
+
+Latest24Oct: user explicitly requested direct authenticated API diagnosis using the previously supplied key. GET succeeded without browser use; current46 unique resources/tasks comprise41 HorseIdentityConflict race failures,4 ambiguous same-name horse-profile failures and1 missing retired-trainer link. This supersedes the diagnostic evidence blocker below; browser access remains unverified and no recovery mutation has occurred. Current investigation and corrective decisions are owned by [collection failure recovery](../20261024_collection-failure-recovery/README.md). Original3 approval does not identify all41 current collisions. No blind retry/reset, forced same-name identity or automatic resume. Credential exists only in a secure interactive process; no credential is recorded here.
 
 Latest24Oct16:01JST: child API recovery Implemented on2872aaf3, actual manual40070389580 recoveryjob120805657747 success after fresh900s/recheck/fullbackup; publicSwagger200/authpausedzero. Collection remains paused. Original3 migration/selectedretry/separateresume/3lane AC6 NOT executed. Existing IAB tab is a generated data: connection-error page; browser policy rejected reload and direct HTTPS navigation. No alternate surface/workaround attempted after the second rejection; user asynchronously asked to open https://100-49-86-109.sslip.io/jobs and log in. P5 Externally blocked solely on browser access, not AWS/Token or code. After user restores page, reobserve current UI, select only original3 through generic search, stage pendingGUID, explicitly execute, verify backup/apply/postchecks, retry eligible selected targets, separately resume then observe lane timestamps. No reset/fourthpair/forcedcollision/autoresume. Userdirty retained; child/audits and this handoff are intentional final receipt files.
 
