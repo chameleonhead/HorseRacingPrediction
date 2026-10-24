@@ -420,6 +420,15 @@ horse_id_migration_diagnose_startup_journal $(Quote-Bash $directoryBash)
 "@
 }
 
+function Get-DiagnosticJournalHashes([string] $Directory) {
+    $files = @(
+        (Join-Path $Directory 'horse-identity-migration-initialized.marker'),
+        (Join-Path $Directory 'horse-identity-migration-operation.lock'),
+        (Join-Path $Directory 'horse-identity-migration-journal.db')
+    )
+    return (($files | ForEach-Object { (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash }) -join ',')
+}
+
 function Invoke-RecoveryBackupDiagnostic([string] $Directory, [string] $Sha, [string[]] $ExpectedMembers) {
     $directoryBash = ConvertTo-BashPath $Directory
     $memberArguments = ($ExpectedMembers | ForEach-Object { Quote-Bash $_ }) -join ' '
@@ -440,9 +449,27 @@ try {
     )
     $journalHashesBefore = @($diagnosticJournalFiles | ForEach-Object { (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash })
     $journalDiagnostic = Invoke-StartupJournalDiagnostic $diagnosticJournal
-    Assert-Case ($journalDiagnostic.ExitCode -eq 0 -and $journalDiagnostic.Output -match 'JOURNAL code=READY_SHAPE marker=1 integrity=ok schema=current staged=0 running=0') "Known ready journal shape must produce bounded read-only evidence. $($journalDiagnostic.Output)"
+    Assert-Case ($journalDiagnostic.ExitCode -eq 0 -and $journalDiagnostic.Output -match 'JOURNAL code=READY_SHAPE marker=1 integrity=ok schema=current request_key_rows=0 staged=0 running=0') "Known ready journal shape must produce bounded read-only evidence. $($journalDiagnostic.Output)"
     $journalHashesAfter = @($diagnosticJournalFiles | ForEach-Object { (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash })
     Assert-Case (($journalHashesBefore -join ',') -eq ($journalHashesAfter -join ',')) 'Startup journal diagnostics must leave marker, lock, and SQLite bytes unchanged.'
+
+    $absentRequestJournal = New-DiagnosticJournalFixture 'request-key-table-absent'
+    $absentRequestDatabase = Join-Path $absentRequestJournal 'horse-identity-migration-journal.db'
+    & $pythonCommand -c 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("INSERT INTO migration_operations VALUES (?,?,?,?,?,?,?,?,?,?)", ("00000000-0000-0000-0000-000000000001", "a"*64, "{}", 0, 0, "2026-10-24T00:00:00Z", "2026-10-24T00:00:00Z", None, "[]", 0)); c.execute("DROP TABLE migration_request_keys"); c.commit(); c.close()' $absentRequestDatabase
+    Assert-Case ($LASTEXITCODE -eq 0) 'Could not create absent request-key table fixture.'
+    $absentRequestHashesBefore = Get-DiagnosticJournalHashes $absentRequestJournal
+    $absentRequestResult = Invoke-StartupJournalDiagnostic $absentRequestJournal
+    Assert-Case ($absentRequestResult.ExitCode -ne 0 -and $absentRequestResult.Output -match 'JOURNAL code=REQUEST_SCHEMA_UNKNOWN key_table=0 request_key=0 immutable_request_hash=0 operation_id=0 preview_fingerprint=0 request_kind=0 rowcount=unknown staged=1 running=0 succeeded=0 rejected=0 failed=0 interrupted=0 partial=0') 'An absent request-key table must have distinct bounded flags, operation counts, and remain fail-closed.'
+    Assert-Case ($absentRequestHashesBefore -eq (Get-DiagnosticJournalHashes $absentRequestJournal)) 'Absent-table diagnosis must not mutate marker, lock, or SQLite bytes.'
+
+    $missingBaseColumnJournal = New-DiagnosticJournalFixture 'request-key-base-column-missing'
+    $missingBaseColumnDatabase = Join-Path $missingBaseColumnJournal 'horse-identity-migration-journal.db'
+    & $pythonCommand -c 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("INSERT INTO migration_operations VALUES (?,?,?,?,?,?,?,?,?,?)", ("00000000-0000-0000-0000-000000000001", "a"*64, "{}", 0, 0, "2026-10-24T00:00:00Z", "2026-10-24T00:00:00Z", None, "[]", 0)); c.execute("DROP TABLE migration_request_keys"); c.execute("CREATE TABLE migration_request_keys (request_key TEXT PRIMARY KEY NOT NULL, preview_fingerprint TEXT NULL, request_kind TEXT NOT NULL DEFAULT ''BoundV1'', operation_id TEXT NOT NULL UNIQUE)"); c.commit(); c.close()' $missingBaseColumnDatabase
+    Assert-Case ($LASTEXITCODE -eq 0) 'Could not create request-key base-column fixture.'
+    $missingBaseHashesBefore = Get-DiagnosticJournalHashes $missingBaseColumnJournal
+    $missingBaseResult = Invoke-StartupJournalDiagnostic $missingBaseColumnJournal
+    Assert-Case ($missingBaseResult.ExitCode -ne 0 -and $missingBaseResult.Output -match 'JOURNAL code=REQUEST_SCHEMA_UNKNOWN key_table=1 request_key=1 immutable_request_hash=0 operation_id=1 preview_fingerprint=1 request_kind=1 rowcount=unknown staged=1 running=0 succeeded=0 rejected=0 failed=0 interrupted=0 partial=0') 'A missing immutable-request-hash column must have distinct bounded flags, operation counts, and remain fail-closed.'
+    Assert-Case ($missingBaseHashesBefore -eq (Get-DiagnosticJournalHashes $missingBaseColumnJournal)) 'Malformed-table diagnosis must not mutate marker, lock, or SQLite bytes.'
 
     $unknownJournal = Join-Path $tempRoot 'readonly-startup-journal-unknown'
     [void](New-Item -ItemType Directory -Path $unknownJournal)

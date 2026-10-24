@@ -1109,21 +1109,35 @@ try:
         if incomplete:
             fail("SUCCEEDED_EVIDENCE")
         request_kind = "legacy"
-        if "migration_request_keys" in tables:
-            request_columns = columns("migration_request_keys")
-            if not {"request_key", "immutable_request_hash", "operation_id"}.issubset(request_columns):
-                unknown("REQUEST_SCHEMA_UNKNOWN")
+        request_table = "migration_request_keys" in tables
+        request_columns = columns("migration_request_keys") if request_table else set()
+        required_request_columns = {"request_key", "immutable_request_hash", "operation_id"}
+        if not request_table or not required_request_columns.issubset(request_columns):
+            report("REQUEST_SCHEMA_UNKNOWN", key_table=int(request_table),
+                   request_key=int("request_key" in request_columns),
+                   immutable_request_hash=int("immutable_request_hash" in request_columns),
+                   operation_id=int("operation_id" in request_columns),
+                   preview_fingerprint=int("preview_fingerprint" in request_columns),
+                   request_kind=int("request_kind" in request_columns), rowcount="unknown",
+                   staged=counts[0], running=counts[1], succeeded=counts[2], rejected=counts[3],
+                   failed=counts[4], interrupted=counts[5], partial=counts[6])
+            raise SystemExit(1)
+        request_rows = connection.execute(
+            "SELECT COUNT(*) FROM (SELECT 1 FROM migration_request_keys LIMIT 4097)"
+        ).fetchone()[0]
+        if request_rows > 4096:
+            fail("REQUEST_KEY_ROW_LIMIT")
+        if request_table:
             if "request_kind" in request_columns:
                 request_kind = "current"
                 invalid_kind = connection.execute("SELECT 1 FROM migration_request_keys WHERE request_kind NOT IN ('BoundV1','PendingV2') LIMIT 1").fetchone()
                 if invalid_kind:
                     fail("REQUEST_KIND")
-        else:
-            unknown("REQUEST_SCHEMA_UNKNOWN")
         staged = connection.execute("SELECT COUNT(*) FROM migration_operations WHERE status=0").fetchone()[0]
         blocked = counts[5] + counts[6]
         code = "READY_SHAPE" if blocked == 0 and counts[1] == 0 else ("INTERRUPTED" if counts[5] else ("PARTIAL_UNVERIFIED" if counts[6] else "RUNNING"))
         report(code, marker=1, integrity="ok", schema="current" if request_kind == "current" else "legacy-upgradable",
+               request_key_rows=request_rows,
                staged=staged, running=counts[1], succeeded=counts[2], rejected=counts[3], failed=counts[4],
                interrupted=counts[5], partial=counts[6], pages=page_count, required_pages=required_count)
         database_after = os.fstat(database_fd)
