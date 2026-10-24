@@ -397,6 +397,217 @@ public sealed class HorseIdentityMigrationJournalTests
     }
 
     [TestMethod]
+    public async Task PreAdmissionEmptyJournalCreatesOnlyCanonicalSupplementalSchema()
+    {
+        using var fixture = new Fixture();
+        await HistoricalHorseIdentityMigrationJournalFixture.CreateAsync(fixture.Journal.DatabasePath,
+            fixture.Journal.InitializationMarkerPath, fixture.Journal.LockPath);
+
+        var upgraded = await fixture.Journal.InspectStartupGuardAsync(Now.AddMinutes(1));
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Ready, upgraded.State);
+
+        await using var inspect = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False");
+        await inspect.OpenAsync();
+        Assert.AreEqual(0L, await ScalarInt64Async(inspect, "SELECT COUNT(*) FROM migration_operations;"));
+        Assert.AreEqual(0L, await ScalarInt64Async(inspect, "SELECT COUNT(*) FROM migration_request_keys;"));
+        Assert.AreEqual(0L, await ScalarInt64Async(inspect, "SELECT COUNT(*) FROM migration_execution_intents;"));
+        Assert.AreEqual(0L, await ScalarInt64Async(inspect, "SELECT COUNT(*) FROM migration_pending_seals;"));
+        Assert.AreEqual(1L, await ScalarInt64Async(inspect,
+            "SELECT COUNT(*) FROM pragma_index_list('migration_execution_intents') WHERE name = 'IX_migration_execution_intents_single_active' AND \"unique\" = 1 AND partial = 1;"));
+    }
+
+    [TestMethod]
+    public async Task PreAdmissionNonemptyStagedJournalPreservesRowsWithoutSynthesizingAdmissionRecords()
+    {
+        using var fixture = new Fixture();
+        var operationId = Guid.NewGuid();
+        await HistoricalHorseIdentityMigrationJournalFixture.CreateAsync(fixture.Journal.DatabasePath,
+            fixture.Journal.InitializationMarkerPath, fixture.Journal.LockPath, operationId, Manifest(31), Now);
+
+        string?[] before;
+        await using (var snapshot = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await snapshot.OpenAsync();
+            before = await ReadOperationRowAsync(snapshot, operationId);
+        }
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Ready,
+            (await fixture.Journal.InspectStartupGuardAsync(Now.AddMinutes(1))).State);
+        await using var inspect = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False");
+        await inspect.OpenAsync();
+        CollectionAssert.AreEqual(before, await ReadOperationRowAsync(inspect, operationId));
+        Assert.AreEqual(0L, await ScalarInt64Async(inspect, "SELECT COUNT(*) FROM migration_request_keys;"));
+        Assert.AreEqual(0L, await ScalarInt64Async(inspect, "SELECT COUNT(*) FROM migration_execution_intents;"));
+        Assert.AreEqual(0L, await ScalarInt64Async(inspect, "SELECT COUNT(*) FROM migration_pending_seals;"));
+    }
+
+    [TestMethod]
+    public async Task PreAdmissionSchemaUpgradeIsIdempotentUnderConcurrentStartup()
+    {
+        using var fixture = new Fixture();
+        var operationId = Guid.NewGuid();
+        await HistoricalHorseIdentityMigrationJournalFixture.CreateAsync(fixture.Journal.DatabasePath,
+            fixture.Journal.InitializationMarkerPath, fixture.Journal.LockPath, operationId, Manifest(35), Now);
+        string?[] original;
+        await using (var before = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await before.OpenAsync();
+            original = await ReadOperationRowAsync(before, operationId);
+        }
+
+        var journals = Enumerable.Range(0, 8)
+            .Select(_ => new HorseIdentityMigrationJournal(fixture.Directory, []))
+            .ToArray();
+        var outcomes = await Task.WhenAll(journals.Select(journal => journal.InspectStartupGuardAsync(Now)));
+        Assert.IsTrue(outcomes.All(outcome => outcome.State is HorseIdentityMigrationStartupState.Ready
+            or HorseIdentityMigrationStartupState.OwnerActive), string.Join(',', outcomes.Select(outcome => outcome.State)));
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Ready,
+            (await fixture.Journal.InspectStartupGuardAsync(Now.AddMinutes(1))).State);
+
+        await using var inspect = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False");
+        await inspect.OpenAsync();
+        CollectionAssert.AreEqual(original, await ReadOperationRowAsync(inspect, operationId));
+        Assert.AreEqual(0L, await ScalarInt64Async(inspect, "SELECT COUNT(*) FROM migration_request_keys;"));
+        Assert.AreEqual(0L, await ScalarInt64Async(inspect, "SELECT COUNT(*) FROM migration_execution_intents;"));
+        Assert.AreEqual(0L, await ScalarInt64Async(inspect, "SELECT COUNT(*) FROM migration_pending_seals;"));
+    }
+
+    [TestMethod]
+    public async Task MalformedHistoricalKeyOrIntentTableFailsBeforeAnySupplementalUpgrade()
+    {
+        foreach (var malformedTable in new[] { "migration_request_keys", "migration_execution_intents" })
+        {
+            using var fixture = new Fixture();
+            await HistoricalHorseIdentityMigrationJournalFixture.CreateAsync(fixture.Journal.DatabasePath,
+                fixture.Journal.InitializationMarkerPath, fixture.Journal.LockPath);
+            await using (var connection = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+            {
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText = malformedTable == "migration_request_keys"
+                    ? "CREATE TABLE migration_request_keys (request_key TEXT PRIMARY KEY NOT NULL);"
+                    : "CREATE TABLE migration_execution_intents (operation_id TEXT PRIMARY KEY NOT NULL, phase INTEGER NOT NULL);";
+                await command.ExecuteNonQueryAsync();
+            }
+
+            Assert.AreEqual(HorseIdentityMigrationStartupState.Corrupt,
+                (await fixture.Journal.InspectStartupGuardAsync(Now)).State, malformedTable);
+            await using var inspect = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False");
+            await inspect.OpenAsync();
+            Assert.AreEqual(1L, await ScalarInt64Async(inspect,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('migration_request_keys', 'migration_execution_intents', 'migration_pending_seals');"),
+                $"Only the malformed pre-existing {malformedTable} table should remain; all newly added structures must roll back.");
+            Assert.AreEqual(0L, await ScalarInt64Async(inspect,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'IX_migration_execution_intents_single_active';"),
+                malformedTable);
+        }
+    }
+
+    [TestMethod]
+    public async Task MalformedPresentSealRollsBackNewSupplementalTables()
+    {
+        using var fixture = new Fixture();
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Ready,
+            (await fixture.Journal.InspectStartupGuardAsync(Now)).State);
+        await using (var connection = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "DROP INDEX IX_migration_execution_intents_single_active; DROP TABLE migration_pending_seals; DROP TABLE migration_execution_intents; DROP TABLE migration_request_keys; CREATE TABLE migration_pending_seals (operation_id TEXT PRIMARY KEY NOT NULL, immutable_request_hash TEXT NOT NULL);";
+            await command.ExecuteNonQueryAsync();
+        }
+
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Corrupt,
+            (await fixture.Journal.InspectStartupGuardAsync(Now.AddMinutes(1))).State);
+        await using var inspect = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False");
+        await inspect.OpenAsync();
+        Assert.AreEqual(0L, await ScalarInt64Async(inspect,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('migration_request_keys', 'migration_execution_intents');"));
+        Assert.AreEqual(0L, await ScalarInt64Async(inspect,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'IX_migration_execution_intents_single_active';"));
+    }
+
+    [TestMethod]
+    public async Task DuplicateActiveIntentsFailClosedAndRollbackMissingAdmissionTables()
+    {
+        using var fixture = new Fixture();
+        var firstId = Guid.NewGuid();
+        var secondId = Guid.NewGuid();
+        Assert.IsTrue((await fixture.Journal.StageAsync(firstId, Manifest(32), Now)).Succeeded);
+        Assert.IsTrue((await fixture.Journal.StageAsync(secondId, Manifest(33), Now)).Succeeded);
+        await using (var connection = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "DROP INDEX IX_migration_execution_intents_single_active; DROP TABLE migration_pending_seals; DROP TABLE migration_execution_intents; DROP TABLE migration_request_keys; CREATE TABLE migration_execution_intents (operation_id TEXT PRIMARY KEY NOT NULL, immutable_request_hash TEXT NOT NULL, created_utc TEXT NOT NULL, updated_utc TEXT NOT NULL, phase INTEGER NOT NULL, FOREIGN KEY (operation_id) REFERENCES migration_operations(operation_id) ON DELETE CASCADE); INSERT INTO migration_execution_intents VALUES ($first, $hash, '2026-10-15T00:00:00.0000000+00:00', '2026-10-15T00:00:00.0000000+00:00', 0); INSERT INTO migration_execution_intents VALUES ($second, $hash, '2026-10-15T00:00:00.0000000+00:00', '2026-10-15T00:00:00.0000000+00:00', 0);";
+            command.Parameters.AddWithValue("$first", firstId.ToString("D"));
+            command.Parameters.AddWithValue("$second", secondId.ToString("D"));
+            command.Parameters.AddWithValue("$hash", new string('A', 64));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Corrupt,
+            (await fixture.Journal.InspectStartupGuardAsync(Now.AddMinutes(1))).State);
+        await using var inspect = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False");
+        await inspect.OpenAsync();
+        Assert.AreEqual(0L, await ScalarInt64Async(inspect,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('migration_request_keys', 'migration_pending_seals');"));
+        Assert.AreEqual(0L, await ScalarInt64Async(inspect,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'IX_migration_execution_intents_single_active';"));
+        Assert.AreEqual(2L, await ScalarInt64Async(inspect, "SELECT COUNT(*) FROM migration_execution_intents;"));
+    }
+
+    [TestMethod]
+    public async Task InvalidLegacyOperationStateRollsBackSupplementalSchemaUpgrade()
+    {
+        using var fixture = new Fixture();
+        var operationId = Guid.NewGuid();
+        Assert.IsTrue((await fixture.Journal.StageAsync(operationId, Manifest(34), Now)).Succeeded);
+        await using (var connection = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "DROP INDEX IX_migration_execution_intents_single_active; DROP TABLE migration_pending_seals; DROP TABLE migration_execution_intents; DROP TABLE migration_request_keys; UPDATE migration_operations SET status = 99 WHERE operation_id = $id;";
+            command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Corrupt,
+            (await fixture.Journal.InspectStartupGuardAsync(Now.AddMinutes(1))).State);
+        await using var inspect = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False");
+        await inspect.OpenAsync();
+        Assert.AreEqual(99L, await ScalarInt64Async(inspect,
+            "SELECT status FROM migration_operations WHERE operation_id = '" + operationId.ToString("D") + "';"));
+        Assert.AreEqual(0L, await ScalarInt64Async(inspect,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('migration_request_keys', 'migration_execution_intents', 'migration_pending_seals');"));
+        Assert.AreEqual(0L, await ScalarInt64Async(inspect,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'IX_migration_execution_intents_single_active';"));
+    }
+
+    [TestMethod]
+    public async Task MalformedCanonicalIntentIndexFailsClosedAndRollsBackMissingTables()
+    {
+        using var fixture = new Fixture();
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Ready,
+            (await fixture.Journal.InspectStartupGuardAsync(Now)).State);
+        await using (var connection = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "DROP INDEX IX_migration_execution_intents_single_active; DROP TABLE migration_pending_seals; DROP TABLE migration_request_keys; CREATE UNIQUE INDEX IX_migration_execution_intents_single_active ON migration_execution_intents(phase) WHERE phase NOT IN (9, 10);";
+            await command.ExecuteNonQueryAsync();
+        }
+
+        Assert.AreEqual(HorseIdentityMigrationStartupState.Corrupt,
+            (await fixture.Journal.InspectStartupGuardAsync(Now.AddMinutes(1))).State);
+        await using var inspect = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False");
+        await inspect.OpenAsync();
+        Assert.AreEqual(0L, await ScalarInt64Async(inspect,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('migration_request_keys', 'migration_pending_seals');"));
+        Assert.AreEqual(1L, await ScalarInt64Async(inspect,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'IX_migration_execution_intents_single_active';"));
+    }
+
+    [TestMethod]
     public async Task InvalidLegacyRequestKindRollsBackOperationalSchemaUpgrade()
     {
         using var fixture = new Fixture();
@@ -1540,5 +1751,90 @@ public sealed class HorseIdentityMigrationJournalTests
         {
             if (System.IO.Directory.Exists(Directory)) System.IO.Directory.Delete(Directory, recursive: true);
         }
+    }
+}
+
+internal static class HistoricalHorseIdentityMigrationJournalFixture
+{
+    internal static async Task CreateAsync(string databasePath, string markerPath, string lockPath,
+        Guid? operationId = null, HorseIdentityMigrationManifest? manifest = null, DateTimeOffset? createdAt = null)
+    {
+        if ((operationId is null) != (manifest is null))
+            throw new ArgumentException("A historical core row requires both an operation ID and manifest.");
+        Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
+        await File.WriteAllTextAsync(markerPath, "horse-identity-migration-journal-v1", Encoding.ASCII);
+        await File.WriteAllBytesAsync(lockPath, []);
+
+        await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            Pooling = false,
+            ForeignKeys = true,
+        }.ToString());
+        await connection.OpenAsync();
+        await using (var schema = connection.CreateCommand())
+        {
+            schema.CommandText = """
+                PRAGMA journal_mode = DELETE;
+                PRAGMA synchronous = FULL;
+                PRAGMA foreign_keys = ON;
+                CREATE TABLE migration_operations (
+                    operation_id TEXT PRIMARY KEY NOT NULL,
+                    request_hash TEXT NOT NULL,
+                    request_json TEXT NOT NULL,
+                    status INTEGER NOT NULL,
+                    reason INTEGER NOT NULL,
+                    created_utc TEXT NOT NULL,
+                    updated_utc TEXT NOT NULL,
+                    terminal_utc TEXT NULL,
+                    results_json TEXT NOT NULL,
+                    workflow_claimed INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE TABLE migration_pages (
+                    operation_id TEXT NOT NULL,
+                    page_identity TEXT NOT NULL,
+                    surface INTEGER NOT NULL,
+                    table_name TEXT NOT NULL,
+                    row_count INTEGER NOT NULL,
+                    membership_hash TEXT NOT NULL,
+                    before_hash TEXT NOT NULL,
+                    expected_after_hash TEXT NOT NULL,
+                    state INTEGER NOT NULL,
+                    updated_utc TEXT NOT NULL,
+                    PRIMARY KEY (operation_id, page_identity),
+                    FOREIGN KEY (operation_id) REFERENCES migration_operations(operation_id) ON DELETE CASCADE
+                );
+                CREATE TABLE migration_required_pages (
+                    operation_id TEXT NOT NULL,
+                    page_identity TEXT NOT NULL,
+                    surface INTEGER NOT NULL,
+                    table_name TEXT NOT NULL,
+                    row_count INTEGER NOT NULL,
+                    membership_hash TEXT NOT NULL,
+                    before_hash TEXT NOT NULL,
+                    expected_after_hash TEXT NOT NULL,
+                    evidence_bytes INTEGER NOT NULL,
+                    PRIMARY KEY (operation_id, page_identity),
+                    FOREIGN KEY (operation_id) REFERENCES migration_operations(operation_id) ON DELETE CASCADE
+                );
+                """;
+            await schema.ExecuteNonQueryAsync();
+        }
+
+        if (manifest is null || operationId is null) return;
+        var validated = HorseIdentityMigrationManifestPolicy.Validate(manifest);
+        if (!validated.IsValid) throw new InvalidDataException("The historical fixture manifest must be valid.");
+        var json = JsonSerializer.Serialize(validated.Mappings, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json)));
+        var timestamp = (createdAt ?? DateTimeOffset.UtcNow).ToUniversalTime().ToString("O");
+        await using var insert = connection.CreateCommand();
+        insert.CommandText = "INSERT INTO migration_operations (operation_id, request_hash, request_json, status, reason, created_utc, updated_utc, terminal_utc, results_json, workflow_claimed) VALUES ($id, $hash, $json, 0, 0, $created, $updated, NULL, '[]', 0);";
+        insert.Parameters.AddWithValue("$id", operationId.Value.ToString("D"));
+        insert.Parameters.AddWithValue("$hash", hash);
+        insert.Parameters.AddWithValue("$json", json);
+        insert.Parameters.AddWithValue("$created", timestamp);
+        insert.Parameters.AddWithValue("$updated", timestamp);
+        await insert.ExecuteNonQueryAsync();
     }
 }

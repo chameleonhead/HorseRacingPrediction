@@ -2235,23 +2235,30 @@ internal sealed class HorseIdentityMigrationJournal
         SqliteTransaction transaction,
         CancellationToken cancellationToken)
     {
-        if (await HasPendingSealTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false))
-            return;
+        if (!await HasPendingSealTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false))
+        {
+            await ExecuteSchemaAsync(connection, transaction, cancellationToken, """
+                CREATE TABLE migration_pending_seals (
+                    operation_id TEXT PRIMARY KEY NOT NULL,
+                    immutable_request_hash TEXT NOT NULL,
+                    full_fingerprint TEXT NOT NULL,
+                    source_set_hash TEXT NOT NULL,
+                    backup_manifest_hash TEXT NOT NULL,
+                    sealed_utc TEXT NOT NULL,
+                    FOREIGN KEY (operation_id) REFERENCES migration_operations(operation_id) ON DELETE CASCADE
+                );
+                """).ConfigureAwait(false);
+        }
 
-        await using var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = """
-            CREATE TABLE migration_pending_seals (
-                operation_id TEXT PRIMARY KEY NOT NULL,
-                immutable_request_hash TEXT NOT NULL,
-                full_fingerprint TEXT NOT NULL,
-                source_set_hash TEXT NOT NULL,
-                backup_manifest_hash TEXT NOT NULL,
-                sealed_utc TEXT NOT NULL,
-                FOREIGN KEY (operation_id) REFERENCES migration_operations(operation_id) ON DELETE CASCADE
-            );
-            """;
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await ValidateTableColumnsAsync(connection, transaction, cancellationToken, "migration_pending_seals",
+            ("operation_id", "TEXT", true, 1),
+            ("immutable_request_hash", "TEXT", true, 0),
+            ("full_fingerprint", "TEXT", true, 0),
+            ("source_set_hash", "TEXT", true, 0),
+            ("backup_manifest_hash", "TEXT", true, 0),
+            ("sealed_utc", "TEXT", true, 0)).ConfigureAwait(false);
+        await ValidateForeignKeyAsync(connection, transaction, cancellationToken, "migration_pending_seals",
+            "operation_id").ConfigureAwait(false);
     }
 
     private static async Task EnsureOperationalSchemaUpgradesAsync(
@@ -2259,12 +2266,244 @@ internal sealed class HorseIdentityMigrationJournal
         SqliteTransaction transaction,
         CancellationToken cancellationToken)
     {
+        await ValidateCoreTablesAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
+        await EnsureRequestKeyTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
+        await EnsureExecutionIntentTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
         await EnsureRequestKeyPreviewFingerprintColumnAsync(connection, cancellationToken, transaction)
             .ConfigureAwait(false);
         await EnsureRequestKeyRequestKindColumnAsync(connection, cancellationToken, transaction)
             .ConfigureAwait(false);
+        await ValidateTableColumnsAsync(connection, transaction, cancellationToken, "migration_request_keys",
+            ("request_key", "TEXT", true, 1),
+            ("immutable_request_hash", "TEXT", true, 0),
+            ("preview_fingerprint", "TEXT", false, 0),
+            ("request_kind", "TEXT", true, 0),
+            ("operation_id", "TEXT", true, 0)).ConfigureAwait(false);
+        await ValidateUniqueColumnIndexAsync(connection, transaction, cancellationToken, "migration_request_keys",
+            "operation_id").ConfigureAwait(false);
+        await ValidateForeignKeyAsync(connection, transaction, cancellationToken, "migration_request_keys",
+            "operation_id").ConfigureAwait(false);
+        await ValidateTableColumnsAsync(connection, transaction, cancellationToken, "migration_execution_intents",
+            ("operation_id", "TEXT", true, 1),
+            ("immutable_request_hash", "TEXT", true, 0),
+            ("created_utc", "TEXT", true, 0),
+            ("updated_utc", "TEXT", true, 0),
+            ("phase", "INTEGER", true, 0)).ConfigureAwait(false);
+        await ValidateForeignKeyAsync(connection, transaction, cancellationToken, "migration_execution_intents",
+            "operation_id").ConfigureAwait(false);
         await EnsurePendingSealTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
+        await EnsureSingleActiveIntentIndexAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
     }
+
+    private static async Task EnsureRequestKeyTableAsync(SqliteConnection connection, SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasRequestKeyTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false))
+        {
+            await ValidateTableColumnsAsync(connection, transaction, cancellationToken, "migration_request_keys",
+                [
+                    ("request_key", "TEXT", true, 1),
+                    ("immutable_request_hash", "TEXT", true, 0),
+                    ("operation_id", "TEXT", true, 0),
+                    ("preview_fingerprint", "TEXT", false, 0),
+                    ("request_kind", "TEXT", true, 0),
+                ], ["preview_fingerprint", "request_kind"])
+                .ConfigureAwait(false);
+            return;
+        }
+
+        await ExecuteSchemaAsync(connection, transaction, cancellationToken, """
+            CREATE TABLE migration_request_keys (
+                request_key TEXT PRIMARY KEY NOT NULL,
+                immutable_request_hash TEXT NOT NULL,
+                preview_fingerprint TEXT NULL,
+                request_kind TEXT NOT NULL DEFAULT 'BoundV1',
+                operation_id TEXT NOT NULL UNIQUE,
+                FOREIGN KEY (operation_id) REFERENCES migration_operations(operation_id) ON DELETE CASCADE
+            );
+            """).ConfigureAwait(false);
+    }
+
+    private static async Task EnsureExecutionIntentTableAsync(SqliteConnection connection,
+        SqliteTransaction transaction, CancellationToken cancellationToken)
+    {
+        if (await HasExecutionIntentTableAsync(connection, transaction, cancellationToken).ConfigureAwait(false))
+            return;
+
+        await ExecuteSchemaAsync(connection, transaction, cancellationToken, """
+            CREATE TABLE migration_execution_intents (
+                operation_id TEXT PRIMARY KEY NOT NULL,
+                immutable_request_hash TEXT NOT NULL,
+                created_utc TEXT NOT NULL,
+                updated_utc TEXT NOT NULL,
+                phase INTEGER NOT NULL,
+                FOREIGN KEY (operation_id) REFERENCES migration_operations(operation_id) ON DELETE CASCADE
+            );
+            """).ConfigureAwait(false);
+    }
+
+    private static async Task EnsureSingleActiveIntentIndexAsync(SqliteConnection connection,
+        SqliteTransaction transaction, CancellationToken cancellationToken)
+    {
+        const string indexName = "IX_migration_execution_intents_single_active";
+        await using var lookup = connection.CreateCommand();
+        lookup.Transaction = transaction;
+        lookup.CommandText = "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = $name;";
+        lookup.Parameters.AddWithValue("$name", indexName);
+        var indexSql = await lookup.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        var existingSql = indexSql is string text ? text : null;
+        const string expectedSql = "CREATE UNIQUE INDEX IX_migration_execution_intents_single_active " +
+            "ON migration_execution_intents ((1)) WHERE phase NOT IN (9, 10)";
+        if (existingSql is null)
+        {
+            await ExecuteSchemaAsync(connection, transaction, cancellationToken, """
+                CREATE UNIQUE INDEX IX_migration_execution_intents_single_active
+                    ON migration_execution_intents ((1))
+                    WHERE phase NOT IN (9, 10);
+                """).ConfigureAwait(false);
+            existingSql = expectedSql;
+        }
+
+        if (!string.Equals(NormalizeSchemaSql(existingSql), NormalizeSchemaSql(expectedSql),
+                StringComparison.Ordinal))
+            throw new InvalidDataException("Migration journal active-intent index is corrupt.");
+
+        await using var properties = connection.CreateCommand();
+        properties.Transaction = transaction;
+        properties.CommandText = "PRAGMA index_list('migration_execution_intents');";
+        await using var reader = await properties.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var found = false;
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (!string.Equals(reader.GetString(1), indexName, StringComparison.Ordinal)) continue;
+            found = reader.GetInt32(2) == 1 && reader.GetInt32(4) == 1;
+            break;
+        }
+        if (!found) throw new InvalidDataException("Migration journal active-intent index is corrupt.");
+    }
+
+    private static async Task ValidateCoreTablesAsync(SqliteConnection connection, SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await ValidateTableColumnsAsync(connection, transaction, cancellationToken, "migration_operations",
+            ("operation_id", "TEXT", true, 1), ("request_hash", "TEXT", true, 0),
+            ("request_json", "TEXT", true, 0), ("status", "INTEGER", true, 0), ("reason", "INTEGER", true, 0),
+            ("created_utc", "TEXT", true, 0), ("updated_utc", "TEXT", true, 0),
+            ("terminal_utc", "TEXT", false, 0), ("results_json", "TEXT", true, 0),
+            ("workflow_claimed", "INTEGER", true, 0)).ConfigureAwait(false);
+        await ValidateTableColumnsAsync(connection, transaction, cancellationToken, "migration_pages",
+            ("operation_id", "TEXT", true, 1), ("page_identity", "TEXT", true, 2),
+            ("surface", "INTEGER", true, 0), ("table_name", "TEXT", true, 0),
+            ("row_count", "INTEGER", true, 0), ("membership_hash", "TEXT", true, 0),
+            ("before_hash", "TEXT", true, 0), ("expected_after_hash", "TEXT", true, 0),
+            ("state", "INTEGER", true, 0), ("updated_utc", "TEXT", true, 0)).ConfigureAwait(false);
+        await ValidateTableColumnsAsync(connection, transaction, cancellationToken, "migration_required_pages",
+            ("operation_id", "TEXT", true, 1), ("page_identity", "TEXT", true, 2),
+            ("surface", "INTEGER", true, 0), ("table_name", "TEXT", true, 0),
+            ("row_count", "INTEGER", true, 0), ("membership_hash", "TEXT", true, 0),
+            ("before_hash", "TEXT", true, 0), ("expected_after_hash", "TEXT", true, 0),
+            ("evidence_bytes", "INTEGER", true, 0)).ConfigureAwait(false);
+        await ValidateForeignKeyAsync(connection, transaction, cancellationToken, "migration_pages",
+            "operation_id").ConfigureAwait(false);
+        await ValidateForeignKeyAsync(connection, transaction, cancellationToken, "migration_required_pages",
+            "operation_id").ConfigureAwait(false);
+    }
+
+    private static async Task ValidateForeignKeyAsync(SqliteConnection connection, SqliteTransaction transaction,
+        CancellationToken cancellationToken, string table, string fromColumn)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = $"PRAGMA foreign_key_list('{table}');";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (string.Equals(reader.GetString(2), "migration_operations", StringComparison.Ordinal)
+                && string.Equals(reader.GetString(3), fromColumn, StringComparison.Ordinal)
+                && string.Equals(reader.GetString(4), "operation_id", StringComparison.Ordinal)
+                && string.Equals(reader.GetString(6), "CASCADE", StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+        throw new InvalidDataException($"Migration journal table {table} is corrupt.");
+    }
+
+    private static async Task ValidateUniqueColumnIndexAsync(SqliteConnection connection,
+        SqliteTransaction transaction, CancellationToken cancellationToken, string table, string column)
+    {
+        await using var indexes = connection.CreateCommand();
+        indexes.Transaction = transaction;
+        indexes.CommandText = $"PRAGMA index_list('{table}');";
+        await using var indexReader = await indexes.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var indexNames = new List<string>();
+        while (await indexReader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            if (indexReader.GetInt32(2) == 1 && indexReader.GetInt32(4) == 0)
+                indexNames.Add(indexReader.GetString(1));
+        await indexReader.DisposeAsync().ConfigureAwait(false);
+
+        foreach (var indexName in indexNames)
+        {
+            await using var info = connection.CreateCommand();
+            info.Transaction = transaction;
+            info.CommandText = $"PRAGMA index_info('{indexName.Replace("'", "''", StringComparison.Ordinal)}');";
+            await using var reader = await info.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            var columns = new List<string>();
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                columns.Add(reader.GetString(2));
+            if (columns.Count == 1 && string.Equals(columns[0], column, StringComparison.Ordinal)) return;
+        }
+        throw new InvalidDataException($"Migration journal table {table} is corrupt.");
+    }
+
+    private static Task ValidateTableColumnsAsync(SqliteConnection connection, SqliteTransaction transaction,
+        CancellationToken cancellationToken, string table,
+        params (string Name, string Type, bool NotNull, int PrimaryKey)[] expected) =>
+        ValidateTableColumnsCoreAsync(connection, transaction, cancellationToken, table, expected, null);
+
+    private static Task ValidateTableColumnsAsync(SqliteConnection connection, SqliteTransaction transaction,
+        CancellationToken cancellationToken, string table,
+        (string Name, string Type, bool NotNull, int PrimaryKey)[] expected, string[] allowMissing) =>
+        ValidateTableColumnsCoreAsync(connection, transaction, cancellationToken, table, expected, allowMissing);
+
+    private static async Task ValidateTableColumnsCoreAsync(SqliteConnection connection, SqliteTransaction transaction,
+        CancellationToken cancellationToken, string table,
+        (string Name, string Type, bool NotNull, int PrimaryKey)[] expected,
+        string[]? allowMissing)
+    {
+        var permitted = expected.Select(column => column.Name).ToHashSet(StringComparer.Ordinal);
+        var required = expected.Select(column => column.Name).Except(allowMissing ?? [], StringComparer.Ordinal)
+            .ToHashSet(StringComparer.Ordinal);
+        var actual = new Dictionary<string, (string Type, bool NotNull, int PrimaryKey)>(StringComparer.Ordinal);
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = $"PRAGMA table_info('{table}');";
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                actual.Add(reader.GetString(1), (reader.GetString(2), reader.GetInt32(3) != 0, reader.GetInt32(5)));
+        }
+
+        if (!required.IsSubsetOf(actual.Keys) || actual.Keys.Any(name => !permitted.Contains(name)))
+            throw new InvalidDataException($"Migration journal table {table} is corrupt.");
+        foreach (var column in expected)
+        {
+            if (!actual.TryGetValue(column.Name, out var value)) continue;
+            if (!string.Equals(value.Type, column.Type, StringComparison.OrdinalIgnoreCase)
+                || value.NotNull != column.NotNull || value.PrimaryKey != column.PrimaryKey)
+                throw new InvalidDataException($"Migration journal table {table} is corrupt.");
+        }
+    }
+
+    private static async Task ExecuteSchemaAsync(SqliteConnection connection, SqliteTransaction transaction,
+        CancellationToken cancellationToken, string sql)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = sql;
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static string NormalizeSchemaSql(string sql) => string.Concat(sql.Where(character => !char.IsWhiteSpace(character)))
+        .ToUpperInvariant();
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
     {

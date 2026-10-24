@@ -728,6 +728,42 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
     }
 
     [TestMethod]
+    public async Task NormalHostServesSwaggerAfterEmptyPreAdmissionJournalUpgrade()
+    {
+        using var fixture = new RuntimeFixture();
+        await HistoricalHorseIdentityMigrationJournalFixture.CreateAsync(fixture.Journal.DatabasePath,
+            fixture.Journal.InitializationMarkerPath, fixture.Journal.LockPath);
+
+        using var child = fixture.StartApiProcess(maintenanceMode: true);
+        try
+        {
+            using var client = await fixture.WaitForHealthAsync(child);
+            using var swagger = await client.GetAsync("/swagger/v1/swagger.json");
+            Assert.AreEqual(HttpStatusCode.OK, swagger.StatusCode,
+                "The host must complete the canonical pre-admission journal upgrade before serving its contract.");
+            StringAssert.Contains(swagger.Content.Headers.ContentType?.MediaType ?? string.Empty, "json");
+        }
+        finally
+        {
+            await RuntimeFixture.StopAsync(child);
+        }
+
+        await using var inspect = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False");
+        await inspect.OpenAsync();
+        Assert.AreEqual(0L, await JournalScalarAsync(inspect, "SELECT COUNT(*) FROM migration_operations;"));
+        Assert.AreEqual(0L, await JournalScalarAsync(inspect, "SELECT COUNT(*) FROM migration_request_keys;"));
+        Assert.AreEqual(0L, await JournalScalarAsync(inspect, "SELECT COUNT(*) FROM migration_execution_intents;"));
+        Assert.AreEqual(0L, await JournalScalarAsync(inspect, "SELECT COUNT(*) FROM migration_pending_seals;"));
+    }
+
+    private static async Task<long> JournalScalarAsync(SqliteConnection connection, string sql)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return Convert.ToInt64(await command.ExecuteScalarAsync());
+    }
+
+    [TestMethod]
     public async Task StandaloneFixedCommandRejectsPendingRequestWithoutClaimOrIntent()
     {
         await using var stores = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
