@@ -420,9 +420,9 @@ jobs:
               echo "Existing API container is not the expected Compose-owned image." >&2
               exit 1
             }
+            domain="${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}"
             case "$current_state" in
               running)
-                domain="${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}"
                 horse_id_migration_assert_api_startup_blocked "https://$domain" "$HORSE_RACING_API_KEY"
                 ;;
               exited)

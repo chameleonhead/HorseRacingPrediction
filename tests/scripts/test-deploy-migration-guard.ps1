@@ -248,7 +248,10 @@ w=yaml.safe_load(open(sys.argv[1],encoding='utf-8'))
 s=next(x for x in w['jobs']['recover-api-startup']['steps'] if x.get('name')=='Recover only the exact blocked API image')['with']['script']
 start=s.index('expected_current_image=')
 end=s.index('IMAGE_NAME="$requested_image_name"',start)
+ready=s.index('horse_id_migration_wait_recovery_swagger "https://$domain"')
+ready_end=s.index('\n',s.index('horse_id_migration_assert_recovery_api_ready "https://$domain" "$HORSE_RACING_API_KEY"',ready))
 print(base64.b64encode(s[start:end].encode()).decode())
+print(base64.b64encode(s[ready:ready_end].encode()).decode())
 '@
 if ($ruby) {
     $eligibilityExtractor = @'
@@ -258,15 +261,19 @@ w=YAML.safe_load_file(ARGV.fetch(0), aliases: false)
 s=w.dig('jobs','recover-api-startup','steps').find { |x| x['name']=='Recover only the exact blocked API image' }.dig('with','script')
 start=s.index('expected_current_image=') or abort 'recovery eligibility start missing'
 finish=s.index('IMAGE_NAME="$requested_image_name"',start) or abort 'recovery eligibility end missing'
-print Base64.strict_encode64(s[start...finish])
+ready=s.index('horse_id_migration_wait_recovery_swagger "https://$domain"') or abort 'shared recovery readiness start missing'
+ready_line_end=s.index("\n",s.index('horse_id_migration_assert_recovery_api_ready "https://$domain" "$HORSE_RACING_API_KEY"',ready)) or abort 'shared recovery readiness end missing'
+puts Base64.strict_encode64(s[start...finish])
+puts Base64.strict_encode64(s[ready...ready_line_end])
 '@
     $eligibilityBase64 = & $ruby.Source -e $eligibilityExtractor $workflowPath 2>&1
 }
 else {
     $eligibilityBase64 = & $pythonCommand -c $eligibilityExtractor $workflowPath 2>&1
 }
-Assert-Case ($LASTEXITCODE -eq 0 -and $eligibilityBase64.Count -eq 1) "Could not extract recovery container eligibility from parsed workflow: $(($eligibilityBase64 -join "`n"))"
-$eligibilitySnippet = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(($eligibilityBase64 -join '').Trim()))
+Assert-Case ($LASTEXITCODE -eq 0 -and $eligibilityBase64.Count -eq 2) "Could not extract recovery container eligibility and shared readiness from parsed workflow: $(($eligibilityBase64 -join "`n"))"
+$eligibilitySnippet = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($eligibilityBase64[0].Trim()))
+$readinessSnippet = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($eligibilityBase64[1].Trim()))
 
 $pythonBashPath = ConvertTo-BashPath $pythonCommand
 $helperBashPath = ConvertTo-BashPath $helperPath
@@ -277,7 +284,7 @@ $tempBashPath = ConvertTo-BashPath $tempRoot
 function Invoke-RecoveryEligibilityCase([string] $ApiIds, [string] $Image, [string] $State, [string] $Service, [string] $ProjectLabel, [string] $ConfigProject, [int] $BlockedStatus) {
     $payload = @"
 set -euo pipefail
-export IMAGE_NAME='ghcr.io/example/horse-racing-prediction-api' IMAGE_TAG='sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' EXPECTED_DEPLOYED_SHA='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' APP_DIRECTORY='/tmp/hrp-recovery-eligibility-test' DOMAIN_NAME='localhost' LIGHTSAIL_HOST='localhost' HORSE_RACING_API_KEY='test-only'
+export IMAGE_NAME='ghcr.io/example/horse-racing-prediction-api' IMAGE_TAG='sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' EXPECTED_DEPLOYED_SHA='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' APP_DIRECTORY='/tmp/hrp-recovery-eligibility-test' DOMAIN_NAME='recovery.example.test' LIGHTSAIL_HOST='unused.example.test' HORSE_RACING_API_KEY='test-only'
 requested_image_name=`$IMAGE_NAME
 requested_image_tag=`$IMAGE_TAG
 export MOCK_API_IDS=$(Quote-Bash $ApiIds) MOCK_IMAGE=$(Quote-Bash $Image) MOCK_STATE=$(Quote-Bash $State) MOCK_SERVICE=$(Quote-Bash $Service) MOCK_PROJECT_LABEL=$(Quote-Bash $ProjectLabel) MOCK_CONFIG_PROJECT=$(Quote-Bash $ConfigProject) MOCK_BLOCKED_STATUS=$(Quote-Bash ([string]$BlockedStatus)) MOCK_PYTHON=$(Quote-Bash $pythonBashPath)
@@ -293,7 +300,10 @@ docker() {
 }
 python3() { "`$MOCK_PYTHON" "`$@"; }
 horse_id_migration_assert_api_startup_blocked() { printf 'BLOCKED_HTTP_CHECK\n'; return "`$MOCK_BLOCKED_STATUS"; }
+horse_id_migration_wait_recovery_swagger() { printf 'SWAGGER_URL=%s\n' "`$1"; }
+horse_id_migration_assert_recovery_api_ready() { printf 'READY_URL=%s\nAPI_KEY=%s\n' "`$1" "`$2"; }
 $eligibilitySnippet
+$readinessSnippet
 printf 'ELIGIBILITY_COMPLETE\n'
 "@
     return Invoke-Bash $payload
@@ -301,9 +311,9 @@ printf 'ELIGIBILITY_COMPLETE\n'
 
 $expectedRecoveryImage = 'ghcr.io/example/horse-racing-prediction-api:sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 $runningEligibility = Invoke-RecoveryEligibilityCase 'api1' $expectedRecoveryImage 'running' 'api' 'project1' 'project1' 0
-Assert-Case ($runningEligibility.ExitCode -eq 0 -and $runningEligibility.Output -match 'BLOCKED_HTTP_CHECK') "Running API must retain the blocked HTTP check. $($runningEligibility.Output)"
+Assert-Case ($runningEligibility.ExitCode -eq 0 -and $runningEligibility.Output -match 'BLOCKED_HTTP_CHECK' -and $runningEligibility.Output -match 'SWAGGER_URL=https://recovery\.example\.test' -and $runningEligibility.Output -match 'READY_URL=https://recovery\.example\.test' -and $runningEligibility.Output -match 'API_KEY=test-only') "Running API must retain blocked HTTP and shared readiness must receive the resolved URL and key under nounset. $($runningEligibility.Output)"
 $stoppedEligibility = Invoke-RecoveryEligibilityCase 'api1' $expectedRecoveryImage 'exited' 'api' 'project1' 'project1' 0
-Assert-Case ($stoppedEligibility.ExitCode -eq 0 -and $stoppedEligibility.Output -notmatch 'BLOCKED_HTTP_CHECK' -and $stoppedEligibility.Output -match 'ELIGIBILITY_COMPLETE') "Only the exact stopped Compose API may skip the impossible blocked HTTP check. $($stoppedEligibility.Output)"
+Assert-Case ($stoppedEligibility.ExitCode -eq 0 -and $stoppedEligibility.Output -notmatch 'BLOCKED_HTTP_CHECK' -and $stoppedEligibility.Output -match 'SWAGGER_URL=https://recovery\.example\.test' -and $stoppedEligibility.Output -match 'READY_URL=https://recovery\.example\.test' -and $stoppedEligibility.Output -match 'API_KEY=test-only' -and $stoppedEligibility.Output -match 'ELIGIBILITY_COMPLETE') "Only the exact stopped Compose API may skip the impossible blocked HTTP check, then pass the shared readiness arguments under nounset. $($stoppedEligibility.Output)"
 foreach ($case in @(
     @{ Name = 'missing-container'; Ids = ''; Image = $expectedRecoveryImage; State = 'exited'; Service = 'api'; Project = 'project1'; ConfigProject = 'project1'; Blocked = 0 },
     @{ Name = 'multiple-containers'; Ids = "api1`napi2"; Image = $expectedRecoveryImage; State = 'exited'; Service = 'api'; Project = 'project1'; ConfigProject = 'project1'; Blocked = 0 },
