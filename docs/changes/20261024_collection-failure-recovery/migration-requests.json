@@ -1,0 +1,21 @@
+{
+  "sourceCandidates": "diagnostic-candidates.json",
+  "admissionKind": "PendingV2",
+  "batches": [
+    {
+      "batch": 1,
+      "requestKey": "6650355f-531a-49df-b25c-68810cb4267c",
+      "entries": 16
+    },
+    {
+      "batch": 2,
+      "requestKey": "ef7d5ec5-a1e4-494f-b31b-fc08a880498e",
+      "entries": 16
+    },
+    {
+      "batch": 3,
+      "requestKey": "d3ecfa64-e77f-46c6-867a-149d1dec0b98",
+      "entries": 9
+    }
+  ]
+}
