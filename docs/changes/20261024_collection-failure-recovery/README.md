@@ -8,6 +8,8 @@
 
 ## CURRENT
 
+25Oct followup: user requests that migration errors do not terminate site availability and that errors are visible on screen; redundancy explicitly out of scope. [Migration error containment proposal](../20261025_migration-error-containment/README.md) is source-informed/Proposed, not deployed. Parent41migration and actual handoff diagnosis remain unfinished; no normal-site recovery claim and no new API/data operation in this planning turn.
+
 User explicitly approved41-candidate migration expansion and requested direct API execution with the previously supplied key. T3 Verified/C1 Accepted risk; stop/drain/backup/full validation/postchecks remain mandatory. Lead owns credentials, live migration and acceptance; Luna verifies existing API contracts read-only. Next refresh groups/pipeline and candidate roots, stage generic max16-input batches, explicitly execute and poll actual operations through backup/apply/postchecks/restart, then eligible retry/separate resume/progress. No reset/guard bypass/forced unknown data. Other5 causes remain separate unfinished tasks; original3 in parent not silently declared done. Preserve unrelated dirty policy/AGENTS/routing/efficiency files. No production-code change authorized by this operational approval.
 
 Execution24Oct21:17JST: fresh groups unchanged2+39+4+1, pipeline remains paused from19:55 incident. TargetReviewV2 batches16/16/9 all CanSavePending=true/no blockers. Stable request keys recorded in migration-requests.json before admission. First operation f8f857b4-23c6-40d7-ac04-60676f42aa6d staged PendingV2/AwaitingActions; execute next. Secure session71164 holds key only in memory. Target review/admission is not apply proof. No stage for later batches until first terminal result.

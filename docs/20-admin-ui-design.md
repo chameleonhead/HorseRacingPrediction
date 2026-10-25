@@ -901,6 +901,8 @@ Settingsから `/settings/horse-id-migration` へ移動する。候補は未選�
 
 追加の未承認案: [書き換え開始前の移行準備取消](changes/20261019_pre-apply-cancel/README.md)。書換え未開始を証明した中断依頼だけを明示取消し、backup/元依頼を保持して収集停止の通常画面へ戻す案であり、最小host操作境界はこの追加案の承認まで変更しない。
 
+2026-10-25追加の未承認案: [移行エラーの隔離と画面表示](changes/20261025_migration-error-containment/README.md)。サーバー冗長化は行わず、既存の制御プロセス・最小画面を再利用し、移行の失敗をサイト全体の終了へ波及させず、認証後に段階・安全な理由・時刻・依頼番号を確認できるようにする。保護中の通常URLからも案内画面へ到達させる一方、通常APIと書換え処理の並行アクセス、未知/部分移行データの操作、自動再実行・gate解除は許可しない。現在の接続断・最小状態表示を変更する案であり、承認・実装・配備済みとは扱わない。準備取消しは別の未承認案のままとする。
+
 ## 15. 調査資料
 
 - [ASP.NET Core Blazor tooling / templates (.NET 10)](https://learn.microsoft.com/en-us/aspnet/core/blazor/tooling?view=aspnetcore-10.0)
