@@ -1,0 +1,9 @@
+{
+"schemaVersion":2,"changeId":"20261025_migration-error-containment","taskId":"T4","attemptId":"T4-A1","state":"completed","taskDifficulty":"low","acceptanceCriteria":["AC2","AC4"],
+"route":{"tier":"worker","requestedModel":"gpt-6-luna","observedModel":null,"observationSource":null,"modelTelemetryReason":"Explicit spawn high; telemetry unexposed"},
+"usage":{"availability":"unavailable","totalTokens":null,"reason":"Unexposed"},
+"scope":["HorseIdentityMigrationAdmin.razor, existing AdminApiClient.HorseIdentityMigration only if necessary, relevant component/browser tests; minimal renderer changes return to T3 owner"],
+"review":{"usageAvailability":"unavailable","totalTokens":null,"activeMinutes":null,"reason":"Unexposed"},"elapsed":{"availability":"unavailable","minutes":null,"reason":"Unexposed"},"overhead":{"availability":"unavailable","preparationMinutes":null,"integrationMinutes":null,"auditMinutes":null,"reason":"Unexposed"},
+"startRevision":"e5a9def2","endRevisionOrPatch":"Razor6137ee0d2794c02bfaef602907cf3c46101f211a; component7075f6d9953760c571313a764fc2ee9d65fcb009; browserefdb56510e3abfb434c1c442095ad5834c4a206e",
+"outcome":{"verificationPassed":true,"qualityPassed":true,"scopePassed":true,"independentChallenge":"Lead reviewed safe allowlists/stale/success preservation, corrected Draining and viewed390px error receipt after capture fix. Real temp journal/server GET proves Tab/Enter/reload/no execute. Sessions45449=23/23,10617=browser1/1; final format19276 exit0 and component95994=22/22. Native/final acceptance T6/T5. Three owned files only.","retries":6,"leadCorrections":2,"reviewPasses":3,"promoted":false,"escapedDefects":0,"escalations":0,"reviewMode":"detailed","detailReviewReason":"Browser/format gates: server-side HttpClient/readiness vs mock/oracle assumptions","decision":"accept"}
+}
