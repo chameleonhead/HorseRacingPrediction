@@ -319,6 +319,8 @@ ready=s.index('horse_id_migration_wait_recovery_swagger "https://$domain"')
 ready_end=s.index('\n',s.index('horse_id_migration_assert_recovery_api_ready "https://$domain" "$HORSE_RACING_API_KEY"',ready))
 print(base64.b64encode(s[start:end].encode()).decode())
 print(base64.b64encode(s[ready:ready_end].encode()).decode())
+interop=next(x for x in w['jobs']['verify']['steps'] if x.get('name')=='Verify horse identity migration deploy guard')['run']
+print(base64.b64encode(interop.encode()).decode())
 '@
 if ($ruby) {
     $eligibilityExtractor = @'
@@ -330,23 +332,91 @@ start=s.index('expected_current_image=') or abort 'recovery eligibility start mi
 finish=s.index('IMAGE_NAME="$requested_image_name"',start) or abort 'recovery eligibility end missing'
 ready=s.index('horse_id_migration_wait_recovery_swagger "https://$domain"') or abort 'shared recovery readiness start missing'
 ready_line_end=s.index("\n",s.index('horse_id_migration_assert_recovery_api_ready "https://$domain" "$HORSE_RACING_API_KEY"',ready)) or abort 'shared recovery readiness end missing'
+interop=w.dig('jobs','verify','steps').find { |x| x['name']=='Verify horse identity migration deploy guard' } or abort 'typed interop workflow step missing'
 puts Base64.strict_encode64(s[start...finish])
 puts Base64.strict_encode64(s[ready...ready_line_end])
+puts Base64.strict_encode64(interop['run'])
 '@
     $eligibilityBase64 = & $ruby.Source -e $eligibilityExtractor $workflowPath 2>&1
 }
 else {
     $eligibilityBase64 = & $pythonCommand -c $eligibilityExtractor $workflowPath 2>&1
 }
-Assert-Case ($LASTEXITCODE -eq 0 -and $eligibilityBase64.Count -eq 2) "Could not extract recovery container eligibility and shared readiness from parsed workflow: $(($eligibilityBase64 -join "`n"))"
+Assert-Case ($LASTEXITCODE -eq 0 -and $eligibilityBase64.Count -eq 3) "Could not extract recovery container eligibility, shared readiness, and typed interop step from parsed workflow: $(($eligibilityBase64 -join "`n"))"
 $eligibilitySnippet = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($eligibilityBase64[0].Trim()))
 $readinessSnippet = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($eligibilityBase64[1].Trim()))
+$typedInteropStep = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($eligibilityBase64[2].Trim()))
 
 $pythonBashPath = ConvertTo-BashPath $pythonCommand
 $helperBashPath = ConvertTo-BashPath $helperPath
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("hrp-migration-deploy-test-" + [guid]::NewGuid().ToString('N'))
 [void](New-Item -ItemType Directory -Path $tempRoot)
 $tempBashPath = ConvertTo-BashPath $tempRoot
+
+function Invoke-WorkflowInteropProducer([string] $Payload, [string] $RunnerTemporaryRoot, [string] $DotNetTemporaryRoot, [int] $TimeoutMilliseconds = 180000) {
+    $process = [System.Diagnostics.Process]::new()
+    $process.StartInfo.FileName = (Get-Command pwsh -ErrorAction Stop).Source
+    $process.StartInfo.ArgumentList.Add('-NoProfile')
+    $process.StartInfo.ArgumentList.Add('-NonInteractive')
+    $process.StartInfo.ArgumentList.Add('-EncodedCommand')
+    $process.StartInfo.ArgumentList.Add([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($Payload)))
+    $process.StartInfo.WorkingDirectory = $repositoryRoot
+    $process.StartInfo.UseShellExecute = $false
+    $process.StartInfo.RedirectStandardInput = $true
+    $process.StartInfo.RedirectStandardOutput = $true
+    $process.StartInfo.RedirectStandardError = $true
+    $process.StartInfo.Environment['RUNNER_TEMP'] = $RunnerTemporaryRoot
+    $process.StartInfo.Environment['TMPDIR'] = $DotNetTemporaryRoot
+    $process.StartInfo.Environment['TMP'] = $DotNetTemporaryRoot
+    $process.StartInfo.Environment['TEMP'] = $DotNetTemporaryRoot
+    if (-not $process.Start()) { throw 'Could not start the parsed workflow interop producer.' }
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+    try {
+        $process.StandardInput.Close()
+        if (-not $process.WaitForExit($TimeoutMilliseconds)) {
+            $process.Kill($true)
+            $process.WaitForExit()
+            throw "Parsed workflow typed producer exceeded ${TimeoutMilliseconds}ms; its process tree was terminated."
+        }
+        return [pscustomobject]@{
+            ExitCode = $process.ExitCode
+            Output = ($stdoutTask.Result + $stderrTask.Result)
+        }
+    }
+    finally {
+        $process.Dispose()
+    }
+}
+
+$interopGuardInvocationPattern = '(?m)^[ \t]*\./tests/scripts/test-deploy-migration-guard\.ps1 -Bash /bin/bash -OperatorFixtureDirectory \$fixtureDirectory\r?\n[ \t]*if \(\$LASTEXITCODE -ne 0\) \{ throw ''Horse identity migration deploy guard failed\.'' \}'
+Assert-Case ([regex]::Matches($typedInteropStep, $interopGuardInvocationPattern).Count -eq 1) 'The parsed workflow interop step must contain exactly one guard handoff to isolate its producer in this test.'
+$typedInteropProducerStep = [regex]::Replace($typedInteropStep, $interopGuardInvocationPattern, "Write-Output ('PASS typed workflow fixture=' + `$fixtureDirectory)")
+$runnerTemporaryRoot = Join-Path $tempRoot ("runner-temp-boundary-" + [guid]::NewGuid().ToString('N'))
+[void](New-Item -ItemType Directory -Path $runnerTemporaryRoot)
+$dotNetTemporaryRoot = Join-Path $tempRoot ("dotnet-temp-boundary-" + [guid]::NewGuid().ToString('N'))
+[void](New-Item -ItemType Directory -Path $dotNetTemporaryRoot)
+Assert-Case ([IO.Path]::GetFullPath($runnerTemporaryRoot) -ne [IO.Path]::GetFullPath($dotNetTemporaryRoot)) 'The workflow regression requires RUNNER_TEMP to differ from the .NET temp root.'
+$oldRunnerTempProducerStep = $typedInteropProducerStep.Replace('[IO.Path]::GetTempPath()', '$env:RUNNER_TEMP')
+Assert-Case ($oldRunnerTempProducerStep -ne $typedInteropProducerStep) 'The parsed workflow step must select the canonical .NET temp root before running the regression.'
+Write-Output 'START parsed workflow expected-red legacy RUNNER_TEMP counterexample'
+$oldRunnerTempResult = Invoke-WorkflowInteropProducer $oldRunnerTempProducerStep $runnerTemporaryRoot $dotNetTemporaryRoot
+Assert-Case ($oldRunnerTempResult.ExitCode -ne 0 -and $oldRunnerTempResult.Output.Contains('must target an owned temporary directory')) "The old RUNNER_TEMP selection must fail in the actual typed producer when the roots differ; exit=$($oldRunnerTempResult.ExitCode), output=$($oldRunnerTempResult.Output)"
+Write-Output "PASS parsed workflow expected-red ownership guard rejected legacy path (exit $($oldRunnerTempResult.ExitCode))"
+Write-Output 'START parsed workflow expected-green canonical .NET temp path'
+$canonicalTempResult = Invoke-WorkflowInteropProducer $typedInteropProducerStep $runnerTemporaryRoot $dotNetTemporaryRoot
+Assert-Case ($canonicalTempResult.ExitCode -eq 0 -and $canonicalTempResult.Output.Contains('PASS typed workflow fixture=')) "The parsed workflow must export its typed fixture under .NET temp when RUNNER_TEMP differs: $($canonicalTempResult.Output)"
+Write-Output "PASS parsed workflow typed exporter accepted canonical .NET temp path (exit $($canonicalTempResult.ExitCode))"
+Write-Output 'START bounded parsed PowerShell child timeout counterexample'
+$stallTimedOut = $false
+try {
+    [void](Invoke-WorkflowInteropProducer 'Start-Sleep -Seconds 10' $runnerTemporaryRoot $dotNetTemporaryRoot 1500)
+}
+catch {
+    $stallTimedOut = $_.Exception.Message.Contains('exceeded 1500ms; its process tree was terminated')
+}
+Assert-Case $stallTimedOut 'A stalled parsed-workflow child must hit its short timeout and terminate its process tree.'
+Write-Output 'PASS bounded parsed PowerShell child timeout terminated stalled process tree'
 
 $operatorYamlStart = $workflow.IndexOf("            bash -s <<'OPERATOR_UI_RECOVERY'", [StringComparison]::Ordinal)
 $operatorYamlEnd = $workflow.IndexOf("            OPERATOR_UI_RECOVERY", $operatorYamlStart, [StringComparison]::Ordinal)

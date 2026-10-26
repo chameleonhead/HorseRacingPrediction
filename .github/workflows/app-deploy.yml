@@ -246,7 +246,7 @@ jobs:
         shell: pwsh
         timeout-minutes: 3
         run: |
-          $fixtureDirectory = Join-Path $env:RUNNER_TEMP ("hrp-horse-identity-deploy-interop-" + [guid]::NewGuid().ToString('N'))
+          $fixtureDirectory = Join-Path ([IO.Path]::GetTempPath()) ("hrp-horse-identity-deploy-interop-" + [guid]::NewGuid().ToString('N'))
           [void](New-Item -ItemType Directory -Path $fixtureDirectory)
           $env:HRP_HORSE_IDENTITY_DEPLOY_INTEROP_FIXTURE_DIR = $fixtureDirectory
           try {
