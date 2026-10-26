@@ -58,6 +58,9 @@ internal static class HorseIdentityMigrationMaintenanceOwnership
     internal static string GetControlOwnerRecordPath(string sourcePath) => GetSiblingPath(sourcePath,
         ".horse-identity-migration.supervisor-control.owner");
 
+    internal static string GetControlBootstrapOwnerRecordPath(string sourcePath) => GetSiblingPath(sourcePath,
+        ".horse-identity-migration.supervisor-control.bootstrap.owner");
+
     internal static string GetMaintenanceGatePath(string sourcePath) => GetSiblingPath(sourcePath,
         ".horse-identity-migration.maintenance");
 
@@ -67,7 +70,8 @@ internal static class HorseIdentityMigrationMaintenanceOwnership
         var sidecars = paths.Concat(paths.SelectMany(path => new[]
         {
             HorseIdentityMigrationRuntimeOwnership.GetRuntimeOwnershipGatePath(path),
-            GetControlLockPath(path), GetControlOwnerRecordPath(path), GetMaintenanceGatePath(path),
+            GetControlLockPath(path), GetControlOwnerRecordPath(path),
+            GetControlBootstrapOwnerRecordPath(path), GetMaintenanceGatePath(path),
         })).ToArray();
         if (sidecars.Distinct(comparer).Count() != sidecars.Length)
             throw new IOException("Configured sources and maintenance sidecars cannot alias one another.");
@@ -93,7 +97,7 @@ internal static class HorseIdentityMigrationMaintenanceOwnership
         foreach (var path in paths)
         {
             if (!IsControlLockHeld(GetControlLockPath(path))) return false;
-            var record = ReadOwnerRecord(path);
+            var record = ReadOwnerRecord(path, purpose);
             if (record is null || record.Purpose != purpose
                 || record.OperationId != operationId || record.RequestHash != requestHash
                 || record.SourceSetHash != sourceSetHash || record.ParentProcessId != parentProcessId
@@ -459,12 +463,15 @@ internal static class HorseIdentityMigrationMaintenanceOwnership
         catch (UnauthorizedAccessException) { return false; }
     }
 
-    private static void WriteOwnerRecords(IEnumerable<string> sourcePaths, string record)
+    private static void WriteOwnerRecords(IEnumerable<string> sourcePaths, string purpose, string record)
     {
         var bytes = Encoding.ASCII.GetBytes(record);
         foreach (var path in sourcePaths)
         {
-            var marker = GetControlOwnerRecordPath(path);
+            if (purpose == "api-bootstrap" && !IsStructurallyValidOwnerRecord(GetControlOwnerRecordPath(path)))
+                throw new InvalidDataException("A predecessor supervisor owner record is corrupt.");
+
+            var marker = GetOwnerRecordPath(path, purpose);
             HorseIdentityMigrationRuntimeOwnership.ValidateExistingAncestors(marker, sourceFile: true);
             using var handle = new FileStream(marker, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None,
                 MaximumRecordBytes, FileOptions.WriteThrough);
@@ -478,14 +485,37 @@ internal static class HorseIdentityMigrationMaintenanceOwnership
         }
     }
 
-    private static OwnerRecord? ReadOwnerRecord(string sourcePath)
+    private static OwnerRecord? ReadOwnerRecord(string sourcePath, string purpose)
     {
-        var path = GetControlOwnerRecordPath(sourcePath);
-        if (!File.Exists(path)) return null;
+        if (purpose == "api-bootstrap" && !IsStructurallyValidOwnerRecord(GetControlOwnerRecordPath(sourcePath)))
+            return null;
+        var path = GetOwnerRecordPath(sourcePath, purpose);
         HorseIdentityMigrationRuntimeOwnership.ValidateExistingAncestors(path, sourceFile: true);
+        if (!File.Exists(path)) return null;
         using var handle = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         return ReadRecord(handle);
     }
+
+    private static bool IsStructurallyValidOwnerRecord(string path)
+    {
+        try
+        {
+            HorseIdentityMigrationRuntimeOwnership.ValidateExistingAncestors(path, sourceFile: true);
+            if (!File.Exists(path)) return true;
+            using var handle = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            return handle.Length is > 0 and <= MaximumRecordBytes && ReadRecord(handle) is not null;
+        }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
+    }
+
+    private static string GetOwnerRecordPath(string sourcePath, string purpose) => purpose switch
+    {
+        "api-bootstrap" => GetControlBootstrapOwnerRecordPath(sourcePath),
+        "cli-operation" or "readonly-reverify" => GetControlOwnerRecordPath(sourcePath),
+        _ => throw new ArgumentOutOfRangeException(nameof(purpose)),
+    };
 
     private static OwnerRecord? ReadRecord(FileStream handle)
     {
@@ -591,7 +621,7 @@ internal static class HorseIdentityMigrationMaintenanceOwnership
             var nonce = HorseIdentityMigrationMaintenanceCapability.CreateNonce();
             var authorization = HorseIdentityMigrationMaintenanceCapability.CreateApiBootstrapAuthorization(
                 sourceHash, identity.ProcessId, identity.StartTicks, nonce);
-            WriteOwnerRecords(_sourcePaths, EncodeOwnerRecord("api-bootstrap", null, null, sourceHash,
+            WriteOwnerRecords(_sourcePaths, "api-bootstrap", EncodeOwnerRecord("api-bootstrap", null, null, sourceHash,
                 identity.ProcessId, identity.StartTicks, authorization.GetNonceHash()));
             CryptographicOperations.ZeroMemory(nonce);
             return authorization;
@@ -625,7 +655,7 @@ internal static class HorseIdentityMigrationMaintenanceOwnership
             var nonce = HorseIdentityMigrationMaintenanceCapability.CreateNonce();
             var authorization = HorseIdentityMigrationMaintenanceCapability.CreateOperationAuthorization(
                 operationId, immutableRequestHash, sourceHash, identity.ProcessId, identity.StartTicks, nonce);
-            WriteOwnerRecords(_sourcePaths, EncodeOwnerRecord("cli-operation", operationId, immutableRequestHash,
+            WriteOwnerRecords(_sourcePaths, "cli-operation", EncodeOwnerRecord("cli-operation", operationId, immutableRequestHash,
                 sourceHash, identity.ProcessId, identity.StartTicks, authorization.GetNonceHash()));
             CryptographicOperations.ZeroMemory(nonce);
             return authorization;
@@ -650,7 +680,7 @@ internal static class HorseIdentityMigrationMaintenanceOwnership
             var nonce = HorseIdentityMigrationMaintenanceCapability.CreateNonce();
             var authorization = new HorseIdentityMigrationMaintenanceCapability.ReadonlyReverificationAuthorization(
                 operationId, immutableRequestHash, sourceHash, identity.ProcessId, identity.StartTicks, nonce);
-            WriteOwnerRecords(_sourcePaths, EncodeOwnerRecord("readonly-reverify", operationId, immutableRequestHash,
+            WriteOwnerRecords(_sourcePaths, "readonly-reverify", EncodeOwnerRecord("readonly-reverify", operationId, immutableRequestHash,
                 sourceHash, identity.ProcessId, identity.StartTicks, authorization.GetNonceHash()));
             CryptographicOperations.ZeroMemory(nonce);
             return authorization;

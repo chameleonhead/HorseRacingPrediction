@@ -30,6 +30,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
@@ -84,6 +85,13 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
     }
 
     [TestMethod]
+    public void OperatorOnlyModeForcesTheSupervisorRootToSelectBlockedHostWhenReady()
+    {
+        Assert.IsTrue(HorseIdentityMigrationSupervisor.ShouldStartBlockedHost(
+            HorseIdentityMigrationStartupState.Ready, hasActiveIntent: false, [], forceBlocked: true));
+    }
+
+    [TestMethod]
     public async Task FixedCommandRejectsMissingMalformedAndExtraArgumentsBeforeCreatingHostState()
     {
         var missing = HorseIdentityMigrationRuntimeMode.Parse([HorseIdentityMigrationRuntimeMode.CommandName]);
@@ -101,6 +109,39 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
         Assert.AreEqual(HorseIdentityMigrationRuntimeModeKind.ExecuteOperation,
             HorseIdentityMigrationRuntimeMode.Parse([HorseIdentityMigrationRuntimeMode.CommandName,
                 Guid.NewGuid().ToString("D")]).Kind);
+    }
+
+    [TestMethod]
+    public void MinimalOperatorHtmlPrioritizesSafeFailureWhenResultListIsBounded()
+    {
+        var operation = new HorseIdentityMigrationOperationResponse(Guid.NewGuid(), "Failed", "BackupFailed",
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow,
+            Enumerable.Repeat(new HorseIdentityMigrationOperationResult("PlanIncomplete", null, 0), 32)
+                .Append(new("BackupFailed", null, 0)).ToArray());
+
+        var html = HorseIdentityMigrationRuntimeMode.BuildMinimalOperatorHtml("/races", operation, journalAvailable: true);
+
+        StringAssert.Contains(html, "BackupFailed");
+        Assert.AreEqual(1, html.Split("<li>BackupFailed</li>", StringSplitOptions.None).Length - 1);
+        Assert.AreEqual(31, html.Split("<li>PlanIncomplete</li>", StringSplitOptions.None).Length - 1);
+    }
+
+    [TestMethod]
+    public void OperatorHealthProbeSupportsDeploymentWildcardAndSemicolonBindings()
+    {
+        var health = HorseIdentityMigrationSupervisor.CreateOperatorHealthUri(
+            "http://+:8080;http://*:8081");
+
+        Assert.AreEqual("http", health.Scheme);
+        Assert.AreEqual("127.0.0.1", health.Host);
+        Assert.AreEqual(8080, health.Port);
+        Assert.AreEqual("/health", health.AbsolutePath);
+
+        var configuration = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["http_ports"] = "8080;8081" })
+            .Build();
+        Assert.AreEqual("http://+:8080;http://+:8081",
+            HorseIdentityMigrationSupervisor.ResolveOperatorUrls(configuration));
     }
 
     [TestMethod]
@@ -141,6 +182,7 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
         try
         {
             using var client = await fixture.WaitForHealthAsync(child);
+            client.DefaultRequestHeaders.Accept.ParseAdd("text/html");
             using var health = await client.GetAsync("/health");
             Assert.AreEqual(HttpStatusCode.OK, health.StatusCode);
 
@@ -162,6 +204,27 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
             StringAssert.Contains(html, operationId.ToString("D"));
             Assert.AreEqual("no-store, no-cache, max-age=0", login.Headers.CacheControl?.ToString());
 
+            foreach (var path in new[] { "/", "/races", "/jobs", "/settings", "/settings/horse-id-migration" })
+            {
+                using var page = await client.GetAsync(path);
+                Assert.AreEqual(HttpStatusCode.OK, page.StatusCode, path);
+                Assert.AreEqual("no-store, no-cache, max-age=0", page.Headers.CacheControl?.ToString(), path);
+                var pageHtml = await page.Content.ReadAsStringAsync();
+                StringAssert.Contains(pageHtml, "Partial", path);
+                StringAssert.Contains(pageHtml, operationId.ToString("D"), path);
+                StringAssert.Contains(pageHtml, "状態を更新", path);
+                StringAssert.Contains(pageHtml, $"/settings/horse-id-migration?operationId={operationId:D}", path);
+                Assert.DoesNotContain(fixture.Root, pageHtml, StringComparison.OrdinalIgnoreCase, path);
+                Assert.DoesNotContain(fixture.ApiKey, pageHtml, StringComparison.Ordinal, path);
+            }
+
+            using var injected = await client.GetAsync("/races?message=%3Cscript%3Ealert(1)%3C%2Fscript%3E");
+            Assert.AreEqual(HttpStatusCode.OK, injected.StatusCode);
+            Assert.DoesNotContain("<script>alert(1)</script>", await injected.Content.ReadAsStringAsync(),
+                StringComparison.OrdinalIgnoreCase);
+            Assert.AreEqual(HorseIdentityMigrationOperationStatus.PartialUnverified,
+                (await fixture.Journal.GetStatusAsync(operationId))!.Status);
+
             using var denied = await client.GetAsync($"/api/v2/admin/horse-id-migration-operations/{operationId:D}");
             Assert.AreEqual(HttpStatusCode.Unauthorized, denied.StatusCode,
                 "A valid cookie must not bypass API-key protection for JSON status.");
@@ -175,6 +238,240 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
             using var diagnostics = await client.GetAsync("/api/v2/admin/horse-id-migration-schema-diagnostics");
             Assert.AreEqual(HttpStatusCode.ServiceUnavailable, diagnostics.StatusCode,
                 "The blocked host must not resolve or read configured source stores.");
+            using var htmlNegotiation = new HttpRequestMessage(HttpMethod.Get, "/races");
+            htmlNegotiation.Headers.Accept.ParseAdd("application/json");
+            using var nonHtml = await client.SendAsync(htmlNegotiation);
+            Assert.AreEqual(HttpStatusCode.ServiceUnavailable, nonHtml.StatusCode);
+            StringAssert.Contains(nonHtml.Content.Headers.ContentType?.MediaType ?? string.Empty, "problem");
+            Assert.IsFalse(File.Exists(fixture.EventStorePath));
+            Assert.IsFalse(File.Exists(fixture.CollectionStorePath));
+            Assert.IsFalse(File.Exists(fixture.ScheduleStorePath));
+            Assert.IsFalse(File.Exists(fixture.QueueStorePath));
+        }
+        finally
+        {
+            await RuntimeFixture.StopAsync(child);
+        }
+    }
+
+    [TestMethod]
+    public async Task OperatorOnlyFlagKeepsReadyAndUnknownJournalOnAuthenticatedBlockedSurface()
+    {
+        foreach (var corruptJournal in new[] { false, true })
+        {
+            using var fixture = new RuntimeFixture();
+            if (corruptJournal)
+                await File.WriteAllBytesAsync(fixture.Journal.DatabasePath, Encoding.ASCII.GetBytes("corrupt journal"));
+
+            using var child = fixture.StartApiProcess(operatorOnly: true);
+            try
+            {
+                using var client = await fixture.WaitForHealthAsync(child);
+                client.DefaultRequestHeaders.Accept.ParseAdd("text/html");
+                using var login = await client.PostAsync("/login", new FormUrlEncodedContent(new Dictionary<string, string>
+                {
+                    ["username"] = "user",
+                    ["password"] = fixture.ApiKey,
+                    ["ReturnUrl"] = "/",
+                }));
+                Assert.AreEqual(HttpStatusCode.OK, login.StatusCode,
+                    $"Operator-only mode must serve authenticated navigation ({corruptJournal}).");
+                StringAssert.Contains(await login.Content.ReadAsStringAsync(), "Status: <strong>Unknown</strong>",
+                    $"Operator-only mode must expose unknown status safely ({corruptJournal}).");
+
+                client.DefaultRequestHeaders.Add("X-Test-Horse-Key", fixture.ApiKey);
+                using var businessApi = await client.GetAsync("/api/races/not-available");
+                Assert.AreEqual(HttpStatusCode.ServiceUnavailable, businessApi.StatusCode,
+                    $"Business API must remain blocked ({corruptJournal}).");
+                using var execute = await client.PostAsync(
+                    $"/api/v2/admin/horse-id-migration-operations/{Guid.NewGuid():D}/execute",
+                    new StringContent(string.Empty));
+                Assert.AreEqual(HttpStatusCode.ServiceUnavailable, execute.StatusCode,
+                    $"Migration apply must remain unavailable ({corruptJournal}).");
+                using var verify = await client.PostAsync(
+                    $"/settings/horse-id-migration/{Guid.NewGuid():D}/verify", new StringContent(string.Empty));
+                Assert.AreEqual(HttpStatusCode.ServiceUnavailable, verify.StatusCode,
+                    $"Migration verification must remain unavailable ({corruptJournal}).");
+
+                Assert.IsFalse(File.Exists(fixture.EventStorePath));
+                Assert.IsFalse(File.Exists(fixture.CollectionStorePath));
+                Assert.IsFalse(File.Exists(fixture.ScheduleStorePath));
+                Assert.IsFalse(File.Exists(fixture.QueueStorePath));
+            }
+            finally
+            {
+                await RuntimeFixture.StopAsync(child);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task SupervisorKeepsJournalOnlyOperatorAvailableDuringApplyAndVerificationWork()
+    {
+        if (!OperatingSystem.IsLinux())
+            Assert.Inconclusive("The owned-child lifecycle proof requires Linux process ownership semantics.");
+
+        using var fixture = new RuntimeFixture();
+        var sources = new HorseIdentityMigrationConfiguredSources(fixture.EventStorePath,
+            fixture.CollectionStorePath, fixture.ScheduleStorePath, fixture.QueueStorePath);
+        using var controlLease = HorseIdentityMigrationMaintenanceOwnership.AcquireSupervisorControlLease(
+            sources.PhysicalSourcePaths);
+        using var environment = new OperatorTestEnvironment(fixture);
+
+        foreach (var workWindow in new[] { "apply", "verification" })
+        {
+            var workStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseWork = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var operatorProcessIds = new System.Collections.Concurrent.ConcurrentQueue<int>();
+            var restartObserved = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var restartExpected = 0;
+            var workTask = HorseIdentityMigrationSupervisor.RunWorkWithOperatorHostAsync(async cancellationToken =>
+            {
+                workStarted.TrySetResult();
+                await releaseWork.Task.WaitAsync(cancellationToken);
+                return true;
+            }, controlLease, fixture.OperatorUrls, CancellationToken.None,
+                processId =>
+                {
+                    operatorProcessIds.Enqueue(processId);
+                    if (Volatile.Read(ref restartExpected) != 0) restartObserved.TrySetResult(processId);
+                });
+
+            try
+            {
+                await workStarted.Task.WaitAsync(TimeSpan.FromSeconds(30));
+                Assert.IsTrue(operatorProcessIds.TryPeek(out _),
+                    $"The journal-only operator host must be owned before {workWindow} work starts.");
+                var activeOperatorProcessId = operatorProcessIds.Last();
+                if (workWindow == "apply")
+                {
+                    Volatile.Write(ref restartExpected, 1);
+                    using (var firstOperator = Process.GetProcessById(activeOperatorProcessId))
+                        firstOperator.Kill(entireProcessTree: false);
+                    var restartedOperatorProcessId = await restartObserved.Task.WaitAsync(TimeSpan.FromSeconds(30));
+                    Assert.AreNotEqual(activeOperatorProcessId, restartedOperatorProcessId,
+                        "An operator crash during owned apply work must restart only the journal-only child.");
+                    using var restartedOperator = Process.GetProcessById(restartedOperatorProcessId);
+                    using var healthClient = await fixture.WaitForHealthAsync(restartedOperator);
+                }
+                using var handler = new HttpClientHandler { CookieContainer = new CookieContainer() };
+                using var client = new HttpClient(handler) { BaseAddress = new Uri(fixture.OperatorUrl) };
+                client.DefaultRequestHeaders.Accept.ParseAdd("text/html");
+                using var login = await client.PostAsync("/login", new FormUrlEncodedContent(new Dictionary<string, string>
+                {
+                    ["username"] = "user",
+                    ["password"] = fixture.ApiKey,
+                    ["ReturnUrl"] = "/",
+                }));
+                Assert.AreEqual(HttpStatusCode.OK, login.StatusCode);
+
+                foreach (var path in new[] { "/", "/races", "/jobs", "/settings" })
+                {
+                    using var response = await client.GetAsync(path);
+                    Assert.AreEqual(HttpStatusCode.OK, response.StatusCode,
+                        $"Authenticated {workWindow} navigation to {path} must remain available.");
+                    StringAssert.Contains(await response.Content.ReadAsStringAsync(), "Status: <strong>Unknown</strong>",
+                        $"{path} should render the bounded journal-only status instead of the application service.");
+                }
+
+                using var canonical = await client.GetAsync("/settings/horse-id-migration");
+                Assert.AreEqual(HttpStatusCode.OK, canonical.StatusCode,
+                    "The canonical operator status route must work without an operation query.");
+                using var verifyPost = await client.PostAsync(
+                    $"/settings/horse-id-migration/{Guid.NewGuid():D}/verify", new StringContent(string.Empty));
+                Assert.AreEqual(HttpStatusCode.ServiceUnavailable, verifyPost.StatusCode,
+                    "The temporary operator child must not expose an action that can start verification during active work.");
+
+                Assert.IsFalse(File.Exists(fixture.EventStorePath));
+                Assert.IsFalse(File.Exists(fixture.CollectionStorePath));
+                Assert.IsFalse(File.Exists(fixture.ScheduleStorePath));
+                Assert.IsFalse(File.Exists(fixture.QueueStorePath));
+            }
+            finally
+            {
+                releaseWork.TrySetResult();
+                try { await workTask.WaitAsync(TimeSpan.FromSeconds(30)); }
+                catch { /* Preserve the original assertion while bounding owned-child cleanup. */ }
+            }
+
+            Assert.IsTrue(await workTask.WaitAsync(TimeSpan.FromSeconds(30)),
+                $"The {workWindow} work delegate should complete successfully.");
+            foreach (var processId in operatorProcessIds)
+            {
+                try
+                {
+                    using var exitedOperator = Process.GetProcessById(processId);
+                    Assert.IsTrue(exitedOperator.HasExited,
+                        "Every temporary operator child must be terminated and reaped before normal API restart.");
+                }
+                catch (ArgumentException)
+                {
+                    // The operating system already removed this reaped child process.
+                }
+            }
+        }
+
+        var failedOperatorProcessId = 0;
+        try
+        {
+            _ = await HorseIdentityMigrationSupervisor.RunWorkWithOperatorHostAsync(
+                _ => Task.FromException<bool>(new InvalidOperationException("controlled work failure")),
+                controlLease, fixture.OperatorUrls, CancellationToken.None,
+                processId => Interlocked.Exchange(ref failedOperatorProcessId, processId));
+            Assert.Fail("A failing work delegate must propagate after operator cleanup.");
+        }
+        catch (InvalidOperationException exception)
+        {
+            Assert.AreEqual("controlled work failure", exception.Message);
+        }
+        try
+        {
+            using var exitedOperator = Process.GetProcessById(failedOperatorProcessId);
+            Assert.IsTrue(exitedOperator.HasExited,
+                "The operator child must be reaped even when the active work delegate faults.");
+        }
+        catch (ArgumentException)
+        {
+            // The operating system already removed the reaped child process.
+        }
+    }
+
+    [TestMethod]
+    public async Task CorruptJournalKeepsAuthenticatedOperatorPageAvailableAsUnknownWithoutOpeningBusinessStores()
+    {
+        using var fixture = new RuntimeFixture();
+        var operationId = Guid.NewGuid();
+        Assert.IsTrue((await fixture.Journal.StageAsync(operationId, Manifest(), DateTimeOffset.UtcNow)).Succeeded);
+        await File.WriteAllBytesAsync(fixture.Journal.DatabasePath, Encoding.ASCII.GetBytes("corrupt journal contents"));
+
+        using var child = fixture.StartApiProcess();
+        try
+        {
+            using var client = await fixture.WaitForHealthAsync(child);
+            client.DefaultRequestHeaders.Accept.ParseAdd("text/html");
+            using var login = await client.PostAsync("/login", new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["username"] = "user",
+                ["password"] = fixture.ApiKey,
+                ["ReturnUrl"] = "/races",
+            }));
+            Assert.AreEqual(HttpStatusCode.OK, login.StatusCode);
+
+            using var page = await client.GetAsync("/races");
+            Assert.AreEqual(HttpStatusCode.OK, page.StatusCode);
+            Assert.AreEqual("no-store, no-cache, max-age=0", page.Headers.CacheControl?.ToString());
+            var html = await page.Content.ReadAsStringAsync();
+            StringAssert.Contains(html, "Unavailable");
+            Assert.DoesNotContain(operationId.ToString("D"), html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("corrupt journal contents", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("SqliteException", html, StringComparison.OrdinalIgnoreCase);
+            using var canonicalPage = await client.GetAsync("/settings/horse-id-migration");
+            Assert.AreEqual(HttpStatusCode.ServiceUnavailable, canonicalPage.StatusCode);
+            Assert.AreEqual("text/html", canonicalPage.Content.Headers.ContentType?.MediaType);
+            var canonicalHtml = await canonicalPage.Content.ReadAsStringAsync();
+            StringAssert.Contains(canonicalHtml, "Unknown");
+            StringAssert.Contains(canonicalHtml, "Unavailable");
+            Assert.DoesNotContain(operationId.ToString("D"), canonicalHtml, StringComparison.OrdinalIgnoreCase);
             Assert.IsFalse(File.Exists(fixture.EventStorePath));
             Assert.IsFalse(File.Exists(fixture.CollectionStorePath));
             Assert.IsFalse(File.Exists(fixture.ScheduleStorePath));
@@ -1197,14 +1494,17 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
         }
 
         internal string StateDirectory { get; }
+        internal string Root => _root;
         internal string EventStorePath { get; }
         internal string CollectionStorePath { get; }
         internal string ScheduleStorePath { get; }
         internal string QueueStorePath { get; }
         internal string ApiKey { get; }
+        internal string OperatorUrl => $"http://127.0.0.1:{_port}";
+        internal string OperatorUrls => $"http://+:{_port}";
         internal HorseIdentityMigrationJournal Journal { get; }
 
-        internal Process StartApiProcess(bool maintenanceMode = false)
+        internal Process StartApiProcess(bool maintenanceMode = false, bool operatorOnly = false)
         {
             var apiAssembly = typeof(HorseIdentityMigrationRuntimeMode).Assembly.Location;
             var process = new Process
@@ -1234,6 +1534,8 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
             process.StartInfo.Environment["ApiKey__Key"] = ApiKey;
             process.StartInfo.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
             process.StartInfo.Environment["DOTNET_NOLOGO"] = "1";
+            if (operatorOnly)
+                process.StartInfo.Environment[HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable] = "true";
             if (!process.Start()) throw new InvalidOperationException("API child process did not start.");
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
@@ -1283,6 +1585,35 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
         public void Dispose()
         {
             if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
+        }
+    }
+
+    private sealed class OperatorTestEnvironment : IDisposable
+    {
+        private readonly Dictionary<string, string?> _originalValues = new(StringComparer.Ordinal);
+
+        internal OperatorTestEnvironment(RuntimeFixture fixture)
+        {
+            Set("CollectionPlatform__StateDirectory", fixture.StateDirectory);
+            Set("ConnectionStrings__EventStore", $"Data Source={fixture.EventStorePath}");
+            Set("PredictionScheduling__StateDirectory", Path.GetDirectoryName(fixture.ScheduleStorePath)!);
+            Set("PredictionScheduling__StoreFileName", Path.GetFileName(fixture.ScheduleStorePath));
+            Set("CollectionQueue__Provider", "Local");
+            Set("CollectionQueue__LocalDatabasePath", fixture.QueueStorePath);
+            Set("ApiKey__HeaderName", "X-Test-Horse-Key");
+            Set("ApiKey__Key", fixture.ApiKey);
+        }
+
+        private void Set(string name, string value)
+        {
+            _originalValues[name] = Environment.GetEnvironmentVariable(name);
+            Environment.SetEnvironmentVariable(name, value);
+        }
+
+        public void Dispose()
+        {
+            foreach (var pair in _originalValues)
+                Environment.SetEnvironmentVariable(pair.Key, pair.Value);
         }
     }
 

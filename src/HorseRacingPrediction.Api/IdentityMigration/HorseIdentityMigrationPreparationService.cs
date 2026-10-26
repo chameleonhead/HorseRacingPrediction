@@ -18,6 +18,7 @@ internal sealed class HorseIdentityMigrationPreparationService : BackgroundServi
     private static readonly TimeSpan PauseDuration = TimeSpan.FromSeconds(900);
     private static readonly TimeSpan RunningDrainLimit = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan FailureRecordTimeout = TimeSpan.FromSeconds(2);
     internal static TimeSpan RequiredPauseDuration => PauseDuration;
 
     private readonly HorseIdentityMigrationJournal _journal;
@@ -169,10 +170,24 @@ internal sealed class HorseIdentityMigrationPreparationService : BackgroundServi
 
     private async Task MarkFailedAsync(Guid operationId)
     {
+        var failureAt = _timeProvider.GetUtcNow();
         try
         {
+            using var deadline = new CancellationTokenSource(FailureRecordTimeout);
+            await _journal.RecordFailureAsync(operationId, HorseIdentityMigrationResultCode.PreparationFailed,
+                failureAt, deadline.Token).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Could not persist the categorized preparation failure for {OperationId}.",
+                operationId);
+        }
+
+        try
+        {
+            using var deadline = new CancellationTokenSource(FailureRecordTimeout);
             await _journal.AdvanceExecutionIntentAsync(operationId, HorseIdentityMigrationExecutionPhase.Failed,
-                _timeProvider.GetUtcNow(), CancellationToken.None).ConfigureAwait(false);
+                failureAt, deadline.Token).ConfigureAwait(false);
         }
         catch (Exception exception)
         {

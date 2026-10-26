@@ -26,6 +26,9 @@ internal static class HorseIdentityMigrationSupervisor
     private static readonly TimeSpan FixedCliChildTimeout = TimeSpan.FromMinutes(31);
     private static readonly TimeSpan ChildTerminationGrace = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ChildReapTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan OperatorRetryMaximumDelay = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan OperatorHealthDeadline = TimeSpan.FromSeconds(20);
+    private const int InitialOperatorStartAttempts = 3;
 
     internal static bool IsApiChild(IReadOnlyList<string> arguments) =>
         arguments.Count == 1 && arguments[0] == ApiChildArgument;
@@ -36,9 +39,9 @@ internal static class HorseIdentityMigrationSupervisor
     internal static bool IsSupportedSupervisorProcess(bool isLinux, int processId) => isLinux && processId == 1;
 
     internal static bool ShouldStartBlockedHost(HorseIdentityMigrationStartupState startupState,
-        bool hasActiveIntent, IEnumerable<string> sourcePaths)
+        bool hasActiveIntent, IEnumerable<string> sourcePaths, bool forceBlocked = false)
     {
-        if (startupState != HorseIdentityMigrationStartupState.Ready || hasActiveIntent) return true;
+        if (forceBlocked || startupState != HorseIdentityMigrationStartupState.Ready || hasActiveIntent) return true;
         foreach (var sourcePath in sourcePaths)
         {
             try
@@ -110,57 +113,416 @@ internal static class HorseIdentityMigrationSupervisor
         using var controlLease = HorseIdentityMigrationMaintenanceOwnership.AcquireSupervisorControlLease(paths);
         var journal = HorseIdentityMigrationRuntimeMode.CreateJournal(builder);
 
-        var startup = await journal.InspectStartupGuardAsync(DateTimeOffset.UtcNow).ConfigureAwait(false);
-        var active = await journal.GetActiveExecutionIntentAsync().ConfigureAwait(false);
-        var startBlocked = ShouldStartBlockedHost(startup.State, active is not null, paths);
+        var startBlocked = true;
+        try
+        {
+            var startup = await journal.InspectStartupGuardAsync(DateTimeOffset.UtcNow).ConfigureAwait(false);
+            var active = await journal.GetActiveExecutionIntentAsync().ConfigureAwait(false);
+            startBlocked = ShouldStartBlockedHost(startup.State, active is not null, paths,
+                HorseIdentityMigrationRuntimeMode.IsOperatorOnlyMode());
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+            or InvalidDataException or Microsoft.Data.Sqlite.SqliteException)
+        {
+            // The minimal child can still keep authenticated navigation available and report
+            // that journal state is unknown when startup inspection is corrupt or unavailable.
+        }
 
+        var operatorStartFailures = 0;
         while (true)
         {
             if (stopping.IsCancellationRequested) return 143;
-            using var child = StartApiChild(startBlocked, controlLease);
-            int exitCode;
+            OwnedChild child;
             try
             {
-                exitCode = await WaitForChildExitAsync(child, cancellationToken: stopping.Token).ConfigureAwait(false);
+                child = StartApiChild(startBlocked, controlLease);
             }
-            catch (OperationCanceledException) when (stopping.IsCancellationRequested)
+            catch
             {
-                return 143;
-            }
-            if (stopping.IsCancellationRequested) return 143;
-
-            if (exitCode == HorseIdentityMigrationPreparationService.ApplyReadyExitCode)
-            {
-                if (!await ApplyPreparedOperationAsync(builder, sources, paths, journal, controlLease, stopping.Token)
-                        .ConfigureAwait(false))
-                    return 5;
-                if (stopping.IsCancellationRequested) return 143;
-                startBlocked = false;
+                startBlocked = true;
+                try
+                {
+                    var activeIntent = await journal.GetActiveExecutionIntentAsync(stopping.Token).ConfigureAwait(false);
+                    if (activeIntent is not null)
+                        await TryRecordFailureAsync(journal, activeIntent.OperationId,
+                            HorseIdentityMigrationResultCode.StartupFailed, stopping.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (stopping.IsCancellationRequested)
+                {
+                    return 143;
+                }
+                catch
+                {
+                    // No operation-specific failure can be recorded if the journal is unavailable.
+                }
+                await WaitBeforeOperatorRetryAsync(++operatorStartFailures, stopping.Token).ConfigureAwait(false);
                 continue;
             }
-
-            if (exitCode == VerifyReadyExitCode)
+            using (child)
             {
-                if (!await VerifyReadonlyOperationAsync(sources, paths, journal, controlLease, stopping.Token)
-                        .ConfigureAwait(false))
-                    return 5;
+                int exitCode;
+                try
+                {
+                    exitCode = await WaitForChildExitAsync(child, cancellationToken: stopping.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (stopping.IsCancellationRequested)
+                {
+                    return 143;
+                }
+                catch
+                {
+                    // WaitForChildExitAsync already attempts termination/reap on control errors.
+                    // Confirm ownership is fully settled again before treating the exit as an
+                    // unexpected child failure or launching even the journal-only replacement.
+                    await TerminateAndReapAsync(child).ConfigureAwait(false);
+                    exitCode = -1;
+                }
                 if (stopping.IsCancellationRequested) return 143;
-                startBlocked = false;
-                continue;
+
+                if (HorseIdentityMigrationRuntimeMode.IsOperatorOnlyMode())
+                {
+                    startBlocked = true;
+                    await WaitBeforeOperatorRetryAsync(++operatorStartFailures, stopping.Token).ConfigureAwait(false);
+                    continue;
+                }
+
+                if (exitCode == HorseIdentityMigrationPreparationService.ApplyReadyExitCode)
+                {
+                    bool applied;
+                    try
+                    {
+                        var outcome = await RunWorkWithOperatorHostAsync(
+                            token => ApplyPreparedOperationAsync(builder, sources, paths, journal, controlLease, token),
+                            controlLease, ResolveOperatorUrls(builder.Configuration), stopping.Token)
+                            .ConfigureAwait(false);
+                        applied = outcome ?? false;
+                        if (outcome is null)
+                            await RecordActiveFailureAsync(journal, HorseIdentityMigrationResultCode.StartupFailed,
+                                stopping.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (stopping.IsCancellationRequested)
+                    {
+                        return 143;
+                    }
+                    catch (OperatorHostCleanupException)
+                    {
+                        throw;
+                    }
+                    catch
+                    {
+                        await RecordActiveFailureAsync(journal, HorseIdentityMigrationResultCode.StartupFailed,
+                            stopping.Token).ConfigureAwait(false);
+                        startBlocked = true;
+                        continue;
+                    }
+                    if (!applied)
+                    {
+                        startBlocked = true;
+                        continue;
+                    }
+                    if (stopping.IsCancellationRequested) return 143;
+                    startBlocked = false;
+                    operatorStartFailures = 0;
+                    continue;
+                }
+
+                if (exitCode == VerifyReadyExitCode)
+                {
+                    bool verified;
+                    try
+                    {
+                        var outcome = await RunWorkWithOperatorHostAsync(
+                            token => VerifyReadonlyOperationAsync(sources, paths, journal, controlLease, token),
+                            controlLease, ResolveOperatorUrls(builder.Configuration), stopping.Token)
+                            .ConfigureAwait(false);
+                        verified = outcome ?? false;
+                        if (outcome is null)
+                            await RecordActiveFailureAsync(journal, HorseIdentityMigrationResultCode.StartupFailed,
+                                stopping.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (stopping.IsCancellationRequested)
+                    {
+                        return 143;
+                    }
+                    catch (OperatorHostCleanupException)
+                    {
+                        throw;
+                    }
+                    catch
+                    {
+                        verified = false;
+                    }
+                    if (!verified)
+                    {
+                        await RecordActiveFailureAsync(journal, HorseIdentityMigrationResultCode.VerificationFailed,
+                            stopping.Token).ConfigureAwait(false);
+                        startBlocked = true;
+                        continue;
+                    }
+                    if (stopping.IsCancellationRequested) return 143;
+                    startBlocked = false;
+                    operatorStartFailures = 0;
+                    continue;
+                }
+
+                // A child exit is never permission to replay work. Keep PID 1 alive on the
+                // existing journal-only host, which has no business-store registrations.
+                try
+                {
+                    var activeIntent = await journal.GetActiveExecutionIntentAsync(stopping.Token).ConfigureAwait(false);
+                    if (activeIntent is not null)
+                        await TryRecordFailureAsync(journal, activeIntent.OperationId,
+                            HorseIdentityMigrationResultCode.ChildFailed, stopping.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (stopping.IsCancellationRequested)
+                {
+                    return 143;
+                }
+                catch
+                {
+                    // The status page reports unknown if the journal cannot be read.
+                }
+                startBlocked = true;
+                await WaitBeforeOperatorRetryAsync(++operatorStartFailures, stopping.Token).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static async Task WaitBeforeOperatorRetryAsync(int failures, CancellationToken cancellationToken)
+    {
+        var seconds = Math.Min(OperatorRetryMaximumDelay.TotalSeconds,
+            Math.Pow(2, Math.Min(Math.Max(failures - 1, 0), 4)));
+        await Task.Delay(TimeSpan.FromSeconds(seconds), cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static string ResolveOperatorUrls(Microsoft.Extensions.Configuration.IConfiguration configuration)
+    {
+        var urls = configuration["urls"];
+        if (!string.IsNullOrWhiteSpace(urls)) return urls;
+        var ports = configuration["http_ports"];
+        if (!string.IsNullOrWhiteSpace(ports))
+            return string.Join(';', ports.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(port => $"http://+:{port}"));
+        return "http://localhost:5000";
+    }
+
+    internal static async Task<bool?> RunWorkWithOperatorHostAsync(
+        Func<CancellationToken, Task<bool>> work,
+        HorseIdentityMigrationMaintenanceOwnership.HorseIdentityMigrationSupervisorControlLease controlLease,
+        string operatorUrls, CancellationToken stoppingToken, Action<int>? onOperatorStarted = null)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        ArgumentException.ThrowIfNullOrWhiteSpace(operatorUrls);
+        var healthUri = CreateOperatorHealthUri(operatorUrls);
+        var child = await StartOperatorChildAsync(controlLease, operatorUrls, healthUri,
+            InitialOperatorStartAttempts, stoppingToken, onOperatorStarted).ConfigureAwait(false);
+        if (child is null) return null;
+
+        using var workStopping = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+
+        Task<bool> workTask;
+        try
+        {
+            workTask = work(workStopping.Token);
+        }
+        catch
+        {
+            await ReapOperatorChildAsync(child).ConfigureAwait(false);
+            child.Dispose();
+            throw;
+        }
+
+        var restartFailures = 0;
+        try
+        {
+            while (!workTask.IsCompleted)
+            {
+                if (child is null)
+                {
+                    await WaitBeforeOperatorRetryAsync(++restartFailures, stoppingToken).ConfigureAwait(false);
+                    child = await StartOperatorChildAsync(controlLease, operatorUrls, healthUri, 1,
+                        stoppingToken, onOperatorStarted).ConfigureAwait(false);
+                    continue;
+                }
+                var childExit = child.Process.WaitForExitAsync();
+                if (await Task.WhenAny(workTask, childExit).ConfigureAwait(false) == workTask) break;
+
+                try
+                {
+                    await WaitForChildExitAsync(child).ConfigureAwait(false);
+                }
+                catch
+                {
+                    await ReapOperatorChildAsync(child).ConfigureAwait(false);
+                }
+                child.Dispose();
+                child = null;
+                if (workTask.IsCompleted) break;
+
+                await WaitBeforeOperatorRetryAsync(++restartFailures, stoppingToken).ConfigureAwait(false);
+                child = await StartOperatorChildAsync(controlLease, operatorUrls, healthUri, 1,
+                    stoppingToken, onOperatorStarted).ConfigureAwait(false);
             }
 
-            // A normal stop or unexpected child exit is not permission to replay or restart work.
-            return exitCode == 0 ? 5 : exitCode;
+            return await workTask.ConfigureAwait(false);
+        }
+        catch
+        {
+            // Any unexpected operator-control failure cancels and settles the active work
+            // delegate before this method can unwind. Its apply path owns and reaps the CLI.
+            workStopping.Cancel();
+            try { await workTask.ConfigureAwait(false); }
+            catch { /* Preserve the control failure after the owned work has settled. */ }
+            throw;
+        }
+        finally
+        {
+            if (child is not null)
+            {
+                await ReapOperatorChildAsync(child).ConfigureAwait(false);
+                child.Dispose();
+            }
+        }
+    }
+
+    private static async Task<OwnedChild?> StartOperatorChildAsync(
+        HorseIdentityMigrationMaintenanceOwnership.HorseIdentityMigrationSupervisorControlLease controlLease,
+        string operatorUrls, Uri healthUri, int attempts, CancellationToken stoppingToken,
+        Action<int>? onOperatorStarted)
+    {
+        for (var attempt = 1; attempt <= attempts; attempt++)
+        {
+            stoppingToken.ThrowIfCancellationRequested();
+            OwnedChild? child = null;
+            try
+            {
+                child = StartApiChild(blocked: true, controlLease, operatorUrls, operatorOnly: true);
+                onOperatorStarted?.Invoke(child.Process.Id);
+                await WaitForOperatorHealthAsync(child, healthUri, stoppingToken).ConfigureAwait(false);
+                return child;
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                if (child is not null)
+                {
+                    await ReapOperatorChildAsync(child).ConfigureAwait(false);
+                    child.Dispose();
+                }
+                throw;
+            }
+            catch
+            {
+                if (child is not null)
+                {
+                    await ReapOperatorChildAsync(child).ConfigureAwait(false);
+                    child.Dispose();
+                }
+                if (attempt < attempts)
+                    await WaitBeforeOperatorRetryAsync(attempt, stoppingToken).ConfigureAwait(false);
+            }
+        }
+        return null;
+    }
+
+    private static async Task ReapOperatorChildAsync(OwnedChild child)
+    {
+        try
+        {
+            await TerminateAndReapAsync(child).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            // An unconfirmed child must never be mistaken for an exited/reaped operator.
+            // Let the PID-1 fail-closed path stop before any API restart.
+            throw new OperatorHostCleanupException(exception);
+        }
+    }
+
+    private sealed class OperatorHostCleanupException(Exception innerException)
+        : Exception("The journal-only operator child could not be confirmed reaped.", innerException);
+
+    private static async Task WaitForOperatorHealthAsync(OwnedChild child, Uri healthUri,
+        CancellationToken stoppingToken)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        deadline.CancelAfter(OperatorHealthDeadline);
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(1) };
+        while (!deadline.IsCancellationRequested)
+        {
+            if (child.Process.HasExited)
+                throw new InvalidOperationException("The journal-only operator child exited before becoming ready.");
+            try
+            {
+                using var response = await client.GetAsync(healthUri, deadline.Token).ConfigureAwait(false);
+                if (response.IsSuccessStatusCode) return;
+            }
+            catch (HttpRequestException) { }
+            catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested
+                && !deadline.IsCancellationRequested)
+            { }
+            await Task.Delay(TimeSpan.FromMilliseconds(100), deadline.Token).ConfigureAwait(false);
+        }
+        stoppingToken.ThrowIfCancellationRequested();
+        throw new TimeoutException("The journal-only operator child did not become ready within its bounded startup window.");
+    }
+
+    internal static Uri CreateOperatorHealthUri(string operatorUrls)
+    {
+        var address = operatorUrls.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault() ?? throw new InvalidOperationException("The operator child has no configured URL.");
+        address = address.Replace("://+:", "://127.0.0.1:", StringComparison.Ordinal)
+            .Replace("://*:", "://127.0.0.1:", StringComparison.Ordinal);
+        if (!Uri.TryCreate(address, UriKind.Absolute, out var baseUri))
+            throw new InvalidOperationException("The operator child URL is invalid.");
+        return new UriBuilder(baseUri) { Host = "127.0.0.1", Path = "/health", Query = string.Empty, Fragment = string.Empty }.Uri;
+    }
+
+    private static async Task TryRecordFailureAsync(HorseIdentityMigrationJournal journal, Guid operationId,
+        HorseIdentityMigrationResultCode code, CancellationToken cancellationToken)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(2));
+        try
+        {
+            await journal.RecordFailureAsync(operationId, code, DateTimeOffset.UtcNow, deadline.Token)
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+            or InvalidDataException or Microsoft.Data.Sqlite.SqliteException or OperationCanceledException)
+        {
+            // Failure metadata is best-effort when the bounded journal itself is unavailable.
+        }
+    }
+
+    private static async Task RecordActiveFailureAsync(HorseIdentityMigrationJournal journal,
+        HorseIdentityMigrationResultCode code, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            deadline.CancelAfter(TimeSpan.FromSeconds(2));
+            var intent = await journal.GetActiveExecutionIntentAsync(deadline.Token).ConfigureAwait(false);
+            if (intent is not null)
+                await TryRecordFailureAsync(journal, intent.OperationId, code, deadline.Token).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+            or InvalidDataException or Microsoft.Data.Sqlite.SqliteException or OperationCanceledException)
+        {
+            // Failure reporting must never escape PID 1 when the bounded journal is unavailable.
         }
     }
 
     private static OwnedChild StartApiChild(bool blocked,
-        HorseIdentityMigrationMaintenanceOwnership.HorseIdentityMigrationSupervisorControlLease controlLease)
+        HorseIdentityMigrationMaintenanceOwnership.HorseIdentityMigrationSupervisorControlLease controlLease,
+        string? operatorUrls = null, bool operatorOnly = false)
     {
         var bootstrap = controlLease.IssueApiBootstrapAuthorization();
         var startInfo = CreateDotnetStartInfo(blocked ? BlockedChildArgument : ApiChildArgument);
         startInfo.Environment[HorseIdentityMigrationMaintenanceCapability.PrivateEnvironmentVariable] =
             bootstrap.SerializeForPrivateEnvironment();
+        if (operatorUrls is not null) startInfo.Environment["ASPNETCORE_URLS"] = operatorUrls;
+        if (operatorOnly)
+            startInfo.Environment[HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable] = "true";
         return StartOwnedChild(startInfo, captureOutput: false);
     }
 
@@ -170,80 +532,112 @@ internal static class HorseIdentityMigrationSupervisor
         HorseIdentityMigrationMaintenanceOwnership.HorseIdentityMigrationSupervisorControlLease controlLease,
         CancellationToken stoppingToken)
     {
-        var intent = await journal.GetActiveExecutionIntentAsync().ConfigureAwait(false);
-        if (intent is null || intent.Phase != HorseIdentityMigrationExecutionPhase.StoppingApi
-            || !HorseIdentityMigrationMaintenanceOwnership.ValidateMaintenanceGateSet(paths, intent.OperationId,
-                intent.ImmutableRequestHash, HorseIdentityMigrationRuntimeOwnership.ComputeSourceSetHash(paths)))
-            return false;
-        var operation = await journal.GetStatusAsync(intent.OperationId).ConfigureAwait(false);
-        if (operation?.Status != HorseIdentityMigrationOperationStatus.Staged) return false;
-
-        if (!(await journal.AdvanceExecutionIntentAsync(intent.OperationId, HorseIdentityMigrationExecutionPhase.ApiExited,
-                DateTimeOffset.UtcNow).ConfigureAwait(false)).Succeeded)
-            return false;
-
-        var backup = HorseIdentityMigrationManagedBackup.ForJournal(journal);
-        stoppingToken.ThrowIfCancellationRequested();
-        var backupReceipt = await CreateOrValidateBackupAsync(backup, intent.OperationId, sources, journal, stoppingToken)
-            .ConfigureAwait(false);
-        stoppingToken.ThrowIfCancellationRequested();
-        EnsureSourceFilesystemCapacity(sources.PhysicalSourcePaths);
-        if (!(await journal.AdvanceExecutionIntentAsync(intent.OperationId, HorseIdentityMigrationExecutionPhase.BackedUp,
-                DateTimeOffset.UtcNow).ConfigureAwait(false)).Succeeded)
-            return false;
-
-        var executableRequest = await journal.GetExecutableRequestAsync(intent.OperationId, stoppingToken)
-            .ConfigureAwait(false);
-        if (executableRequest is null
-            || !string.Equals(executableRequest.ImmutableRequestHash, intent.ImmutableRequestHash, StringComparison.Ordinal))
-            return false;
-        if (executableRequest.RequestKind == HorseIdentityMigrationAdmissionKind.PendingV2)
+        Guid? operationId = null;
+        var failureCode = HorseIdentityMigrationResultCode.PreparationFailed;
+        try
         {
-            var sourceSetHash = HorseIdentityMigrationRuntimeOwnership.ComputeSourceSetHash(paths);
-            var (services, engine) = HorseIdentityMigrationRuntimeMode.CreateStoreEngine(builder);
-            HorseIdentityMigrationPreview census;
-            using (services)
-                census = await engine.InspectPreviewAsync(executableRequest.Manifest, stoppingToken).ConfigureAwait(false);
-            if (!census.CanStage || census.Fingerprint is null) return false;
+            var intent = await journal.GetActiveExecutionIntentAsync(stoppingToken).ConfigureAwait(false);
+            operationId = intent?.OperationId;
+            if (intent is null || intent.Phase != HorseIdentityMigrationExecutionPhase.StoppingApi
+                || !HorseIdentityMigrationMaintenanceOwnership.ValidateMaintenanceGateSet(paths, intent.OperationId,
+                    intent.ImmutableRequestHash, HorseIdentityMigrationRuntimeOwnership.ComputeSourceSetHash(paths)))
+                return await FailAsync(journal, operationId, failureCode, stoppingToken).ConfigureAwait(false);
+            var operation = await journal.GetStatusAsync(intent.OperationId, stoppingToken).ConfigureAwait(false);
+            if (operation?.Status != HorseIdentityMigrationOperationStatus.Staged)
+                return await FailAsync(journal, operationId, failureCode, stoppingToken).ConfigureAwait(false);
+
+            if (!(await journal.AdvanceExecutionIntentAsync(intent.OperationId, HorseIdentityMigrationExecutionPhase.ApiExited,
+                    DateTimeOffset.UtcNow, stoppingToken).ConfigureAwait(false)).Succeeded)
+                return await FailAsync(journal, operationId, failureCode, stoppingToken).ConfigureAwait(false);
+
+            failureCode = HorseIdentityMigrationResultCode.BackupFailed;
+            var backup = HorseIdentityMigrationManagedBackup.ForJournal(journal);
             stoppingToken.ThrowIfCancellationRequested();
-            var sealedResult = await journal.SealPendingRequestAsync(intent.OperationId,
-                executableRequest.ImmutableRequestHash, census.Fingerprint, sourceSetHash,
-                backupReceipt.ManifestHash, DateTimeOffset.UtcNow, stoppingToken).ConfigureAwait(false);
-            if (!sealedResult.Succeeded) return false;
+            var backupReceipt = await CreateOrValidateBackupAsync(backup, intent.OperationId, sources, journal, stoppingToken)
+                .ConfigureAwait(false);
+            stoppingToken.ThrowIfCancellationRequested();
+            EnsureSourceFilesystemCapacity(sources.PhysicalSourcePaths);
+            if (!(await journal.AdvanceExecutionIntentAsync(intent.OperationId, HorseIdentityMigrationExecutionPhase.BackedUp,
+                    DateTimeOffset.UtcNow, stoppingToken).ConfigureAwait(false)).Succeeded)
+                return await FailAsync(journal, operationId, failureCode, stoppingToken).ConfigureAwait(false);
+
+            failureCode = HorseIdentityMigrationResultCode.InspectionFailed;
+            var executableRequest = await journal.GetExecutableRequestAsync(intent.OperationId, stoppingToken)
+                .ConfigureAwait(false);
+            if (executableRequest is null
+                || !string.Equals(executableRequest.ImmutableRequestHash, intent.ImmutableRequestHash, StringComparison.Ordinal))
+                return await FailAsync(journal, operationId, failureCode, stoppingToken).ConfigureAwait(false);
+            if (executableRequest.RequestKind == HorseIdentityMigrationAdmissionKind.PendingV2)
+            {
+                var sourceSetHash = HorseIdentityMigrationRuntimeOwnership.ComputeSourceSetHash(paths);
+                var (services, engine) = HorseIdentityMigrationRuntimeMode.CreateStoreEngine(builder);
+                HorseIdentityMigrationPreview census;
+                using (services)
+                    census = await engine.InspectPreviewAsync(executableRequest.Manifest, stoppingToken).ConfigureAwait(false);
+                if (!census.CanStage || census.Fingerprint is null)
+                    return await FailAsync(journal, operationId, failureCode, stoppingToken).ConfigureAwait(false);
+                stoppingToken.ThrowIfCancellationRequested();
+                var sealedResult = await journal.SealPendingRequestAsync(intent.OperationId,
+                    executableRequest.ImmutableRequestHash, census.Fingerprint, sourceSetHash,
+                    backupReceipt.ManifestHash, DateTimeOffset.UtcNow, stoppingToken).ConfigureAwait(false);
+                if (!sealedResult.Succeeded)
+                    return await FailAsync(journal, operationId, failureCode, stoppingToken).ConfigureAwait(false);
+            }
+
+            failureCode = HorseIdentityMigrationResultCode.ApplyFailed;
+            if (!(await journal.AdvanceExecutionIntentAsync(intent.OperationId, HorseIdentityMigrationExecutionPhase.Applying,
+                    DateTimeOffset.UtcNow, stoppingToken).ConfigureAwait(false)).Succeeded)
+                return await FailAsync(journal, operationId, failureCode, stoppingToken).ConfigureAwait(false);
+
+            failureCode = HorseIdentityMigrationResultCode.ChildFailed;
+            var operationAuthorization = await controlLease.IssueOperationAuthorizationAsync(intent.OperationId,
+                intent.ImmutableRequestHash, journal, stoppingToken).ConfigureAwait(false);
+            using (var cli = StartFixedCliChild(intent.OperationId, operationAuthorization))
+                if (await WaitForChildExitAsync(cli, FixedCliChildTimeout, stoppingToken).ConfigureAwait(false) != 0)
+                    return await FailAsync(journal, operationId, failureCode, stoppingToken).ConfigureAwait(false);
+            stoppingToken.ThrowIfCancellationRequested();
+
+            failureCode = HorseIdentityMigrationResultCode.ApplyFailed;
+            var completed = await journal.GetStatusAsync(intent.OperationId, stoppingToken).ConfigureAwait(false);
+            var dataIntent = await journal.GetExecutionIntentAsync(intent.OperationId, stoppingToken).ConfigureAwait(false);
+            if (completed?.Status != HorseIdentityMigrationOperationStatus.Succeeded
+                || dataIntent?.Phase != HorseIdentityMigrationExecutionPhase.DataSucceeded
+                || !await journal.CanBeginReadonlyVerificationAsync(intent.OperationId, stoppingToken).ConfigureAwait(false))
+                return await FailAsync(journal, operationId, failureCode, stoppingToken).ConfigureAwait(false);
+
+            failureCode = HorseIdentityMigrationResultCode.VerificationFailed;
+            if (!(await journal.AdvanceExecutionIntentAsync(intent.OperationId, HorseIdentityMigrationExecutionPhase.Verifying,
+                    DateTimeOffset.UtcNow, stoppingToken).ConfigureAwait(false)).Succeeded)
+                return await FailAsync(journal, operationId, failureCode, stoppingToken).ConfigureAwait(false);
+            await VerifyAllDataAsync(intent.OperationId, sources, journal, backup, stoppingToken)
+                .ConfigureAwait(false);
+            stoppingToken.ThrowIfCancellationRequested();
+            if (!(await journal.AdvanceExecutionIntentAsync(intent.OperationId, HorseIdentityMigrationExecutionPhase.Verified,
+                    DateTimeOffset.UtcNow, stoppingToken).ConfigureAwait(false)).Succeeded)
+                return await FailAsync(journal, operationId, failureCode, stoppingToken).ConfigureAwait(false);
+
+            using var runtimeOwnership = HorseIdentityMigrationRuntimeOwnership.AcquireForMaintenanceGateManagement(
+                paths, controlLease, operationAuthorization);
+            await HorseIdentityMigrationMaintenanceOwnership.ClearMaintenanceGatesAsync(runtimeOwnership, controlLease,
+                operationAuthorization, journal).ConfigureAwait(false);
+            return true;
         }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return await FailAsync(journal, operationId, failureCode, stoppingToken).ConfigureAwait(false);
+        }
+    }
 
-        if (!(await journal.AdvanceExecutionIntentAsync(intent.OperationId, HorseIdentityMigrationExecutionPhase.Applying,
-                DateTimeOffset.UtcNow, stoppingToken).ConfigureAwait(false)).Succeeded)
-            return false;
-
-        var operationAuthorization = await controlLease.IssueOperationAuthorizationAsync(intent.OperationId,
-            intent.ImmutableRequestHash, journal, stoppingToken).ConfigureAwait(false);
-        using (var cli = StartFixedCliChild(intent.OperationId, operationAuthorization))
-            if (await WaitForChildExitAsync(cli, FixedCliChildTimeout, stoppingToken).ConfigureAwait(false) != 0) return false;
-        stoppingToken.ThrowIfCancellationRequested();
-
-        var completed = await journal.GetStatusAsync(intent.OperationId).ConfigureAwait(false);
-        var dataIntent = await journal.GetExecutionIntentAsync(intent.OperationId).ConfigureAwait(false);
-        if (completed?.Status != HorseIdentityMigrationOperationStatus.Succeeded
-            || dataIntent?.Phase != HorseIdentityMigrationExecutionPhase.DataSucceeded
-            || !await journal.CanBeginReadonlyVerificationAsync(intent.OperationId).ConfigureAwait(false))
-            return false;
-
-        if (!(await journal.AdvanceExecutionIntentAsync(intent.OperationId, HorseIdentityMigrationExecutionPhase.Verifying,
-                DateTimeOffset.UtcNow, stoppingToken).ConfigureAwait(false)).Succeeded)
-            return false;
-        await VerifyAllDataAsync(intent.OperationId, sources, journal, backup, stoppingToken)
-            .ConfigureAwait(false);
-        stoppingToken.ThrowIfCancellationRequested();
-        if (!(await journal.AdvanceExecutionIntentAsync(intent.OperationId, HorseIdentityMigrationExecutionPhase.Verified,
-                DateTimeOffset.UtcNow, stoppingToken).ConfigureAwait(false)).Succeeded)
-            return false;
-
-        using var runtimeOwnership = HorseIdentityMigrationRuntimeOwnership.AcquireForMaintenanceGateManagement(
-            paths, controlLease, operationAuthorization);
-        await HorseIdentityMigrationMaintenanceOwnership.ClearMaintenanceGatesAsync(runtimeOwnership, controlLease,
-            operationAuthorization, journal).ConfigureAwait(false);
-        return true;
+    private static async Task<bool> FailAsync(HorseIdentityMigrationJournal journal, Guid? operationId,
+        HorseIdentityMigrationResultCode code, CancellationToken cancellationToken)
+    {
+        if (operationId is { } value)
+            await TryRecordFailureAsync(journal, value, code, cancellationToken).ConfigureAwait(false);
+        return false;
     }
 
     private static async Task<bool> VerifyReadonlyOperationAsync(
@@ -409,10 +803,43 @@ internal static class HorseIdentityMigrationSupervisor
                 .WaitAsync(reapDeadline.Token).ConfigureAwait(false);
             throw new TimeoutException("The supervised fixed migration CLI exceeded its execution bound.");
         }
+        catch
+        {
+            await TerminateAndReapAsync(child).ConfigureAwait(false);
+            throw;
+        }
 
         await Task.WhenAll(child.CreatorThreadLifetime, child.StandardOutputDrain, child.StandardErrorDrain)
             .ConfigureAwait(false);
         return child.Process.ExitCode;
+    }
+
+    private static async Task TerminateAndReapAsync(OwnedChild child)
+    {
+        try
+        {
+            if (!child.Process.HasExited)
+            {
+                try { _ = SendSignal(child.Process.Id, SigTerm); }
+                catch (InvalidOperationException) { }
+                using var grace = new CancellationTokenSource(ChildTerminationGrace);
+                try { await child.Process.WaitForExitAsync(grace.Token).ConfigureAwait(false); }
+                catch (OperationCanceledException)
+                {
+                    try { child.Process.Kill(entireProcessTree: true); }
+                    catch (InvalidOperationException) { }
+                }
+            }
+            using var reapDeadline = new CancellationTokenSource(ChildReapTimeout);
+            await child.Process.WaitForExitAsync(reapDeadline.Token).ConfigureAwait(false);
+            await Task.WhenAll(child.CreatorThreadLifetime, child.StandardOutputDrain, child.StandardErrorDrain)
+                .WaitAsync(reapDeadline.Token).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException) when (child.Process.HasExited)
+        {
+            await Task.WhenAll(child.CreatorThreadLifetime, child.StandardOutputDrain, child.StandardErrorDrain)
+                .ConfigureAwait(false);
+        }
     }
 
     private sealed class OwnedChild(Process process, Task creatorThreadLifetime,
@@ -428,10 +855,12 @@ internal static class HorseIdentityMigrationSupervisor
     private static ProcessStartInfo CreateDotnetStartInfo(params string[] arguments)
     {
         var executable = Environment.ProcessPath ?? throw new InvalidOperationException("The runtime executable is unavailable.");
+        var executableName = Path.GetFileNameWithoutExtension(executable);
+        if (string.Equals(executableName, "testhost", StringComparison.OrdinalIgnoreCase))
+            executable = "dotnet";
         var startInfo = new ProcessStartInfo(executable) { UseShellExecute = false };
         if (string.Equals(Path.GetFileNameWithoutExtension(executable), "dotnet", StringComparison.OrdinalIgnoreCase))
-            startInfo.ArgumentList.Add(Assembly.GetEntryAssembly()?.Location
-                ?? throw new InvalidOperationException("The API assembly path is unavailable."));
+            startInfo.ArgumentList.Add(typeof(HorseIdentityMigrationSupervisor).Assembly.Location);
         foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
         return startInfo;
     }

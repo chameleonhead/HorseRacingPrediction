@@ -208,6 +208,23 @@ public sealed class HorseIdentityMigrationRuntimeOwnershipTests
             var operationAuthorization = await control.IssueOperationAuthorizationAsync(operationId, requestHash, journal);
             Assert.IsTrue(await RunMaintenanceChildAsync("install-cli", paths,
                 operationAuthorization.SerializeForPrivateEnvironment(), journalDirectory, operationId, requestHash));
+            var serializedCliOwnerRecords = paths.Select(path => File.ReadAllBytes(
+                HorseIdentityMigrationMaintenanceOwnership.GetControlOwnerRecordPath(path))).ToArray();
+
+            var restartedBootstrap = control.IssueApiBootstrapAuthorization();
+            Assert.IsTrue(await RunMaintenanceChildAsync("bootstrap", paths,
+                restartedBootstrap.SerializeForPrivateEnvironment()),
+                "A restarted operator must receive a fresh bootstrap authorization.");
+            Assert.IsFalse(HorseIdentityMigrationMaintenanceCapability.ApiBootstrapAuthorization.TryImportAndValidate(
+                bootstrap.SerializeForPrivateEnvironment(), paths, out _),
+                "Issuing a replacement bootstrap authorization revokes the previous bootstrap authorization.");
+            for (var index = 0; index < paths.Length; index++)
+                CollectionAssert.AreEqual(serializedCliOwnerRecords[index], File.ReadAllBytes(
+                    HorseIdentityMigrationMaintenanceOwnership.GetControlOwnerRecordPath(paths[index])),
+                    "Bootstrap issuance must retain the predecessor CLI owner record bytes.");
+            Assert.IsTrue(await RunMaintenanceChildAsync("install-cli", paths,
+                operationAuthorization.SerializeForPrivateEnvironment(), journalDirectory, operationId, requestHash),
+                "Reissuing bootstrap authorization must not revoke the still-running CLI authorization.");
 
             await CompleteAppliedJournalAsync(journal, operationId);
             using (var gateManagementOwnership = HorseIdentityMigrationRuntimeOwnership.AcquireForMaintenanceGateManagement(
@@ -351,6 +368,127 @@ public sealed class HorseIdentityMigrationRuntimeOwnershipTests
                 readonlyOwnership, currentControl, readonlyAuthorization, journal);
             Assert.IsTrue(paths.All(path => !File.Exists(
                 HorseIdentityMigrationMaintenanceOwnership.GetMaintenanceGatePath(path))));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task BootstrapAndReadonlyOwnerRecordsRemainIndependentAndRevokeWithinPurpose()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"horse-maintenance-owner-purpose-{Guid.NewGuid():N}");
+        var paths = new[] { Path.Combine(root, "a", "store.db"), Path.Combine(root, "b", "store.db") };
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var control = HorseIdentityMigrationMaintenanceOwnership.AcquireSupervisorControlLease(paths);
+            var bootstrap = control.IssueApiBootstrapAuthorization();
+            var journalDirectory = Path.Combine(root, "journal");
+            var (journal, operationId, requestHash) = await CreateStoppingApiJournal(journalDirectory, paths);
+            Assert.IsTrue(await RunMaintenanceChildAsync("install-api", paths,
+                bootstrap.SerializeForPrivateEnvironment(), journalDirectory, operationId, requestHash));
+            foreach (var phase in new[]
+            {
+                HorseIdentityMigrationExecutionPhase.ApiExited,
+                HorseIdentityMigrationExecutionPhase.BackedUp,
+                HorseIdentityMigrationExecutionPhase.Applying,
+            })
+                Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId, phase,
+                    DateTimeOffset.UtcNow)).Succeeded);
+
+            var operationAuthorization = await control.IssueOperationAuthorizationAsync(operationId, requestHash, journal);
+            await CompleteAppliedJournalAsync(journal, operationId, leaveVerifying: true);
+            var firstReadonly = (await control.IssueReadonlyReverificationAuthorizationAsync(
+                operationId, requestHash, journal))!;
+            Assert.IsNotNull(firstReadonly);
+            Assert.IsTrue(await RunMaintenanceChildAsync("bootstrap", paths,
+                bootstrap.SerializeForPrivateEnvironment()),
+                "Readonly issuance must not revoke bootstrap authorization.");
+            Assert.IsFalse(HorseIdentityMigrationMaintenanceCapability.OperationAuthorization.TryImportAndValidate(
+                operationAuthorization.SerializeForPrivateEnvironment(), paths, out _),
+                "Readonly issuance revokes the serialized CLI/read-only owner slot.");
+
+            var secondReadonly = (await control.IssueReadonlyReverificationAuthorizationAsync(
+                operationId, requestHash, journal))!;
+            using (await HorseIdentityMigrationRuntimeOwnership.AcquireForReadonlyReverificationAsync(
+                       paths, control, secondReadonly, journal)) { }
+            await Assert.ThrowsExactlyAsync<IOException>(() =>
+                HorseIdentityMigrationRuntimeOwnership.AcquireForReadonlyReverificationAsync(
+                    paths, control, firstReadonly, journal));
+            Assert.IsTrue(await RunMaintenanceChildAsync("bootstrap", paths,
+                bootstrap.SerializeForPrivateEnvironment()));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void BootstrapAuthorizationRejectsCorruptOrOversizedLegacyAndBootstrapOwnerRecords()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"horse-maintenance-owner-corrupt-{Guid.NewGuid():N}");
+        var paths = new[] { Path.Combine(root, "a", "store.db") };
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var control = HorseIdentityMigrationMaintenanceOwnership.AcquireSupervisorControlLease(paths);
+            var bootstrap = control.IssueApiBootstrapAuthorization();
+            var legacyPath = HorseIdentityMigrationMaintenanceOwnership.GetControlOwnerRecordPath(paths[0]);
+            var bootstrapPath = HorseIdentityMigrationMaintenanceOwnership.GetControlBootstrapOwnerRecordPath(paths[0]);
+
+            File.WriteAllText(legacyPath, string.Empty);
+            Assert.IsFalse(HorseIdentityMigrationMaintenanceCapability.ApiBootstrapAuthorization.TryImportAndValidate(
+                bootstrap.SerializeForPrivateEnvironment(), paths, out _));
+            File.WriteAllText(legacyPath, "corrupt");
+            Assert.IsFalse(HorseIdentityMigrationMaintenanceCapability.ApiBootstrapAuthorization.TryImportAndValidate(
+                bootstrap.SerializeForPrivateEnvironment(), paths, out _));
+            File.WriteAllBytes(legacyPath, new byte[1025]);
+            Assert.IsFalse(HorseIdentityMigrationMaintenanceCapability.ApiBootstrapAuthorization.TryImportAndValidate(
+                bootstrap.SerializeForPrivateEnvironment(), paths, out _));
+            File.Delete(legacyPath);
+            if (OperatingSystem.IsLinux())
+            {
+                File.CreateSymbolicLink(legacyPath, Path.Combine(root, "missing-owner-record"));
+                Assert.IsFalse(HorseIdentityMigrationMaintenanceCapability.ApiBootstrapAuthorization.TryImportAndValidate(
+                    bootstrap.SerializeForPrivateEnvironment(), paths, out _));
+                File.Delete(legacyPath);
+            }
+
+            File.WriteAllText(bootstrapPath, "corrupt");
+            Assert.IsFalse(HorseIdentityMigrationMaintenanceCapability.ApiBootstrapAuthorization.TryImportAndValidate(
+                bootstrap.SerializeForPrivateEnvironment(), paths, out _));
+            File.WriteAllBytes(bootstrapPath, new byte[1025]);
+            Assert.IsFalse(HorseIdentityMigrationMaintenanceCapability.ApiBootstrapAuthorization.TryImportAndValidate(
+                bootstrap.SerializeForPrivateEnvironment(), paths, out _));
+            File.Delete(bootstrapPath);
+            if (OperatingSystem.IsLinux())
+            {
+                File.CreateSymbolicLink(bootstrapPath, Path.Combine(root, "missing-bootstrap-record"));
+                Assert.IsFalse(HorseIdentityMigrationMaintenanceCapability.ApiBootstrapAuthorization.TryImportAndValidate(
+                    bootstrap.SerializeForPrivateEnvironment(), paths, out _));
+                File.Delete(bootstrapPath);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void SupervisorControlRejectsBootstrapOwnerSidecarAlias()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"horse-maintenance-owner-alias-{Guid.NewGuid():N}");
+        var sourcePath = Path.Combine(root, "a", "store.db");
+        var aliasedSourcePath = HorseIdentityMigrationMaintenanceOwnership.GetControlBootstrapOwnerRecordPath(sourcePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
+        try
+        {
+            Assert.ThrowsExactly<IOException>(() =>
+                HorseIdentityMigrationMaintenanceOwnership.AcquireSupervisorControlLease([sourcePath, aliasedSourcePath]));
         }
         finally
         {
