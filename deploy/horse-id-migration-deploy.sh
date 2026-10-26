@@ -55,13 +55,104 @@ horse_id_migration_require_recovery_tools() {
 # by the API (for the deployed Compose bind these are /opt/.../data/x and
 # /data/x). Do not unlink gates: their inode and validated path identity are the
 # cross-process protocol shared with HorseIdentityMigrationRuntimeOwnership.
+horse_id_migration_validate_supervisor_owner_record() {
+  local owner=${1:?supervisor owner path is required}
+  local source_set_hash=${2:?source-set hash is required}
+  local owner_kind=${3:?owner kind is required}
+  if [[ ! -e "$owner" && ! -L "$owner" ]]; then return 0; fi
+  if [[ -L "$owner" || ! -f "$owner" || "$(stat -c %h -- "$owner" 2>/dev/null)" != 1 ||
+        "$(stat -c %s -- "$owner" 2>/dev/null)" -lt 1 || "$(stat -c %s -- "$owner" 2>/dev/null)" -gt 1024 ||
+        "$(realpath -e -- "$owner" 2>/dev/null)" != "$owner" ]]; then
+    return 1
+  fi
+  timeout --signal=TERM --kill-after=5s 60s "${HRP_PYTHON3:-python3}" - "$owner" "$source_set_hash" "$owner_kind" <<'PY'
+import os, re, stat, sys
+from pathlib import Path
+
+try:
+    path = Path(sys.argv[1])
+    expected_source_set_hash = sys.argv[2]
+    owner_kind = sys.argv[3]
+    before = path.lstat()
+    if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+            or before.st_size < 1 or before.st_size > 1024
+            or os.path.realpath(path) != str(path)):
+        raise ValueError()
+    fd = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_CLOEXEC', 0))
+    try:
+        opened = os.fstat(fd)
+        if (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns) != (
+                before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns):
+            raise ValueError()
+        raw = os.read(fd, 1025)
+        after = os.fstat(fd)
+        if (len(raw) != before.st_size or
+                (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) !=
+                (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns)):
+            raise ValueError()
+    finally:
+        os.close(fd)
+    fields = raw.decode('ascii').split('\n')
+    allowed_purposes = (('api-bootstrap',) if owner_kind == 'bootstrap'
+                        else ('api-bootstrap', 'cli-operation', 'readonly-reverify') if owner_kind == 'legacy'
+                        else ())
+    if (len(fields) != 8 or fields[0] != 'v1' or fields[1] not in allowed_purposes
+            or not re.fullmatch(r'[0-9A-Fa-f]{64}', fields[4])
+            or fields[4] != expected_source_set_hash
+            or not re.fullmatch(r'[0-9A-Fa-f]{64}', fields[7])
+            or not re.fullmatch(r'[0-9]+', fields[5]) or int(fields[5]) <= 0
+            or not re.fullmatch(r'[0-9]+', fields[6]) or int(fields[6]) <= 0):
+        raise ValueError()
+    if fields[1] == 'api-bootstrap':
+        if fields[2:4] != ['-', '-']:
+            raise ValueError()
+    elif (not re.fullmatch(r'[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}', fields[2])
+          or fields[2] == '00000000-0000-0000-0000-000000000000'
+          or not re.fullmatch(r'[0-9A-Fa-f]{64}', fields[3])):
+        raise ValueError()
+except (OSError, UnicodeError, ValueError):
+    raise SystemExit(1)
+PY
+}
+
 horse_id_migration_acquire_source_ownership() {
-  local physical logical gate expected actual fd source_name control owner source_set_hash gate_identity fd_identity
+  local preserve_existing_maintenance_gates=false
+  if [[ "${1-}" == "--preserve-existing-maintenance-gates" ]]; then
+    preserve_existing_maintenance_gates=true
+    shift
+  fi
+  local physical logical gate expected actual fd source_name control owner bootstrap_owner source_set_hash gate_identity fd_identity
   local -a pairs=("$@")
   local -a logical_paths=()
   local index
   if (( ${#pairs[@]} == 0 || ${#pairs[@]} % 2 != 0 )); then
     echo "Source ownership requires physical/API path pairs." >&2
+    return 1
+  fi
+  if ! timeout --signal=TERM --kill-after=5s 60s "${HRP_PYTHON3:-python3}" - "${pairs[@]}" <<'PY'
+import os, sys
+from pathlib import Path
+
+try:
+    pairs = sys.argv[1:]
+    if not pairs or len(pairs) % 2:
+        raise ValueError()
+    sources = pairs[::2]
+    if any(not Path(path).is_absolute() or str(Path(path)) != path for path in sources):
+        raise ValueError()
+    sidecars = []
+    for source in sources:
+        path = Path(source)
+        sidecars.extend((str(path.parent / ('.' + path.name + '.horse-identity-migration.supervisor-control.owner')),
+                         str(path.parent / ('.' + path.name + '.horse-identity-migration.supervisor-control.bootstrap.owner'))))
+    identities = [os.path.normcase(os.path.realpath(path)) for path in sources + sidecars]
+    if len(set(identities)) != len(identities):
+        raise ValueError()
+except (OSError, ValueError):
+    raise SystemExit(1)
+PY
+  then
+    echo "Configured sources and supervisor owner sidecars must not alias." >&2
     return 1
   fi
   for (( index=1; index<${#pairs[@]}; index+=2 )); do logical_paths+=("${pairs[index]}"); done
@@ -141,7 +232,8 @@ horse_id_migration_acquire_source_ownership() {
       horse_id_migration_release_source_ownership
       return 1
     fi
-    if [[ -e "${physical%/*}/.${source_name}.horse-identity-migration.maintenance" ]]; then
+    if [[ "$preserve_existing_maintenance_gates" != true &&
+          -e "${physical%/*}/.${source_name}.horse-identity-migration.maintenance" ]]; then
       echo "An active migration maintenance gate exists for a configured source." >&2
       horse_id_migration_release_source_ownership
       return 1
@@ -149,6 +241,7 @@ horse_id_migration_acquire_source_ownership() {
 
     control="${physical%/*}/.${source_name}.horse-identity-migration.supervisor-control.lock"
     owner="${physical%/*}/.${source_name}.horse-identity-migration.supervisor-control.owner"
+    bootstrap_owner="${physical%/*}/.${source_name}.horse-identity-migration.supervisor-control.bootstrap.owner"
     if [[ ! -f "$control" || -L "$control" || "$(stat -c %h -- "$control" 2>/dev/null)" != 1 ||
           "$(realpath -e -- "$control" 2>/dev/null)" != "$control" ]]; then
       echo "Supervisor control lock is not a regular unaliased file." >&2
@@ -192,51 +285,11 @@ horse_id_migration_acquire_source_ownership() {
       horse_id_migration_release_source_ownership
       return 1
     fi
-    if [[ -e "$owner" ]]; then
-      if [[ -L "$owner" || ! -f "$owner" || "$(stat -c %h -- "$owner" 2>/dev/null)" != 1 ||
-            "$(stat -c %s -- "$owner" 2>/dev/null)" -lt 1 || "$(stat -c %s -- "$owner" 2>/dev/null)" -gt 1024 ||
-            "$(realpath -e -- "$owner" 2>/dev/null)" != "$owner" ]] ||
-         ! "${HRP_PYTHON3:-python3}" - "$owner" "$source_set_hash" <<'PY'
-import os, re, stat, sys
-from pathlib import Path
-try:
-    p = Path(sys.argv[1])
-    expected_source_set_hash = sys.argv[2]
-    fd = os.open(p, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
-    try:
-        info = os.fstat(fd)
-        path_info = os.stat(p, follow_symlinks=False)
-        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size < 1 or info.st_size > 1024
-                or (info.st_dev, info.st_ino) != (path_info.st_dev, path_info.st_ino)):
-            raise ValueError()
-        raw = os.read(fd, 1025)
-        after = os.fstat(fd)
-        if len(raw) != info.st_size or after.st_size != info.st_size or (after.st_dev, after.st_ino) != (info.st_dev, info.st_ino):
-            raise ValueError()
-    finally:
-        os.close(fd)
-    if not raw:
-        raise ValueError()
-    fields = raw.decode('ascii').split('\n')
-    if len(fields) != 8 or fields[0] != 'v1' or fields[1] not in ('api-bootstrap','cli-operation','readonly-reverify'):
-        raise ValueError()
-    if fields[4] != expected_source_set_hash or not re.fullmatch(r'[0-9A-Fa-f]{64}', fields[7]):
-        raise ValueError()
-    if not fields[5].isdigit() or not fields[6].isdigit() or int(fields[5]) <= 0 or int(fields[6]) <= 0:
-        raise ValueError()
-    if fields[1] == 'api-bootstrap':
-        if fields[2:4] != ['-','-']:
-            raise ValueError()
-    elif not re.fullmatch(r'[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}', fields[2]) or not re.fullmatch(r'[0-9A-Fa-f]{64}', fields[3]):
-        raise ValueError()
-except (OSError, UnicodeError, ValueError):
-    raise SystemExit(1)
-PY
-      then
-        echo "Supervisor owner record is active or invalid." >&2
-        horse_id_migration_release_source_ownership
-        return 1
-      fi
+    if ! horse_id_migration_validate_supervisor_owner_record "$owner" "$source_set_hash" legacy ||
+       ! horse_id_migration_validate_supervisor_owner_record "$bootstrap_owner" "$source_set_hash" bootstrap; then
+      echo "Supervisor owner record is active or invalid." >&2
+      horse_id_migration_release_source_ownership
+      return 1
     fi
   done
 }
@@ -328,6 +381,277 @@ except (OSError, URLError, ValueError, json.JSONDecodeError):
 PY
 }
 
+horse_id_migration_assert_api_container_exited() {
+  local container=${1:?API container is required}
+  local metadata
+  metadata="$(docker inspect --format '{{.State.Status}} {{.State.Running}} {{.State.Restarting}} {{.State.Paused}} {{.State.Pid}}' "$container")" || {
+    echo "Could not inspect the former API container after stop." >&2
+    return 1
+  }
+  read -r status running restarting paused pid <<< "$metadata"
+  [ "$status" = "exited" ] && [ "$running" = "false" ] && [ "$restarting" = "false" ] && [ "$paused" = "false" ] && [ "$pid" = "0" ] || {
+    echo "Former API container did not reach a fully stopped state." >&2
+    return 1
+  }
+  [ -z "$(docker compose --env-file .env ps --status running -q api)" ] || {
+    echo "A Compose API container remains running after the bounded stop." >&2
+    return 1
+  }
+}
+
+horse_id_migration_validate_operator_binding() {
+  local data_directory=${1:?data directory is required}
+  local operation_id=${2:?operation GUID is required}
+  local python_command=${HRP_PYTHON3:-python3}
+  shift 2
+  local -a source_pairs=("$@")
+  horse_id_migration_validate_guid "$operation_id" || return 1
+  ((${#source_pairs[@]} > 0 && ${#source_pairs[@]} % 2 == 0)) || return 1
+  timeout --signal=TERM --kill-after=5s 60s "$python_command" - "$data_directory" "$operation_id" "${source_pairs[@]}" <<'PY'
+import hashlib
+import os
+import re
+import sqlite3
+import stat
+import sys
+from pathlib import Path
+from uuid import UUID
+
+data = Path(sys.argv[1])
+requested = sys.argv[2]
+arguments = sys.argv[3:]
+hash_re = re.compile(r"[0-9A-F]{64}")
+
+def reject():
+    print("Operator intent and maintenance-gate binding is unknown or unsafe.", file=sys.stderr)
+    raise SystemExit(1)
+
+def read_stable(path, max_bytes):
+    before = path.lstat()
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > max_bytes or path.is_symlink():
+        reject()
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0))
+    try:
+        opened = os.fstat(fd)
+        if (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns) != (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns):
+            reject()
+        content = os.read(fd, max_bytes + 1)
+        after = os.fstat(fd)
+        if len(content) != before.st_size or (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) != (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns):
+            reject()
+        return content
+    finally:
+        os.close(fd)
+
+try:
+    if not data.is_dir() or data.is_symlink() or len(arguments) == 0 or len(arguments) % 2:
+        reject()
+    if str(UUID(requested)) != requested or UUID(requested).int == 0:
+        reject()
+    data_root = str(Path(os.path.abspath(data)))
+    if os.path.realpath(data_root) != data_root:
+        reject()
+    pairs = []
+    for index in range(0, len(arguments), 2):
+        source = Path(arguments[index])
+        logical = arguments[index + 1]
+        resolved = Path(os.path.abspath(source))
+        info = resolved.lstat()
+        if (not source.is_absolute() or str(source) != str(resolved)
+                or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or resolved.is_symlink()
+                or os.path.realpath(resolved) != str(resolved)):
+            reject()
+        try:
+            if os.path.commonpath((data_root, str(resolved))) != data_root:
+                reject()
+        except ValueError:
+            reject()
+        if (not logical.startswith("/") or logical == "/" or logical.endswith("/")
+                or any(part in (".", "..") for part in logical.split("/"))
+                or any(character.isspace() for character in logical)
+                or logical.rsplit("/", 1)[-1] != resolved.name):
+            reject()
+        pairs.append((str(resolved), logical))
+    canonical = [physical for physical, _ in pairs]
+    logical_paths = [logical for _, logical in pairs]
+    if len(set(canonical)) != len(canonical) or len(set(logical_paths)) != len(logical_paths):
+        reject()
+    if logical_paths != sorted(logical_paths, key=lambda value: value.encode("utf-16-be")):
+        reject()
+    source_hash = hashlib.sha256("\n".join(logical_paths).encode("utf-8")).hexdigest().upper()
+    database = data / "horse-identity-migration-journal.db"
+    marker = data / "horse-identity-migration-initialized.marker"
+    lock = data / "horse-identity-migration-operation.lock"
+    marker_bytes = read_stable(marker, 64)
+    if marker_bytes != b"horse-identity-migration-journal-v1":
+        reject()
+    read_stable(lock, 64)
+    read_stable(database, 64 * 1024 * 1024)
+    connection = sqlite3.connect(database.resolve(strict=True).as_uri() + "?mode=ro", uri=True, timeout=5)
+    try:
+        connection.execute("PRAGMA query_only=ON")
+        if connection.execute("PRAGMA query_only").fetchone() != (1,) or connection.execute("PRAGMA quick_check(1)").fetchone() != ("ok",):
+            reject()
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        required = {"migration_operations", "migration_execution_intents"}
+        if not required.issubset(tables):
+            reject()
+        operation_columns = {row[1] for row in connection.execute("PRAGMA table_info(migration_operations)")}
+        intent_columns = {row[1] for row in connection.execute("PRAGMA table_info(migration_execution_intents)")}
+        if not {"operation_id", "request_hash", "request_json", "status"}.issubset(operation_columns) or not {"operation_id", "immutable_request_hash", "phase"}.issubset(intent_columns):
+            reject()
+        operation_rows = connection.execute("SELECT operation_id, request_hash, request_json, status FROM migration_operations WHERE operation_id=?", (requested,)).fetchall()
+        intent_rows = connection.execute("SELECT operation_id, immutable_request_hash, phase FROM migration_execution_intents WHERE operation_id=?", (requested,)).fetchall()
+    finally:
+        connection.close()
+    if len(operation_rows) != 1 or len(intent_rows) != 1 or intent_rows[0][0] != requested:
+        reject()
+    operation_id, operation_hash, request_json, status = operation_rows[0]
+    intent_id, immutable_request_hash, phase = intent_rows[0]
+    if (operation_id != requested or intent_id != requested
+            or not isinstance(operation_hash, str) or not hash_re.fullmatch(operation_hash)
+            or not isinstance(request_json, str) or len(request_json.encode("utf-8")) > 1024 * 1024
+            or hashlib.sha256(request_json.encode("utf-8")).hexdigest().upper() != operation_hash
+            or not isinstance(immutable_request_hash, str) or not hash_re.fullmatch(immutable_request_hash)
+            or not isinstance(status, int) or status not in range(7)
+            or not isinstance(phase, int) or phase not in range(11)):
+        reject()
+    gates = []
+    for source in canonical:
+        gate = Path(source).parent / ("." + Path(source).name + ".horse-identity-migration.maintenance")
+        fields = read_stable(gate, 1024).decode("ascii").split("\n")
+        if len(fields) != 7 or fields[0] != "v1" or fields[1] != requested or fields[2] != immutable_request_hash or fields[3] != source_hash or not fields[4].isdigit() or int(fields[4]) <= 0 or not fields[5].isdigit() or int(fields[5]) <= 0 or not hash_re.fullmatch(fields[6]):
+            reject()
+        gates.append(gate)
+    print("PASS code=OPERATOR_BINDING sources=%d gates=%d phase=%d" % (len(canonical), len(gates), phase))
+except SystemExit:
+    raise
+except (OSError, UnicodeError, sqlite3.Error, ValueError, TypeError):
+    reject()
+PY
+}
+
+horse_id_migration_assert_operator_status() {
+  local api_base_url=${1:?API base URL is required}
+  local api_key=${2:?API key is required}
+  local operation_id=${3:?operation GUID is required}
+  local python_command=${HRP_PYTHON3:-python3}
+  HRP_OPERATOR_API_KEY="$api_key" "$python_command" - "$api_base_url" "$operation_id" <<'PY'
+import json
+import os
+import sys
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener
+
+base, requested = sys.argv[1:]
+api_key = os.environ.pop("HRP_OPERATOR_API_KEY", "")
+if urlparse(base).scheme != "https" or not api_key:
+    raise SystemExit(1)
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+opener = build_opener(NoRedirect())
+try:
+    request = Request(base.rstrip("/") + "/api/v2/admin/horse-id-migration-operations/" + requested,
+                      headers={"X-Api-Key": api_key})
+    with opener.open(request, timeout=10) as response:
+        if response.status != 200:
+            raise ValueError()
+        payload = response.read(65537)
+    if len(payload) > 65536:
+        raise ValueError()
+    body = json.loads(payload)
+    if not isinstance(body, dict) or body.get("operationId") != requested or not isinstance(body.get("status"), str):
+        raise ValueError()
+except (OSError, URLError, HTTPError, ValueError, TypeError, json.JSONDecodeError):
+    print("Authenticated operation status did not match the requested bound operation.", file=sys.stderr)
+    raise SystemExit(1)
+print("PASS code=OPERATOR_STATUS")
+PY
+}
+
+horse_id_migration_assert_operator_ui_ready() {
+  local api_base_url=${1:?API base URL is required}
+  local api_key=${2:?API key is required}
+  local operation_id=${3:?operation GUID is required}
+  local python_command=${HRP_PYTHON3:-python3}
+  HRP_OPERATOR_API_KEY="$api_key" "$python_command" - "$api_base_url" "$operation_id" <<'PY'
+import http.cookiejar
+import json
+import os
+import sys
+import time
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode, urlparse
+from urllib.request import HTTPRedirectHandler, HTTPCookieProcessor, Request, build_opener
+
+base, requested = sys.argv[1:]
+api_key = os.environ.pop("HRP_OPERATOR_API_KEY", "")
+if urlparse(base).scheme != "https" or not api_key:
+    raise SystemExit(1)
+jar = http.cookiejar.CookieJar()
+base_origin = urlparse(base)
+class SameOriginRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        target = urlparse(newurl)
+        if target.scheme != base_origin.scheme or target.netloc != base_origin.netloc:
+            return None
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+opener = build_opener(SameOriginRedirect(), HTTPCookieProcessor(jar))
+def request(path, headers=None, data=None, expected=None):
+    req = Request(base.rstrip("/") + path, headers=headers or {}, data=data)
+    try:
+        response = opener.open(req, timeout=10)
+    except HTTPError as error:
+        if expected is not None and error.code == expected:
+            return error.code, error.read(65537)
+        raise
+    if expected is not None and response.status != expected:
+        raise ValueError()
+    return response.status, response.read(1024 * 1024 + 1)
+
+def read_only_readiness():
+    status, payload = request("/health", expected=200)
+    if json.loads(payload).get("status") != "ok":
+        raise ValueError()
+    status, payload = request("/api/v2/admin/horse-id-migration-operations/" + requested,
+                              headers={"X-Api-Key": api_key}, expected=200)
+    body = json.loads(payload)
+    if body.get("operationId") != requested:
+        raise ValueError()
+    status, payload = request("/api/v2/admin/collection/pipeline-state",
+                              headers={"X-Api-Key": api_key}, expected=503)
+    blocked = json.loads(payload)
+    if blocked.get("title") != "Application startup is blocked by migration state.":
+        raise ValueError()
+
+try:
+    deadline = time.monotonic() + 120
+    while True:
+        try:
+            read_only_readiness()
+            break
+        except (OSError, URLError, HTTPError, ValueError, TypeError, UnicodeError, json.JSONDecodeError):
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(1)
+    login = urlencode({"username": "operator", "password": api_key,
+                       "ReturnUrl": "/settings/horse-id-migration?operationId=" + requested}).encode()
+    request("/login", headers={"Content-Type": "application/x-www-form-urlencoded",
+                                "Accept": "text/html"}, data=login)
+    status, html = request("/settings/horse-id-migration?operationId=" + requested,
+                           headers={"Accept": "text/html"}, expected=200)
+    text = html.decode("utf-8")
+    if requested not in text or "Status:" not in text:
+        raise ValueError()
+except (OSError, URLError, HTTPError, ValueError, TypeError, UnicodeError, json.JSONDecodeError):
+    print("Operator-only protected host did not pass liveness, status, HTML, and business-block checks.", file=sys.stderr)
+    raise SystemExit(1)
+print("PASS code=OPERATOR_UI_READY")
+PY
+}
+
 horse_id_migration_assert_api_startup_blocked() {
   local api_base_url=${1:?API base URL is required}
   local api_key=${2:?API key is required}
@@ -374,18 +698,23 @@ PY
 # deployed collection schema version and known state values.
 horse_id_migration_assert_recovery_collection_state() {
   local database=${1:?collection database path is required}
+  local minimum_age_seconds=${2:-0}
   local python_command=${HRP_PYTHON3:-python3}
-  timeout --signal=TERM --kill-after=5s 60s "$python_command" - "$database" <<'PY'
+  timeout --signal=TERM --kill-after=5s 60s "$python_command" - "$database" "$minimum_age_seconds" <<'PY'
+import datetime
+import re
 import sqlite3
 import stat
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
+minimum_age = int(sys.argv[2])
 def fail():
     print("Persisted collection pause or work state is unknown or unsafe; refusing API startup recovery.", file=sys.stderr)
     raise SystemExit(1)
 
+paused_timestamp = None
 try:
     info = path.lstat()
     if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or path.is_symlink():
@@ -416,10 +745,39 @@ try:
             actual = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
             if not columns.issubset(actual):
                 fail()
+        control_columns = {row[1] for row in connection.execute("PRAGMA table_info(collection_platform_controls)")}
+        pipeline_select = "IsPaused, UpdatedAt, typeof(IsPaused)" if "UpdatedAt" in control_columns else "IsPaused, NULL, typeof(IsPaused)"
         pipeline = connection.execute(
-            "SELECT IsPaused, typeof(IsPaused) FROM collection_platform_controls WHERE ControlId='pipeline'").fetchall()
-        if pipeline != [(1, "integer")]:
+            f"SELECT {pipeline_select} FROM collection_platform_controls WHERE ControlId='pipeline'").fetchall()
+        if len(pipeline) != 1 or pipeline[0][0] != 1 or pipeline[0][2] != "integer":
             fail()
+        if minimum_age < 0:
+            fail()
+        if minimum_age:
+            if "UpdatedAt" not in control_columns:
+                fail()
+            if not isinstance(pipeline[0][1], str):
+                fail()
+            stored = pipeline[0][1]
+            timestamp_match = re.fullmatch(
+                r"(?P<date>\d{4}-\d{2}-\d{2})[ T](?P<time>\d{2}:\d{2}:\d{2})(?:\.(?P<fraction>\d{1,7}))?",
+                stored)
+            if timestamp_match is None:
+                fail()
+            # CollectionPlatformStore persists JstTime.ToDatabase through the
+            # EF SQLite DateTime mapping (space separator, up to seven
+            # fractional digits); migration JSON uses the equivalent T form.
+            # Parse both actual producer forms as timezone-less JST, then
+            # reject future timestamps before applying the drain age.
+            fraction = (timestamp_match.group("fraction") or "").ljust(6, "0")[:6]
+            paused_at = datetime.datetime.strptime(
+                f"{timestamp_match.group('date')} {timestamp_match.group('time')}.{fraction}",
+                "%Y-%m-%d %H:%M:%S.%f").replace(
+                    tzinfo=datetime.timezone(datetime.timedelta(hours=9)))
+            age = (datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))) - paused_at).total_seconds()
+            if age < minimum_age:
+                fail()
+            paused_timestamp = stored
         task_states = {row[0] for row in connection.execute("SELECT DISTINCT Status FROM collection_tasks")}
         known_tasks = {"Pending", "Ready", "Running", "RetryWaiting", "WaitingDiscovery",
                        "Succeeded", "Failed", "Cancelled", "DeadLetter"}
@@ -439,7 +797,7 @@ except SystemExit:
     raise
 except (OSError, sqlite3.Error, ValueError, TypeError, RuntimeError):
     fail()
-print("PASS code=RECOVERY_QUIESCENT")
+print("PASS code=RECOVERY_QUIESCENT" + (" updated_at=" + paused_timestamp if paused_timestamp is not None else ""))
 PY
 }
 

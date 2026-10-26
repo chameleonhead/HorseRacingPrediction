@@ -1,11 +1,25 @@
 param(
     [string] $Bash = 'C:\Program Files\Git\bin\bash.exe',
     [string] $Python = 'python3',
+    [string] $OperatorFixtureDirectory,
     [switch] $PythonSemanticOnly
 )
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+$operatorFixtureDirectory = if ([string]::IsNullOrWhiteSpace($OperatorFixtureDirectory)) { $null } else { [IO.Path]::GetFullPath($OperatorFixtureDirectory) }
+if (-not $operatorFixtureDirectory) { throw 'A typed operator fixture is required. Export it with HorseIdentityMigrationDeployInteropTests first.' }
+$temporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+$operatorFixtureName = [IO.Path]::GetFileName($operatorFixtureDirectory)
+$operatorFixtureValid = $operatorFixtureDirectory.StartsWith($temporaryRoot, [StringComparison]::OrdinalIgnoreCase) `
+    -and $operatorFixtureName.StartsWith('hrp-horse-identity-deploy-interop-', [StringComparison]::Ordinal) `
+    -and (Test-Path -LiteralPath $operatorFixtureDirectory -PathType Container)
+if ($operatorFixtureValid) {
+    $operatorFixtureValid = ((Get-Item -LiteralPath $operatorFixtureDirectory -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0
+}
+if (-not $operatorFixtureValid) {
+    throw 'The typed operator fixture must be an existing owned temporary directory.'
+}
 $helperPath = (Resolve-Path (Join-Path $repositoryRoot 'deploy/horse-id-migration-deploy.sh')).Path
 $workflowPath = Join-Path $repositoryRoot '.github/workflows/app-deploy.yml'
 $dockerfilePath = Join-Path $repositoryRoot 'Dockerfile'
@@ -73,6 +87,16 @@ $ruby = Get-Command ruby -ErrorAction SilentlyContinue
 if ($ruby -and -not $PythonSemanticOnly) {
     $yamlSemanticScript = @'
 require 'yaml'
+document = YAML.parse_file(ARGV.fetch(0))
+walk = lambda do |node|
+  next if node.nil?
+  if node.is_a?(Psych::Nodes::Mapping)
+    keys = node.children.each_slice(2).map { |pair| pair.first.value }
+    raise 'duplicate YAML mapping key' unless keys.uniq.length == keys.length
+  end
+  node.children&.each { |child| walk.call(child) }
+end
+walk.call(document.root)
 workflow = YAML.safe_load_file(ARGV.fetch(0), aliases: false)
 events = workflow['on'] || workflow[true]
 raise 'workflow_dispatch input is not optional string' unless events.dig('workflow_dispatch','inputs','horse_id_migration_operation_id').then { |v| v && v['required'] == false && v['type'] == 'string' }
@@ -81,10 +105,16 @@ raise 'verification runner must be Ubuntu 24.04' unless workflow.dig('jobs','ver
 verify_steps = workflow.dig('jobs','verify','steps')
 guard_step = verify_steps.find { |s| s['name'] == 'Verify horse identity migration deploy guard' }
 raise 'migration guard tests need a finite step timeout' unless guard_step && guard_step['timeout-minutes'] == 3
+api_fixture_index = verify_steps.index { |s| s['name'] == 'Build the production API test fixture' }
+guard_index = verify_steps.index(guard_step)
+raise 'the production API test fixture must be built before the interop guard' unless api_fixture_index && guard_index && api_fixture_index < guard_index && verify_steps[api_fixture_index]['run'].include?('HorseRacingPrediction.Api.Tests.csproj') && verify_steps[api_fixture_index]['run'].include?('--configuration Debug')
 raise 'build must depend on verification' unless Array(workflow.dig('jobs','build-and-push','needs')).include?('verify')
 early_validation = verify_steps.find { |s| s['name'] == 'Validate optional migration request before publishing or deployment' }
 raise 'pre-publish validation must reject GUID.Empty' unless early_validation && early_validation['run'].include?('00000000-0000-0000-0000-000000000000')
 raise 'recovery input validation must be default-off, manual-only, SHA-bound, and migration-exclusive' unless early_validation['run'].include?('API_STARTUP_RECOVERY') && early_validation['run'].include?('EXPECTED_DEPLOYED_SHA') && early_validation['run'].include?('workflow_dispatch') && early_validation['run'].include?('HORSE_ID_MIGRATION_OPERATION_ID')
+operator_input = events.dig('workflow_dispatch','inputs','operator_ui_recovery_operation_id')
+raise 'operator UI recovery input contract is missing' unless operator_input == {'description'=>'Existing bound horse-identity operation GUID for protected operator UI bootstrap','required'=>false,'type'=>'string'}
+raise 'operator validation must be manual, GUID/SHA-bound, and mutually exclusive' unless early_validation['run'].include?('OPERATOR_UI_RECOVERY_OPERATION_ID') && early_validation['run'].include?('Operator UI recovery requires') && early_validation['run'].include?('EXPECTED_DEPLOYED_SHA')
 recovery = workflow.dig('jobs','recover-api-startup')
 raise 'API recovery must be a manual API-only route after verified build' unless recovery && recovery['if'].to_s.include?('api_startup_recovery') && Array(recovery['needs']).sort == ['build-and-push','verify'] && recovery['environment'] == 'production' && recovery['timeout-minutes'] == 50
 diagnostic = workflow.dig('jobs','diagnose-api-startup')
@@ -108,6 +138,20 @@ raise 'diagnostic path must not start, stop, pull, exec, or mutate service/datab
 raise 'diagnostic must call bounded read-only journal, backup, and safe log functions' unless diagnostic_script.include?('horse_id_migration_diagnose_startup_journal') && diagnostic_script.include?('horse_id_migration_verify_recovery_backup') && diagnostic_script.include?('horse_id_migration_sanitize_startup_logs')
 raise 'diagnostic must preserve both log streams, pipe failures, and still attempt journal/backup evidence before failing' unless diagnostic_script.include?('set -euo pipefail') && diagnostic_script.include?('docker logs --tail 200 "$container" 2>&1 | head') && diagnostic_script.include?('logs_status=$?') && diagnostic_script.index('logs_status=') < diagnostic_script.index('horse_id_migration_diagnose_startup_journal') && diagnostic_script.index('horse_id_migration_verify_recovery_backup') < diagnostic_script.index('[ "$logs_status" -eq 0 ]')
 raise 'normal deploy paths must exclude API recovery without changing their requirements' unless workflow.dig('jobs','deploy')['if'].to_s.include?('api_startup_recovery') && workflow.dig('jobs','deploy-collector-lambda')['if'].to_s.include?('api_startup_recovery')
+operator = workflow.dig('jobs','recover-operator-ui')
+raise 'operator recovery must be an independent verified production job' unless operator && operator['if'].to_s.include?('operator_ui_recovery_operation_id') && Array(operator['needs']).sort == ['build-and-push','verify'] && operator['environment'] == 'production' && operator['timeout-minutes'] == 50
+operator_script = operator['steps'].find { |s| s['name'] == 'Bootstrap only the protected operator UI' }.dig('with','script')
+raise 'operator recovery must bind target image to the exact workflow SHA' unless operator_script.include?('TARGET_COMMIT_SHA') && operator_script.include?('sha-$TARGET_COMMIT_SHA')
+raise 'operator binding and ownership must share the configured physical/logical source pairs' unless operator_script.index('ownership_pairs=()') < operator_script.index('horse_id_migration_validate_operator_binding') && !operator_script.include?('horse_id_migration_validate_operator_binding "$data_directory" "$OPERATOR_UI_RECOVERY_OPERATION_ID" "${source_paths[@]}"')
+first_pause = operator_script.index('horse_id_migration_assert_recovery_collection_state')
+second_pause = operator_script.index('horse_id_migration_assert_recovery_collection_state', first_pause + 1)
+operator_positions = [operator_script.index('horse_id_migration_assert_operator_status'), operator_script.index('horse_id_migration_validate_operator_binding', operator_script.index('horse_id_migration_assert_operator_status')), first_pause, operator_script.index('docker pull '), operator_script.index('horse_id_migration_check_image_capability'), operator_script.index("stage=stopping\ndocker compose --env-file .env stop api"), operator_script.index('horse_id_migration_assert_api_container_exited'), operator_script.index('horse_id_migration_acquire_source_ownership --preserve-existing-maintenance-gates'), operator_script.index('horse_id_migration_acquire_journal_operation_lock'), second_pause, operator_script.rindex('horse_id_migration_validate_operator_binding'), operator_script.index('horse_id_migration_copy_store_set'), operator_script.rindex('horse_id_migration_update_recovery_env'), operator_script.index('HRP_HORSE_IDENTITY_OPERATOR_ONLY'), operator_script.rindex('docker compose --env-file .env -f docker-compose.yml -f "$operator_override" up'), operator_script.index('horse_id_migration_assert_operator_ui_ready')]
+raise 'operator recovery must verify, drain, lease, back up, and start protected UI in order' unless operator_positions.all? && operator_positions.each_cons(2).all? { |a,b| a < b }
+raise 'operator failure cleanup must be installed before leases, restore old image only after binding recheck, and preserve proven target' unless operator_script.index('trap operator_cleanup EXIT') < operator_script.index('horse_id_migration_acquire_source_ownership') && operator_script.include?('old_restore_override') && operator_script.include?('restored_image_id" != "$old_image_id"') && operator_script.index('target_proven=true') < operator_script.index('horse_id_migration_assert_operator_ui_ready')
+raise 'operator rollback must use an exact local image ID with pull disabled, never a config ID as a manifest digest' unless operator_script.include?('docker image tag "$old_image_id" "$old_restore_local_image"') && operator_script.include?('pull_policy: never') && !operator_script.include?('old_image_repository@$old_image_id')
+raise 'operator recovery must not call migration, retry, reset, marker deletion, Lambda, or arbitrary exec paths' if operator_script.match?(/horse_id_migration_run_fixed_command|horse-id-migration(?:\s|["']|$)|\b(?:resume|retry|reset|DELETE|terraform|lambda|aws|docker exec)\b/i)
+raise 'normal deploy and Lambda paths must exclude operator recovery' unless workflow.dig('jobs','deploy')['if'].to_s.include?('operator_ui_recovery_operation_id') && workflow.dig('jobs','deploy-collector-lambda')['if'].to_s.include?('operator_ui_recovery_operation_id')
+raise 'operator recovery must skip unrelated race-owner migration' unless workflow.dig('jobs','migrate-race-entry-owners')['if'].to_s.include?('operator_ui_recovery_operation_id')
 upload = recovery['steps'].find { |s| s['name'] == 'Upload only the verified recovery helper' }
 recovery_step_index = recovery['steps'].index { |s| s['name'] == 'Recover only the exact blocked API image' }
 raise 'recovery must upload only the helper from the checked-out exact SHA before invoking it' unless upload && upload['uses'] == 'appleboy/scp-action@v1.0.0' && upload.dig('with','source') == 'deploy/horse-id-migration-deploy.sh' && upload.dig('with','strip_components') == 1 && recovery_step_index && recovery['steps'].index(upload) < recovery_step_index
@@ -173,7 +217,16 @@ puts 'PASS parsed workflow semantics'
 else {
     $yamlSemanticScript = @'
 import re,sys,yaml
-w=yaml.safe_load(open(sys.argv[1],encoding='utf-8'))
+class StrictLoader(yaml.SafeLoader): pass
+def strict_mapping(loader,node,deep=False):
+    result={}
+    for key_node,value_node in node.value:
+        key=loader.construct_object(key_node,deep=deep)
+        if key in result: raise ValueError('duplicate YAML mapping key')
+        result[key]=loader.construct_object(value_node,deep=deep)
+    return result
+StrictLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,strict_mapping)
+w=yaml.load(open(sys.argv[1],encoding='utf-8'),Loader=StrictLoader)
 events=w.get('on',w.get(True))
 assert events['workflow_dispatch']['inputs']['horse_id_migration_operation_id']=={'description':'Existing staged horse-identity migration GUID; leave empty for a normal deploy','required':False,'type':'string'}
 assert events['workflow_dispatch']['inputs']['api_startup_recovery']=={'description':'Restore the API only from the expected blocked deployment; leaves collection paused','required':False,'default':False,'type':'boolean'}
@@ -182,9 +235,12 @@ assert w['jobs']['verify']['runs-on']=='ubuntu-24.04'
 verify=w['jobs']['verify']['steps']
 guard_test=next(s for s in verify if s.get('name')=='Verify horse identity migration deploy guard')
 assert guard_test['timeout-minutes']==3 and 'verify' in w['jobs']['build-and-push']['needs']
+api_fixture_index=next(i for i,s in enumerate(verify) if s.get('name')=='Build the production API test fixture'); guard_index=next(i for i,s in enumerate(verify) if s.get('name')=='Verify horse identity migration deploy guard'); assert api_fixture_index<guard_index and 'HorseRacingPrediction.Api.Tests.csproj' in verify[api_fixture_index]['run'] and '--configuration Debug' in verify[api_fixture_index]['run']
 early_validation=next(s for s in verify if s.get('name')=='Validate optional migration request before publishing or deployment')
 assert '00000000-0000-0000-0000-000000000000' in early_validation['run']
 assert all(x in early_validation['run'] for x in ('API_STARTUP_RECOVERY','EXPECTED_DEPLOYED_SHA','workflow_dispatch','HORSE_ID_MIGRATION_OPERATION_ID'))
+assert events['workflow_dispatch']['inputs']['operator_ui_recovery_operation_id']=={'description':'Existing bound horse-identity operation GUID for protected operator UI bootstrap','required':False,'type':'string'}
+assert all(x in early_validation['run'] for x in ('OPERATOR_UI_RECOVERY_OPERATION_ID','Operator UI recovery requires','EXPECTED_DEPLOYED_SHA'))
 recovery=w['jobs']['recover-api-startup']; assert 'api_startup_recovery' in recovery['if'] and sorted(recovery['needs'])==['build-and-push','verify'] and recovery['environment']=='production' and recovery['timeout-minutes']==50
 diagnostic=w['jobs']['diagnose-api-startup']; assert 'api_startup_recovery' in diagnostic['if'] and 'needs' not in diagnostic and diagnostic['environment']=='production' and diagnostic['timeout-minutes']==8
 diagnostic_steps=diagnostic['steps']; validation_index=next(i for i,s in enumerate(diagnostic_steps) if s.get('name')=='Validate read-only API diagnosis inputs'); classify_index=next(i for i,s in enumerate(diagnostic_steps) if s.get('name')=='Classify the expected API container without inspecting its data'); upload_index=next(i for i,s in enumerate(diagnostic_steps) if s.get('name')=='Stage bounded diagnostic helper outside the application directory'); diagnostic_step=next(s for s in diagnostic_steps if s.get('name')=='Diagnose the exact stopped API without changing production state'); assert validation_index<classify_index<upload_index<diagnostic_steps.index(diagnostic_step)
@@ -196,6 +252,17 @@ assert not re.search(r'docker compose[^\n]*(?:\bstop\b|\bup\b|\bpull\b|\bexec\b)
 assert all(x in diagnostic_script for x in ('horse_id_migration_diagnose_startup_journal','horse_id_migration_verify_recovery_backup','horse_id_migration_sanitize_startup_logs'))
 assert 'set -euo pipefail' in diagnostic_script and 'docker logs --tail 200 "$container" 2>&1 | head' in diagnostic_script and 'logs_status=$?' in diagnostic_script and diagnostic_script.index('horse_id_migration_verify_recovery_backup')<diagnostic_script.index('[ "$logs_status" -eq 0 ]')
 assert 'api_startup_recovery' in w['jobs']['deploy']['if'] and 'api_startup_recovery' in w['jobs']['deploy-collector-lambda']['if']
+operator=w['jobs']['recover-operator-ui']; assert 'operator_ui_recovery_operation_id' in operator['if'] and sorted(operator['needs'])==['build-and-push','verify'] and operator['environment']=='production' and operator['timeout-minutes']==50
+operator_script=next(s for s in operator['steps'] if s.get('name')=='Bootstrap only the protected operator UI')['with']['script']
+assert 'TARGET_COMMIT_SHA' in operator_script and 'sha-$TARGET_COMMIT_SHA' in operator_script
+assert operator_script.index('ownership_pairs=()')<operator_script.index('horse_id_migration_validate_operator_binding') and 'horse_id_migration_validate_operator_binding "$data_directory" "$OPERATOR_UI_RECOVERY_OPERATION_ID" "${source_paths[@]}"' not in operator_script
+first_pause=operator_script.find('horse_id_migration_assert_recovery_collection_state'); second_pause=operator_script.find('horse_id_migration_assert_recovery_collection_state',first_pause+1)
+operator_positions=[operator_script.find('horse_id_migration_assert_operator_status'),operator_script.find('horse_id_migration_validate_operator_binding',operator_script.find('horse_id_migration_assert_operator_status')),first_pause,operator_script.find('docker pull '),operator_script.find('horse_id_migration_check_image_capability'),operator_script.find('stage=stopping\ndocker compose --env-file .env stop api'),operator_script.find('horse_id_migration_assert_api_container_exited'),operator_script.find('horse_id_migration_acquire_source_ownership --preserve-existing-maintenance-gates'),operator_script.find('horse_id_migration_acquire_journal_operation_lock'),second_pause,operator_script.rfind('horse_id_migration_validate_operator_binding'),operator_script.find('horse_id_migration_copy_store_set'),operator_script.rfind('horse_id_migration_update_recovery_env'),operator_script.find('HRP_HORSE_IDENTITY_OPERATOR_ONLY'),operator_script.rfind('docker compose --env-file .env -f docker-compose.yml -f "$operator_override" up'),operator_script.find('horse_id_migration_assert_operator_ui_ready')]; assert operator_positions==sorted(operator_positions)
+assert operator_script.index('trap operator_cleanup EXIT')<operator_script.index('horse_id_migration_acquire_source_ownership') and 'old_restore_override' in operator_script and 'restored_image_id" != "$old_image_id"' in operator_script and operator_script.index('target_proven=true')<operator_script.index('horse_id_migration_assert_operator_ui_ready')
+assert 'docker image tag "$old_image_id" "$old_restore_local_image"' in operator_script and 'pull_policy: never' in operator_script and 'old_image_repository@$old_image_id' not in operator_script
+assert not re.search(r'horse_id_migration_run_fixed_command|horse-id-migration(?:\s|["\']|$)|\b(?:resume|retry|reset|DELETE|terraform|lambda|aws|docker exec)\b',operator_script,re.I)
+assert 'operator_ui_recovery_operation_id' in w['jobs']['deploy']['if'] and 'operator_ui_recovery_operation_id' in w['jobs']['deploy-collector-lambda']['if']
+assert 'operator_ui_recovery_operation_id' in w['jobs']['migrate-race-entry-owners']['if']
 upload=next((s for s in recovery['steps'] if s.get('name')=='Upload only the verified recovery helper'),None); recovery_step_index=next((i for i,s in enumerate(recovery['steps']) if s.get('name')=='Recover only the exact blocked API image'),None)
 assert upload and upload['uses']=='appleboy/scp-action@v1.0.0' and upload['with']['source']=='deploy/horse-id-migration-deploy.sh' and upload['with']['strip_components']==1 and recovery_step_index is not None and recovery['steps'].index(upload)<recovery_step_index
 recovery_script=next(s for s in recovery['steps'] if s.get('name')=='Recover only the exact blocked API image')['with']['script']
@@ -280,6 +347,215 @@ $helperBashPath = ConvertTo-BashPath $helperPath
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("hrp-migration-deploy-test-" + [guid]::NewGuid().ToString('N'))
 [void](New-Item -ItemType Directory -Path $tempRoot)
 $tempBashPath = ConvertTo-BashPath $tempRoot
+
+$operatorYamlStart = $workflow.IndexOf("            bash -s <<'OPERATOR_UI_RECOVERY'", [StringComparison]::Ordinal)
+$operatorYamlEnd = $workflow.IndexOf("            OPERATOR_UI_RECOVERY", $operatorYamlStart, [StringComparison]::Ordinal)
+Assert-Case ($operatorYamlStart -ge 0 -and $operatorYamlEnd -gt $operatorYamlStart) 'Could not extract the operator recovery script for executable cleanup fixtures.'
+$operatorRawLines = $workflow.Substring($operatorYamlStart, $operatorYamlEnd - $operatorYamlStart).Split("`n")
+$operatorScriptForExecution = ($operatorRawLines | ForEach-Object {
+    if ($_.Length -ge 12) { $_.Substring(12) } else { $_ }
+}) -join "`n"
+$cleanupStart = $operatorScriptForExecution.IndexOf('operator_cleanup() {', [StringComparison]::Ordinal)
+$cleanupEnd = $operatorScriptForExecution.IndexOf('trap operator_cleanup EXIT', $cleanupStart, [StringComparison]::Ordinal)
+Assert-Case ($cleanupStart -ge 0 -and $cleanupEnd -gt $cleanupStart) 'Could not extract the parsed operator cleanup function.'
+$cleanupFunction = $operatorScriptForExecution.Substring($cleanupStart, $cleanupEnd - $cleanupStart)
+
+function Invoke-OperatorCleanupFixture([string] $Scenario) {
+    $fixtureRoot = Join-Path $tempRoot ("operator-cleanup-" + $Scenario)
+    [void](New-Item -ItemType Directory -Path $fixtureRoot)
+    $logPath = Join-Path $fixtureRoot 'calls.log'
+    $overridePath = Join-Path $fixtureRoot '.operator-ui-run-1.old.compose.yml'
+    $payload = @'
+set +e
+LOG=__LOG__
+ROOT=__ROOT__
+EXPECTED_OVERRIDE=__OVERRIDE__
+SCENARIO=__SCENARIO__
+: > "$LOG"
+docker() {
+  printf 'docker %s\n' "$*" >> "$LOG"
+  case "$1:$2" in
+    image:inspect)
+      if [ "${3-}" = "--format" ]; then printf '%s\n' "$OLD_IMAGE_ID"; return 0; fi
+      return 1 ;;
+    image:tag) OLD_RESTORE_LOCAL_IMAGE="$4"; return 0 ;;
+    image:rm) return 0 ;;
+    compose:*)
+      case "$*" in
+        *" up -d "*) grep -Fx '    pull_policy: never' "$EXPECTED_OVERRIDE" >/dev/null || return 91; echo PULL_POLICY_OK >> "$LOG"; return 0 ;;
+        *" ps --status running -q api"*) printf 'restored-container\n'; return 0 ;;
+        *) return 0 ;;
+      esac ;;
+    inspect:--format)
+      case "$3" in
+        *'.Image'*) printf 'sha256:%064d\n' 0 ;;
+        *'.Config.Image'*) printf '%s\n' "$OLD_RESTORE_LOCAL_IMAGE" ;;
+      esac
+      return 0 ;;
+  esac
+  return 0
+}
+horse_id_migration_release_source_ownership() { echo RELEASE >> "$LOG"; }
+horse_id_migration_validate_operator_binding() { echo BINDING >> "$LOG"; return 0; }
+horse_id_migration_update_recovery_env() { echo ENV_RESTORED >> "$LOG"; return 0; }
+data_directory="$ROOT/data"
+source_paths=("$ROOT/data/eventstore.db")
+APP_DIRECTORY="$ROOT"
+GITHUB_RUN_ID=run
+GITHUB_RUN_ATTEMPT=1
+OPERATOR_UI_RECOVERY_OPERATION_ID=00000000-0000-0000-0000-000000000001
+container=old-container
+operator_override=
+old_restore_override=
+old_restore_local_image=
+old_image_repository=ghcr.io/example/horse-racing-prediction-api
+old_image_tag=sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+old_image_id=sha256:0000000000000000000000000000000000000000000000000000000000000000
+OLD_IMAGE_ID="$old_image_id"
+leases_held=false
+target_started=false
+target_proven=false
+stage=before-stop
+OLD_RESTORE_LOCAL_IMAGE=
+__CLEANUP__
+case "$SCENARIO" in
+  pre-stop)
+    leases_held=true
+    false || operator_cleanup
+    ;;
+  post-stop)
+    stage=stopped
+    false || operator_cleanup
+    ;;
+  post-proven)
+    target_started=true
+    target_proven=true
+    operator_override="$ROOT/operator.compose.yml"
+    : > "$operator_override"
+    false || operator_cleanup
+    ;;
+esac
+'@
+    $payload = $payload.Replace('__LOG__', (Quote-Bash (ConvertTo-BashPath $logPath))).Replace('__ROOT__', (Quote-Bash (ConvertTo-BashPath $fixtureRoot))).Replace('__OVERRIDE__', (Quote-Bash (ConvertTo-BashPath $overridePath))).Replace('__SCENARIO__', (Quote-Bash $Scenario)).Replace('__CLEANUP__', $cleanupFunction)
+    $result = Invoke-Bash $payload 15000
+    $log = if (Test-Path -LiteralPath $logPath) { Get-Content -Raw -LiteralPath $logPath } else { '' }
+    Remove-Item -LiteralPath $fixtureRoot -Recurse -Force
+    return [pscustomobject]@{ Result = $result; Log = $log }
+}
+
+$preStopFixture = Invoke-OperatorCleanupFixture 'pre-stop'
+Assert-Case ($preStopFixture.Result.ExitCode -ne 0 -and $preStopFixture.Log -match 'RELEASE' -and $preStopFixture.Log -notmatch 'stop api|image tag| up -d ') 'Pre-stop operator failure must leave the old host untouched.'
+$postStopFixture = Invoke-OperatorCleanupFixture 'post-stop'
+Assert-Case ($postStopFixture.Result.ExitCode -ne 0 -and $postStopFixture.Log -match 'image tag' -and $postStopFixture.Log -match 'PULL_POLICY_OK' -and $postStopFixture.Log -match 'ENV_RESTORED' -and $postStopFixture.Log -notmatch 'stop api') 'Post-stop/pre-proven operator failure must restore the exact local image and environment.'
+$postProvenFixture = Invoke-OperatorCleanupFixture 'post-proven'
+Assert-Case ($postProvenFixture.Result.ExitCode -ne 0 -and [string]::IsNullOrEmpty([string]$postProvenFixture.Log)) 'Post-proven HTTP failure must keep the protected target running.'
+Write-Output 'PASS executable parsed operator cleanup fixtures pre-stop/post-stop/post-proven'
+
+$lifecycleStart = $operatorScriptForExecution.IndexOf('stage=stopping', [StringComparison]::Ordinal)
+$lifecycleEnd = $operatorScriptForExecution.IndexOf('stage=target-proven', $lifecycleStart, [StringComparison]::Ordinal)
+Assert-Case ($lifecycleStart -ge 0 -and $lifecycleEnd -gt $lifecycleStart) 'Could not extract the parsed operator lifecycle for lease-order fixtures.'
+$operatorLifecycle = $operatorScriptForExecution.Substring($lifecycleStart, $lifecycleEnd - $lifecycleStart)
+function Invoke-OperatorLifecycleFixture([bool] $ExternalWriterBusy) {
+    $fixtureName = if ($ExternalWriterBusy) { 'operator-lifecycle-external-writer' } else { 'operator-lifecycle-stop-before-lease' }
+    $fixtureRoot = Join-Path $tempRoot $fixtureName
+    [void](New-Item -ItemType Directory -Path $fixtureRoot)
+    $logPath = Join-Path $fixtureRoot 'calls.log'
+    $payload = @'
+set +e
+LOG=__LOG__
+: > "$LOG"
+OLD_ROOT_RUNNING=1
+EXTERNAL_WRITER_BUSY=__BUSY__
+docker() {
+  printf 'docker %s\n' "$*" >> "$LOG"
+  if [ "$1" = compose ]; then
+    case "$*" in
+      *" stop api"*) OLD_ROOT_RUNNING=0; echo STOP >> "$LOG"; return 0 ;;
+      *" ps --status running -q api"*) printf 'target-container\n'; return 0 ;;
+      *" up -d "*) echo UP >> "$LOG"; return 0 ;;
+      *) return 0 ;;
+    esac
+  fi
+  if [ "$1" = inspect ]; then
+    case "\${3-}" in
+      *'.Config.Image {{.Image}}'*) printf '%s %s\n' "$target_image" "$target_image_id"; return 0 ;;
+      *'.Config.Image'*) printf '%s\n' "$target_image"; return 0 ;;
+      *'.Image'*) printf '%s\n' "$target_image_id"; return 0 ;;
+      *'range .Config.Env'*) printf 'HRP_HORSE_IDENTITY_OPERATOR_ONLY=true\n'; return 0 ;;
+    esac
+  fi
+  return 0
+}
+horse_id_migration_assert_api_container_exited() { [ "$OLD_ROOT_RUNNING" = 0 ]; }
+horse_id_migration_assert_recovery_collection_state() { printf '%s\n' '2026-10-25T10:00:00.0000000'; }
+horse_id_migration_validate_operator_binding() { echo BINDING >> "$LOG"; return 0; }
+horse_id_migration_acquire_source_ownership() { [ "$OLD_ROOT_RUNNING" = 0 ] || return 81; echo SOURCE >> "$LOG"; return 0; }
+horse_id_migration_acquire_journal_operation_lock() { [ "$OLD_ROOT_RUNNING" = 0 ] || return 82; echo JOURNAL >> "$LOG"; return 0; }
+horse_id_migration_copy_store_set() { echo BACKUP >> "$LOG"; [ "$EXTERNAL_WRITER_BUSY" = 0 ]; }
+horse_id_migration_update_recovery_env() { echo ENV >> "$LOG"; return 0; }
+horse_id_migration_release_source_ownership() { echo RELEASE >> "$LOG"; return 0; }
+horse_id_migration_assert_operator_ui_ready() { return 0; }
+APP_DIRECTORY=__ROOT__
+GITHUB_RUN_ID=run
+GITHUB_RUN_ATTEMPT=1
+OPERATOR_UI_RECOVERY_OPERATION_ID=00000000-0000-0000-0000-000000000001
+HORSE_RACING_API_KEY=fixture-key
+domain=example.test
+data_directory="$APP_DIRECTORY/data"
+collection_database="$data_directory/collection.db"
+configured_stores=(eventstore.db collection.db horse.db horse-identity-migration-journal.db)
+source_relatives=(eventstore.db collection.db horse.db)
+source_paths=("$data_directory/eventstore.db" "$data_directory/collection.db" "$data_directory/horse.db")
+container=old-container
+target_image=ghcr.io/example/horse-racing-prediction-api:sha-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+target_image_id=sha256:1111111111111111111111111111111111111111111111111111111111111111
+IMAGE_NAME=ghcr.io/example/horse-racing-prediction-api
+IMAGE_TAG=sha-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+operator_override=__ROOT__/operator.compose.yml
+pause_before_stop=2026-10-25T10:00:00.0000000
+old_image_id=sha256:0000000000000000000000000000000000000000000000000000000000000000
+mkdir -p "$data_directory"
+( set -euo pipefail
+__LIFECYCLE__
+)
+status=$?
+printf 'STATUS=%s\n' "$status" >> "$LOG"
+exit 0
+'@
+    $payload = $payload.Replace('__LOG__', (Quote-Bash (ConvertTo-BashPath $logPath))).Replace('__ROOT__', (Quote-Bash (ConvertTo-BashPath $fixtureRoot))).Replace('__BUSY__', $(if ($ExternalWriterBusy) { '1' } else { '0' })).Replace('__LIFECYCLE__', $operatorLifecycle)
+    $result = Invoke-Bash $payload 15000
+    $log = if (Test-Path -LiteralPath $logPath) { Get-Content -Raw -LiteralPath $logPath } else { '' }
+    Remove-Item -LiteralPath $fixtureRoot -Recurse -Force
+    return [pscustomobject]@{ Result = $result; Log = $log }
+}
+$orderedLifecycleFixture = Invoke-OperatorLifecycleFixture $false
+$orderedLog = $orderedLifecycleFixture.Log
+Assert-Case ($orderedLifecycleFixture.Result.ExitCode -eq 0 -and $orderedLog.IndexOf('STOP') -ge 0 -and $orderedLog.IndexOf('SOURCE') -gt $orderedLog.IndexOf('STOP') -and $orderedLog.IndexOf('JOURNAL') -gt $orderedLog.IndexOf('SOURCE') -and $orderedLog.IndexOf('BACKUP') -gt $orderedLog.IndexOf('JOURNAL') -and $orderedLog.IndexOf('UP') -gt $orderedLog.IndexOf('BACKUP')) 'The parsed operator lifecycle must stop/reap the old controller before acquiring leases and starting the replacement.'
+$externalWriterFixture = Invoke-OperatorLifecycleFixture $true
+Assert-Case ($externalWriterFixture.Result.ExitCode -eq 0 -and $externalWriterFixture.Log -match 'STOP' -and $externalWriterFixture.Log -match 'SOURCE' -and $externalWriterFixture.Log -match 'JOURNAL' -and $externalWriterFixture.Log -match 'BACKUP' -and $externalWriterFixture.Log -notmatch '(^|\r?\n)UP(\r?\n|$)') 'An external writer after stop must fail backup before replacement start.'
+Write-Output 'PASS executable parsed operator lifecycle stop-before-lease and external-writer fixtures'
+
+$validationMatch = [regex]::Match($workflow, '(?s)- name: Validate optional migration request before publishing or deployment\r?\n        shell: bash\r?\n        env:.*?        run: \|\r?\n(?<script>.*?)(?=\r?\n\r?\n      - (?:name: Verify deployment pause|uses: actions/setup-dotnet))')
+Assert-Case $validationMatch.Success 'Optional recovery validation script was not found.'
+$validationScript = ($validationMatch.Groups['script'].Value -split '\r?\n' | ForEach-Object { $_ -replace '^          ', '' }) -join "`n"
+function Invoke-ValidationCase([string] $Operator, [string] $ExpectedSha, [string] $ApiRecovery, [string] $Migration) {
+    $result = Invoke-Bash @"
+set -euo pipefail
+export GITHUB_EVENT_NAME=workflow_dispatch API_STARTUP_RECOVERY=$(Quote-Bash $ApiRecovery) EXPECTED_DEPLOYED_SHA=$(Quote-Bash $ExpectedSha) OPERATOR_UI_RECOVERY_OPERATION_ID=$(Quote-Bash $Operator) HORSE_ID_MIGRATION_OPERATION_ID=$(Quote-Bash $Migration)
+$validationScript
+"@ 10000
+    return $result
+}
+$validOperatorValidation = Invoke-ValidationCase '00000000-0000-0000-0000-000000000001' ('a' * 40) 'false' ''
+Assert-Case ($validOperatorValidation.ExitCode -eq 0) "Valid operator input must pass pre-publish validation: $($validOperatorValidation.Output)"
+$missingShaValidation = Invoke-ValidationCase '00000000-0000-0000-0000-000000000001' '' 'false' ''
+Assert-Case ($missingShaValidation.ExitCode -eq 2) 'Operator input without expected SHA must be rejected by executable validation.'
+$mixedModeValidation = Invoke-ValidationCase '00000000-0000-0000-0000-000000000001' ('a' * 40) 'true' ''
+Assert-Case ($mixedModeValidation.ExitCode -eq 2) 'Operator and API startup recovery inputs must be mutually exclusive.'
+$mixedMigrationValidation = Invoke-ValidationCase '00000000-0000-0000-0000-000000000001' ('a' * 40) 'false' '00000000-0000-0000-0000-000000000002'
+Assert-Case ($mixedMigrationValidation.ExitCode -eq 2) 'Operator and migration inputs must be mutually exclusive.'
+$shaOnlyValidation = Invoke-ValidationCase '' ('a' * 40) 'false' ''
+Assert-Case ($shaOnlyValidation.ExitCode -eq 2) 'Expected SHA without an explicit recovery mode must remain rejected.'
 
 function Invoke-RecoveryEligibilityCase([string] $ApiIds, [string] $Image, [string] $State, [string] $Service, [string] $ProjectLabel, [string] $ConfigProject, [int] $BlockedStatus) {
     $payload = @"
@@ -380,6 +656,17 @@ function Write-OwnershipMarkers([string] $Source, [string] $Logical, [string] $R
     $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($Logical)))
     [IO.File]::WriteAllText($RuntimeGate, "HorseIdentityMigrationSourceOwnership:v1:$hash`n", [Text.Encoding]::ASCII)
     [IO.File]::WriteAllText($ControlGate, "HorseIdentityMigrationSupervisorControl:v1:$hash`n", [Text.Encoding]::ASCII)
+}
+
+function Write-SupervisorOwnerMarker([string] $Path, [string] $Purpose, [string] $Logical) {
+    $sourceHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($Logical)))
+    if ($Purpose -eq 'api-bootstrap') {
+        $fields = @('v1', $Purpose, '-', '-', $sourceHash, '1', '1', ('A' * 64))
+    }
+    else {
+        $fields = @('v1', $Purpose, '00000000-0000-0000-0000-000000000001', ('B' * 64), $sourceHash, '1', '1', ('C' * 64))
+    }
+    [IO.File]::WriteAllText($Path, ($fields -join "`n"), [Text.Encoding]::ASCII)
 }
 
 function Invoke-SourceOwnership([string] $SourceBash, [string] $Logical, [bool] $Expected) {
@@ -562,7 +849,7 @@ try {
     Assert-Case ($LASTEXITCODE -eq 0) 'Could not create request-key base-column fixture.'
     $missingBaseHashesBefore = Get-DiagnosticJournalHashes $missingBaseColumnJournal
     $missingBaseResult = Invoke-StartupJournalDiagnostic $missingBaseColumnJournal
-    Assert-Case ($missingBaseResult.ExitCode -ne 0 -and $missingBaseResult.Output -match 'JOURNAL code=REQUEST_SCHEMA_UNKNOWN key_table=1 request_key=1 immutable_request_hash=0 operation_id=1 preview_fingerprint=1 request_kind=1 rowcount=unknown staged=1 running=0 succeeded=0 rejected=0 failed=0 interrupted=0 partial=0') 'A missing immutable-request-hash column must have distinct bounded flags, operation counts, and remain fail-closed.'
+    Assert-Case ($missingBaseResult.ExitCode -ne 0 -and $missingBaseResult.Output -match 'JOURNAL code=REQUEST_SCHEMA_UNKNOWN key_table=1 request_key=1 immutable_request_hash=0 operation_id=1 preview_fingerprint=1 request_kind=1 rowcount=unknown staged=1 running=0 succeeded=0 rejected=0 failed=0 interrupted=0 partial=0') "A missing immutable-request-hash column must have distinct bounded flags, operation counts, and remain fail-closed. $($missingBaseResult.Output)"
     Assert-Case ($missingBaseHashesBefore -eq (Get-DiagnosticJournalHashes $missingBaseColumnJournal)) 'Malformed-table diagnosis must not mutate marker, lock, or SQLite bytes.'
 
     $unknownJournal = Join-Path $tempRoot 'readonly-startup-journal-unknown'
@@ -670,6 +957,8 @@ test "`$logs_status" -ne 0
         $logicalPath = '/data/fixture.db'
         $runtimeGate = Join-Path $ownershipRoot '.fixture.db.horse-identity-migration.lock'
         $controlGate = Join-Path $ownershipRoot '.fixture.db.horse-identity-migration.supervisor-control.lock'
+        $legacyOwner = Join-Path $ownershipRoot '.fixture.db.horse-identity-migration.supervisor-control.owner'
+        $bootstrapOwner = Join-Path $ownershipRoot '.fixture.db.horse-identity-migration.supervisor-control.bootstrap.owner'
         Write-OwnershipMarkers $sourcePath $logicalPath $runtimeGate $controlGate
         $sourceBash = ConvertTo-BashPath $sourcePath
         $journalDatabase = Join-Path $ownershipRoot 'horse-identity-migration-journal.db'
@@ -677,6 +966,90 @@ test "`$logs_status" -ne 0
         $journalLock = Join-Path $ownershipRoot 'horse-identity-migration-operation.lock'
         [IO.File]::WriteAllBytes($journalLock, [byte[]]::new(0))
         [void](Invoke-SourceOwnership $sourceBash $logicalPath $true)
+
+        foreach ($purpose in @('api-bootstrap', 'cli-operation', 'readonly-reverify')) {
+            Write-SupervisorOwnerMarker $legacyOwner $purpose $logicalPath
+            [void](Invoke-SourceOwnership $sourceBash $logicalPath $true)
+        }
+        Write-SupervisorOwnerMarker $bootstrapOwner 'api-bootstrap' $logicalPath
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $true)
+        foreach ($purpose in @('cli-operation', 'readonly-reverify')) {
+            Write-SupervisorOwnerMarker $bootstrapOwner $purpose $logicalPath
+            [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        }
+        Write-SupervisorOwnerMarker $bootstrapOwner 'api-bootstrap' $logicalPath
+        $bootstrapOriginal = [IO.File]::ReadAllBytes($bootstrapOwner)
+        $bootstrapWrongSource = [Text.Encoding]::ASCII.GetString($bootstrapOriginal).Replace(
+            [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($logicalPath))), ('D' * 64))
+        [IO.File]::WriteAllText($bootstrapOwner, $bootstrapWrongSource, [Text.Encoding]::ASCII)
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        [IO.File]::WriteAllBytes($bootstrapOwner, $bootstrapOriginal)
+        [IO.File]::WriteAllText($bootstrapOwner, ([Text.Encoding]::ASCII.GetString($bootstrapOriginal).Replace("v1`n", "v2`n")), [Text.Encoding]::ASCII)
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        $bootstrapInvalidPidFields = [Text.Encoding]::ASCII.GetString($bootstrapOriginal).Split("`n")
+        $bootstrapInvalidPidFields[5] = '0'
+        [IO.File]::WriteAllText($bootstrapOwner, ($bootstrapInvalidPidFields -join "`n"), [Text.Encoding]::ASCII)
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        [IO.File]::WriteAllBytes($bootstrapOwner, [byte[]]::new(1025))
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        [IO.File]::WriteAllBytes($bootstrapOwner, $bootstrapOriginal)
+        $bootstrapOwnerBash = ConvertTo-BashPath $bootstrapOwner
+        $bootstrapAlias = "$bootstrapOwner.alias"
+        $bootstrapAliasBash = ConvertTo-BashPath $bootstrapAlias
+        $bootstrapSymlink = Invoke-Bash "mv -- $(Quote-Bash $bootstrapOwnerBash) $(Quote-Bash $bootstrapAliasBash); ln -s -- $(Quote-Bash $bootstrapAliasBash) $(Quote-Bash $bootstrapOwnerBash)"
+        Assert-Case ($bootstrapSymlink.ExitCode -eq 0) 'Could not create the bootstrap supervisor owner symlink fixture.'
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        [void](Invoke-Bash "rm -- $(Quote-Bash $bootstrapOwnerBash); mv -- $(Quote-Bash $bootstrapAliasBash) $(Quote-Bash $bootstrapOwnerBash)")
+        $bootstrapHardlink = Invoke-Bash "ln -- $(Quote-Bash $bootstrapOwnerBash) $(Quote-Bash $bootstrapAliasBash)"
+        Assert-Case ($bootstrapHardlink.ExitCode -eq 0) 'Could not create the bootstrap supervisor owner hard-link fixture.'
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        [void](Invoke-Bash "rm -- $(Quote-Bash $bootstrapAliasBash)")
+        [IO.File]::Delete($bootstrapOwner)
+        $legacyOriginal = [IO.File]::ReadAllBytes($legacyOwner)
+        $legacyWrongSource = [Text.Encoding]::ASCII.GetString($legacyOriginal).Replace(
+            [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($logicalPath))), ('D' * 64))
+        [IO.File]::WriteAllText($legacyOwner, $legacyWrongSource, [Text.Encoding]::ASCII)
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        [IO.File]::WriteAllBytes($legacyOwner, $legacyOriginal)
+        $legacyWrongFields = [Text.Encoding]::ASCII.GetString($legacyOriginal).Replace("v1`n", "v2`n")
+        [IO.File]::WriteAllText($legacyOwner, $legacyWrongFields, [Text.Encoding]::ASCII)
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        $legacyInvalidPidFields = [Text.Encoding]::ASCII.GetString($legacyOriginal).Split("`n")
+        $legacyInvalidPidFields[5] = '0'
+        [IO.File]::WriteAllText($legacyOwner, ($legacyInvalidPidFields -join "`n"), [Text.Encoding]::ASCII)
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        [IO.File]::WriteAllBytes($legacyOwner, [byte[]]::new(1025))
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        [IO.File]::WriteAllBytes($legacyOwner, $legacyOriginal)
+        $legacyOwnerBash = ConvertTo-BashPath $legacyOwner
+        $ownerAlias = "$legacyOwner.alias"
+        $ownerAliasBash = ConvertTo-BashPath $ownerAlias
+        $ownerSymlink = Invoke-Bash "mv -- $(Quote-Bash $legacyOwnerBash) $(Quote-Bash $ownerAliasBash); ln -s -- $(Quote-Bash $ownerAliasBash) $(Quote-Bash $legacyOwnerBash)"
+        Assert-Case ($ownerSymlink.ExitCode -eq 0) 'Could not create the legacy supervisor owner symlink fixture.'
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        [void](Invoke-Bash "rm -- $(Quote-Bash $legacyOwnerBash); mv -- $(Quote-Bash $ownerAliasBash) $(Quote-Bash $legacyOwnerBash)")
+        $ownerHardlink = Invoke-Bash "ln -- $(Quote-Bash $legacyOwnerBash) $(Quote-Bash $ownerAliasBash)"
+        Assert-Case ($ownerHardlink.ExitCode -eq 0) 'Could not create the legacy supervisor owner hard-link fixture.'
+        [void](Invoke-SourceOwnership $sourceBash $logicalPath $false)
+        [void](Invoke-Bash "rm -- $(Quote-Bash $ownerAliasBash)")
+        $bootstrapAliasSource = Join-Path $ownershipRoot '.fixture.db.horse-identity-migration.supervisor-control.bootstrap.owner'
+        [IO.File]::WriteAllBytes($bootstrapAliasSource, $bootstrapOriginal)
+        $sourceAliasLogical = '/data/.fixture.db.horse-identity-migration.supervisor-control.bootstrap.owner'
+        $aliasBefore = (Get-FileHash -LiteralPath $bootstrapAliasSource -Algorithm SHA256).Hash
+        $aliasBash = ConvertTo-BashPath $bootstrapAliasSource
+        $aliasSourceResult = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+export HRP_PYTHON3=$(Quote-Bash $pythonBashPath)
+if horse_id_migration_acquire_source_ownership $(Quote-Bash $sourceBash) $(Quote-Bash $logicalPath) $(Quote-Bash $aliasBash) $(Quote-Bash $sourceAliasLogical); then
+  horse_id_migration_release_source_ownership
+  exit 80
+fi
+"@
+        Assert-Case ($aliasSourceResult.ExitCode -eq 0 -and $aliasSourceResult.Output -match 'Configured sources and supervisor owner sidecars must not alias') "Configured source and bootstrap owner alias must be rejected in preflight. exit=$($aliasSourceResult.ExitCode) output=$($aliasSourceResult.Output)"
+        Assert-Case ($aliasBefore -eq (Get-FileHash -LiteralPath $bootstrapAliasSource -Algorithm SHA256).Hash) 'Alias preflight must not mutate the owner marker.'
+        [IO.File]::Delete($bootstrapAliasSource)
+        [IO.File]::Delete($legacyOwner)
 
         $runtimeBytes = [IO.File]::ReadAllBytes($runtimeGate)
         [void](Invoke-Bash "rm -- $(Quote-Bash (ConvertTo-BashPath $runtimeGate))")
@@ -1307,6 +1680,180 @@ if horse_id_migration_run_fixed_command $(Quote-Bash $guid) example/api:sha-test
     Assert-Case ($workflow -match 'if \[ -n "\$HORSE_ID_MIGRATION_OPERATION_ID" \]; then[\s\S]*remains paused for explicit verification and resume') 'Migration mode must remain paused after success.'
     Assert-Case ($dockerfile -match 'LABEL com\.horseracingprediction\.identity-migration-guard="v1"') 'Target Docker image must declare the guarded-runtime capability.'
     Assert-Case ($workflow -match 'source: [^\r\n]*horse-id-migration-deploy\.sh') 'Sourceable helper must be distributed through the existing SCP bundle.'
+    Assert-Case ($helper -match 'deadline = time\.monotonic\(\) \+ 120[\s\S]*time\.sleep\(1\)[\s\S]*login = urlencode') 'Operator readiness must use a bounded read-only retry window before the single login/UI read.'
+
+    # Exercise the new operator binding with a maintenance gate emitted by the
+    # canonical C# encoder, then cover wrong GUID, gate binding, active writer,
+    # and readiness failures through parsed Bash rather than string-only checks.
+    $operatorData = Join-Path $tempRoot 'operator-binding-fixture'
+    [void](New-Item -ItemType Directory -Path $operatorData)
+    $requiredInteropFiles = @(
+        'eventstore.db', 'collection-platform.db', 'prediction-executions.db',
+        'horse-identity-migration-journal.db', 'horse-identity-migration-initialized.marker',
+        'horse-identity-migration-operation.lock', 'operator-source-paths.json',
+        '.eventstore.db.horse-identity-migration.lock',
+        '.collection-platform.db.horse-identity-migration.lock',
+        '.prediction-executions.db.horse-identity-migration.lock',
+        '.eventstore.db.horse-identity-migration.supervisor-control.lock',
+        '.collection-platform.db.horse-identity-migration.supervisor-control.lock',
+        '.prediction-executions.db.horse-identity-migration.supervisor-control.lock',
+        '.eventstore.db.horse-identity-migration.supervisor-control.bootstrap.owner',
+        '.collection-platform.db.horse-identity-migration.supervisor-control.bootstrap.owner',
+        '.prediction-executions.db.horse-identity-migration.supervisor-control.bootstrap.owner',
+        '.eventstore.db.horse-identity-migration.maintenance',
+        '.collection-platform.db.horse-identity-migration.maintenance',
+        '.prediction-executions.db.horse-identity-migration.maintenance')
+    foreach ($requiredFile in $requiredInteropFiles) {
+        if (-not (Test-Path -LiteralPath (Join-Path $operatorFixtureDirectory $requiredFile) -PathType Leaf)) {
+            throw "The typed operator fixture is missing required file '$requiredFile'."
+        }
+    }
+    foreach ($fixtureFile in Get-ChildItem -Force -LiteralPath $operatorFixtureDirectory) {
+        Copy-Item -LiteralPath $fixtureFile.FullName -Destination $operatorData -Recurse
+    }
+    $operatorGuid = '00000000-0000-0000-0000-000000000001'
+    $operatorSourcePaths = @(
+        (Join-Path $operatorData 'eventstore.db'),
+        (Join-Path $operatorData 'collection-platform.db'),
+        (Join-Path $operatorData 'prediction-executions.db'))
+    Assert-Case (($operatorSourcePaths | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) }).Count -eq 0) 'The typed operator fixture must include all three configured source databases.'
+    $sourcePathMetadata = Get-Item -LiteralPath (Join-Path $operatorFixtureDirectory 'operator-source-paths.json')
+    Assert-Case ($sourcePathMetadata.Length -le 4096) 'Typed producer source-path metadata must remain bounded.'
+    $producerSourcePaths = @(Get-Content -Raw -LiteralPath $sourcePathMetadata.FullName | ConvertFrom-Json)
+    $expectedSourceNames = @('collection-platform.db', 'eventstore.db', 'prediction-executions.db')
+    Assert-Case ($producerSourcePaths.Count -eq $expectedSourceNames.Count) 'Typed producer metadata must describe exactly the three real source paths.'
+    $producerPathByName = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
+    foreach ($producerSourcePath in $producerSourcePaths) {
+        if ($producerSourcePath -isnot [string] -or -not [IO.Path]::IsPathFullyQualified($producerSourcePath)) {
+            throw 'Typed producer source-path metadata must contain fully qualified paths.'
+        }
+        $canonicalProducerPath = [IO.Path]::GetFullPath($producerSourcePath)
+        $sourceName = [IO.Path]::GetFileName($canonicalProducerPath)
+        if ((-not [StringComparer]::Ordinal.Equals($producerSourcePath, $canonicalProducerPath)) -or (-not [StringComparer]::Ordinal.Equals([IO.Path]::GetDirectoryName($canonicalProducerPath), $operatorFixtureDirectory)) -or ($sourceName -notin $expectedSourceNames) -or (-not (Test-Path -LiteralPath $canonicalProducerPath -PathType Leaf)) -or $producerPathByName.ContainsKey($sourceName)) {
+            throw 'Typed producer source-path metadata did not match its original fixture files.'
+        }
+        $producerPathByName.Add($sourceName, $canonicalProducerPath)
+    }
+    Assert-Case ($expectedSourceNames.Where({ -not $producerPathByName.ContainsKey($_) }).Count -eq 0) 'Typed producer metadata must include every expected source exactly once.'
+    $logicalSources = [string[]] @($producerSourcePaths)
+    [Array]::Sort($logicalSources, [StringComparer]::Ordinal)
+    $operatorSourcePairsBash = ($logicalSources | ForEach-Object {
+        $sourceName = [IO.Path]::GetFileName($_)
+        (Quote-Bash (ConvertTo-BashPath (Join-Path $operatorData $sourceName))) + ' ' + (Quote-Bash (ConvertTo-BashPath $_))
+    }) -join ' '
+    $typedOwnershipPaths = @($operatorSourcePaths)
+    foreach ($name in @('eventstore.db', 'collection-platform.db', 'prediction-executions.db')) {
+        foreach ($suffix in @('.horse-identity-migration.lock',
+                '.horse-identity-migration.supervisor-control.lock',
+                '.horse-identity-migration.supervisor-control.bootstrap.owner',
+                '.horse-identity-migration.maintenance')) {
+            $typedOwnershipPaths += Join-Path $operatorData ('.' + $name + $suffix)
+        }
+    }
+    $typedOwnershipPaths += @((Join-Path $operatorData 'horse-identity-migration-journal.db'),
+        (Join-Path $operatorData 'horse-identity-migration-initialized.marker'),
+        (Join-Path $operatorData 'horse-identity-migration-operation.lock'))
+    $typedOwnershipPaths = @($typedOwnershipPaths | Sort-Object -Unique)
+    $typedOwnershipHashesBefore = ($typedOwnershipPaths | ForEach-Object { (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash }) -join '|'
+    $typedOwnershipCheck = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+export HRP_PYTHON3=$(Quote-Bash $pythonBashPath)
+horse_id_migration_acquire_source_ownership --preserve-existing-maintenance-gates $operatorSourcePairsBash
+horse_id_migration_release_source_ownership
+"@ 15000
+    Assert-Case ($typedOwnershipCheck.ExitCode -eq 0) "Actual typed C# bootstrap owner markers must interoperate with source ownership validation. $($typedOwnershipCheck.Output)"
+    $typedOwnershipHashesAfter = ($typedOwnershipPaths | ForEach-Object { (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash }) -join '|'
+    Assert-Case ($typedOwnershipHashesBefore -eq $typedOwnershipHashesAfter) 'Typed owner validation must leave source, lock, owner, marker, journal, and gate bytes unchanged.'
+    $operatorSource = $operatorSourcePaths[0]
+    $operatorJournalPath = Join-Path $operatorData 'horse-identity-migration-journal.db'
+    $operatorDataBash = ConvertTo-BashPath $operatorData
+    $operatorSourceBash = ConvertTo-BashPath $operatorSource
+    $operatorGateRecord = Get-Content -Raw -LiteralPath (Join-Path $operatorData '.eventstore.db.horse-identity-migration.maintenance')
+    $operatorRequestHash = & $pythonCommand -c "import sqlite3,sys; print(sqlite3.connect(sys.argv[1]).execute('select request_hash from migration_operations where operation_id=?',(sys.argv[2],)).fetchone()[0])" $operatorJournalPath $operatorGuid
+    Assert-Case ($LASTEXITCODE -eq 0 -and $operatorRequestHash -match '^[0-9A-F]{64}$') 'The typed PendingV2 operation request hash must be present.'
+    $validBinding = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+horse_id_migration_validate_operator_binding $(Quote-Bash $operatorDataBash) $(Quote-Bash $operatorGuid) $operatorSourcePairsBash
+"@ 15000
+    Assert-Case ($validBinding.ExitCode -eq 0 -and $validBinding.Output -match 'PASS code=OPERATOR_BINDING') 'Canonical C# gate must interoperate with the read-only operator binding validator.'
+    & $pythonCommand -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('update migration_operations set request_hash=? where operation_id=?',('A'*64,sys.argv[2])); c.commit(); c.close()" $operatorJournalPath $operatorGuid
+    $requestHashMismatch = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+if horse_id_migration_validate_operator_binding $(Quote-Bash $operatorDataBash) $(Quote-Bash $operatorGuid) $operatorSourcePairsBash; then exit 80; fi
+"@ 15000
+    Assert-Case ($requestHashMismatch.ExitCode -eq 0) 'A request JSON hash mismatch must be rejected independently of the immutable intent hash.'
+    & $pythonCommand -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('update migration_operations set request_hash=? where operation_id=?',(sys.argv[3],sys.argv[2])); c.commit(); c.close()" $operatorJournalPath $operatorGuid $operatorRequestHash
+    $wrongGuid = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+if horse_id_migration_validate_operator_binding $(Quote-Bash $operatorDataBash) 00000000-0000-0000-0000-000000000002 $operatorSourcePairsBash; then exit 80; fi
+"@ 15000
+    Assert-Case ($wrongGuid.ExitCode -eq 0) 'Wrong operator GUID must be rejected before mutation.'
+    $gateBefore = (Get-FileHash -LiteralPath (Join-Path $operatorData '.eventstore.db.horse-identity-migration.maintenance') -Algorithm SHA256).Hash
+    [IO.File]::WriteAllText((Join-Path $operatorData '.eventstore.db.horse-identity-migration.maintenance'), $operatorGateRecord.Replace($operatorGuid, '00000000-0000-0000-0000-000000000002'), [Text.Encoding]::ASCII)
+    $bindingMismatch = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+if horse_id_migration_validate_operator_binding $(Quote-Bash $operatorDataBash) $(Quote-Bash $operatorGuid) $operatorSourcePairsBash; then exit 80; fi
+"@ 15000
+    Assert-Case ($bindingMismatch.ExitCode -eq 0) 'Mismatched maintenance gate binding must be rejected.'
+    [IO.File]::WriteAllText((Join-Path $operatorData '.eventstore.db.horse-identity-migration.maintenance'), $operatorGateRecord, [Text.Encoding]::ASCII)
+    Assert-Case ($gateBefore -eq (Get-FileHash -LiteralPath (Join-Path $operatorData '.eventstore.db.horse-identity-migration.maintenance') -Algorithm SHA256).Hash) 'Restored canonical gate bytes changed unexpectedly.'
+    $logicalSource = '/data/eventstore.db'
+    $logicalHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($logicalSource)))
+    $sourceGate = Join-Path $operatorData '.eventstore.db.horse-identity-migration.lock'
+    $controlGate = Join-Path $operatorData '.eventstore.db.horse-identity-migration.supervisor-control.lock'
+    [IO.File]::WriteAllText($sourceGate, "HorseIdentityMigrationSourceOwnership:v1:$logicalHash`n", [Text.Encoding]::ASCII)
+    [IO.File]::WriteAllText($controlGate, "HorseIdentityMigrationSupervisorControl:v1:$logicalHash`n", [Text.Encoding]::ASCII)
+    $activeWriter = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+exec 9<$(Quote-Bash (ConvertTo-BashPath $controlGate))
+flock -n 9
+if horse_id_migration_acquire_source_ownership --preserve-existing-maintenance-gates $(Quote-Bash $operatorSourceBash) $(Quote-Bash $logicalSource); then exit 80; fi
+"@ 15000
+    Assert-Case ($activeWriter.ExitCode -eq 0) 'Active supervisor writer must block operator source ownership.'
+    $operatorCollection = Join-Path $operatorData 'collection-platform.db'
+    $persistedPause = & $pythonCommand -c "import sqlite3,sys; row=sqlite3.connect(sys.argv[1]).execute('select IsPaused,UpdatedAt from collection_platform_controls where ControlId=?',('pipeline',)).fetchone(); print('%s|%s' % row) if row else sys.exit(2)" $operatorCollection
+    Assert-Case ($LASTEXITCODE -eq 0 -and $persistedPause -match '^1\|\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,7})?$') 'The actual CollectionPlatformStore producer must persist a paused pipeline with its native timestamp representation.'
+    $persistedPauseTimestamp = $persistedPause.Substring(2)
+    $actualPause = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+horse_id_migration_assert_recovery_collection_state $(Quote-Bash (ConvertTo-BashPath $operatorCollection)) 900
+"@ 15000
+    Assert-Case ($actualPause.ExitCode -eq 0 -and $actualPause.Output -match 'PASS code=RECOVERY_QUIESCENT') 'The native producer pause timestamp must satisfy the actual recovery quiescence parser.'
+    & $pythonCommand -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('update collection_platform_controls set IsPaused=0 where ControlId=?',('pipeline',)); c.commit(); c.close()" $operatorCollection
+    $readinessFailure = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+if horse_id_migration_assert_recovery_collection_state $(Quote-Bash (ConvertTo-BashPath $operatorCollection)) 900; then exit 80; fi
+"@ 15000
+    Assert-Case ($readinessFailure.ExitCode -eq 0) 'Unpaused collection state must block operator bootstrap.'
+    & $pythonCommand -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('update collection_platform_controls set IsPaused=1,UpdatedAt=? where ControlId=?',(sys.argv[2],'pipeline')); c.commit(); c.close()" $operatorCollection 'not-a-timestamp'
+    $malformedPause = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+if horse_id_migration_assert_recovery_collection_state $(Quote-Bash (ConvertTo-BashPath $operatorCollection)) 900; then exit 80; fi
+"@ 15000
+    Assert-Case ($malformedPause.ExitCode -eq 0) 'Malformed non-production pause timestamps must be rejected.'
+    & $pythonCommand -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('update collection_platform_controls set UpdatedAt=? where ControlId=?',('2999-01-01 00:00:00.0000000','pipeline')); c.commit(); c.close()" $operatorCollection
+    $futurePause = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+if horse_id_migration_assert_recovery_collection_state $(Quote-Bash (ConvertTo-BashPath $operatorCollection)) 900; then exit 80; fi
+"@ 15000
+    Assert-Case ($futurePause.ExitCode -eq 0) 'Future JST pause timestamps must be rejected.'
+    & $pythonCommand -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('update collection_platform_controls set UpdatedAt=? where ControlId=?',(sys.argv[2],'pipeline')); c.commit(); c.close()" $operatorCollection $persistedPauseTimestamp
+    $stalePause = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+horse_id_migration_assert_recovery_collection_state $(Quote-Bash (ConvertTo-BashPath $operatorCollection)) 900
+"@ 15000
+    Assert-Case ($stalePause.ExitCode -eq 0 -and $stalePause.Output -match 'PASS code=RECOVERY_QUIESCENT') 'A canonical stale JST pause must pass the bounded offline drain check.'
 
     Write-Output 'PASS T4 deploy guard fixtures, all-store integrity, bounds, backup sidecars, capability, child timeout and workflow order'
 }

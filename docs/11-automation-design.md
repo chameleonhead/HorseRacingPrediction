@@ -55,6 +55,8 @@ API停止成功・非稼働・未checkpointのSQLite WALなしを確認してか
 配備時の旧race collection job移行（race-detail apply/preview）は実行しない。配備とhealth確認後にも停止/実行中0件を確認し、配備前に稼働中で、再開直前に要対応failureが0件の場合だけ自動再開する。要対応failureが残る場合は停止を維持してGitHub Actions noticeへ明示し、deployment workflowは正常終了する。pipeline/API確認やhealth、drain、resume自体の不明・失敗は引き続きdeployment failureとする。新旧どちらの要対応でも残る場合は明示的な復旧判断へ戻す。新しいWorkflowは追加しない。変更記録は [再開見送り時もデプロイを正常終了する](changes/20261003_deploy-with-paused-collection/README.md) を参照する。
 変更・反例・運用結果は [collection error closure](changes/20260924_collection-error-closure/evidence/operations.md) を参照する。
 
+移行中断で通常APIを起動できない場合の限定配備は、[保護画面だけを更新する承認済み設計](changes/20261025_operator-ui-bootstrap/README.md)に従う（実装・配備状況は同記録を参照）。既存`app-deploy`の手動実行で`operator_ui_recovery_operation_id`と`expected_deployed_sha`を指定し、他の復旧・移行モードとは併用しない。現行イメージ・依頼・保存先の一致、収集停止後900秒以上・実行中0件、完全停止・排他・全保存先バックアップを確認してからAPIイメージだけを置き換える。成功条件は認証済み保護画面の表示と通常業務APIの停止維持であり、通常稼働への復旧ではない。移行実行・再試行・収集再開・データ復元・保護解除は行わない。保護起動を確認した後の診断失敗だけでは、稼働中の保護画面を停止しない。
+
 ### Collector Lambda の一時資源
 
 Collector Lambda は共有 `/tmp` を直接 cleanup 対象にしない。`/tmp/horse-racing-prediction-collector` をアプリ所有rootとし、invocationごとのchildへPlaywrightのtemp、HOME/XDG cache、runtime event/responseを隔離する。collectorとPlaywright/Chromium子孫はinvocation専用process groupで起動し、直接child終了またはbootstrap signal時に当該groupだけをTERM、bounded wait、必要時KILLしてからchildを削除する。invocation sessionはcollectorを起動する直前にcore sizeを0とし、異常終了のstatusとtext diagnosticは維持したままcollector/子孫のraw core file生成だけを抑止する。このpolicyはbootstrap親やunrelated processへ適用しない。正常終了・報告済み失敗・signal終了では当該childだけを削除し、runtime強制終了で後処理できなかったchildは次のbootstrap初期化時にownership markerと非稼働leaseを検証して回収する。空・不正・bootstrap自身と同じPGID、marker不正、symlink、root外、稼働中processのchildは削除・終了対象にせず、process名検索や共有processの一括停止を行わない。

@@ -29,6 +29,10 @@ on:
         description: Exact currently deployed API commit SHA required for API startup recovery
         required: false
         type: string
+      operator_ui_recovery_operation_id:
+        description: Existing bound horse-identity operation GUID for protected operator UI bootstrap
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -58,9 +62,10 @@ jobs:
           API_STARTUP_RECOVERY: ${{ inputs.api_startup_recovery || false }}
           EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha || '' }}
           HORSE_ID_MIGRATION_OPERATION_ID: ${{ inputs.horse_id_migration_operation_id || '' }}
+          OPERATOR_UI_RECOVERY_OPERATION_ID: ${{ inputs.operator_ui_recovery_operation_id || '' }}
         run: |
           if [ "$EVENT_NAME" != "workflow_dispatch" ] || [ "$API_STARTUP_RECOVERY" != "true" ] || \
-             [[ ! "$EXPECTED_DEPLOYED_SHA" =~ ^[0-9a-f]{40}$ ]] || [ -n "$HORSE_ID_MIGRATION_OPERATION_ID" ]; then
+             [[ ! "$EXPECTED_DEPLOYED_SHA" =~ ^[0-9a-f]{40}$ ]] || [ -n "$HORSE_ID_MIGRATION_OPERATION_ID" ] || [ -n "$OPERATOR_UI_RECOVERY_OPERATION_ID" ]; then
             echo "Read-only API diagnosis requires manual recovery mode, one exact SHA, and no migration request." >&2
             exit 2
           fi
@@ -188,6 +193,7 @@ jobs:
           HORSE_ID_MIGRATION_OPERATION_ID: ${{ inputs.horse_id_migration_operation_id || '' }}
           API_STARTUP_RECOVERY: ${{ inputs.api_startup_recovery || false }}
           EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha || '' }}
+          OPERATOR_UI_RECOVERY_OPERATION_ID: ${{ inputs.operator_ui_recovery_operation_id || '' }}
         run: |
           if [ -n "$HORSE_ID_MIGRATION_OPERATION_ID" ] && \
              { [ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ] || \
@@ -203,10 +209,33 @@ jobs:
               echo "API startup recovery requires a manual dispatch, one exact lowercase deployed SHA, and no migration operation input." >&2
               exit 2
             fi
-          elif [ -n "$EXPECTED_DEPLOYED_SHA" ]; then
+          elif [ -n "$EXPECTED_DEPLOYED_SHA" ] && [ -z "$OPERATOR_UI_RECOVERY_OPERATION_ID" ]; then
             echo "Expected deployed SHA is accepted only with explicit API startup recovery." >&2
             exit 2
           fi
+          if [ -n "$OPERATOR_UI_RECOVERY_OPERATION_ID" ] && \
+             { [ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ] || \
+               [[ ! "$OPERATOR_UI_RECOVERY_OPERATION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || \
+               [ "$OPERATOR_UI_RECOVERY_OPERATION_ID" = "00000000-0000-0000-0000-000000000000" ] || \
+               [ "$API_STARTUP_RECOVERY" = "true" ] || [ -n "$HORSE_ID_MIGRATION_OPERATION_ID" ] || \
+               [[ ! "$EXPECTED_DEPLOYED_SHA" =~ ^[0-9a-f]{40}$ ]]; }; then
+            echo "Operator UI recovery requires one manual canonical operation GUID, one lowercase deployed SHA, and no other recovery mode." >&2
+            exit 2
+          fi
+          if [ -n "$EXPECTED_DEPLOYED_SHA" ] && [ "$API_STARTUP_RECOVERY" != "true" ] && [ -z "$OPERATOR_UI_RECOVERY_OPERATION_ID" ]; then
+            echo "Expected deployed SHA is accepted only with explicit API startup or operator UI recovery." >&2
+            exit 2
+          fi
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore production assemblies for gate interoperability
+        run: dotnet restore HorseRacingPrediction.sln
+
+      - name: Build the production API test fixture
+        run: dotnet build tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-restore --configuration Debug
 
       - name: Verify deployment pause and failure guards
         shell: pwsh
@@ -216,7 +245,19 @@ jobs:
       - name: Verify horse identity migration deploy guard
         shell: pwsh
         timeout-minutes: 3
-        run: ./tests/scripts/test-deploy-migration-guard.ps1 -Bash /bin/bash
+        run: |
+          $fixtureDirectory = Join-Path $env:RUNNER_TEMP ("hrp-horse-identity-deploy-interop-" + [guid]::NewGuid().ToString('N'))
+          [void](New-Item -ItemType Directory -Path $fixtureDirectory)
+          $env:HRP_HORSE_IDENTITY_DEPLOY_INTEROP_FIXTURE_DIR = $fixtureDirectory
+          try {
+            dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-restore --no-build --configuration Debug --filter 'FullyQualifiedName~HorseIdentityMigrationDeployInteropTests'
+            if ($LASTEXITCODE -ne 0) { throw 'Typed deployment fixture producer failed.' }
+            ./tests/scripts/test-deploy-migration-guard.ps1 -Bash /bin/bash -OperatorFixtureDirectory $fixtureDirectory
+            if ($LASTEXITCODE -ne 0) { throw 'Horse identity migration deploy guard failed.' }
+          }
+          finally {
+            if (Test-Path -LiteralPath $fixtureDirectory) { Remove-Item -LiteralPath $fixtureDirectory -Recurse -Force }
+          }
 
       - name: Verify collector temporary storage lifecycle
         shell: pwsh
@@ -226,15 +267,8 @@ jobs:
         shell: pwsh
         run: ./tests/scripts/test-playwright-container-version.ps1
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: 10.0.x
-
       - name: Restore local tools
         run: dotnet tool restore
-
-      - name: Restore
-        run: dotnet restore HorseRacingPrediction.sln
 
       - name: Build
         run: dotnet build HorseRacingPrediction.sln --no-restore --configuration Release
@@ -323,7 +357,7 @@ jobs:
             ${{ steps.image.outputs.image_name }}:latest
 
   recover-api-startup:
-    if: github.event_name == 'workflow_dispatch' && inputs.api_startup_recovery == true
+    if: github.event_name == 'workflow_dispatch' && inputs.api_startup_recovery == true && inputs.operator_ui_recovery_operation_id == ''
     needs: [verify, build-and-push]
     runs-on: ubuntu-24.04
     environment: production
@@ -359,8 +393,8 @@ jobs:
         env:
           IMAGE_NAME: ${{ needs.build-and-push.outputs.image_name }}
           IMAGE_TAG: sha-${{ github.sha }}
-          EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
           TARGET_COMMIT_SHA: ${{ github.sha }}
+          EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
           APP_DIRECTORY: ${{ env.APP_DIRECTORY }}
           DOMAIN_NAME: ${{ secrets.LIGHTSAIL_DOMAIN_NAME }}
           LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
@@ -515,8 +549,286 @@ jobs:
             echo "API startup recovery completed; collection remains paused. Backup: $backup_directory"
             API_STARTUP_RECOVERY
 
+  recover-operator-ui:
+    if: github.event_name == 'workflow_dispatch' && inputs.operator_ui_recovery_operation_id != '' && inputs.api_startup_recovery != true
+    needs: [verify, build-and-push]
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Wait for SSH availability
+        run: |
+          for attempt in $(seq 1 30); do
+            if timeout 5 bash -c "echo > /dev/tcp/${{ secrets.LIGHTSAIL_HOST }}/22" 2>/dev/null; then
+              echo "SSH port reachable"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for SSH port 22" >&2
+          exit 1
+
+      - name: Upload only the verified operator bootstrap helper
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USERNAME }}
+          key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
+          source: deploy/horse-id-migration-deploy.sh
+          target: ${{ env.APP_DIRECTORY }}
+          strip_components: 1
+
+      - name: Bootstrap only the protected operator UI
+        timeout-minutes: 40
+        uses: appleboy/ssh-action@v1.2.5
+        env:
+          IMAGE_NAME: ${{ needs.build-and-push.outputs.image_name }}
+          IMAGE_TAG: sha-${{ github.sha }}
+          TARGET_COMMIT_SHA: ${{ github.sha }}
+          EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
+          OPERATOR_UI_RECOVERY_OPERATION_ID: ${{ inputs.operator_ui_recovery_operation_id }}
+          APP_DIRECTORY: ${{ env.APP_DIRECTORY }}
+          DOMAIN_NAME: ${{ secrets.LIGHTSAIL_DOMAIN_NAME }}
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          HORSE_RACING_API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USERNAME }}
+          key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
+          command_timeout: 38m
+          envs: IMAGE_NAME,IMAGE_TAG,TARGET_COMMIT_SHA,EXPECTED_DEPLOYED_SHA,OPERATOR_UI_RECOVERY_OPERATION_ID,APP_DIRECTORY,DOMAIN_NAME,LIGHTSAIL_HOST,HORSE_RACING_API_KEY,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT
+          script: |
+            bash -s <<'OPERATOR_UI_RECOVERY'
+            set -euo pipefail
+            . "$APP_DIRECTORY/horse-id-migration-deploy.sh"
+            horse_id_migration_require_tools
+            horse_id_migration_require_recovery_tools
+            horse_id_migration_validate_guid "$OPERATOR_UI_RECOVERY_OPERATION_ID" || {
+              echo "Operator UI recovery requires one canonical operation GUID." >&2
+              exit 2
+            }
+            [[ "$EXPECTED_DEPLOYED_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "Operator UI recovery requires one exact lowercase deployed SHA." >&2
+              exit 2
+            }
+            [[ "$TARGET_COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]] && [ "$IMAGE_TAG" = "sha-$TARGET_COMMIT_SHA" ] || {
+              echo "Operator UI target image tag is not bound to the checked-out source." >&2
+              exit 2
+            }
+            cd "$APP_DIRECTORY"
+            [ -f .env ] && [ ! -L .env ] || { echo "Existing API deployment configuration is unavailable." >&2; exit 1; }
+            expected_current_image="$IMAGE_NAME:sha-$EXPECTED_DEPLOYED_SHA"
+            target_image="$IMAGE_NAME:$IMAGE_TAG"
+            compose_config="$(docker compose --env-file .env config --format json)" || {
+              echo "Could not read the current Compose project configuration safely." >&2
+              exit 1
+            }
+            expected_compose_project="$(python3 -c 'import json,sys; value=json.load(sys.stdin).get("name"); print(value if isinstance(value,str) else "")' <<< "$compose_config")" || {
+              echo "Could not parse the current Compose project identity safely." >&2
+              exit 1
+            }
+            unset compose_config
+            [ -n "$expected_compose_project" ] || { echo "Could not identify the current Compose project safely." >&2; exit 1; }
+            api_ids="$(docker compose --env-file .env ps --all -q api)" || { echo "Could not enumerate the existing API container." >&2; exit 1; }
+            mapfile -t api_containers <<< "$api_ids"
+            [ "${#api_containers[@]}" -eq 1 ] && [ -n "${api_containers[0]}" ] || {
+              echo "Expected exactly one existing Compose API container before operator bootstrap." >&2
+              exit 1
+            }
+            container="${api_containers[0]}"
+            read -r current_image current_state compose_service compose_project extra_metadata < <(
+              docker inspect --format '{{.Config.Image}} {{.State.Status}} {{index .Config.Labels "com.docker.compose.service"}} {{index .Config.Labels "com.docker.compose.project"}}' "$container") || {
+              echo "Could not inspect the existing Compose API container." >&2
+              exit 1
+            }
+            [ -n "$current_image" ] && [ -n "$current_state" ] && [ -n "$compose_service" ] && [ -n "$compose_project" ] && [ -z "${extra_metadata:-}" ] || {
+              echo "Existing API container inspection returned incomplete metadata." >&2
+              exit 1
+            }
+            [ "$current_image" = "$expected_current_image" ] && [ "$compose_service" = "api" ] && [ "$compose_project" = "$expected_compose_project" ] && [ "$current_state" = "running" ] || {
+              echo "Existing API container is not the exact expected running Compose-owned image." >&2
+              exit 1
+            }
+            old_image_repository="${expected_current_image%%:*}"
+            old_image_tag="${expected_current_image##*:}"
+            [[ "$old_image_repository" =~ ^ghcr\.io/[A-Za-z0-9_.-]+/horse-racing-prediction-api$ ]] && [[ "$old_image_tag" =~ ^sha-[0-9a-f]{40}$ ]] || {
+              echo "Existing deployment image coordinates are not canonical." >&2
+              exit 1
+            }
+            domain="${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}"
+            horse_id_migration_assert_operator_status "https://$domain" "$HORSE_RACING_API_KEY" "$OPERATOR_UI_RECOVERY_OPERATION_ID"
+            configured_store_paths="$(horse_id_migration_configured_store_paths "$APP_DIRECTORY/data")" || {
+              echo "Configured persistent stores could not be resolved safely." >&2
+              exit 1
+            }
+            mapfile -t configured_stores <<< "$configured_store_paths"
+            for index in "${!configured_stores[@]}"; do configured_stores[$index]=${configured_stores[$index]%$'\r'}; done
+            [ "${#configured_stores[@]}" -ge 4 ] && [ "${configured_stores[-1]}" = "horse-identity-migration-journal.db" ] || {
+              echo "Configured local store set is incomplete or unknown." >&2
+              exit 1
+            }
+            data_directory="$APP_DIRECTORY/data"
+            collection_database="${configured_stores[1]}"
+            source_relatives=()
+            source_paths=()
+            for store in "${configured_stores[@]}"; do
+              [ "$store" = "horse-identity-migration-journal.db" ] && continue
+              source_relatives+=("$store")
+              source_paths+=("$data_directory/$store")
+            done
+            ownership_rows=()
+            for index in "${!source_relatives[@]}"; do ownership_rows+=("/data/${source_relatives[$index]}"$'\t'"${source_paths[$index]}"); done
+            mapfile -t sorted_ownership_rows < <(printf '%s\n' "${ownership_rows[@]}" | sort)
+            ownership_pairs=()
+            for row in "${sorted_ownership_rows[@]}"; do ownership_pairs+=("${row#*$'\t'}" "${row%%$'\t'*}"); done
+            horse_id_migration_validate_operator_binding "$data_directory" "$OPERATOR_UI_RECOVERY_OPERATION_ID" "${ownership_pairs[@]}"
+            pause_before_stop="$(horse_id_migration_assert_recovery_collection_state "$data_directory/$collection_database" 900)"
+            old_image_id="$(docker inspect --format '{{.Image}}' "$container")"
+            [[ "$old_image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Existing API image has no stable content identity." >&2; exit 1; }
+            docker pull "$target_image"
+            target_image_id="$(docker image inspect --format '{{.Id}}' "$target_image")" || {
+              echo "Verified target API image could not be inspected." >&2
+              exit 1
+            }
+            [[ "$target_image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+              echo "Verified target API image has no stable content identity." >&2
+              exit 1
+            }
+            horse_id_migration_check_image_capability "$target_image"
+            stage=before-stop
+            target_started=false
+            target_proven=false
+            leases_held=false
+            operator_override=
+            old_restore_override=
+            old_restore_local_image=
+            old_restore_tag_created=false
+            operator_cleanup() {
+              status=$?
+              trap - EXIT HUP INT TERM
+              if [ "$target_started" = true ] && [ "$target_proven" != true ]; then
+                docker compose --env-file .env stop api >/dev/null 2>&1 || true
+                if [ -n "$(docker compose --env-file .env ps --status running -q api 2>/dev/null)" ]; then
+                  echo "Unproven replacement API could not be held stopped." >&2
+                  status=1
+                fi
+              fi
+              if [ "$leases_held" = true ]; then horse_id_migration_release_source_ownership; leases_held=false; fi
+              if [ "$stage" = stopping ] && [ -n "$container" ] && [ "$(docker inspect --format '{{.State.Running}}' "$container" 2>/dev/null || true)" = true ]; then
+                stage=before-stop
+              fi
+              if { [ "$stage" = stopped ] || [ "$stage" = stopping ]; } && [ "$target_proven" != true ]; then
+                if horse_id_migration_validate_operator_binding "$data_directory" "$OPERATOR_UI_RECOVERY_OPERATION_ID" "${ownership_pairs[@]}"; then
+                  old_restore_override="$APP_DIRECTORY/.operator-ui-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.old.compose.yml"
+                  old_restore_local_image="$old_image_repository:operator-restore-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+                  old_restore_ready=false
+                  if docker image inspect "$old_restore_local_image" >/dev/null 2>&1; then
+                    echo "Exact old protected API image could not be prepared as a local immutable restore ref." >&2
+                    status=1
+                  elif docker image tag "$old_image_id" "$old_restore_local_image" >/dev/null 2>&1; then
+                    old_restore_tag_created=true
+                    if [ "$(docker image inspect --format '{{.Id}}' "$old_restore_local_image" 2>/dev/null || true)" = "$old_image_id" ]; then
+                      old_restore_ready=true
+                    else
+                      echo "Exact old protected API image could not be prepared as a local immutable restore ref." >&2
+                      status=1
+                    fi
+                  else
+                    echo "Exact old protected API image could not be prepared as a local immutable restore ref." >&2
+                    status=1
+                  fi
+                  printf '%s\n' 'services:' '  api:' "    image: $old_restore_local_image" '    pull_policy: never' > "$old_restore_override"
+                  horse_id_migration_update_recovery_env "$APP_DIRECTORY/.env" "$old_image_repository" "$old_image_tag" || status=1
+                  if ! horse_id_migration_validate_operator_binding "$data_directory" "$OPERATOR_UI_RECOVERY_OPERATION_ID" "${ownership_pairs[@]}"; then
+                    echo "Old API restoration was blocked because the binding changed during recovery cleanup." >&2
+                    status=1
+                  elif [ "$old_restore_ready" = true ] && docker compose --env-file .env -f docker-compose.yml -f "$old_restore_override" up -d --no-deps --force-recreate api >/dev/null; then
+                    restored_container="$(docker compose --env-file .env ps --status running -q api)"
+                    restored_image_id="$(docker inspect --format '{{.Image}}' "$restored_container" 2>/dev/null || true)"
+                    restored_image="$(docker inspect --format '{{.Config.Image}}' "$restored_container" 2>/dev/null || true)"
+                    if [ -z "$restored_container" ] || [ "$restored_image" != "$old_restore_local_image" ] || [ "$restored_image_id" != "$old_image_id" ]; then
+                      echo "Exact old protected API could not be restored after replacement preparation failure." >&2
+                      status=1
+                    fi
+                  else
+                    echo "Exact old protected API could not be restarted after replacement preparation failure." >&2
+                    status=1
+                  fi
+                  rm -f -- "$old_restore_override"
+                  old_restore_override=
+                  if [ "$old_restore_tag_created" = true ]; then
+                    docker image rm "$old_restore_local_image" >/dev/null 2>&1 || status=1
+                    old_restore_tag_created=false
+                  fi
+                  old_restore_local_image=
+                else
+                  echo "Old API restoration was blocked because the binding changed after stop." >&2
+                  status=1
+                fi
+              fi
+              [ -z "$operator_override" ] || rm -f -- "$operator_override"
+              [ -z "$old_restore_override" ] || rm -f -- "$old_restore_override"
+              if [ "$old_restore_tag_created" = true ]; then
+                docker image rm "$old_restore_local_image" >/dev/null 2>&1 || status=1
+              fi
+              exit "$status"
+            }
+            trap operator_cleanup EXIT
+            trap 'exit 129' HUP
+            trap 'exit 130' INT
+            stage=stopping
+            docker compose --env-file .env stop api
+            stage=stopped
+            horse_id_migration_assert_api_container_exited "$container"
+            horse_id_migration_acquire_source_ownership --preserve-existing-maintenance-gates "${ownership_pairs[@]}"
+            leases_held=true
+            horse_id_migration_acquire_journal_operation_lock "$data_directory/horse-identity-migration-journal.db"
+            pause_after_stop="$(horse_id_migration_assert_recovery_collection_state "$data_directory/$collection_database" 900)"
+            [ "$pause_after_stop" = "$pause_before_stop" ] || {
+              echo "Persisted collection pause timestamp changed across API stop." >&2
+              exit 1
+            }
+            horse_id_migration_validate_operator_binding "$data_directory" "$OPERATOR_UI_RECOVERY_OPERATION_ID" "${ownership_pairs[@]}"
+            backup_directory="$data_directory/backups/operator-ui-recovery-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            backup_paths=("${configured_stores[@]}" horse-identity-migration-initialized.marker)
+            for store in "${source_relatives[@]}"; do
+              directory="${store%/*}"
+              [ "$directory" = "$store" ] && directory=
+              name="${store##*/}"
+              gate=".${name}.horse-identity-migration.maintenance"
+              [ -n "$directory" ] && gate="$directory/$gate"
+              backup_paths+=("$gate")
+            done
+            horse_id_migration_copy_store_set "$data_directory" "$backup_directory" yes "${backup_paths[@]}"
+            horse_id_migration_update_recovery_env "$APP_DIRECTORY/.env" "$IMAGE_NAME" "$IMAGE_TAG"
+            operator_override="$APP_DIRECTORY/.operator-ui-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.compose.yml"
+            printf '%s\n' 'services:' '  api:' '    environment:' '      HRP_HORSE_IDENTITY_OPERATOR_ONLY: "true"' > "$operator_override"
+            horse_id_migration_release_source_ownership
+            leases_held=false
+            target_started=true
+            docker compose --env-file .env -f docker-compose.yml -f "$operator_override" up -d --no-deps --force-recreate api
+            rm -f -- "$operator_override"
+            operator_override=
+            container="$(docker compose --env-file .env ps --status running -q api)"
+            [ -n "$container" ] || { echo "Protected operator API container is not running." >&2; exit 1; }
+            read -r image image_id < <(docker inspect --format '{{.Config.Image}} {{.Image}}' "$container")
+            [ "$image" = "$target_image" ] && [ "$image_id" = "$target_image_id" ] || { echo "Running operator API image differs from the verified target content identity." >&2; exit 1; }
+            docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$container" | grep -Fx 'HRP_HORSE_IDENTITY_OPERATOR_ONLY=true' >/dev/null || {
+              echo "Target API container did not receive the protected operator-only flag." >&2
+              exit 1
+            }
+            target_proven=true
+            stage=target-proven
+            horse_id_migration_assert_operator_ui_ready "https://$domain" "$HORSE_RACING_API_KEY" "$OPERATOR_UI_RECOVERY_OPERATION_ID"
+            echo "Protected operator UI bootstrap completed; ordinary business API remains blocked. Backup retained at $backup_directory"
+            OPERATOR_UI_RECOVERY
+
   deploy:
-    if: ${{ ! (github.event_name == 'workflow_dispatch' && inputs.api_startup_recovery == true) }}
+    if: ${{ ! (github.event_name == 'workflow_dispatch' && (inputs.api_startup_recovery == true || inputs.operator_ui_recovery_operation_id != '')) }}
     needs: [build-and-push, deploy-collector-lambda]
     runs-on: ubuntu-24.04
     environment: production
@@ -783,7 +1095,7 @@ jobs:
           fi
 
   deploy-collector-lambda:
-    if: ${{ ! (github.event_name == 'workflow_dispatch' && inputs.api_startup_recovery == true) }}
+    if: ${{ ! (github.event_name == 'workflow_dispatch' && (inputs.api_startup_recovery == true || inputs.operator_ui_recovery_operation_id != '')) }}
     needs: build-and-push
     runs-on: ubuntu-24.04
     environment: production
@@ -1019,6 +1331,7 @@ jobs:
             chmod 600 "$env_file"
 
   migrate-race-entry-owners:
+    if: ${{ ! (github.event_name == 'workflow_dispatch' && inputs.operator_ui_recovery_operation_id != '') }}
     needs: [deploy, deploy-collector-lambda]
     runs-on: ubuntu-24.04
     environment: production
