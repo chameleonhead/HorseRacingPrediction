@@ -421,15 +421,31 @@
     {
         <section class="migration-operation-result" aria-labelledby="migration-operation-result-heading">
             <h3 id="migration-operation-result-heading">保存済み依頼</h3>
+            @if (HasFailureEvidence(operation))
+            {
+                <div class="migration-warning" role="alert" aria-label="移行エラー概要">
+                    <strong>@FailureStatusSummary(operation)</strong>
+                    <p>@FailureReasonSummary(operation)</p>
+                    <p>最後に確認した段階: @LastConfirmedPhaseLabel(operation.ExecutionPhase)</p>
+                    @if (operationIsStale)
+                    {
+                        <p>最新の状態を取得できなかったため、以下は前回確認した記録です。再度「状態を更新」してください。</p>
+                    }
+                </div>
+            }
+            else if (operationIsStale)
+            {
+                <p class="migration-warning" role="alert">最新の状態を取得できませんでした。以下は前回確認した記録です。再度「状態を更新」してください。</p>
+            }
             <dl>
                 <dt>依頼 GUID</dt><dd><code>@operation.OperationId.ToString("D")</code></dd>
                 <dt>状態</dt><dd><RaceOpsStatusBadge Label="@StatusLabel(operation)" Tone="@StatusTone(operation)" /></dd>
-                <dt>理由コード</dt><dd>@operation.Reason</dd>
+                <dt>理由</dt><dd>@OperationReasonLabel(operation.Reason)</dd>
                 @if (operation.RequestKind == HorseIdentityMigrationAdmissionKind.PendingV2)
                 {
                     <dt>依頼方式</dt><dd>停止後に全件検証する方式</dd>
                 }
-                <dt>更新時刻 (UTC)</dt><dd>@operation.UpdatedAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</dd>
+                <dt>記録更新時刻 (UTC)</dt><dd>@operation.UpdatedAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</dd>
                 @if (!string.IsNullOrWhiteSpace(operation.ExecutionPhase))
                 {
                     <dt>実行段階</dt><dd>@ExecutionPhaseLabel(operation.ExecutionPhase)</dd>
@@ -498,7 +514,7 @@
                 <ul>
                     @foreach (var result in operation.Results)
                     {
-                        <li>@result.Code@(result.Surface is null ? "" : $" · {SurfaceLabel(result.Surface)}"): @result.Count</li>
+                        <li>@ResultCodeLabel(result.Code)@(result.Surface is null ? "" : $" · {SurfaceLabel(result.Surface)}"): @result.Count</li>
                     }
                 </ul>
             }
@@ -560,6 +576,7 @@
     private string requestKeyInput = string.Empty;
     private string? errorMessage;
     private string? operationError;
+    private bool operationIsStale;
     private string? successMessage;
     private string? busyMessage;
     private bool busy;
@@ -602,7 +619,7 @@
         get
         {
             var current = operation;
-            return interactiveReady && !busy && !executeUncertain && string.IsNullOrWhiteSpace(requestKeyInput)
+            return interactiveReady && !busy && !operationIsStale && !executeUncertain && string.IsNullOrWhiteSpace(requestKeyInput)
                 && current is { Status: "AwaitingActions", ExecutionPhase: null }
                 && (current.RequestKind == HorseIdentityMigrationAdmissionKind.PendingV2
                     ? current.PreviewFingerprint is null
@@ -974,12 +991,14 @@
 
             if (operation is null)
             {
+                operationIsStale = false;
                 operationError = useRequestKey
                     ? "この受付照会キーの依頼を見つけられませんでした。キーは保持されています。"
                     : "このGUIDの依頼を見つけられませんでした。入力を確認してください。";
             }
             else
             {
+                operationIsStale = false;
                 executeUncertain = false;
                 operationIdInput = operation.OperationId.ToString("D");
                 requestKeyInput = string.Empty;
@@ -989,7 +1008,7 @@
         }
         catch (HttpRequestException exception)
         {
-            operation = null;
+            operationIsStale = operation is not null;
             operationError = exception.StatusCode switch
             {
                 HttpStatusCode.NotFound => "このGUIDの依頼を見つけられませんでした。入力を確認してください。",
@@ -1000,7 +1019,7 @@
         }
         catch (OperationCanceledException)
         {
-            operation = null;
+            operationIsStale = operation is not null;
             operationError = "状態を読み取れませんでした。必要な場合に手動で再度確認してください。";
         }
         finally
@@ -1292,7 +1311,7 @@
     {
         "IntentRecorded" => "開始受付済み",
         "Preparing" => "準備中",
-        "Draining" => "API終了待ち",
+        "Draining" => "実行中ジョブの終了待ち",
         "StoppingApi" => "API停止中",
         "ApiExited" => "API終了済み",
         "BackedUp" => "バックアップ確認済み",
@@ -1302,6 +1321,112 @@
         "Verified" => "検証済み",
         "Failed" => "失敗・要確認",
         _ => "確認できない段階（安全のため追加操作は停止）",
+    };
+
+    private static bool HasFailureEvidence(HorseIdentityMigrationOperationResponse value) =>
+        value.Status is "Failed" or "Partial" or "Interrupted"
+        || IsFailureCode(value.Reason)
+        || value.Results.Any(result => IsFailureCode(result.Code));
+
+    private static bool IsFailureCode(string? code) => code is
+        "PreparationFailed" or "BackupFailed" or "InspectionFailed" or "ApplyFailed"
+        or "VerificationFailed" or "ChildFailed" or "StartupFailed";
+
+    private static string FailureStatusSummary(HorseIdentityMigrationOperationResponse value)
+    {
+        var category = FailureCategories(value).FirstOrDefault();
+        if (value.Status == "Succeeded")
+            return category == "通常APIの起動に失敗"
+                ? "移行データの成功記録は保持されています。通常APIを起動できませんでした。"
+                : "成功記録は保持されています。後続の処理でエラーが記録されています。";
+        if (category is not null) return $"移行処理の停止: {category}";
+        return "移行処理が停止または一部未確認です。原因は記録から確認できません。";
+    }
+
+    private static string FailureReasonSummary(HorseIdentityMigrationOperationResponse value)
+    {
+        var categories = FailureCategories(value).Distinct(StringComparer.Ordinal).ToArray();
+        return categories.Length > 0
+            ? string.Join("、", categories.Select(category => FailureReason(category)))
+            : "詳しい原因は安全な形式で記録されていません。";
+    }
+
+    private static IEnumerable<string> FailureCategories(HorseIdentityMigrationOperationResponse value)
+    {
+        foreach (var result in value.Results)
+        {
+            var category = FailureCategory(result.Code);
+            if (category is not null) yield return category;
+        }
+
+        var reasonCategory = FailureCategory(value.Reason);
+        if (reasonCategory is not null) yield return reasonCategory;
+    }
+
+    private static string? FailureCategory(string? code) => code switch
+    {
+        "PreparationFailed" => "移行準備に失敗",
+        "BackupFailed" => "バックアップの作成または確認に失敗",
+        "InspectionFailed" => "保存データの検証に失敗",
+        "ApplyFailed" => "データ移行に失敗",
+        "VerificationFailed" => "移行後の検証に失敗",
+        "ChildFailed" => "移行処理の実行に失敗",
+        "StartupFailed" => "通常APIの起動に失敗",
+        _ => null,
+    };
+
+    private static string FailureReason(string category) => category switch
+    {
+        "移行準備に失敗" => "移行開始前の準備を完了できませんでした。",
+        "バックアップの作成または確認に失敗" => "バックアップの作成または確認を完了できませんでした。",
+        "保存データの検証に失敗" => "書き換え前の保存データ検証を完了できませんでした。",
+        "データ移行に失敗" => "データ移行を完了できませんでした。",
+        "移行後の検証に失敗" => "移行後の読み取り専用検証を完了できませんでした。",
+        "移行処理の実行に失敗" => "移行処理を正常に完了できませんでした。",
+        "通常APIの起動に失敗" => "通常APIを起動できませんでした。移行データの状態は上記の記録で確認してください。",
+        _ => "詳しい原因は記録されていません。",
+    };
+
+    private static string LastConfirmedPhaseLabel(string? phase) => phase switch
+    {
+        null or "" or "Failed" => "記録から確認できません",
+        "IntentRecorded" => "開始受付済み",
+        "Preparing" => "準備中",
+        "Draining" => "実行中ジョブの終了待ち",
+        "StoppingApi" => "API停止中",
+        "ApiExited" => "API終了済み",
+        "BackedUp" => "バックアップ確認済み",
+        "Applying" => "データ移行中",
+        "DataSucceeded" => "データ移行済み・検証待ち",
+        "Verifying" => "読み取り専用検証中",
+        "Verified" => "検証済み",
+        _ => "記録から確認できません",
+    };
+
+    private static string OperationReasonLabel(string? reason) => reason switch
+    {
+        "None" => "なし",
+        "CapacityExceeded" => "処理容量の上限",
+        "OwnershipBusy" => "別の処理が保存先を使用中",
+        "RequestConflict" => "依頼内容の競合",
+        "StaleOperation" => "依頼時の前提が古い状態",
+        "UnverifiedPages" => "未検証のデータが残っています",
+        "OperationInterrupted" => "処理が中断しました",
+        "PreparationFailed" or "BackupFailed" or "InspectionFailed" or "ApplyFailed"
+            or "VerificationFailed" or "ChildFailed" or "StartupFailed" => FailureReason(FailureCategory(reason)!),
+        _ => "詳しい原因は記録されていません",
+    };
+
+    private static string ResultCodeLabel(string? code) => code switch
+    {
+        "PlanIncomplete" => "移行計画の検証未完了",
+        "DestinationCollision" => "移行先の競合",
+        "PageMismatch" => "ページ検証の不一致",
+        "CapacityExceeded" => "処理容量の上限",
+        "OperationInterrupted" => "処理の中断",
+        "PreparationFailed" or "BackupFailed" or "InspectionFailed" or "ApplyFailed"
+            or "VerificationFailed" or "ChildFailed" or "StartupFailed" => FailureCategory(code)!,
+        _ => "確認できない結果",
     };
 
     private sealed record MigrationCandidate(string OldHorseId, string JraIdentity, string Name,

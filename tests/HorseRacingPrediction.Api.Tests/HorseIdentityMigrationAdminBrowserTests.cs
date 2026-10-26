@@ -4,6 +4,8 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
+using HorseRacingPrediction.Api.IdentityMigration;
+using HorseRacingPrediction.Contracts.Identity;
 using Microsoft.Playwright;
 
 namespace HorseRacingPrediction.Api.Tests;
@@ -197,6 +199,107 @@ public sealed class HorseIdentityMigrationAdminBrowserTests
                 await page.GetByText("手動操作待ち").ScrollIntoViewIfNeededAsync();
                 await page.ScreenshotAsync(new PageScreenshotOptions
                 { Path = Path.Combine(screenshotDirectory, "mobile-receipt-status.png") });
+
+                var savedOperationId = new Uri(page.Url).Query.Split("operationId=").Last();
+                var failureJournal = new HorseIdentityMigrationJournal(
+                    Path.GetDirectoryName(stores.CollectionPath)!,
+                    [stores.EventStorePath, stores.CollectionPath, stores.SchedulePath, stores.QueuePath]);
+                var failureRecorded = await failureJournal.RecordFailureAsync(
+                    Guid.Parse(savedOperationId), HorseIdentityMigrationResultCode.BackupFailed, DateTimeOffset.UtcNow);
+                Assert.IsTrue(failureRecorded.Succeeded,
+                    "The isolated fixture journal must persist the safe failure before the authenticated page reads it.");
+
+                var statusReadsBeforeErrorReload = CountStatusReads(endpointLog);
+                await page.ReloadAsync(new PageReloadOptions
+                { WaitUntil = WaitUntilState.DOMContentLoaded, Timeout = (float)RequestTimeout.TotalMilliseconds });
+                await page.GetByRole(AriaRole.Button, new() { Name = "状態を更新" }).WaitForAsync(new LocatorWaitForOptions
+                { Timeout = (float)RequestTimeout.TotalMilliseconds });
+                Assert.AreEqual(statusReadsBeforeErrorReload, CountStatusReads(endpointLog));
+
+                await page.SetViewportSizeAsync(390, 844);
+                var refreshButton = page.GetByRole(AriaRole.Button, new() { Name = "状態を更新" });
+                Assert.AreEqual(1, await refreshButton.CountAsync(), "The manual refresh button must resolve uniquely by its accessible name.");
+                Assert.IsTrue(await refreshButton.IsVisibleAsync(), "The manual refresh button must be visible after reload.");
+                await Assertions.Expect(refreshButton).ToBeEnabledAsync(new LocatorAssertionsToBeEnabledOptions
+                { Timeout = (float)RequestTimeout.TotalMilliseconds });
+                var focusTrail = new List<string>();
+                var refreshHasFocus = false;
+                for (var tab = 0; tab < 40 && !refreshHasFocus; tab++)
+                {
+                    await page.Keyboard.PressAsync("Tab");
+                    focusTrail.Add(await page.EvaluateAsync<string>("""
+                        () => {
+                            const chain = [];
+                            let root = document;
+                            while (root?.activeElement) {
+                                const active = root.activeElement;
+                                chain.push(`${active.tagName}[role=${active.getAttribute('role') ?? ''}][aria-label=${active.getAttribute('aria-label') ?? ''}][text=${(active.innerText ?? '').trim().slice(0, 60)}]`);
+                                root = active.shadowRoot;
+                            }
+                            return chain.join(' -> ') || '(no active element)';
+                        }
+                        """));
+                    refreshHasFocus = await refreshButton.EvaluateAsync<bool>("""
+                        element => {
+                            let current = element;
+                            while (current) {
+                                const root = current.getRootNode();
+                                if (root.activeElement !== current) return false;
+                                current = root.host;
+                            }
+                            return true;
+                        }
+                        """);
+                }
+                if (!refreshHasFocus)
+                {
+                    var refreshDiagnostics = await refreshButton.EvaluateAsync<string>("""
+                        element => {
+                            const ancestors = [];
+                            for (let node = element; node; node = node.parentElement ?? node.getRootNode().host) {
+                                ancestors.push(`${node.tagName}[inert=${node.inert ?? false}][hidden=${node.hidden ?? false}][tabIndex=${node.tabIndex ?? 'n/a'}]`);
+                            }
+                            return JSON.stringify({
+                                documentHasFocus: document.hasFocus(),
+                                readyState: document.readyState,
+                                tag: element.tagName,
+                                constructor: element.constructor?.name,
+                                registeredCustomElement: customElements.get(element.localName)?.name ?? null,
+                                disabled: element.matches(':disabled') || element.getAttribute('aria-disabled'),
+                                tabIndex: element.tabIndex,
+                                outerHTML: element.outerHTML,
+                                ancestors,
+                            });
+                        }
+                        """);
+                    Assert.Fail($"Tab traversal must reach the manual refresh button. diagnostics={refreshDiagnostics}; activeTrail={string.Join(" | ", focusTrail)}");
+                }
+                await page.Keyboard.PressAsync("Enter");
+                var errorSummary = page.Locator("[aria-label='移行エラー概要']");
+                await Assertions.Expect(errorSummary).ToContainTextAsync("バックアップの作成または確認に失敗",
+                    new LocatorAssertionsToContainTextOptions { Timeout = (float)RequestTimeout.TotalMilliseconds });
+                Assert.AreEqual(statusReadsBeforeErrorReload + 1, CountStatusReads(endpointLog),
+                    "Keyboard Enter must activate the real manual refresh action and read the persisted failure from the isolated API.");
+                Assert.IsTrue(await page.GetByText("失敗", new() { Exact = true }).CountAsync() > 0,
+                    "The screen translates persisted status and safe failure codes into Japanese.");
+                Assert.IsTrue(await page.GetByText("最後に確認した段階: 記録から確認できません", new() { Exact = true }).IsVisibleAsync());
+                Assert.IsTrue(await page.GetByText("記録更新時刻 (UTC)", new() { Exact = true }).IsVisibleAsync());
+                Assert.IsTrue(await page.GetByText(savedOperationId, new() { Exact = true }).IsVisibleAsync());
+                Assert.IsTrue(await page.EvaluateAsync<bool>("() => document.documentElement.scrollWidth <= window.innerWidth"),
+                    "The 390px error detail must not overflow horizontally.");
+                await AssertTextFitsItsMobileCellAsync(page.Locator(".migration-operation-result dd code").First);
+                Assert.AreEqual(0, CountEndpoint(endpointLog, "POST", "/api/v2/admin/horse-id-migration-operations/{operationId}/execute"),
+                    "Viewing and refreshing failure status must never start another migration.");
+                await errorSummary.ScrollIntoViewIfNeededAsync();
+                await page.ScreenshotAsync(new PageScreenshotOptions
+                {
+                    Path = Path.Combine(screenshotDirectory, "mobile-error-status.png"),
+                });
+                await page.ScreenshotAsync(new PageScreenshotOptions
+                {
+                    Path = Path.Combine(screenshotDirectory, "mobile-error-status-full.png"),
+                    FullPage = true,
+                });
                 Console.WriteLine($"T17 sanitized UI screenshots saved to: {screenshotDirectory}");
             }
             finally

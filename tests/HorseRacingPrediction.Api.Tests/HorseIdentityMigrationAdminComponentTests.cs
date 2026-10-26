@@ -451,10 +451,130 @@ public sealed class HorseIdentityMigrationAdminComponentTests
         await ClickAsync(cut, "状態を更新");
 
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "未検証の一部適用"));
+        StringAssert.Contains(cut.Markup, "未検証のデータが残っています");
+        StringAssert.Contains(cut.Markup, "ページ検証の不一致");
+        Assert.IsFalse(cut.Markup.Contains("UnverifiedPages", StringComparison.Ordinal));
+        Assert.IsFalse(cut.Markup.Contains("PageMismatch", StringComparison.Ordinal));
         StringAssert.Contains(cut.Markup, "この画面から再実行・再開はできません");
         Assert.AreEqual(1, handler.Requests.Count);
         Assert.AreEqual(HttpMethod.Get, handler.Requests[0].Method);
         Assert.AreEqual($"/api/v2/admin/horse-id-migration-operations/{operationId:D}", handler.Requests[0].Path);
+    }
+
+    [TestMethod]
+    public async Task SafeFailureCodesShowJapaneseCategoryAndLastConfirmedStage()
+    {
+        (string Code, string Category, string Reason)[] codes =
+        [
+            ("PreparationFailed", "移行準備に失敗", "移行開始前の準備を完了できませんでした。"),
+            ("BackupFailed", "バックアップの作成または確認に失敗", "バックアップの作成または確認を完了できませんでした。"),
+            ("InspectionFailed", "保存データの検証に失敗", "書き換え前の保存データ検証を完了できませんでした。"),
+            ("ApplyFailed", "データ移行に失敗", "データ移行を完了できませんでした。"),
+            ("VerificationFailed", "移行後の検証に失敗", "移行後の読み取り専用検証を完了できませんでした。"),
+            ("ChildFailed", "移行処理の実行に失敗", "移行処理を正常に完了できませんでした。"),
+            ("StartupFailed", "通常APIの起動に失敗", "通常APIを起動できませんでした。移行データの状態は上記の記録で確認してください。"),
+        ];
+
+        foreach (var (code, category, reason) in codes)
+        {
+            var (app, original) = await TestApplicationFactory.CreateAsync();
+            await using var application = app;
+            using var ignored = original;
+            var operationId = Guid.Parse("c54c11b0-b17a-4aed-a956-b8feb0c57a74");
+            var status = new HorseIdentityMigrationOperationResponse(operationId,
+                code == "StartupFailed" ? "Succeeded" : "Failed", code,
+                DateTimeOffset.Parse("2026-10-15T00:00:00Z"), DateTimeOffset.Parse("2026-10-15T00:01:00Z"),
+                [new(code, null, 1)])
+            { ExecutionPhase = code == "StartupFailed" ? "DataSucceeded" : "BackedUp" };
+            var handler = new MigrationHandler { Status = status };
+            using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+            await using var context = CreateContext(app.Services, http);
+            context.Services.GetRequiredService<NavigationManager>()
+                .NavigateTo($"http://localhost/settings/horse-id-migration?operationId={operationId:D}");
+            var cut = context.Render<HorseIdentityMigrationAdmin>();
+
+            await ClickAsync(cut, "状態を更新");
+
+            cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, category));
+            StringAssert.Contains(cut.Markup, reason);
+            StringAssert.Contains(cut.Markup, "最後に確認した段階");
+            StringAssert.Contains(cut.Markup, code == "StartupFailed" ? "データ移行済み・検証待ち" : "バックアップ確認済み");
+            StringAssert.Contains(cut.Markup, "記録更新時刻 (UTC)");
+            StringAssert.Contains(cut.Markup, operationId.ToString("D"));
+            Assert.IsFalse(cut.Markup.Contains("理由コード", StringComparison.Ordinal));
+            Assert.IsFalse(cut.Markup.Contains(code, StringComparison.Ordinal), "Safe codes should be translated before display.");
+            if (code == "StartupFailed")
+            {
+                StringAssert.Contains(cut.Markup, "成功記録は保持されています");
+                StringAssert.Contains(cut.Markup, "データ移行済み・検証中");
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task UnknownFailureDetailsAreHiddenAndUnknownStageIsExplicit()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        const string secret = "C:\\private\\stores\\migration.sqlite; api-key=secret";
+        var operationId = Guid.Parse("e54c11b0-b17a-4aed-a956-b8feb0c57a74");
+        var handler = new MigrationHandler
+        {
+            Status = new HorseIdentityMigrationOperationResponse(operationId, "Failed", secret,
+                DateTimeOffset.Parse("2026-10-15T00:00:00Z"), DateTimeOffset.Parse("2026-10-15T00:01:00Z"),
+                [new(secret, secret, 1)])
+            { ExecutionPhase = secret },
+        };
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        context.Services.GetRequiredService<NavigationManager>()
+            .NavigateTo($"http://localhost/settings/horse-id-migration?operationId={operationId:D}");
+        var cut = context.Render<HorseIdentityMigrationAdmin>();
+
+        await ClickAsync(cut, "状態を更新");
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "原因は記録から確認できません"));
+        StringAssert.Contains(cut.Markup, "詳しい原因は記録されていません");
+        StringAssert.Contains(cut.Markup, "最後に確認した段階: 記録から確認できません");
+        StringAssert.Contains(cut.Markup, "確認できない結果");
+        Assert.IsFalse(cut.Markup.Contains(secret, StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public async Task FailedManualRefreshKeepsPriorReceiptVisibleAndDisablesExecution()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var operationId = Guid.Parse("f54c11b0-b17a-4aed-a956-b8feb0c57a74");
+        var manifest = new HorseIdentityMigrationManifest([new(OldHorseId, JraIdentity, true)]);
+        var handler = new MigrationHandler
+        {
+            Status = Operation(operationId, "AwaitingActions", manifest, null),
+        };
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        context.Services.GetRequiredService<NavigationManager>()
+            .NavigateTo($"http://localhost/settings/horse-id-migration?operationId={operationId:D}");
+        var cut = context.Render<HorseIdentityMigrationAdmin>();
+
+        await ClickAsync(cut, "状態を更新");
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "手動操作待ち"));
+        Assert.IsTrue(cut.FindComponents<FluentButton>().Any(button => button.Markup.Contains("この保存済み依頼を実行", StringComparison.Ordinal)
+            && !button.Instance.Disabled));
+
+        handler.StatusFailureStatus = HttpStatusCode.ServiceUnavailable;
+        await ClickAsync(cut, "状態を更新");
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "以下は前回確認した記録です"));
+        StringAssert.Contains(cut.Markup, operationId.ToString("D"));
+        Assert.IsFalse(cut.FindComponents<FluentButton>()
+            .Any(button => button.Markup.Contains("この保存済み依頼を実行", StringComparison.Ordinal)),
+            "A stale receipt must not render an execution action after refresh fails.");
+        Assert.AreEqual(2, handler.Requests.Count(request => request.Method == HttpMethod.Get
+            && request.Path.EndsWith($"/horse-id-migration-operations/{operationId:D}", StringComparison.Ordinal)));
+        Assert.IsFalse(handler.Requests.Any(request => request.Path.EndsWith("/execute", StringComparison.Ordinal)));
     }
 
     [TestMethod]
@@ -771,6 +891,7 @@ public sealed class HorseIdentityMigrationAdminComponentTests
         public HorseIdentityMigrationOperationResponse? RequestReceipt { get; init; }
         public HorseIdentityMigrationOperationResponse? Executed { get; init; }
         public HttpStatusCode? ExecuteStatus { get; init; }
+        public HttpStatusCode? StatusFailureStatus { get; set; }
         public HorseIdentityMigrationSchemaDiagnostics? SchemaDiagnostics { get; init; }
         public IReadOnlyList<HorseRacingPrediction.Contracts.Horses.HorseSummaryDto> SearchHorses { get; init; } =
             [new(OldHorseId, "Fixture horse", "Fixture horse", null, null, 0)];
@@ -788,6 +909,10 @@ public sealed class HorseIdentityMigrationAdminComponentTests
             var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
             var path = request.RequestUri!.AbsolutePath;
             Requests.Add(new(request.Method, path, request.RequestUri.Query, body));
+            if (path.StartsWith("/api/v2/admin/horse-id-migration-operations/", StringComparison.Ordinal)
+                && !path.EndsWith("/execute", StringComparison.Ordinal)
+                && StatusFailureStatus is { } statusFailure)
+                return new HttpResponseMessage(statusFailure);
             if (path.EndsWith("/execute", StringComparison.Ordinal) && ExecuteStatus is { } executeStatus)
                 return new HttpResponseMessage(executeStatus);
             if (path.EndsWith("/execute", StringComparison.Ordinal) && Executed is { } executed)
