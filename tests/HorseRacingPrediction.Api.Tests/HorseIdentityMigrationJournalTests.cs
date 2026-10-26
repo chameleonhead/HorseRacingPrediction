@@ -24,6 +24,134 @@ public sealed class HorseIdentityMigrationJournalTests
     private static readonly ConditionalWeakTable<Process, BoundedProcessOutput> ChildOutput = new();
 
     [TestMethod]
+    public async Task RecordFailureIsAtomicBoundedAndPreservesEarlierResults()
+    {
+        using var fixture = new Fixture();
+        var operationId = Guid.NewGuid();
+        var staged = await fixture.Journal.StageAsync(operationId, Manifest(1), Now);
+        Assert.IsTrue(staged.Succeeded);
+        Assert.IsTrue((await fixture.Journal.SetResultsAsync(operationId,
+            [new(HorseIdentityMigrationResultCode.PlanIncomplete, Count: 2)], Now.AddMinutes(1))).Succeeded);
+
+        var failedAt = Now.AddMinutes(2);
+        var recorded = await fixture.Journal.RecordFailureAsync(operationId,
+            HorseIdentityMigrationResultCode.BackupFailed, failedAt);
+        var readback = await fixture.Journal.GetStatusAsync(operationId);
+
+        Assert.IsTrue(recorded.Succeeded);
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.Failed, readback!.Status);
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.BackupFailed, readback.Reason);
+        Assert.AreEqual(failedAt, readback.UpdatedAt);
+        CollectionAssert.AreEqual(new[]
+        {
+            HorseIdentityMigrationResultCode.PlanIncomplete,
+            HorseIdentityMigrationResultCode.BackupFailed,
+        }, readback.Results.Select(result => result.Code).ToArray());
+        Assert.AreEqual(operationId, (await fixture.Journal.GetMostRecentOperationAsync())!.OperationId);
+    }
+
+    [TestMethod]
+    public async Task RecordFailurePreservesPartialStatusReasonAndEvidence()
+    {
+        using var fixture = new Fixture();
+        var operationId = Guid.NewGuid();
+        var lease = await StartClaimedAsync(fixture, operationId);
+        await fixture.Journal.SetResultsAsync(operationId,
+            [new(HorseIdentityMigrationResultCode.OperationInterrupted, Count: 1)], Now);
+        await lease.MarkPartialAsync(Now.AddMinutes(1));
+        await lease.DisposeAsync();
+
+        var recorded = await fixture.Journal.RecordFailureAsync(operationId,
+            HorseIdentityMigrationResultCode.ApplyFailed, Now.AddMinutes(2));
+        var readback = await fixture.Journal.GetStatusAsync(operationId);
+
+        Assert.IsTrue(recorded.Succeeded);
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.PartialUnverified, readback!.Status);
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.OperationInterrupted, readback.Reason);
+        CollectionAssert.AreEqual(new[]
+        {
+            HorseIdentityMigrationResultCode.OperationInterrupted,
+            HorseIdentityMigrationResultCode.ApplyFailed,
+        }, readback.Results.Select(result => result.Code).ToArray());
+    }
+
+    [TestMethod]
+    public async Task RecordVerificationFailureDoesNotDowngradeSucceededDataEvidence()
+    {
+        using var fixture = new Fixture();
+        var operationId = Guid.NewGuid();
+        var lease = await StartClaimedAsync(fixture, operationId);
+        var evidence = Evidence(0);
+        await fixture.Journal.RegisterRequiredPagesAsync(operationId, [Prepared(evidence)], Now);
+        await AdvanceToVerifiedAsync(fixture.Journal, operationId, evidence);
+        await lease.CompleteAsync(Now.AddMinutes(1));
+        await lease.DisposeAsync();
+
+        var originalTerminal = await ReadTerminalTimestampAsync(fixture.Journal.DatabasePath, operationId);
+        var recorded = await fixture.Journal.RecordFailureAsync(operationId,
+            HorseIdentityMigrationResultCode.VerificationFailed, Now.AddMinutes(2));
+        var duplicate = await fixture.Journal.RecordFailureAsync(operationId,
+            HorseIdentityMigrationResultCode.VerificationFailed, Now.AddMinutes(3));
+        var readback = await fixture.Journal.GetStatusAsync(operationId);
+        var retainedTerminal = await ReadTerminalTimestampAsync(fixture.Journal.DatabasePath, operationId);
+
+        Assert.IsTrue(recorded.Succeeded);
+        Assert.IsTrue(duplicate.Succeeded);
+        Assert.AreEqual(originalTerminal, retainedTerminal, "Late failures must not rewrite terminal evidence.");
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.Succeeded, readback!.Status);
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.None, readback.Reason);
+        Assert.AreEqual(HorseIdentityMigrationResultCode.VerificationFailed, readback.Results.Single().Code);
+        Assert.AreEqual(Now.AddMinutes(3), readback.UpdatedAt);
+    }
+
+    [TestMethod]
+    public void PublicMapperKeepsNewSafeFailureAtResultCapWithoutMutatingStoredResults()
+    {
+        var operation = new HorseIdentityMigrationJournalOperation(Guid.NewGuid(), new string('a', 64),
+            HorseIdentityMigrationOperationStatus.Failed, HorseIdentityMigrationJournalReason.BackupFailed,
+            Now, Now.AddMinutes(1), Enumerable.Repeat(
+                new HorseIdentityMigrationJournalResultItem(HorseIdentityMigrationResultCode.PlanIncomplete), 128)
+                .Append(new(HorseIdentityMigrationResultCode.BackupFailed)).ToArray());
+
+        var response = HorseIdentityMigrationPublicMapper.ToPublic(operation);
+
+        Assert.AreEqual(129, operation.Results.Count, "Mapping must not discard persisted evidence.");
+        Assert.AreEqual(128, response.Results.Count);
+        Assert.AreEqual("BackupFailed", response.Results[^1].Code);
+        Assert.AreEqual(127, response.Results.Count(result => result.Code == "PlanIncomplete"));
+    }
+
+    [TestMethod]
+    public async Task MostRecentJournalReadHonorsCancellation()
+    {
+        using var fixture = new Fixture();
+        var operationId = Guid.NewGuid();
+        Assert.IsTrue((await fixture.Journal.StageAsync(operationId, Manifest(1), Now)).Succeeded);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        try
+        {
+            await fixture.Journal.GetMostRecentOperationAsync(cancellation.Token);
+            Assert.Fail("A canceled status read must not continue as an uncanceled journal read.");
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected: status inspection must honor caller cancellation.
+        }
+    }
+
+    private static async Task<string?> ReadTerminalTimestampAsync(string databasePath, Guid operationId)
+    {
+        await using var connection = new SqliteConnection($"Data Source={databasePath};Pooling=False");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT terminal_utc FROM migration_operations WHERE operation_id = $id;";
+        command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+        return await command.ExecuteScalarAsync() as string;
+    }
+
+    [TestMethod]
     public async Task SameGuidAndValidatedManifestIsIdempotentButChangedManifestConflicts()
     {
         using var fixture = new Fixture();

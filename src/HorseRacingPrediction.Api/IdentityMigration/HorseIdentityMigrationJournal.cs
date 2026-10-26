@@ -28,6 +28,13 @@ internal enum HorseIdentityMigrationJournalReason
     StaleOperation,
     UnverifiedPages,
     OperationInterrupted,
+    PreparationFailed,
+    BackupFailed,
+    InspectionFailed,
+    ApplyFailed,
+    VerificationFailed,
+    ChildFailed,
+    StartupFailed,
 }
 
 internal enum HorseIdentityMigrationPageState
@@ -44,6 +51,13 @@ internal enum HorseIdentityMigrationResultCode
     PageMismatch,
     CapacityExceeded,
     OperationInterrupted,
+    PreparationFailed,
+    BackupFailed,
+    InspectionFailed,
+    ApplyFailed,
+    VerificationFailed,
+    ChildFailed,
+    StartupFailed,
 }
 
 internal sealed record HorseIdentityMigrationJournalOperation(
@@ -442,6 +456,48 @@ internal sealed class HorseIdentityMigrationJournal
             .ConfigureAwait(false);
         if (operation?.Status == HorseIdentityMigrationOperationStatus.Succeeded
             && !await HasCompleteVerifiedEvidenceAsync(connection, transaction, operationId, cancellationToken)
+                .ConfigureAwait(false))
+            throw new InvalidDataException("Succeeded operation has incomplete page evidence.");
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return operation;
+    }
+
+    internal async Task<HorseIdentityMigrationJournalOperation?> GetMostRecentOperationAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!File.Exists(_databasePath)) return null;
+        await PrepareReadOnlyDirectoryAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = _databasePath,
+            Mode = SqliteOpenMode.ReadOnly,
+            Pooling = false,
+            DefaultTimeout = 1,
+        }.ToString());
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: true);
+        Guid? operationId = null;
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "SELECT operation_id FROM migration_operations ORDER BY updated_utc DESC, operation_id LIMIT 1;";
+            var value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            if (value is string id && Guid.TryParseExact(id, "D", out var parsed) && parsed != Guid.Empty)
+                operationId = parsed;
+            else if (value is not null)
+                throw new InvalidDataException("Migration journal operation identity is corrupt.");
+        }
+
+        if (operationId is null)
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+
+        var operation = await ReadOperationAsync(connection, transaction, operationId.Value, cancellationToken)
+            .ConfigureAwait(false);
+        if (operation?.Status == HorseIdentityMigrationOperationStatus.Succeeded
+            && !await HasCompleteVerifiedEvidenceAsync(connection, transaction, operationId.Value, cancellationToken)
                 .ConfigureAwait(false))
             throw new InvalidDataException("Succeeded operation has incomplete page evidence.");
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -1460,6 +1516,93 @@ internal sealed class HorseIdentityMigrationJournal
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return new(updated, HorseIdentityMigrationJournalReason.None);
     }
+
+    internal async Task<HorseIdentityMigrationJournalOutcome> RecordFailureAsync(
+        Guid operationId, HorseIdentityMigrationResultCode code, DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsFailureCode(code))
+            return new(null, HorseIdentityMigrationJournalReason.RequestConflict);
+
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction();
+        var operation = await ReadOperationAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        if (operation is null)
+            return new(null, HorseIdentityMigrationJournalReason.StaleOperation);
+
+        var results = operation.Results.ToList();
+        if (!results.Any(result => result.Code == code))
+            results.Add(new(code));
+        var resultJson = JsonSerializer.Serialize(results, JsonOptions);
+        if (Encoding.UTF8.GetByteCount(resultJson) > MaximumResultBytes)
+            return new(operation, HorseIdentityMigrationJournalReason.CapacityExceeded);
+
+        var status = operation.Status;
+        var reason = operation.Reason;
+        if (status == HorseIdentityMigrationOperationStatus.Staged)
+        {
+            status = HorseIdentityMigrationOperationStatus.Failed;
+            reason = ToFailureReason(code);
+        }
+        else if (status == HorseIdentityMigrationOperationStatus.Running)
+        {
+            // Once the writer has claimed the operation, its data outcome is uncertain until
+            // independent verification says otherwise. Keep the existing interrupted/partial rule.
+            status = HorseIdentityMigrationOperationStatus.PartialUnverified;
+            reason = HorseIdentityMigrationJournalReason.OperationInterrupted;
+        }
+
+        string? priorTerminalAt;
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "SELECT terminal_utc FROM migration_operations WHERE operation_id = $id;";
+            command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            priorTerminalAt = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as string;
+        }
+        var terminalAt = IsTerminal(status)
+            ? operation.Status == status && priorTerminalAt is not null
+                ? priorTerminalAt
+                : now.ToUniversalTime().ToString("O")
+            : null;
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "UPDATE migration_operations SET status = $status, reason = $reason, results_json = $results, updated_utc = $now, terminal_utc = $terminal WHERE operation_id = $id;";
+            command.Parameters.AddWithValue("$status", (int)status);
+            command.Parameters.AddWithValue("$reason", (int)reason);
+            command.Parameters.AddWithValue("$results", resultJson);
+            command.Parameters.AddWithValue("$now", now.ToUniversalTime().ToString("O"));
+            command.Parameters.AddWithValue("$terminal", (object?)terminalAt ?? DBNull.Value);
+            command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        var updated = await ReadOperationAsync(connection, transaction, operationId, cancellationToken)
+            .ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new(updated, HorseIdentityMigrationJournalReason.None);
+    }
+
+    internal static HorseIdentityMigrationJournalReason ToFailureReason(HorseIdentityMigrationResultCode code) => code switch
+    {
+        HorseIdentityMigrationResultCode.PreparationFailed => HorseIdentityMigrationJournalReason.PreparationFailed,
+        HorseIdentityMigrationResultCode.BackupFailed => HorseIdentityMigrationJournalReason.BackupFailed,
+        HorseIdentityMigrationResultCode.InspectionFailed => HorseIdentityMigrationJournalReason.InspectionFailed,
+        HorseIdentityMigrationResultCode.ApplyFailed => HorseIdentityMigrationJournalReason.ApplyFailed,
+        HorseIdentityMigrationResultCode.VerificationFailed => HorseIdentityMigrationJournalReason.VerificationFailed,
+        HorseIdentityMigrationResultCode.ChildFailed => HorseIdentityMigrationJournalReason.ChildFailed,
+        HorseIdentityMigrationResultCode.StartupFailed => HorseIdentityMigrationJournalReason.StartupFailed,
+        _ => throw new ArgumentOutOfRangeException(nameof(code)),
+    };
+
+    private static bool IsFailureCode(HorseIdentityMigrationResultCode code) => code is
+        HorseIdentityMigrationResultCode.PreparationFailed or HorseIdentityMigrationResultCode.BackupFailed
+        or HorseIdentityMigrationResultCode.InspectionFailed or HorseIdentityMigrationResultCode.ApplyFailed
+        or HorseIdentityMigrationResultCode.VerificationFailed or HorseIdentityMigrationResultCode.ChildFailed
+        or HorseIdentityMigrationResultCode.StartupFailed;
 
     private async Task CompleteAsync(Guid operationId, DateTimeOffset now, CancellationToken cancellationToken)
     {

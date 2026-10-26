@@ -7,11 +7,22 @@ internal static class HorseIdentityMigrationPublicMapper
 {
     internal static HorseIdentityMigrationOperationResponse ToPublic(
         HorseIdentityMigrationJournalOperation operation)
-        => new(operation.OperationId, Status(operation.Status), Reason(operation.Reason),
+    {
+        var failures = operation.Results.Where(item => IsFailureCode(item.Code)).TakeLast(7).ToArray();
+        var visibleResults = operation.Results.Where(item => !IsFailureCode(item.Code))
+            .Take(128 - failures.Length).Concat(failures);
+        return new(operation.OperationId, Status(operation.Status), Reason(operation.Reason),
             operation.CreatedAt, operation.UpdatedAt,
-            operation.Results.Take(128).Select(item => new HorseIdentityMigrationOperationResult(
+            visibleResults.Select(item => new HorseIdentityMigrationOperationResult(
                 Result(item.Code), item.Surface is null ? null : Surface(item.Surface.Value),
                 Math.Clamp(item.Count, 0, 1_000_000))).ToArray());
+    }
+
+    private static bool IsFailureCode(HorseIdentityMigrationResultCode code) => code is
+        HorseIdentityMigrationResultCode.PreparationFailed or HorseIdentityMigrationResultCode.BackupFailed
+        or HorseIdentityMigrationResultCode.InspectionFailed or HorseIdentityMigrationResultCode.ApplyFailed
+        or HorseIdentityMigrationResultCode.VerificationFailed or HorseIdentityMigrationResultCode.ChildFailed
+        or HorseIdentityMigrationResultCode.StartupFailed;
 
     internal static string Status(HorseIdentityMigrationOperationStatus status) => status switch
     {
@@ -34,6 +45,13 @@ internal static class HorseIdentityMigrationPublicMapper
         HorseIdentityMigrationJournalReason.StaleOperation => "StaleOperation",
         HorseIdentityMigrationJournalReason.UnverifiedPages => "UnverifiedPages",
         HorseIdentityMigrationJournalReason.OperationInterrupted => "OperationInterrupted",
+        HorseIdentityMigrationJournalReason.PreparationFailed => "PreparationFailed",
+        HorseIdentityMigrationJournalReason.BackupFailed => "BackupFailed",
+        HorseIdentityMigrationJournalReason.InspectionFailed => "InspectionFailed",
+        HorseIdentityMigrationJournalReason.ApplyFailed => "ApplyFailed",
+        HorseIdentityMigrationJournalReason.VerificationFailed => "VerificationFailed",
+        HorseIdentityMigrationJournalReason.ChildFailed => "ChildFailed",
+        HorseIdentityMigrationJournalReason.StartupFailed => "StartupFailed",
         _ => "Unavailable",
     };
 
@@ -44,6 +62,13 @@ internal static class HorseIdentityMigrationPublicMapper
         HorseIdentityMigrationResultCode.PageMismatch => "PageMismatch",
         HorseIdentityMigrationResultCode.CapacityExceeded => "CapacityExceeded",
         HorseIdentityMigrationResultCode.OperationInterrupted => "OperationInterrupted",
+        HorseIdentityMigrationResultCode.PreparationFailed => "PreparationFailed",
+        HorseIdentityMigrationResultCode.BackupFailed => "BackupFailed",
+        HorseIdentityMigrationResultCode.InspectionFailed => "InspectionFailed",
+        HorseIdentityMigrationResultCode.ApplyFailed => "ApplyFailed",
+        HorseIdentityMigrationResultCode.VerificationFailed => "VerificationFailed",
+        HorseIdentityMigrationResultCode.ChildFailed => "ChildFailed",
+        HorseIdentityMigrationResultCode.StartupFailed => "StartupFailed",
         _ => "Unavailable",
     };
 
