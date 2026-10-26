@@ -57,6 +57,8 @@ API停止成功・非稼働・未checkpointのSQLite WALなしを確認してか
 
 移行中断で通常APIを起動できない場合の限定配備は、[保護画面だけを更新する承認済み設計](changes/20261025_operator-ui-bootstrap/README.md)に従う（実装・配備状況は同記録を参照）。既存`app-deploy`の手動実行で`operator_ui_recovery_operation_id`と`expected_deployed_sha`を指定し、他の復旧・移行モードとは併用しない。現行イメージ・依頼・保存先の一致、収集停止後900秒以上・実行中0件、完全停止・排他・全保存先バックアップを確認してからAPIイメージだけを置き換える。成功条件は認証済み保護画面の表示と通常業務APIの停止維持であり、通常稼働への復旧ではない。移行実行・再試行・収集再開・データ復元・保護解除は行わない。保護起動を確認した後の診断失敗だけでは、稼働中の保護画面を停止しない。
 
+未承認の追加案: [開始前の準備中止](changes/20261019_pre-apply-cancel/README.md)。専用の取消要求とcontrollerの実行時証明・atomic receiptにより、業務データ/元依頼/backupを保持して収集停止の通常画面へ戻す案である。限定配備の対象GUIDを起動設定にもbindし、その対象の確定取消と全gate解除/Readyが一致する場合だけ保護mode解除を許す。別対象・GUID欠落・未知状態は解除しない。本案はProposedであり、現在の限定配備の保護解除禁止を変更する承認ではない。
+
 ### Collector Lambda の一時資源
 
 Collector Lambda は共有 `/tmp` を直接 cleanup 対象にしない。`/tmp/horse-racing-prediction-collector` をアプリ所有rootとし、invocationごとのchildへPlaywrightのtemp、HOME/XDG cache、runtime event/responseを隔離する。collectorとPlaywright/Chromium子孫はinvocation専用process groupで起動し、直接child終了またはbootstrap signal時に当該groupだけをTERM、bounded wait、必要時KILLしてからchildを削除する。invocation sessionはcollectorを起動する直前にcore sizeを0とし、異常終了のstatusとtext diagnosticは維持したままcollector/子孫のraw core file生成だけを抑止する。このpolicyはbootstrap親やunrelated processへ適用しない。正常終了・報告済み失敗・signal終了では当該childだけを削除し、runtime強制終了で後処理できなかったchildは次のbootstrap初期化時にownership markerと非稼働leaseを検証して回収する。空・不正・bootstrap自身と同じPGID、marker不正、symlink、root外、稼働中processのchildは削除・終了対象にせず、process名検索や共有processの一括停止を行わない。
