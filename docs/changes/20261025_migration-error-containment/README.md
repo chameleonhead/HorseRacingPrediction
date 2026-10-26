@@ -14,7 +14,7 @@ Remote full solution2088passed/8knownoptional (API823/8); all native gates/exact
 Actual real900 waits905.661/903.589s, failure/restart/no-replay/TERM/source proof independently accepted; F30/F31 closed on matching remote gates.
 No migration/resume/reset/gate removal. Parent41migration and original24Oct handoff cause remain unfinished; existing f8 operation StoppingApi.
 Next parent work is current contract/design refresh of still-Proposed pre-apply cancellation, not blind replay; user browser login remains optional for viewing.
-Only final evidence/design/audit documents intentionally uncommitted; unrelated skills/AGENTS/olderdocs preserved. Model/usage unobserved; no savings claim.
+Implementation/evidence/proposed next-design are committed and published on codex/migration-error-containment; later documentation commits do not change deployed d020. Only unrelated skills/AGENTS/olderdocs dirt remains; model/usage unobserved, no savings claim.
 
 ## Context and hypotheses
 
