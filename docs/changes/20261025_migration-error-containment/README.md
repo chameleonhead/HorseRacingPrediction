@@ -1,6 +1,6 @@
 # 移行エラーをサイト停止へ波及させず画面で確認する
 
-- Status: Approved
+- Status: Implemented
 - Change record schema: 2
 - Owner: Lead
 - Created: 2026-10-25
@@ -8,18 +8,13 @@
 
 ## CURRENT
 
-Approved / Execution Mode26Oct; published branch codex/migration-error-containment HEAD892f3c8a; last public health/login200,jobs503.
-Exact app-ci gates0,10TRXs2087pass/8knownoptional, criticalLinuxskips0; partialtree59/109/UI23 and exactformatters0 independently checked.
-T8 local app-deploy gates all0 incl collector imagebd67d997/Chromium/core/Terraform; extra longTMP JSON replay failed, corrected exactvalidate0; failure retained, socketmechanism inferred only.
-N3 accepted exact17-input closure + predeclared samefixture producer2/Ruby/Python all0/unchanged3DBhashes (results28b0d143); originalF26firstrow unknown, deterministic provider red/green proves defect corrected.
-F28/F29 confirmed observer races and realZemptycmd defect fixed. FinalPS05fee8c6/SHA25661cb8f29 parser/smoke/realPerlZ0; root checked positive state/start and postcommand identity fences.
-Full05fee default0 independently accepted:16JSONLevents,905.661s/903.589s actual waits, backup/fault/restart/no-replay/TERM143/source fingerprint proof. All local implementation/CI/native tasksVerified; stale active session note rejected.
-17:02 resumed after user continuation: worker hit quota until15:56, but full default run completed; Lead directly read native terminal numericProcessExitCode=0, real900/fault/restart PASS and gone test PID. Stale active session note is not current process evidence.
-Protected-only run40291822903 failed verify before any production mutation: workflow RUNNER_TEMP is outside exporter Path.GetTempPath; local RUNNER_TEMP override masked boundary (F30).
-F30 fixed892f3c8a: remote verify13m40 and buildpush passed; matching run40295497378 failed only final protected readiness after actual892 image replacement/backup/binding.
-F31 helper authenticates operator but actual C# username=user; protected container preserved, public health/login200 and browser races→login. N2-A8 fixes actual login contract/regression next; user re-login requested.
-Only F30 record/audit updates intentionally uncommitted; unrelated skill/AGENTS/olderdocs dirt preserved. Usage/model observations remainunavailable, no measured-savings claim.
-No migration/resume/reset/gate removal; protected image now892f3c8a, but final authenticated readiness/production verification unfinished. Parent41 migration unfinished.
+Implemented26Oct: actual protected image d020f6080982bc20360ffa8a0735929b64ed564c; run40301038134 completed success.
+All approved child AC/tasks Verified; production authenticated status+HTML200/business503 and exact target/backup/binding verified09:53:22UTC.
+Remote full solution2088passed/8knownoptional (API823/8); all native gates/exactformatter and real05fee FAST/default0 remain attributable.
+Actual real900 waits905.661/903.589s, failure/restart/no-replay/TERM/source proof independently accepted; F30/F31 closed on matching remote gates.
+No migration/resume/reset/gate removal. Parent41migration and original24Oct handoff cause remain unfinished; existing f8 operation StoppingApi.
+Next parent work is current contract/design refresh of still-Proposed pre-apply cancellation, not blind replay; user browser login remains optional for viewing.
+Only final evidence/design/audit documents intentionally uncommitted; unrelated skills/AGENTS/olderdocs preserved. Model/usage unobserved; no savings claim.
 
 ## Context and hypotheses
 
@@ -72,10 +67,10 @@ Use existing Detail Page hierarchy, no new dashboard or server. Primary action i
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | Migration-controlled exceptions and child failures do not leave the site connectionless or raw503-only; authenticated operator/error page remains reachable without added HA infrastructure | T1,T2,T3,T5,T6,T8,T9 | Real LinuxPID1/process failure through HTTP, normal unaffected path | Connected |
-| AC2 | Screen shows migration status, failed stage, safe reason, timestamp and operation reference, survives reload/restart; unknown evidence is explicitly unknown | T1,T2,T3,T4,T5,T6,T8 | Producer→journal→DTO→normal/minimal UI, injection/restart/browser counterexamples | Connected |
-| AC3 | Partial/unknown data never enables unsafe ordinary writes, clears ownership gates, or starts duplicate apply; no reset or new automatic retry | T1,T2,T3,T5,T6,T8,T9 | Collision/unknown/apply failure/process ownership/idempotency regressions | Connected |
-| AC4 | Authenticated desktop/narrow error page is discoverable from ordinary URLs, keyboard usable, no API key/path/stack trace leakage; API errors retain proper HTTP semantics | T1,T2,T3,T4,T5,T6,T8 | Auth/CSRF/XSS/HTML-vs-API endpoint tests, bUnit and real browser390px/reload | Connected |
+| AC1 | Migration-controlled exceptions and child failures do not leave the site connectionless or raw503-only; authenticated operator/error page remains reachable without added HA infrastructure | T1,T2,T3,T5,T6,T8,T9 | Real LinuxPID1/process failure through HTTP, normal unaffected path | Verified |
+| AC2 | Screen shows migration status, failed stage, safe reason, timestamp and operation reference, survives reload/restart; unknown evidence is explicitly unknown | T1,T2,T3,T4,T5,T6,T8 | Producer→journal→DTO→normal/minimal UI, injection/restart/browser counterexamples | Verified |
+| AC3 | Partial/unknown data never enables unsafe ordinary writes, clears ownership gates, or starts duplicate apply; no reset or new automatic retry | T1,T2,T3,T5,T6,T8,T9 | Collision/unknown/apply failure/process ownership/idempotency regressions | Verified |
+| AC4 | Authenticated desktop/narrow error page is discoverable from ordinary URLs, keyboard usable, no API key/path/stack trace leakage; API errors retain proper HTTP semantics | T1,T2,T3,T4,T5,T6,T8 | Auth/CSRF/XSS/HTML-vs-API endpoint tests, bUnit and real browser390px/reload | Verified |
 
 ## Task plan
 
@@ -85,7 +80,7 @@ Use existing Detail Page hierarchy, no new dashboard or server. Primary action i
 | T2 | Freeze smallest concrete design and concern dispositions, obtain approval | Lead | Lead | T1 | This record, mock and relevant canonical docs | Hypothesis/contract/AC review; no material unresolved design premise | Explicit user approval25Oct | Verified | Lead — architecture/public contract/security/approval | none | unavailable; retries 0; corrections 0; reviews 0 |
 | T3 | Implement lifecycle/error-persistence containment after approval | supervisor_final_oracles | Luna/high | T2 approval | Api/IdentityMigration runtime, journal, mapper/minimal HTML and corresponding Identity policy/result enum, Contracts/Identity operation contracts only if required; corresponding API migration tests | Real failure red/green, focused then related native regression/build/format | App13 committed and processPS05fee accepted: parser/smoke/FAST/default0,109/unit+2087CI independent proof; T7 actualtiming/fault/source accepted | Verified | Worker — exclusive frozen lifecycle slice | T3-A1, T3-A2, T3-A3 | unavailable; retries 8; corrections 13; reviews 10 |
 | T4 | Implement normal operator error UI and integrated browser proof after contract freeze | migration_containment_ui | Luna/high | T2 approval,T3 contract freeze | HorseIdentityMigrationAdmin.razor, existing AdminApiClient.HorseIdentityMigration only if necessary, relevant component/browser tests; minimal renderer changes return to T3 owner | bUnit/HTTP/browser desktop390px auth/reload/error/long strings | Sessions45449=23/23,10617=browser1/1; Lead viewed390px error; final component95994=22/22,formatter19276 exit0; native T6 | Verified | Worker — disjoint UI after contract freeze, runtime rendering returns T3 owner | T4-A1 | unavailable; retries 6; corrections 2; reviews 3 |
-| T5 | Integrate, deploy approved change and verify actual path | Lead | Lead | T3,T4 | Reviewed integration/docs and separately approved canonical deployment/production checks | Exact CI parity, real HTTP/process proof and live normal/operator availability; parent recovery kept owned | All local source/native/CI and N2/N3 gates accepted; protected-only publication/dispatch/readback preparation in progress, no production mutation yet | In progress | Lead — operational authority/integration/final acceptance | none | unavailable; retries 0; corrections 0; reviews 0 |
+| T5 | Integrate, deploy approved change and verify actual path | Lead | Lead | T3,T4 | Reviewed integration/docs and separately approved canonical deployment/production checks | Exact CI parity, real HTTP/process proof and live normal/operator availability; parent recovery kept owned | Actual d020 protected image/run40301038134 success; all CI/backup/binding/authenticated status+HTML/business503 proof, F30/F31 closure; parent migration not claimed recovered | Verified | Lead — operational authority/integration/final acceptance | none | unavailable; retries 2; corrections 0; reviews 1 |
 | T6 | Prepare native runner then independently verify frozen source | native_lifecycle_verify | Luna/high | Setup independent; final gates after T3/T4 freeze | Owned temporary native runner/artifacts only; no repository source edits | Ubuntu24.04 SDK10 process/HTTP/browser/full exact workflow gates, Git-clean source attribution and truePID1 proof | Canonical runtime109/UI23 and exactformatter0; independent actualsource/JSONL/default two900-window proof accepted through T7 | Verified | Worker — mechanical verification, disjoint temporary artifacts | T6-A1, T6-A2, T6-A3 | unavailable; retries 6; corrections 9; reviews 7 |
 | T7 | Independently reconcile final verification receipts | native_lifecycle_verify | Luna/high | Frozen source and T6 artifacts | Read-only owned native artifacts, TRX/logs, source/workflow and Git hashes; own temporary receipt output only | Programmatic exact filter/class membership, exit/source/tool identity and required-gate coverage; no duplicate broad runs | A4 accepted defaultnumeric0,905.661/903.589s,16eventJSONL/fault/no-replay/TERM/hashproof and18code+doc/formatter0/10projectCI | Verified | Worker — bounded independent receipt checks, no shared source/build writes | T7-A1, T7-A2, T7-A3, T7-A4 | unavailable; retries 2; corrections 3; reviews 5 |
 | T9 | Diagnose real held-CLI failure after operator restart | cli_restart_diagnosis | Luna/high | T6 real failure evidence | Read-only migration lifecycle/capability source and owned failed native fixture; no edits | Trace exact admission/authorization/exit consumer; safe evidence and smallest counterexample, no speculative cause | Direct native receipt same CLI identity; source-proven overwrite and helper inventory corrected by Lead; exact exit unknown; deterministic closure owned T3/F20 | Verified | Worker — bounded cause investigation, security decision retained by Lead | T9-A1 | unavailable; retries 0; corrections 2; reviews 3 |
@@ -215,8 +210,10 @@ Planning checkpoint25Oct: audit validator exit0 (initial numeric result-metric s
 
 ## Completion summary
 
+Final review26Oct: T1–T9 and AC1–AC4 Verified for this approved containment scope. Integrated app13, supervisorPS05fee, bootstrap guards and F31 actual-login interop are accepted through source-attributed native realPID1/fault/restart/no-replay, full900, desktop/390px browser, journal and exactCI proof. Matching production run40301038134/head/actualimaged020 completed success; backup/3source+3gates/phase3/exactforceflag, authenticated status+HTML200/business503 checked09:53:22UTC; verify/build/deploy annotations empty, fullremote2088pass/8knownoptional. F30/F31 original remote gates now closed. No reset/gate deletion/migration/retry/resume was performed. Parent incident, unknown original24Oct cause and pending41 migration remain owned and unfinished, with separateProposed cancellation authority required. Shared proxy anonymous redirect normalization is the explicitly excluded non-blocking follow-up in the bootstrap record (Lead owner; direct HTTP/login308HTTPS and credentialed workflow HTTPS checked); not claimed fixed. All final audit/DDD/diff checks must pass before the documentation checkpoint. Model/token observations unavailable; no cost-efficiency conclusion.
+
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
 | Code | Verified | App13 and final process harness implemented, independently accepted and checkpointed; no approved code item remains |
-| Verification | In progress | All local CI/native/full real900 gates accepted; actual production operator/blocked-business readback remains |
-| Deployment/operation | Not started | No live action; parent incident still unfinished |
+| Verification | Verified | Local CI/native/full real900, UI and real-login helper tests accepted; actual matching remote2088pass/8knownoptional and authenticated readiness success |
+| Deployment/operation | Verified | Run40301038134 success, exact image d020/backup/binding/authenticated operator HTML+status/business503; parent incident/data migration still unfinished |

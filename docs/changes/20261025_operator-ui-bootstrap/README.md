@@ -1,6 +1,6 @@
 # 中断状態を保持したまま保護用画面だけを更新する限定配備
 
-- Status: Approved
+- Status: Implemented
 - Change record schema: 2
 - Owner: Lead
 - Created: 2026-10-25
@@ -8,21 +8,14 @@
 
 ## CURRENT
 
-Approved / Execution Mode26Oct; published codex/migration-error-containment HEAD892f3c8af1405b4a48cdc86b3c14da2f7781ac0c.
-N2 helperSHA719bb08c, guard3314c32e/blobc1d91080, typedtest9787b114/blob46680098 committed after deterministic trailing-zero red/green; producer2/Ruby/Python/semantic/pipeline17 passed.
-Exact canonical final app-ci full restore/format/build/EF/tests/vulnerability/entry-repair all0; 2087passed/8knownoptional. Previous N2 formatter setup defect closed by this independent tree proof.
-App-deploy gates all0 incl2087+8/Terraform/collector imagebd67d997/Chromium/core. Original deleted F26row unknown, but actual typedprovider counterexample deterministically fails oldguard and passesfix.
-Remote40291822903 failed verify before production mutation: RUNNER_TEMP differs from .NET temporary root; exporter correctly rejects the workflow caller path (F30).
-N2 reopened for minimal caller/regression correction; N3 dependent on source freeze. FinalPS05fee nativeFAST0/default0 remains accepted with two905.661/903.589s waits; runtime source unchanged.
-N2-A7/N3-A3 local closure accepted: real parsed fullstep0/100s, old1/new0, short stalledchild, Ruby/Python fullguards/pipeline17/exactformatter0; untouched C# ownership/runtime/helper.
-Run40295497378 terminalfailure: verify121480451007 success13m40/zeroannotations; buildpush121485987209 success; recover121487052263 failed only protected HTTP readiness09:11:05UTC.
-Actual new image892f3c8a started after old2872 stop/exclusivity/binding/backup; target-proven cleanup correctly preserves protected host. Image digest ae8b24a13209163f1359ca72ec94b4fd4e40731848c0a200756ecc94b178883c.
-F30 original remote step succeeded121s within180s. F31 helper login uses operator, actual AdminUserName=user; no migration/replay/resume performed.
-Public health/login200, browser races redirectslogin (new protected HTML path), unauth businessAPI401. User re-login requested asynchronously; not a source-work blocker.
-N2-A8/N3-A4 accepted: helper954a18b0/newtestfee34e39 real API/TLS/journal old1/new0 and all durable producer/auth/runtime/Ruby/fullPython/pipeline/formatter exits0.
-Next: scoped checkpoint/push, then exact current892f3c8a-bound protected deployment and authenticated readback; F31 remote closure pending.
-Production operation f8f857b4-23c6-40d7-ac04-60676f42aa6d remains phase3; do not use obsolete expected old2872 for the next run.
-No migration/resume/reset/gate removal. Parent41migration unfinished; unrelated dirt preserved.
+Implemented26Oct: actual protected image d020f6080982bc20360ffa8a0735929b64ed564c; run40301038134 completed success.
+Verify121498706353, build121503988164, protected deploy121505151238 succeeded; annotations empty; unrelated deployment/migration jobs skipped.
+09:53:22UTC authenticated operation/HTML and business503 readiness passed; source/gate binding3/3/phase3 before/after stop, backup retained.
+Backup: /opt/horse-racing-prediction/app/data/backups/operator-ui-recovery-40301038134-1; digest78fa3487d5cc617b469d3e88cd5be1cbd0b40575f6aacee17f6edb060edfbe63.
+Remote complete solution2088passed/8knownoptional (API823/8). Real nativeFAST/full900 and F30/F31 red/green remain attributable.
+No migration/resume/reset/gate removal. Existing f8f857b4-23c6-40d7-ac04-60676f42aa6d remains StoppingApi; parent41migration and original handoff cause unfinished.
+Next parent action: refresh still-Proposed19Oct safe cancellation design/approval; do not replay existing operation.
+User browser remains at login; authenticated production verification used canonical workflow credentials, not a claimed signed-in browser session.
 
 ## Evidence and decision
 
@@ -55,10 +48,10 @@ New image must start in journal-only protected mode from the preserved bound int
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | Manual exact-image/operation mode only; all existing deployment modes remain unchanged, invalid/conflicting inputs rejected before side effects | N1,N2,N3,N4 | Parsed workflow/helper exact branch semantic tests and matching run inputs | Connected |
-| AC2 | Stop/drain/exclusive/full backup precedes image replacement; domain data and maintenance ownership are preserved | N1,N2,N3,N4 | Real command simulation+native process/file assertions and production receipts | Connected |
-| AC3 | New image serves authenticated operator/error UI while business writes stay blocked; result explicitly not full recovery | N1,N2,N3,N4 | Exact SHA/status/HTML/API checks, auth negative controls | Connected |
-| AC4 | No migration CLI/retry/resume/reset/marker deletion, secret leakage or duplicate execution on failure | N1,N2,N3,N4 | Forbidden-call/failure/restart/input counterexamples and actual run logs | Connected |
+| AC1 | Manual exact-image/operation mode only; all existing deployment modes remain unchanged, invalid/conflicting inputs rejected before side effects | N1,N2,N3,N4 | Parsed workflow/helper exact branch semantic tests and matching run inputs | Verified |
+| AC2 | Stop/drain/exclusive/full backup precedes image replacement; domain data and maintenance ownership are preserved | N1,N2,N3,N4 | Real command simulation+native process/file assertions and production receipts | Verified |
+| AC3 | New image serves authenticated operator/error UI while business writes stay blocked; result explicitly not full recovery | N1,N2,N3,N4 | Exact SHA/status/HTML/API checks, auth negative controls | Verified |
+| AC4 | No migration CLI/retry/resume/reset/marker deletion, secret leakage or duplicate execution on failure | N1,N2,N3,N4 | Forbidden-call/failure/restart/input counterexamples and actual run logs | Verified |
 
 ## Task plan
 
@@ -67,9 +60,13 @@ New image must start in journal-only protected mode from the preserved bound int
 | N1 | Establish deployment mismatch and freeze bounded scope | Lead | Lead | none | This record; read-only workflow/helper/public probes | Exact source guard and public response distinction | Above source/probe evidence; no dispatch | Verified | Lead — operational authority/architecture/security | none | unavailable; retries 0; corrections 0; reviews 0 |
 | N2 | Implement explicit limited bootstrap mode | ci_temp_boundary | Luna/high | Approval, frozen protected-host contract | .github/workflows/app-deploy.yml, deploy/horse-id-migration-deploy.sh, corresponding deployment guard tests only | Exact native parsed-shell/input/failure branches, no unrelated action | A8 helper954a/newtestfee3 actual C# API/TLS/journal old1/new0; all final native durable gates0; remote F31 closure belongs N4 | Verified | Worker — bounded exclusive workflow/helper slice | N2-A1, N2-A2, N2-A3, N2-A4, N2-A5, N2-A6, N2-A7, N2-A8 | unavailable; retries 9; corrections 11; reviews 12 |
 | N3 | Verify attributable frozen helper/workflow | ci_temp_review | Luna/high | N2 source freeze; final acceptance after N2 | Owned native temporary artifacts, no source edits | Ruby/Python backend parity where applicable, native semantic guard/original-negative control and exactCI | A4 accepted real login/secret-free TLS/process teardown, final frozen2file hashes and durable producer/auth/runtime/Ruby/fullPython/pipeline/formatter0 | Verified | Worker — mechanical independent validation | N3-A1, N3-A2, N3-A3, N3-A4 | unavailable; retries 0; corrections 2; reviews 5 |
-| N4 | Deploy and verify operator-only restoration | Lead | Lead | N2,N3, approved application tests | Explicit canonical workflow dispatch and production readback | Full matching run through terminal, backup/ownership/image/operator-page/business-block receipts | Run40295497378 verify/build success, actual replacement892f3c8a protected/backup/binding preserved; final readiness failed F31 login contract, not full recovery | In progress | Lead — production credentials/data/final acceptance | none | unavailable; retries 0; corrections 0; reviews 0 |
+| N4 | Deploy and verify operator-only restoration | Lead | Lead | N2,N3, approved application tests | Explicit canonical workflow dispatch and production readback | Full matching run through terminal, backup/ownership/image/operator-page/business-block receipts | Run40301038134 success/headd020, exact target/binding/pause/stop/exclusive/backup, OPERATOR_UI_READY09:53:22UTC, authenticated status+HTML/business503, annotations empty | Verified | Lead — production credentials/data/final acceptance | none | unavailable; retries 2; corrections 0; reviews 1 |
 
 ## Documentation updates and review
+
+Final review26Oct: all four AC groups and N1–N4 Verified. Run40301038134 completed success at actual sourced020; verify/build/protected jobs succeeded, normal/Lambda/data migrations skipped. SSH trace proves exact target image/flag, pause/drain, full stop, exclusive ownership, bound3source/3gates phase3, backup and authenticated readiness. OPERATOR_UI_READY09:53:22UTC checks health200, exact operation200, cookie-auth HTML200 and authenticated business503. Final image digest78fa3487d5cc617b469d3e88cd5be1cbd0b40575f6aacee17f6edb060edfbe63; backup above; all three check annotations empty. Remote2088pass/8knownoptional (API823/8), critical Linux skips0. F31 original readiness is closed by this actual success; earlier incident paragraph describes its originally open state. N3-A4 accepted final helper/test hashes and durable exits, excluding invalid attempts. Requested Luna/high remains preference, model/usage observations unavailable, no efficiency claim. Parent migration/retry/resume and unknown original24Oct handoff remain unfinished, not excluded from parent acceptance.
+
+Non-blocking out-of-scope observation: anonymous HTTPS HTML challenge returns a same-host HTTP login URL; direct HTTP login responds308 to HTTPS. Workflow sends credentials only directly to HTTPS and rejects origin/downgrade redirects; no HTTP credential submission was performed or observed. Browser reaches HTTPS login. Source/proxy redirect normalization remains a separate hardening follow-up, not claimed fixed and not permission to weaken TLS. User's browser still needs login; production authenticated readiness was verified independently by workflow.
 
 F31 (26Oct, open): run40295497378 full verify/build succeeded, protected deployment job121487052263 failed09:11:05UTC at HTTP readiness. Durable logs show OPERATOR_STATUS, three-source/gate binding phase3 before/after stop, image892f3c8a pull/start and target-proven continuation after backup. Failure cleanup preserved the proven protected container; fresh health/login200 and browser races→login confirm live HTML path. Helper login hardcodes username=operator, but real MapAdminLoginEndpoints authenticates only AdminAuthenticationExtensions.AdminUserName=user; no CSRF is required on that existing login endpoint and Status: sentinel still exists. This is a producer/consumer login-contract mismatch omitted by mock-only helper tests, not evidence of wrong production key, data failure or site death. A8 must preserve readiness/authentication and test the actual C# login path with the actual helper before another dispatch. Current actual expected-image bound is892f3c8a, never obsolete2872. No operation replay/reset/gate deletion/resume is authorized.
 
@@ -124,5 +121,5 @@ Verification closure26Oct: previous N2 formatter2 (38 whitespace diagnostics/6,3
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
 | Code | Verified | Bootstrap/F30 deployed892; F31 helper-login correction and actual API regression locally verified with independent acceptance |
-| Verification | In progress | Actual remote verify/build success; real-login regression and final protected readiness still required |
-| Deployment/operation | In progress | Actual image892 protected and preserved after run40295497378 readiness failure; health/login200, browser races→login; no migration/resume |
+| Verification | Verified | Real API/TLS/journal/helper red/green and native suites accepted; matching remote full suite2088/8, all guards success, annotations empty |
+| Deployment/operation | Verified | Actual d020 image protected; run40301038134 success, backup/exclusive/binding/authenticated HTML/status/business503 verified; no migration/resume |
