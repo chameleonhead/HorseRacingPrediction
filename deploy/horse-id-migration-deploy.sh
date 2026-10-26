@@ -636,7 +636,7 @@ try:
             if time.monotonic() >= deadline:
                 raise
             time.sleep(1)
-    login = urlencode({"username": "operator", "password": api_key,
+    login = urlencode({"username": "user", "password": api_key,
                        "ReturnUrl": "/settings/horse-id-migration?operationId=" + requested}).encode()
     request("/login", headers={"Content-Type": "application/x-www-form-urlencoded",
                                 "Accept": "text/html"}, data=login)

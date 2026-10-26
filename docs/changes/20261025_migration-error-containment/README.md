@@ -8,7 +8,7 @@
 
 ## CURRENT
 
-Approved / Execution Mode26Oct; published branch codex/migration-error-containment HEAD93a63c7f; last public health/login200,jobs503.
+Approved / Execution Mode26Oct; published branch codex/migration-error-containment HEAD892f3c8a; last public health/login200,jobs503.
 Exact app-ci gates0,10TRXs2087pass/8knownoptional, criticalLinuxskips0; partialtree59/109/UI23 and exactformatters0 independently checked.
 T8 local app-deploy gates all0 incl collector imagebd67d997/Chromium/core/Terraform; extra longTMP JSON replay failed, corrected exactvalidate0; failure retained, socketmechanism inferred only.
 N3 accepted exact17-input closure + predeclared samefixture producer2/Ruby/Python all0/unchanged3DBhashes (results28b0d143); originalF26firstrow unknown, deterministic provider red/green proves defect corrected.
@@ -16,9 +16,10 @@ F28/F29 confirmed observer races and realZemptycmd defect fixed. FinalPS05fee8c6
 Full05fee default0 independently accepted:16JSONLevents,905.661s/903.589s actual waits, backup/fault/restart/no-replay/TERM143/source fingerprint proof. All local implementation/CI/native tasksVerified; stale active session note rejected.
 17:02 resumed after user continuation: worker hit quota until15:56, but full default run completed; Lead directly read native terminal numericProcessExitCode=0, real900/fault/restart PASS and gone test PID. Stale active session note is not current process evidence.
 Protected-only run40291822903 failed verify before any production mutation: workflow RUNNER_TEMP is outside exporter Path.GetTempPath; local RUNNER_TEMP override masked boundary (F30).
-Next unmet AC: bootstrap N2-A6 minimal caller/regression fix, audit/native exact gate, new scoped commit/push/dispatch and productionreadback. T5 Inprogress; runtime/full900 proofs unchanged.
+F30 fixed892f3c8a: remote verify13m40 and buildpush passed; matching run40295497378 failed only final protected readiness after actual892 image replacement/backup/binding.
+F31 helper authenticates operator but actual C# username=user; protected container preserved, public health/login200 and browser races→login. N2-A8 fixes actual login contract/regression next; user re-login requested.
 Only F30 record/audit updates intentionally uncommitted; unrelated skill/AGENTS/olderdocs dirt preserved. Usage/model observations remainunavailable, no measured-savings claim.
-No migration/resume/reset/gate removal; operator-only bootstrap deployment and production verification remain unfinished; parent41 migration unfinished.
+No migration/resume/reset/gate removal; protected image now892f3c8a, but final authenticated readiness/production verification unfinished. Parent41 migration unfinished.
 
 ## Context and hypotheses
 
