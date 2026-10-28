@@ -16,6 +16,69 @@ namespace HorseRacingPrediction.Api.Tests;
 public sealed class HorseIdentityMigrationClientTests
 {
     [TestMethod]
+    public async Task CancelPreparationUsesBodylessPostAndPreservesFrozenHttpOutcomes()
+    {
+        var acceptedId = Guid.NewGuid();
+        var missingId = Guid.NewGuid();
+        var conflictId = Guid.NewGuid();
+        var unavailableId = Guid.NewGuid();
+        var malformedId = Guid.NewGuid();
+        var receipt = new HorseIdentityMigrationOperationResponse(acceptedId, "AwaitingActions",
+            "None", DateTimeOffset.Parse("2026-10-15T00:00:00Z"),
+            DateTimeOffset.Parse("2026-10-15T00:01:00Z"), [])
+        { ExecutionPhase = "CancellationRequested" };
+        var requests = new List<(HttpMethod Method, string Path, long? ContentLength, string Body)>();
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        await using var app = builder.Build();
+        app.MapPost("/api/v2/admin/horse-id-migration-operations/{operationId:guid}/cancel-preparation",
+            async (Guid operationId, HttpRequest request) =>
+            {
+                using var body = new StreamReader(request.Body);
+                requests.Add((HttpMethod.Post, request.Path.Value ?? string.Empty, request.ContentLength,
+                    await body.ReadToEndAsync()));
+                if (operationId == acceptedId)
+                    return Results.Accepted($"/api/v2/admin/horse-id-migration-operations/{acceptedId:D}/cancel-preparation", receipt);
+                if (operationId == malformedId)
+                    return Results.Content("{", "application/json", statusCode: (int)HttpStatusCode.Accepted);
+                return Results.StatusCode(operationId == conflictId
+                    ? (int)HttpStatusCode.Conflict
+                    : operationId == unavailableId
+                        ? (int)HttpStatusCode.ServiceUnavailable
+                        : (int)HttpStatusCode.NotFound);
+            });
+        await app.StartAsync();
+
+        using var http = app.GetTestClient();
+        var client = CreateClient(http, app.Services.GetRequiredService<IServer>(), includeApiKey: true);
+        var accepted = await client.CancelHorseIdentityMigrationPreparationAsync(acceptedId);
+        var missing = await client.CancelHorseIdentityMigrationPreparationAsync(missingId);
+        var conflict = await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.CancelHorseIdentityMigrationPreparationAsync(conflictId));
+        var unavailable = await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.CancelHorseIdentityMigrationPreparationAsync(unavailableId));
+        var malformed = await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.CancelHorseIdentityMigrationPreparationAsync(malformedId));
+        Assert.IsNull(await client.CancelHorseIdentityMigrationPreparationAsync(Guid.Empty));
+
+        Assert.AreEqual(acceptedId, accepted!.OperationId);
+        Assert.AreEqual("CancellationRequested", accepted.ExecutionPhase);
+        Assert.IsNull(missing);
+        Assert.AreEqual(HttpStatusCode.Conflict, conflict.StatusCode);
+        Assert.AreEqual(HttpStatusCode.ServiceUnavailable, unavailable.StatusCode);
+        Assert.AreEqual(HttpStatusCode.Accepted, malformed.StatusCode,
+            "A malformed successful receipt remains an ambiguous response with its original status.");
+        Assert.IsInstanceOfType<JsonException>(malformed.InnerException);
+        Assert.AreEqual(5, requests.Count, "An empty operation ID must not send an HTTP request.");
+        Assert.IsTrue(requests.All(request => request.Method == HttpMethod.Post
+            && request.Path.EndsWith("/cancel-preparation", StringComparison.Ordinal)
+            && request.ContentLength is null && request.Body.Length == 0),
+            "Cancellation is a bodyless journal action; no manifest or command payload may be sent.");
+        Assert.AreEqual($"/api/v2/admin/horse-id-migration-operations/{acceptedId:D}/cancel-preparation",
+            requests[0].Path);
+    }
+
+    [TestMethod]
     public async Task AdminClientUsesApiKeyForPreviewStageAndReadOnlyStatusContracts()
     {
         var manifest = new HorseIdentityMigrationManifest(

@@ -204,6 +204,84 @@ public sealed class HorseIdentityMigrationAdminBrowserTests
                 var failureJournal = new HorseIdentityMigrationJournal(
                     Path.GetDirectoryName(stores.CollectionPath)!,
                     [stores.EventStorePath, stores.CollectionPath, stores.SchedulePath, stores.QueuePath]);
+
+                // Exercise the cancellation affordance against a second, real journal operation while
+                // retaining the original operation for the failure/reconnect assertions below.
+                var originalPending = await failureJournal.GetPendingRequestAsync(Guid.Parse(savedOperationId));
+                Assert.IsNotNull(originalPending?.Manifest,
+                    "The real pending operation must retain the immutable manifest used for this browser fixture.");
+                var cancellationOperationId = Guid.NewGuid();
+                var cancellationRequestKey = Guid.NewGuid();
+                var cancellationRequestHash = HorseIdentityMigrationExecutionPolicy
+                    .ComputePendingImmutableRequestHash(originalPending.Manifest);
+                var cancellationStage = await failureJournal.StagePendingWithRequestKeyAsync(
+                    cancellationOperationId, originalPending.Manifest, cancellationRequestKey,
+                    cancellationRequestHash, DateTimeOffset.UtcNow);
+                Assert.IsTrue(cancellationStage.Succeeded,
+                    "The second operation must be staged in the real journal before browser cancellation is tested.");
+                var cancellationIntent = await failureJournal.CreateExecutionIntentAsync(
+                    cancellationOperationId, cancellationRequestHash, DateTimeOffset.UtcNow);
+                Assert.IsTrue(cancellationIntent.Succeeded);
+                foreach (var phase in new[]
+                {
+                    HorseIdentityMigrationExecutionPhase.Preparing,
+                    HorseIdentityMigrationExecutionPhase.Draining,
+                    HorseIdentityMigrationExecutionPhase.StoppingApi,
+                    HorseIdentityMigrationExecutionPhase.ApiExited,
+                    HorseIdentityMigrationExecutionPhase.BackedUp,
+                })
+                {
+                    var advanced = await failureJournal.AdvanceExecutionIntentAsync(
+                        cancellationOperationId, phase, DateTimeOffset.UtcNow);
+                    Assert.IsTrue(advanced.Succeeded, $"The journal fixture could not advance to {phase}.");
+                }
+
+                await page.GotoAsync(new Uri(baseAddress,
+                    $"/settings/horse-id-migration?operationId={cancellationOperationId:D}").ToString(),
+                    new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded, Timeout = (float)RequestTimeout.TotalMilliseconds });
+                await page.SetViewportSizeAsync(390, 844);
+                var cancelReadsBefore = CountStatusReads(endpointLog);
+                var cancellationRefresh = page.GetByRole(AriaRole.Button, new() { Name = "状態を更新" });
+                await cancellationRefresh.ClickAsync();
+                await page.GetByText("バックアップ確認済み").WaitForAsync(new LocatorWaitForOptions
+                { Timeout = (float)RequestTimeout.TotalMilliseconds });
+                Assert.AreEqual(cancelReadsBefore + 1, CountStatusReads(endpointLog),
+                    "The cancellation screen must be restored only after a manual status read.");
+                Assert.IsTrue(await page.EvaluateAsync<bool>("() => document.documentElement.scrollWidth <= window.innerWidth"),
+                    "The 390px cancellation detail must not overflow horizontally.");
+                var cancelButton = page.GetByRole(AriaRole.Button, new() { Name = "準備を中止" }).Last;
+                await cancelButton.FocusAsync();
+                Assert.IsTrue(await cancelButton.EvaluateAsync<bool>("element => document.activeElement === element || element.shadowRoot?.activeElement !== null"),
+                    "Keyboard focus must reach the cancellation action.");
+                await cancelButton.PressAsync("Enter");
+                var cancellationDialogTitle = page.GetByRole(AriaRole.Heading,
+                    new() { Name = "実行前の準備を中止しますか？" });
+                await Assertions.Expect(cancellationDialogTitle).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions
+                { Timeout = (float)RequestTimeout.TotalMilliseconds });
+                Assert.IsTrue(await page.GetByText(
+                    "この操作は保存済み依頼、バックアップ、業務データ、履歴を削除しません。", new() { Exact = false }).IsVisibleAsync(),
+                    "The cancellation dialog must explicitly preserve saved records, backups, business data, and history.");
+                await page.ScreenshotAsync(new PageScreenshotOptions
+                { Path = Path.Combine(screenshotDirectory, "cancellation-confirmation-390.png") });
+                await page.GetByRole(AriaRole.Button, new() { Name = "準備を中止" }).Last.ClickAsync();
+                await page.GetByText("準備中止の安全確認中です。再送や再実行はせず", new() { Exact = false })
+                    .WaitForAsync(new LocatorWaitForOptions { Timeout = (float)RequestTimeout.TotalMilliseconds });
+                Assert.AreEqual(1, CountEndpoint(endpointLog, "POST",
+                    "/api/v2/admin/horse-id-migration-operations/{operationId}/cancel-preparation"),
+                    "Explicit confirmation must send exactly one bodyless cancellation request.");
+                Assert.AreEqual(0, CountEndpoint(endpointLog, "POST",
+                    "/api/v2/admin/horse-id-migration-operations/{operationId}/execute"),
+                    "Cancellation confirmation must never dispatch migration execution.");
+                Assert.IsTrue(await page.EvaluateAsync<bool>("() => document.documentElement.scrollWidth <= window.innerWidth"),
+                    "The pending cancellation status must remain usable at 390px.");
+                await page.ScreenshotAsync(new PageScreenshotOptions
+                { Path = Path.Combine(screenshotDirectory, "cancellation-pending-390.png") });
+
+                await page.GotoAsync(new Uri(baseAddress,
+                    $"/settings/horse-id-migration?operationId={savedOperationId}").ToString(),
+                    new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded, Timeout = (float)RequestTimeout.TotalMilliseconds });
+                await page.GetByRole(AriaRole.Button, new() { Name = "状態を更新" }).WaitForAsync(new LocatorWaitForOptions
+                { Timeout = (float)RequestTimeout.TotalMilliseconds });
                 var failureRecorded = await failureJournal.RecordFailureAsync(
                     Guid.Parse(savedOperationId), HorseIdentityMigrationResultCode.BackupFailed, DateTimeOffset.UtcNow);
                 Assert.IsTrue(failureRecorded.Succeeded,

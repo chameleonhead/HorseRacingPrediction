@@ -462,6 +462,187 @@ public sealed class HorseIdentityMigrationAdminComponentTests
     }
 
     [TestMethod]
+    public async Task PreparationCancellationRequiresConfirmationAndKeepsOnePendingRequest()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var operationId = Guid.Parse("c54c11b0-b17a-4aed-a956-b8feb0c57a74");
+        var manifest = new HorseIdentityMigrationManifest([new(OldHorseId, JraIdentity, true)]);
+        var pending = new TaskCompletionSource<HorseIdentityMigrationOperationResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new MigrationHandler
+        {
+            Status = Operation(operationId, "AwaitingActions", manifest, null, "BackedUp"),
+            CancellationPending = pending,
+        };
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        context.Services.GetRequiredService<NavigationManager>()
+            .NavigateTo($"http://localhost/settings/horse-id-migration?operationId={operationId:D}");
+        var cut = context.Render<HorseIdentityMigrationAdmin>();
+        await ClickAsync(cut, "状態を更新");
+
+        var open = cut.FindComponents<FluentButton>().First(button => button.Markup.Contains("準備を中止", StringComparison.Ordinal));
+        Assert.AreEqual(0, handler.Requests.Count(request => request.Path.EndsWith("/cancel-preparation", StringComparison.Ordinal)),
+            "Loading an eligible saved receipt must not cancel it.");
+        await cut.InvokeAsync(() => open.Instance.OnClick.InvokeAsync());
+        StringAssert.Contains(cut.Markup, "実行前の準備を中止しますか？");
+        Assert.AreEqual(0, handler.Requests.Count(request => request.Path.EndsWith("/cancel-preparation", StringComparison.Ordinal)),
+            "Opening the second confirmation must not dispatch the request.");
+
+        var confirm = cut.FindComponents<FluentButton>()
+            .Last(button => button.Markup.Contains("準備を中止", StringComparison.Ordinal));
+        var requestTask = cut.InvokeAsync(() => confirm.Instance.OnClick.InvokeAsync());
+        try
+        {
+            cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "中止確認中"));
+            Assert.IsTrue(cut.FindComponents<FluentButton>().Single(button => button.Markup.Contains("中止確認中", StringComparison.Ordinal)).Instance.Disabled);
+            var cancelRequests = handler.Requests.Where(request => request.Path.EndsWith("/cancel-preparation", StringComparison.Ordinal)).ToArray();
+            Assert.AreEqual(1, cancelRequests.Length, "A pending request must not be duplicated.");
+            Assert.AreEqual(HttpMethod.Post, cancelRequests[0].Method);
+            Assert.AreEqual($"/api/v2/admin/horse-id-migration-operations/{operationId:D}/cancel-preparation", cancelRequests[0].Path);
+            Assert.IsNull(cancelRequests[0].Body, "Cancellation is a bodyless action against the saved operation.");
+            Assert.IsFalse(handler.Requests.Any(request => request.Path.EndsWith("/execute", StringComparison.Ordinal)
+                || request.Path == "/api/v2/admin/horse-id-migration-operations"),
+                "Cancellation must not execute or stage an operation.");
+        }
+        finally
+        {
+            pending.TrySetResult(Operation(operationId, "AwaitingActions", manifest, null, "CancellationRequested"));
+            await requestTask.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "準備中止の安全確認中です"));
+        Assert.IsFalse(cut.FindAll(".migration-actions")
+            .Any(actions => actions.TextContent.Contains("準備を中止", StringComparison.Ordinal)),
+            "The pending receipt cannot expose a second cancellation action outside the hidden dialog.");
+    }
+
+    [TestMethod]
+    public async Task CancellationRejectionPreservesReceiptUntilManualRefreshAndUnsafePhasesNeverOfferCancel()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var operationId = Guid.Parse("c54c11b0-b17a-4aed-a956-b8feb0c57a74");
+        var manifest = new HorseIdentityMigrationManifest([new(OldHorseId, JraIdentity, true)]);
+        var status = Operation(operationId, "AwaitingActions", manifest, null, "BackedUp");
+        var handler = new MigrationHandler { Status = status, CancellationStatus = HttpStatusCode.Conflict };
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        context.Services.GetRequiredService<NavigationManager>()
+            .NavigateTo($"http://localhost/settings/horse-id-migration?operationId={operationId:D}");
+        var cut = context.Render<HorseIdentityMigrationAdmin>();
+        await ClickAsync(cut, "状態を更新");
+        await ClickFirstAsync(cut, "準備を中止");
+        await ClickLastAsync(cut, "準備を中止");
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "この依頼の状態では準備を中止できません"));
+        StringAssert.Contains(cut.Markup, operationId.ToString("D"), "The last confirmed receipt remains visible after rejection.");
+        Assert.AreEqual(1, handler.Requests.Count(request => request.Path.EndsWith("/cancel-preparation", StringComparison.Ordinal)));
+        Assert.IsFalse(cut.Markup.Contains("中止確認中", StringComparison.Ordinal));
+
+        handler.Status = Operation(operationId, "AwaitingActions", manifest, null, "Applying");
+        await ClickAsync(cut, "状態を更新");
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "この段階では準備中止を行えません"));
+        Assert.IsFalse(cut.FindAll(".migration-actions")
+            .Any(actions => actions.TextContent.Contains("準備を中止", StringComparison.Ordinal)));
+        Assert.AreEqual(1, handler.Requests.Count(request => request.Path.EndsWith("/cancel-preparation", StringComparison.Ordinal)));
+
+        handler.Status = Operation(operationId, "AwaitingActions", manifest, null, "FutureUnknownPhase");
+        await ClickAsync(cut, "状態を更新");
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "保存済み依頼の状態または実行段階を確認できない"));
+        Assert.IsFalse(cut.FindAll(".migration-actions")
+            .Any(actions => actions.TextContent.Contains("準備を中止", StringComparison.Ordinal)));
+
+        handler.Status = Operation(operationId, "Partial", manifest, null, "Partial");
+        await ClickAsync(cut, "状態を更新");
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "未検証または中断状態です"));
+        Assert.IsFalse(cut.FindAll(".migration-actions")
+            .Any(actions => actions.TextContent.Contains("準備を中止", StringComparison.Ordinal)));
+        Assert.AreEqual(1, handler.Requests.Count(request => request.Path.EndsWith("/cancel-preparation", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
+    public async Task MalformedAcceptedCancellationReceiptPreservesPriorReceiptWithoutResending()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var operationId = Guid.Parse("c54c11b0-b17a-4aed-a956-b8feb0c57a74");
+        var manifest = new HorseIdentityMigrationManifest([new(OldHorseId, JraIdentity, true)]);
+        var handler = new MigrationHandler
+        {
+            Status = Operation(operationId, "AwaitingActions", manifest, null, "BackedUp"),
+            CancellationMalformedJson = true,
+        };
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        context.Services.GetRequiredService<NavigationManager>()
+            .NavigateTo($"http://localhost/settings/horse-id-migration?operationId={operationId:D}");
+        var cut = context.Render<HorseIdentityMigrationAdmin>();
+        await ClickAsync(cut, "状態を更新");
+        await ClickFirstAsync(cut, "準備を中止");
+        await ClickLastAsync(cut, "準備を中止");
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup,
+            "中止結果を確認できませんでした。記録を保持し、自動再送せず状態を手動で更新してください。"));
+        StringAssert.Contains(cut.Markup, operationId.ToString("D"),
+            "An invalid 202 receipt must not replace the last confirmed saved-operation receipt.");
+        StringAssert.Contains(cut.Markup, "バックアップ確認済み");
+        Assert.AreEqual(1, handler.Requests.Count(request => request.Path.EndsWith("/cancel-preparation", StringComparison.Ordinal)));
+        Assert.IsFalse(handler.Requests.Any(request => request.Path.EndsWith("/execute", StringComparison.Ordinal)
+            || request.Path == "/api/v2/admin/horse-id-migration-operations"),
+            "A malformed receipt must not trigger a stage, execute, or automatic cancellation retry.");
+    }
+
+    [TestMethod]
+    public async Task CancellationProofFailureAndTerminalCancellationHaveDistinctSafePresentation()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var operationId = Guid.Parse("c54c11b0-b17a-4aed-a956-b8feb0c57a74");
+        var updatedAt = DateTimeOffset.Parse("2026-10-27T12:34:56Z");
+        var handler = new MigrationHandler
+        {
+            Status = new HorseIdentityMigrationOperationResponse(operationId, "AwaitingActions", "PreparationFailed",
+                updatedAt.AddMinutes(-1), updatedAt, [])
+            {
+                ExecutionPhase = "CancellationRequested",
+                ExecutionUpdatedAt = updatedAt,
+            },
+        };
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        context.Services.GetRequiredService<NavigationManager>()
+            .NavigateTo($"http://localhost/settings/horse-id-migration?operationId={operationId:D}");
+        var cut = context.Render<HorseIdentityMigrationAdmin>();
+
+        await ClickAsync(cut, "状態を更新");
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "安全確認ができず、準備を中止できませんでした。保護状態を維持しています。"));
+        StringAssert.Contains(cut.Markup, "2026-10-27 12:34:56 UTC");
+        Assert.IsFalse(cut.Markup.Contains("移行処理の停止:", StringComparison.Ordinal),
+            "A cancellation proof failure must not be displayed as a generic data-migration failure.");
+        Assert.IsFalse(cut.FindAll(".migration-actions")
+            .Any(actions => actions.TextContent.Contains("準備を中止", StringComparison.Ordinal)),
+            "A failed safety proof must not offer retry.");
+
+        handler.Status = new HorseIdentityMigrationOperationResponse(operationId, "Failed", "PreparationCancelled",
+            updatedAt.AddMinutes(-2), updatedAt, [])
+        {
+            ExecutionPhase = "PreparationCancelled",
+            ExecutionUpdatedAt = updatedAt,
+        };
+        await ClickAsync(cut, "状態を更新");
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "書き込み前の準備を中止しました。"));
+        StringAssert.Contains(cut.Markup, "収集は一時停止のままです");
+        Assert.IsFalse(cut.Markup.Contains("移行処理の停止:", StringComparison.Ordinal));
+        Assert.IsFalse(cut.FindAll(".migration-actions")
+            .Any(actions => actions.TextContent.Contains("準備を中止", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
     public async Task SafeFailureCodesShowJapaneseCategoryAndLastConfirmedStage()
     {
         (string Code, string Category, string Reason)[] codes =
@@ -818,6 +999,12 @@ public sealed class HorseIdentityMigrationAdminComponentTests
         await cut.InvokeAsync(() => button.Instance.OnClick.InvokeAsync());
     }
 
+    private static async Task ClickLastAsync(IRenderedComponent<HorseIdentityMigrationAdmin> cut, string label)
+    {
+        var button = cut.FindComponents<FluentButton>().Last(component => component.Markup.Contains(label, StringComparison.Ordinal));
+        await cut.InvokeAsync(() => button.Instance.OnClick.InvokeAsync());
+    }
+
     private static async Task SelectAndAcceptFirstCandidateAsync(IRenderedComponent<HorseIdentityMigrationAdmin> cut)
     {
         if (cut.FindAll(".migration-cards[aria-label='馬ID移行の仮説候補'] .migration-card").Count == 0)
@@ -887,10 +1074,14 @@ public sealed class HorseIdentityMigrationAdminComponentTests
         public List<CapturedRequest> Requests { get; } = [];
         public HorseIdentityMigrationPreview? Preview { get; init; }
         public HorseIdentityMigrationOperationResponse? Staged { get; init; }
-        public HorseIdentityMigrationOperationResponse? Status { get; init; }
+        public HorseIdentityMigrationOperationResponse? Status { get; set; }
         public HorseIdentityMigrationOperationResponse? RequestReceipt { get; init; }
         public HorseIdentityMigrationOperationResponse? Executed { get; init; }
         public HttpStatusCode? ExecuteStatus { get; init; }
+        public HttpStatusCode? CancellationStatus { get; set; }
+        public bool CancellationMalformedJson { get; init; }
+        public HorseIdentityMigrationOperationResponse? CancellationReceipt { get; init; }
+        public TaskCompletionSource<HorseIdentityMigrationOperationResponse>? CancellationPending { get; init; }
         public HttpStatusCode? StatusFailureStatus { get; set; }
         public HorseIdentityMigrationSchemaDiagnostics? SchemaDiagnostics { get; init; }
         public IReadOnlyList<HorseRacingPrediction.Contracts.Horses.HorseSummaryDto> SearchHorses { get; init; } =
@@ -909,8 +1100,29 @@ public sealed class HorseIdentityMigrationAdminComponentTests
             var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
             var path = request.RequestUri!.AbsolutePath;
             Requests.Add(new(request.Method, path, request.RequestUri.Query, body));
+            if (path.EndsWith("/cancel-preparation", StringComparison.Ordinal) && request.Method == HttpMethod.Post
+                && CancellationMalformedJson)
+                return new HttpResponseMessage(HttpStatusCode.Accepted)
+                {
+                    Content = new StringContent("{", System.Text.Encoding.UTF8, "application/json"),
+                };
+            if (path.EndsWith("/cancel-preparation", StringComparison.Ordinal) && request.Method == HttpMethod.Post
+                && CancellationStatus is { } cancellationStatus)
+                return new HttpResponseMessage(cancellationStatus);
+            if (path.EndsWith("/cancel-preparation", StringComparison.Ordinal) && request.Method == HttpMethod.Post
+                && (CancellationPending is not null || CancellationReceipt is not null))
+            {
+                var receipt = CancellationPending is { } cancellationPending
+                    ? await cancellationPending.Task.WaitAsync(cancellationToken)
+                    : CancellationReceipt!;
+                return new HttpResponseMessage(HttpStatusCode.Accepted)
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(receipt, Json), System.Text.Encoding.UTF8, "application/json"),
+                };
+            }
             if (path.StartsWith("/api/v2/admin/horse-id-migration-operations/", StringComparison.Ordinal)
                 && !path.EndsWith("/execute", StringComparison.Ordinal)
+                && !path.EndsWith("/cancel-preparation", StringComparison.Ordinal)
                 && StatusFailureStatus is { } statusFailure)
                 return new HttpResponseMessage(statusFailure);
             if (path.EndsWith("/execute", StringComparison.Ordinal) && ExecuteStatus is { } executeStatus)

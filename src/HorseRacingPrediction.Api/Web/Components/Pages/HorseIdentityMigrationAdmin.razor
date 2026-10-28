@@ -417,11 +417,33 @@
     {
         <p class="migration-error" role="alert">@operationError</p>
     }
-    @if (operation is not null)
-    {
-        <section class="migration-operation-result" aria-labelledby="migration-operation-result-heading">
-            <h3 id="migration-operation-result-heading">保存済み依頼</h3>
-            @if (HasFailureEvidence(operation))
+        @if (operation is not null)
+        {
+            <section class="migration-operation-result" aria-labelledby="migration-operation-result-heading">
+                <h3 id="migration-operation-result-heading">保存済み依頼</h3>
+            @if (IsPreparationCancelled(operation))
+            {
+                <div class="migration-success" role="status" aria-label="書き込み前の準備中止を記録">
+                    <strong>書き込み前の準備を中止しました。</strong>
+                    <p>保存済み依頼、バックアップ、業務データ、履歴は削除していません。収集は一時停止のままです。状態確認だけでは収集の再開を保証しません。</p>
+                    @if (operationIsStale)
+                    {
+                        <p>最新の状態を取得できなかったため、以下は前回確認した中止記録です。必要な場合に「状態を更新」してください。</p>
+                    }
+                </div>
+            }
+            else if (IsCancellationProofFailure(operation))
+            {
+                <div class="migration-warning" role="alert" aria-label="準備中止の安全確認失敗">
+                    <strong>安全確認ができず、準備を中止できませんでした。保護状態を維持しています。</strong>
+                    <p>保存済み依頼、バックアップ、業務データ、履歴は削除していません。移行の自動再実行や収集再開は行わず、最新状態を手動で確認してください。</p>
+                    @if (operation.ExecutionUpdatedAt is { } cancellationCheckAt)
+                    {
+                        <p>安全確認の記録時刻 (UTC): @cancellationCheckAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</p>
+                    }
+                </div>
+            }
+            else if (HasFailureEvidence(operation))
             {
                 <div class="migration-warning" role="alert" aria-label="移行エラー概要">
                     <strong>@FailureStatusSummary(operation)</strong>
@@ -504,9 +526,32 @@
                     <FluentButton Appearance="@Appearance.Accent" OnClick="OpenExecuteConfirmation">この保存済み依頼を実行</FluentButton>
                 </div>
             }
+            @if (operation.Status == "AwaitingActions" && IsPreApplicationCancellationPhase(operation.ExecutionPhase))
+            {
+                @if (CanCancelPreparation)
+                {
+                    <p class="migration-warning" role="status">実行前の準備段階です。段階表示だけでは安全な中止を証明しません。サーバーが書き込み処理の停止、収集の停止状態、データの保護状態を再確認し、確認できない場合は拒否します。</p>
+                    <div class="migration-actions">
+                        <FluentButton Appearance="@Appearance.Outline" OnClick="OpenPreparationCancellationConfirmation">準備を中止</FluentButton>
+                    </div>
+                }
+                else
+                {
+                    <p class="migration-warning" role="alert">中止の可否を確認できる最新状態ではありません。保存済み記録を保持しました。必要な場合に手動で状態を更新してください。</p>
+                }
+            }
+            else if (operation.Status == "AwaitingActions" && operation.ExecutionPhase == "CancellationRequested"
+                && operation.Reason != "PreparationFailed")
+            {
+                <p class="migration-warning" role="status">準備中止の安全確認中です。再送や再実行はせず、必要な場合に手動で状態を更新してください。</p>
+            }
+            else if (operation.Status == "AwaitingActions" && operation.ExecutionPhase is "Applying" or "DataSucceeded" or "Verifying" or "Verified" or "Failed")
+            {
+                <p class="migration-warning" role="alert">この段階では準備中止を行えません。データ適用以後の状態は別の明示的な運用手順で確認してください。記録やバックアップを削除せず、再実行・再開もしません。</p>
+            }
             else if (operation.Status == "AwaitingActions")
             {
-                <p class="migration-warning" role="alert">保存された依頼の内容・fingerprint・実行段階を確認できないため、この画面からは実行できません。手動で状態を更新してください。</p>
+                <p class="migration-warning" role="alert">保存済み依頼の状態または実行段階を確認できないため、実行・準備中止の操作を表示していません。手動で状態を更新してください。</p>
             }
             @if (operation.Results.Count > 0)
             {
@@ -565,6 +610,20 @@
     </FluentDialogFooter>
 </FluentDialog>
 
+<FluentDialog Hidden="@(!confirmPreparationCancellation)" HiddenChanged="@(hidden => confirmPreparationCancellation = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="migration-cancel-preparation-title" Style="width:min(680px, calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="@(!busy)"><h2 id="migration-cancel-preparation-title">実行前の準備を中止しますか？</h2></FluentDialogHeader>
+    <FluentDialogBody>
+        <p>依頼 @operation?.OperationId.ToString("D") の、書き込み前の準備だけを中止するよう要求します。</p>
+        <p class="migration-warning">画面の段階表示だけでは安全性を証明できません。サーバーが書き込み処理の停止、収集の停止状態、データの保護状態を再確認し、証明できなければ中止を拒否します。</p>
+        <p>この操作は保存済み依頼、バックアップ、業務データ、履歴を削除しません。移行・新しい依頼・再試行・収集の再開は行いません。収集は一時停止のままです。</p>
+        <p>結果を受け取れなかった場合も自動再送せず、保存済み依頼の状態を手動で更新してください。</p>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton OnClick="ClosePreparationCancellationConfirmation" Disabled="@busy">戻って確認</FluentButton>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="CancelPreparationAsync" Disabled="@(!CanCancelPreparation)">@(busy && busyMessage == "実行前の準備を中止しています…" ? "中止確認中…" : "準備を中止")</FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
 @code {
     private readonly List<MigrationCandidate> Candidates = [];
 
@@ -582,7 +641,9 @@
     private bool busy;
     private bool confirmStage;
     private bool confirmExecute;
+    private bool confirmPreparationCancellation;
     private bool executeUncertain;
+    private bool preparationCancellationUncertain;
     private bool stageRequestRejected;
     private bool interactiveReady;
     private HorseIdentityMigrationSchemaDiagnostics? schemaDiagnostics;
@@ -629,6 +690,9 @@
                 && HorseIdentityMigrationManifestPolicy.Validate(current.SavedManifest).IsValid;
         }
     }
+    private bool CanCancelPreparation => interactiveReady && !busy && !operationIsStale
+        && !preparationCancellationUncertain && operation is { Status: "AwaitingActions" } current
+        && IsPreApplicationCancellationPhase(current.ExecutionPhase);
     private bool CanAddCandidate => interactiveReady && !busy && Candidates.Count < HorseIdentityMigrationManifest.MaximumEntries
         && !Candidates.Any(candidate => string.Equals(candidate.OldHorseId, selectedHorseId, StringComparison.Ordinal))
         && horseSearchResults?.Any(candidate => string.Equals(candidate.HorseId, selectedHorseId, StringComparison.Ordinal)) == true
@@ -1000,6 +1064,7 @@
             {
                 operationIsStale = false;
                 executeUncertain = false;
+                preparationCancellationUncertain = false;
                 operationIdInput = operation.OperationId.ToString("D");
                 requestKeyInput = string.Empty;
                 stageRequestRejected = false;
@@ -1032,6 +1097,70 @@
     private void OpenExecuteConfirmation()
     {
         if (CanExecute) confirmExecute = true;
+    }
+
+    private void OpenPreparationCancellationConfirmation()
+    {
+        if (CanCancelPreparation) confirmPreparationCancellation = true;
+    }
+
+    private void ClosePreparationCancellationConfirmation()
+    {
+        if (!busy) confirmPreparationCancellation = false;
+    }
+
+    private async Task CancelPreparationAsync()
+    {
+        if (!confirmPreparationCancellation || !CanCancelPreparation || operation is null) return;
+        var operationId = operation.OperationId;
+        busy = true;
+        busyMessage = "実行前の準備を中止しています…";
+        operationError = null;
+        preparationCancellationUncertain = false;
+        try
+        {
+            var response = await Api.CancelHorseIdentityMigrationPreparationAsync(operationId);
+            if (response is null)
+            {
+                operationIsStale = true;
+                preparationCancellationUncertain = true;
+                operationError = "中止結果を受け取れませんでした。自動再送はしていません。保存済み記録を保持し、必要な場合に状態を手動で更新してください。";
+                confirmPreparationCancellation = false;
+                return;
+            }
+
+            operation = response;
+            operationIdInput = response.OperationId.ToString("D");
+            RememberOperationId(response.OperationId);
+            operationIsStale = false;
+            preparationCancellationUncertain = false;
+            confirmPreparationCancellation = false;
+        }
+        catch (HttpRequestException exception)
+        {
+            operationIsStale = true;
+            preparationCancellationUncertain = true;
+            operationError = exception.StatusCode switch
+            {
+                HttpStatusCode.NotFound => "保存済み依頼を見つけられませんでした。記録を保持しました。必要な場合に状態を手動で更新してください。",
+                HttpStatusCode.Conflict => "この依頼の状態では準備を中止できません。記録を保持しました。状態を手動で更新してください。",
+                HttpStatusCode.ServiceUnavailable => "安全な中止結果を確認できませんでした。記録を保持し、自動再送せず状態を手動で更新してください。",
+                _ => "中止結果を確認できませんでした。記録を保持し、自動再送せず状態を手動で更新してください。",
+            };
+            confirmPreparationCancellation = false;
+        }
+        catch (OperationCanceledException)
+        {
+            operationIsStale = true;
+            preparationCancellationUncertain = true;
+            operationError = "中止結果を確認できませんでした。記録を保持し、自動再送せず状態を手動で更新してください。";
+            confirmPreparationCancellation = false;
+        }
+        finally
+        {
+            busy = false;
+            busyMessage = null;
+        }
     }
 
     private void CloseExecuteConfirmation()
@@ -1289,6 +1418,7 @@
     {
         "AwaitingActions" => "手動操作待ち",
         "Running" => "実行中",
+        "Failed" when IsPreparationCancelled(operation) => "書き込み前の準備中止",
         "Succeeded" when operation.ExecutionPhase == "Verified" => "検証済み完了",
         "Succeeded" when operation.ExecutionPhase is "DataSucceeded" or "Verifying" => "データ移行済み・検証中",
         "Succeeded" => "成功記録・検証未確認",
@@ -1303,6 +1433,7 @@
     {
         "Succeeded" when operation.ExecutionPhase == "Verified" => "success",
         "Running" => "info",
+        "Failed" when IsPreparationCancelled(operation) => "info",
         "AwaitingActions" => "warning",
         _ => "warning",
     };
@@ -1320,13 +1451,27 @@
         "Verifying" => "読み取り専用検証中",
         "Verified" => "検証済み",
         "Failed" => "失敗・要確認",
+        "CancellationRequested" => "準備中止の安全確認中",
+        "PreparationCancelled" => "書き込み前の準備中止",
         _ => "確認できない段階（安全のため追加操作は停止）",
     };
 
+    private static bool IsPreApplicationCancellationPhase(string? phase) => phase is
+        "StoppingApi" or "ApiExited" or "BackedUp";
+
+    private static bool IsPreparationCancelled(HorseIdentityMigrationOperationResponse value) =>
+        value.Status == "Failed" && value.Reason == "PreparationCancelled"
+        && value.ExecutionPhase == "PreparationCancelled";
+
+    private static bool IsCancellationProofFailure(HorseIdentityMigrationOperationResponse value) =>
+        value.Status == "AwaitingActions" && value.ExecutionPhase == "CancellationRequested"
+        && value.Reason == "PreparationFailed";
+
     private static bool HasFailureEvidence(HorseIdentityMigrationOperationResponse value) =>
-        value.Status is "Failed" or "Partial" or "Interrupted"
+        !IsPreparationCancelled(value) && !IsCancellationProofFailure(value)
+        && (value.Status is "Failed" or "Partial" or "Interrupted"
         || IsFailureCode(value.Reason)
-        || value.Results.Any(result => IsFailureCode(result.Code));
+        || value.Results.Any(result => IsFailureCode(result.Code)));
 
     private static bool IsFailureCode(string? code) => code is
         "PreparationFailed" or "BackupFailed" or "InspectionFailed" or "ApplyFailed"
@@ -1400,6 +1545,8 @@
         "DataSucceeded" => "データ移行済み・検証待ち",
         "Verifying" => "読み取り専用検証中",
         "Verified" => "検証済み",
+        "CancellationRequested" => "準備中止の安全確認中",
+        "PreparationCancelled" => "書き込み前の準備中止",
         _ => "記録から確認できません",
     };
 
@@ -1412,6 +1559,7 @@
         "StaleOperation" => "依頼時の前提が古い状態",
         "UnverifiedPages" => "未検証のデータが残っています",
         "OperationInterrupted" => "処理が中断しました",
+        "PreparationCancelled" => "書き込み前の準備を中止",
         "PreparationFailed" or "BackupFailed" or "InspectionFailed" or "ApplyFailed"
             or "VerificationFailed" or "ChildFailed" or "StartupFailed" => FailureReason(FailureCategory(reason)!),
         _ => "詳しい原因は記録されていません",

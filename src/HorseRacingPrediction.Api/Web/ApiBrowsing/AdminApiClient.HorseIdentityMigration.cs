@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using HorseRacingPrediction.Contracts.Identity;
 
 namespace HorseRacingPrediction.Api.Web.ApiBrowsing;
@@ -68,6 +69,28 @@ public sealed partial class AdminApiClient
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<HorseIdentityMigrationOperationResponse>(
             JsonOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<HorseIdentityMigrationOperationResponse?> CancelHorseIdentityMigrationPreparationAsync(
+        Guid operationId, CancellationToken cancellationToken = default)
+    {
+        if (operationId == Guid.Empty) return null;
+        using var response = await _httpClient.PostAsync(
+            $"{HorseIdentityMigrationOperationsPath}/{operationId:D}/cancel-preparation", content: null,
+            cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.NoContent)
+            return null;
+        response.EnsureSuccessStatusCode();
+        try
+        {
+            return await response.Content.ReadFromJsonAsync<HorseIdentityMigrationOperationResponse>(
+                JsonOptions, cancellationToken).ConfigureAwait(false);
+        }
+        catch (JsonException exception)
+        {
+            throw new HttpRequestException(
+                "The preparation cancellation endpoint returned an invalid receipt.", exception, response.StatusCode);
+        }
     }
 
     private async Task<T?> PostJsonAsync<T>(string requestUri, object body, CancellationToken cancellationToken)
