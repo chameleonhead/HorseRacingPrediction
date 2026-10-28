@@ -806,7 +806,7 @@ jobs:
             horse_id_migration_copy_store_set "$data_directory" "$backup_directory" yes "${backup_paths[@]}"
             horse_id_migration_update_recovery_env "$APP_DIRECTORY/.env" "$IMAGE_NAME" "$IMAGE_TAG"
             operator_override="$APP_DIRECTORY/.operator-ui-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.compose.yml"
-            printf '%s\n' 'services:' '  api:' '    environment:' '      HRP_HORSE_IDENTITY_OPERATOR_ONLY: "true"' > "$operator_override"
+            horse_id_migration_write_operator_override "$operator_override" "$OPERATOR_UI_RECOVERY_OPERATION_ID"
             horse_id_migration_release_source_ownership
             leases_held=false
             target_started=true
@@ -819,6 +819,11 @@ jobs:
             [ "$image" = "$target_image" ] && [ "$image_id" = "$target_image_id" ] || { echo "Running operator API image differs from the verified target content identity." >&2; exit 1; }
             docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$container" | grep -Fx 'HRP_HORSE_IDENTITY_OPERATOR_ONLY=true' >/dev/null || {
               echo "Target API container did not receive the protected operator-only flag." >&2
+              exit 1
+            }
+            operator_target_environment="HRP_HORSE_IDENTITY_OPERATOR_OPERATION_ID=$OPERATOR_UI_RECOVERY_OPERATION_ID"
+            docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$container" | grep -Fx "$operator_target_environment" >/dev/null || {
+              echo "Target API container did not receive the exact protected operation GUID." >&2
               exit 1
             }
             target_proven=true

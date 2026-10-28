@@ -142,10 +142,12 @@ operator = workflow.dig('jobs','recover-operator-ui')
 raise 'operator recovery must be an independent verified production job' unless operator && operator['if'].to_s.include?('operator_ui_recovery_operation_id') && Array(operator['needs']).sort == ['build-and-push','verify'] && operator['environment'] == 'production' && operator['timeout-minutes'] == 50
 operator_script = operator['steps'].find { |s| s['name'] == 'Bootstrap only the protected operator UI' }.dig('with','script')
 raise 'operator recovery must bind target image to the exact workflow SHA' unless operator_script.include?('TARGET_COMMIT_SHA') && operator_script.include?('sha-$TARGET_COMMIT_SHA')
+raise 'protected override must derive its exact operation target only from the existing validated workflow input' unless operator_script.include?('horse_id_migration_write_operator_override "$operator_override" "$OPERATOR_UI_RECOVERY_OPERATION_ID"')
+raise 'container proof must verify the exact operation target beside the forced-mode flag before accepting protected readiness' unless operator_script.include?('operator_target_environment="HRP_HORSE_IDENTITY_OPERATOR_OPERATION_ID=$OPERATOR_UI_RECOVERY_OPERATION_ID"') && operator_script.include?('grep -Fx "$operator_target_environment"')
 raise 'operator binding and ownership must share the configured physical/logical source pairs' unless operator_script.index('ownership_pairs=()') < operator_script.index('horse_id_migration_validate_operator_binding') && !operator_script.include?('horse_id_migration_validate_operator_binding "$data_directory" "$OPERATOR_UI_RECOVERY_OPERATION_ID" "${source_paths[@]}"')
 first_pause = operator_script.index('horse_id_migration_assert_recovery_collection_state')
 second_pause = operator_script.index('horse_id_migration_assert_recovery_collection_state', first_pause + 1)
-operator_positions = [operator_script.index('horse_id_migration_assert_operator_status'), operator_script.index('horse_id_migration_validate_operator_binding', operator_script.index('horse_id_migration_assert_operator_status')), first_pause, operator_script.index('docker pull '), operator_script.index('horse_id_migration_check_image_capability'), operator_script.index("stage=stopping\ndocker compose --env-file .env stop api"), operator_script.index('horse_id_migration_assert_api_container_exited'), operator_script.index('horse_id_migration_acquire_source_ownership --preserve-existing-maintenance-gates'), operator_script.index('horse_id_migration_acquire_journal_operation_lock'), second_pause, operator_script.rindex('horse_id_migration_validate_operator_binding'), operator_script.index('horse_id_migration_copy_store_set'), operator_script.rindex('horse_id_migration_update_recovery_env'), operator_script.index('HRP_HORSE_IDENTITY_OPERATOR_ONLY'), operator_script.rindex('docker compose --env-file .env -f docker-compose.yml -f "$operator_override" up'), operator_script.index('horse_id_migration_assert_operator_ui_ready')]
+operator_positions = [operator_script.index('horse_id_migration_assert_operator_status'), operator_script.index('horse_id_migration_validate_operator_binding', operator_script.index('horse_id_migration_assert_operator_status')), first_pause, operator_script.index('docker pull '), operator_script.index('horse_id_migration_check_image_capability'), operator_script.index("stage=stopping\ndocker compose --env-file .env stop api"), operator_script.index('horse_id_migration_assert_api_container_exited'), operator_script.index('horse_id_migration_acquire_source_ownership --preserve-existing-maintenance-gates'), operator_script.index('horse_id_migration_acquire_journal_operation_lock'), second_pause, operator_script.rindex('horse_id_migration_validate_operator_binding'), operator_script.index('horse_id_migration_copy_store_set'), operator_script.rindex('horse_id_migration_update_recovery_env'), operator_script.index('horse_id_migration_write_operator_override'), operator_script.rindex('docker compose --env-file .env -f docker-compose.yml -f "$operator_override" up'), operator_script.index('horse_id_migration_assert_operator_ui_ready')]
 raise 'operator recovery must verify, drain, lease, back up, and start protected UI in order' unless operator_positions.all? && operator_positions.each_cons(2).all? { |a,b| a < b }
 raise 'operator failure cleanup must be installed before leases, restore old image only after binding recheck, and preserve proven target' unless operator_script.index('trap operator_cleanup EXIT') < operator_script.index('horse_id_migration_acquire_source_ownership') && operator_script.include?('old_restore_override') && operator_script.include?('restored_image_id" != "$old_image_id"') && operator_script.index('target_proven=true') < operator_script.index('horse_id_migration_assert_operator_ui_ready')
 raise 'operator rollback must use an exact local image ID with pull disabled, never a config ID as a manifest digest' unless operator_script.include?('docker image tag "$old_image_id" "$old_restore_local_image"') && operator_script.include?('pull_policy: never') && !operator_script.include?('old_image_repository@$old_image_id')
@@ -255,9 +257,11 @@ assert 'api_startup_recovery' in w['jobs']['deploy']['if'] and 'api_startup_reco
 operator=w['jobs']['recover-operator-ui']; assert 'operator_ui_recovery_operation_id' in operator['if'] and sorted(operator['needs'])==['build-and-push','verify'] and operator['environment']=='production' and operator['timeout-minutes']==50
 operator_script=next(s for s in operator['steps'] if s.get('name')=='Bootstrap only the protected operator UI')['with']['script']
 assert 'TARGET_COMMIT_SHA' in operator_script and 'sha-$TARGET_COMMIT_SHA' in operator_script
+assert 'horse_id_migration_write_operator_override "$operator_override" "$OPERATOR_UI_RECOVERY_OPERATION_ID"' in operator_script
+assert 'operator_target_environment="HRP_HORSE_IDENTITY_OPERATOR_OPERATION_ID=$OPERATOR_UI_RECOVERY_OPERATION_ID"' in operator_script and 'grep -Fx "$operator_target_environment"' in operator_script
 assert operator_script.index('ownership_pairs=()')<operator_script.index('horse_id_migration_validate_operator_binding') and 'horse_id_migration_validate_operator_binding "$data_directory" "$OPERATOR_UI_RECOVERY_OPERATION_ID" "${source_paths[@]}"' not in operator_script
 first_pause=operator_script.find('horse_id_migration_assert_recovery_collection_state'); second_pause=operator_script.find('horse_id_migration_assert_recovery_collection_state',first_pause+1)
-operator_positions=[operator_script.find('horse_id_migration_assert_operator_status'),operator_script.find('horse_id_migration_validate_operator_binding',operator_script.find('horse_id_migration_assert_operator_status')),first_pause,operator_script.find('docker pull '),operator_script.find('horse_id_migration_check_image_capability'),operator_script.find('stage=stopping\ndocker compose --env-file .env stop api'),operator_script.find('horse_id_migration_assert_api_container_exited'),operator_script.find('horse_id_migration_acquire_source_ownership --preserve-existing-maintenance-gates'),operator_script.find('horse_id_migration_acquire_journal_operation_lock'),second_pause,operator_script.rfind('horse_id_migration_validate_operator_binding'),operator_script.find('horse_id_migration_copy_store_set'),operator_script.rfind('horse_id_migration_update_recovery_env'),operator_script.find('HRP_HORSE_IDENTITY_OPERATOR_ONLY'),operator_script.rfind('docker compose --env-file .env -f docker-compose.yml -f "$operator_override" up'),operator_script.find('horse_id_migration_assert_operator_ui_ready')]; assert operator_positions==sorted(operator_positions)
+operator_positions=[operator_script.find('horse_id_migration_assert_operator_status'),operator_script.find('horse_id_migration_validate_operator_binding',operator_script.find('horse_id_migration_assert_operator_status')),first_pause,operator_script.find('docker pull '),operator_script.find('horse_id_migration_check_image_capability'),operator_script.find('stage=stopping\ndocker compose --env-file .env stop api'),operator_script.find('horse_id_migration_assert_api_container_exited'),operator_script.find('horse_id_migration_acquire_source_ownership --preserve-existing-maintenance-gates'),operator_script.find('horse_id_migration_acquire_journal_operation_lock'),second_pause,operator_script.rfind('horse_id_migration_validate_operator_binding'),operator_script.find('horse_id_migration_copy_store_set'),operator_script.rfind('horse_id_migration_update_recovery_env'),operator_script.find('horse_id_migration_write_operator_override'),operator_script.rfind('docker compose --env-file .env -f docker-compose.yml -f "$operator_override" up'),operator_script.find('horse_id_migration_assert_operator_ui_ready')]; assert operator_positions==sorted(operator_positions)
 assert operator_script.index('trap operator_cleanup EXIT')<operator_script.index('horse_id_migration_acquire_source_ownership') and 'old_restore_override' in operator_script and 'restored_image_id" != "$old_image_id"' in operator_script and operator_script.index('target_proven=true')<operator_script.index('horse_id_migration_assert_operator_ui_ready')
 assert 'docker image tag "$old_image_id" "$old_restore_local_image"' in operator_script and 'pull_policy: never' in operator_script and 'old_image_repository@$old_image_id' not in operator_script
 assert not re.search(r'horse_id_migration_run_fixed_command|horse-id-migration(?:\s|["\']|$)|\b(?:resume|retry|reset|DELETE|terraform|lambda|aws|docker exec)\b',operator_script,re.I)
@@ -306,7 +310,6 @@ print('PASS parsed workflow semantics')
 '@
     $yamlResult = & $pythonCommand -c $yamlSemanticScript $workflowPath 2>&1
     Assert-Case ($LASTEXITCODE -eq 0) "Parsed workflow semantic validation requires Ruby or PyYAML: $(($yamlResult -join "`n"))"
-    if ($PythonSemanticOnly) { return }
 }
 
 $eligibilityExtractor = @'
@@ -352,6 +355,148 @@ $helperBashPath = ConvertTo-BashPath $helperPath
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("hrp-migration-deploy-test-" + [guid]::NewGuid().ToString('N'))
 [void](New-Item -ItemType Directory -Path $tempRoot)
 $tempBashPath = ConvertTo-BashPath $tempRoot
+
+function Invoke-OperatorOverrideSemanticValidation([string] $Path, [string] $ExpectedOperationId) {
+    if ($ruby -and -not $PythonSemanticOnly) {
+        $semantic = @'
+require 'yaml'
+document = YAML.parse_file(ARGV.fetch(0))
+walk = lambda do |node|
+  next if node.nil?
+  if node.is_a?(Psych::Nodes::Mapping)
+    keys = node.children.each_slice(2).map { |pair| pair.first.value }
+    raise 'duplicate YAML mapping key' unless keys.uniq.length == keys.length
+  end
+  node.children&.each { |child| walk.call(child) }
+end
+walk.call(document.root)
+value = YAML.safe_load_file(ARGV.fetch(0), aliases: false)
+expected = {
+  'HRP_HORSE_IDENTITY_OPERATOR_ONLY' => 'true',
+  'HRP_HORSE_IDENTITY_OPERATOR_OPERATION_ID' => ARGV.fetch(1)
+}
+abort 'protected Compose environment must contain exactly the forced flag and its exact selected operation GUID' unless value.dig('services','api','environment') == expected
+'@
+        $result = & $ruby.Source -e $semantic $Path $ExpectedOperationId 2>&1
+    }
+    else {
+        $semantic = @'
+import sys,yaml
+class StrictLoader(yaml.SafeLoader): pass
+def strict_mapping(loader,node,deep=False):
+    result={}
+    for key_node,value_node in node.value:
+        key=loader.construct_object(key_node,deep=deep)
+        if key in result: raise ValueError('duplicate YAML mapping key')
+        result[key]=loader.construct_object(value_node,deep=deep)
+    return result
+StrictLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,strict_mapping)
+value=yaml.load(open(sys.argv[1],encoding='utf-8'),Loader=StrictLoader)
+expected={'HRP_HORSE_IDENTITY_OPERATOR_ONLY':'true','HRP_HORSE_IDENTITY_OPERATOR_OPERATION_ID':sys.argv[2]}
+assert value['services']['api']['environment']==expected, 'protected Compose environment must contain exactly the forced flag and its exact selected operation GUID'
+'@
+        $result = & $pythonCommand -c $semantic $Path $ExpectedOperationId 2>&1
+    }
+    return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($result -join "`n") }
+}
+
+$expectedOperatorOperationId = '12345678-1234-4234-8234-123456789abc'
+$operatorOverridePath = Join-Path $tempRoot 'protected-operator.compose.yml'
+$operatorOverrideBashPath = ConvertTo-BashPath $operatorOverridePath
+$writeOperatorOverride = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+horse_id_migration_write_operator_override $(Quote-Bash $operatorOverrideBashPath) $(Quote-Bash $expectedOperatorOperationId)
+"@
+Assert-Case ($writeOperatorOverride.ExitCode -eq 0) "The actual deployment helper must safely write the protected Compose override. $($writeOperatorOverride.Output)"
+$validOperatorOverride = Invoke-OperatorOverrideSemanticValidation $operatorOverridePath $expectedOperatorOperationId
+Assert-Case ($validOperatorOverride.ExitCode -eq 0) "Parsed Compose must carry exactly the existing selected GUID beside the forced flag. $($validOperatorOverride.Output)"
+Write-Output 'PASS protected Compose semantics bind exact existing operator GUID'
+
+$uppercaseOperationId = $expectedOperatorOperationId.ToUpperInvariant()
+$uppercaseOperatorOverridePath = Join-Path $tempRoot 'uppercase-operator.compose.yml'
+$uppercaseOperatorOverrideBashPath = ConvertTo-BashPath $uppercaseOperatorOverridePath
+$writeUppercaseOperatorOverride = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+horse_id_migration_write_operator_override $(Quote-Bash $uppercaseOperatorOverrideBashPath) $(Quote-Bash $uppercaseOperationId)
+"@
+Assert-Case ($writeUppercaseOperatorOverride.ExitCode -eq 0) "The helper must preserve the existing GUID validator's case-insensitive contract. $($writeUppercaseOperatorOverride.Output)"
+$uppercaseOperatorOverride = Invoke-OperatorOverrideSemanticValidation $uppercaseOperatorOverridePath $uppercaseOperationId
+Assert-Case ($uppercaseOperatorOverride.ExitCode -eq 0) "Parsed Compose must preserve the exact validated input spelling. $($uppercaseOperatorOverride.Output)"
+Write-Output 'PASS uppercase valid GUID remains accepted and bound exactly'
+
+$legacyOperatorOverridePath = Join-Path $tempRoot 'legacy-operator.compose.yml'
+[IO.File]::WriteAllText($legacyOperatorOverridePath, "services:`n  api:`n    environment:`n      HRP_HORSE_IDENTITY_OPERATOR_ONLY: `"true`"`n")
+$legacyOperatorOverride = Invoke-OperatorOverrideSemanticValidation $legacyOperatorOverridePath $expectedOperatorOperationId
+Assert-Case ($legacyOperatorOverride.ExitCode -ne 0) 'The original flag-only Compose override must fail the exact target-binding semantic assertion.'
+Write-Output 'PASS expected-red legacy flag-only override rejected for missing target'
+
+$wrongOperatorOverridePath = Join-Path $tempRoot 'wrong-operator.compose.yml'
+$wrongOperationId = 'abcdefab-cdef-4abc-8def-abcdefabcdef'
+$writeWrongOperatorOverride = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+horse_id_migration_write_operator_override $(Quote-Bash (ConvertTo-BashPath $wrongOperatorOverridePath)) $(Quote-Bash $wrongOperationId)
+"@
+Assert-Case ($writeWrongOperatorOverride.ExitCode -eq 0) "A different valid target should still be syntactically representable. $($writeWrongOperatorOverride.Output)"
+$wrongOperatorOverride = Invoke-OperatorOverrideSemanticValidation $wrongOperatorOverridePath $expectedOperatorOperationId
+Assert-Case ($wrongOperatorOverride.ExitCode -ne 0) 'A valid but different operation GUID must fail exact target binding.'
+
+$duplicateOperatorOverridePath = Join-Path $tempRoot 'duplicate-operator.compose.yml'
+[IO.File]::WriteAllText($duplicateOperatorOverridePath, "services:`n  api:`n    environment:`n      HRP_HORSE_IDENTITY_OPERATOR_ONLY: `"true`"`n      HRP_HORSE_IDENTITY_OPERATOR_OPERATION_ID: `"$expectedOperatorOperationId`"`n      HRP_HORSE_IDENTITY_OPERATOR_OPERATION_ID: `"$wrongOperationId`"`n")
+$duplicateOperatorOverride = Invoke-OperatorOverrideSemanticValidation $duplicateOperatorOverridePath $expectedOperatorOperationId
+Assert-Case ($duplicateOperatorOverride.ExitCode -ne 0) 'Duplicate target environment keys must fail strict YAML parsing.'
+
+$malformedOperatorOverridePath = Join-Path $tempRoot 'malformed-operator.compose.yml'
+$malformedOperatorOverrideBashPath = ConvertTo-BashPath $malformedOperatorOverridePath
+$malformedOperatorOverride = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+horse_id_migration_write_operator_override $(Quote-Bash $malformedOperatorOverrideBashPath) 'not-a-guid'
+"@
+Assert-Case ($malformedOperatorOverride.ExitCode -ne 0 -and -not (Test-Path -LiteralPath $malformedOperatorOverridePath)) 'Malformed operation GUIDs must fail before creating a Compose override.'
+
+$missingOperatorOverridePath = Join-Path $tempRoot 'missing-operator.compose.yml'
+$missingOperatorOverrideBashPath = ConvertTo-BashPath $missingOperatorOverridePath
+$missingOperatorOverride = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+horse_id_migration_write_operator_override $(Quote-Bash $missingOperatorOverrideBashPath)
+"@
+Assert-Case ($missingOperatorOverride.ExitCode -ne 0 -and -not (Test-Path -LiteralPath $missingOperatorOverridePath)) 'A missing operation GUID must fail before creating a Compose override.'
+
+$zeroOperatorOverridePath = Join-Path $tempRoot 'zero-operator.compose.yml'
+$zeroOperatorOverrideBashPath = ConvertTo-BashPath $zeroOperatorOverridePath
+$zeroOperatorOverride = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+horse_id_migration_write_operator_override $(Quote-Bash $zeroOperatorOverrideBashPath) '00000000-0000-0000-0000-000000000000'
+"@
+Assert-Case ($zeroOperatorOverride.ExitCode -ne 0 -and -not (Test-Path -LiteralPath $zeroOperatorOverridePath)) 'Guid.Empty must fail before creating a Compose override.'
+
+$injectionOperatorOverridePath = Join-Path $tempRoot 'injection-operator.compose.yml'
+$injectionOperatorOverrideBashPath = ConvertTo-BashPath $injectionOperatorOverridePath
+$injectionOperationId = "12345678-1234-4234-8234-123456789abc`n  arbitrary: true"
+$injectionOperatorOverride = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+horse_id_migration_write_operator_override $(Quote-Bash $injectionOperatorOverrideBashPath) $(Quote-Bash $injectionOperationId)
+"@
+Assert-Case ($injectionOperatorOverride.ExitCode -ne 0 -and -not (Test-Path -LiteralPath $injectionOperatorOverridePath)) 'Newline/injection input must fail before creating a Compose override.'
+
+$existingOperatorOverridePath = Join-Path $tempRoot 'existing-operator.compose.yml'
+$existingOperatorOverrideBashPath = ConvertTo-BashPath $existingOperatorOverridePath
+$existingOperatorOverrideContents = 'preserve existing override'
+[IO.File]::WriteAllText($existingOperatorOverridePath, $existingOperatorOverrideContents)
+$existingOperatorOverride = Invoke-Bash @"
+set -euo pipefail
+. $(Quote-Bash $helperBashPath)
+horse_id_migration_write_operator_override $(Quote-Bash $existingOperatorOverrideBashPath) $(Quote-Bash $expectedOperatorOperationId)
+"@
+Assert-Case ($existingOperatorOverride.ExitCode -ne 0 -and [IO.File]::ReadAllText($existingOperatorOverridePath) -ceq $existingOperatorOverrideContents) 'An existing Compose override must be left unchanged.'
+
+if ($PythonSemanticOnly) { return }
 
 function Invoke-WorkflowInteropProducer([string] $Payload, [string] $RunnerTemporaryRoot, [string] $DotNetTemporaryRoot, [int] $TimeoutMilliseconds = 180000) {
     $process = [System.Diagnostics.Process]::new()

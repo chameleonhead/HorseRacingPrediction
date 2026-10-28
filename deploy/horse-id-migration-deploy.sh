@@ -14,6 +14,23 @@ horse_id_migration_validate_guid() {
     [[ "${operation_id//-/}" != "00000000000000000000000000000000" ]]
 }
 
+horse_id_migration_write_operator_override() {
+  local override_path=${1-}
+  local operation_id=${2-}
+  horse_id_migration_validate_guid "$operation_id" || return 1
+  [[ -n "$override_path" && ! -e "$override_path" && ! -L "$override_path" ]] || return 1
+  (
+    umask 077
+    set -o noclobber
+    printf '%s\n' \
+      'services:' \
+      '  api:' \
+      '    environment:' \
+      '      HRP_HORSE_IDENTITY_OPERATOR_ONLY: "true"' \
+      "      HRP_HORSE_IDENTITY_OPERATOR_OPERATION_ID: \"$operation_id\"" > "$override_path"
+  )
+}
+
 horse_id_migration_require_tools() {
   local python_command=${HRP_PYTHON3:-python3}
   command -v "$python_command" >/dev/null 2>&1 || {
