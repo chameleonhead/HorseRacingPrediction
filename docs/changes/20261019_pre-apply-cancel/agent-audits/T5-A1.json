@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261019_pre-apply-cancel",
+  "taskId": "T5",
+  "attemptId": "T5-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC1", "AC2"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "Selected high via spawn_agent; runtime telemetry unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "Runtime telemetry unavailable"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.Api/IdentityMigration/HorseIdentityMigrationSupervisor.cs; HorseIdentityMigrationMaintenanceOwnership.cs; HorseIdentityMigrationRuntimeOwnership.cs; HorseIdentityMigrationRuntimeMode.cs; HorseIdentityMigrationPublicMapper.cs; Endpoints/IdentityMigration/HorseIdentityMigrationEndpoints.cs; HorseIdentityMigrationExecutionPolicy.cs (cancellation diagnostic only); HorseIdentityMigrationJournal.cs (cancellation diagnostic only); tests/HorseRacingPrediction.Api.Tests/HorseIdentityMigrationRuntimeOwnershipTests.cs; HorseIdentityMigrationRuntimeModeTests.cs; HorseIdentityMigrationEndpointsTests.cs; HorseIdentityMigrationJournalTests.cs; tests/scripts/test-horse-id-migration-supervisor.ps1"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "reason": "Runtime telemetry unavailable"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "Active effort unavailable"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "Active effort unavailable"
+  },
+  "startRevision": "7699e736",
+  "endRevisionOrPatch": "Read-only T5 plan delivered27Oct; no implementation patch",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Lead CodeGraph reread confirms forced-host predicate and operation/bootstrap authorization separation. Planning only, not feature test proof.",
+    "promoted": false,
+    "escapedDefects": 0,
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

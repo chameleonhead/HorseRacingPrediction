@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261019_pre-apply-cancel",
+  "taskId": "T4",
+  "attemptId": "T4-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC1", "AC2"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime does not expose agent model telemetry"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime does not expose per-agent usage"
+  },
+  "scope": [
+    "docs/changes/20261019_pre-apply-cancel/README.md",
+    "docs/changes/20261019_pre-apply-cancel/agent-audits/T4-A1.json",
+    "/tmp/hrp-t4-source-only-20261028"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review effort unavailable; Lead independently parsed TRX and source provenance"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "not measured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "not exposed by runtime"
+  },
+  "startRevision": "7699e7368d86dca3ebd5b1652b7b752613dee73a",
+  "endRevisionOrPatch": "Source-only /tmp/hrp-t4-source-only-20261028; 24-file overlay b2a067407f68691216bb9f5dcbaf58641c15583bddcb850cde2043730d496131; normalized input aggregate 07217c28e7c50fe1f178e6a41ef903a14ed5f6a9cad506fa709c17415f416010",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Formatter/build passed; full suite 2,110 passed / 8 baseline-identical skips / 0 failed. Deploy fixture 2/2; Ruby guard, pipeline, collector 14/14, Playwright, EF, vulnerability and repair gates passed. Source-only tree excluded generated state; Node/SQLite matched packages. Lead verified TRX/provenance. Stale DB/corrupt copied Node were closed by source-only rerun; collector passed with TMPDIR/TMP/TEMP=/tmp and runner temp preserved.",
+    "promoted": false,
+    "escapedDefects": 0,
+    "retries": 3,
+    "leadCorrections": 1,
+    "reviewPasses": 1,
+    "escalations": 0,
+    "decision": "accept",
+    "reviewMode": "ac-group",
+    "detailReviewReason": null
+  }
+}

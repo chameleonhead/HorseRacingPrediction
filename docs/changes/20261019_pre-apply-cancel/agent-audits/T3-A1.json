@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261019_pre-apply-cancel",
+  "taskId": "T3",
+  "attemptId": "T3-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC1", "AC2"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime does not expose agent model telemetry"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime does not expose per-agent usage"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.Api/Web/ApiBrowsing/AdminApiClient.HorseIdentityMigration.cs",
+    "src/HorseRacingPrediction.Api/Web/Components/Pages/HorseIdentityMigrationAdmin.razor",
+    "tests/HorseRacingPrediction.Api.Tests/HorseIdentityMigrationClientTests.cs",
+    "tests/HorseRacingPrediction.Api.Tests/HorseIdentityMigrationAdminComponentTests.cs",
+    "tests/HorseRacingPrediction.Api.Tests/HorseIdentityMigrationAdminBrowserTests.cs",
+    "docs/changes/20261019_pre-apply-cancel/README.md",
+    "docs/changes/20261019_pre-apply-cancel/agent-audits/T3-A1.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review token and active-time telemetry are not exposed"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "preparation, integration, and audit time were not measured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "agent active duration is not exposed"
+  },
+  "startRevision": "7699e7368d86dca3ebd5b1652b7b752613dee73a",
+  "endRevisionOrPatch": "Uncommitted scoped patch; AdminBrowserTests.cs SHA256 1AB8AD56546FAD19BAE405B3FA390FD1E1229D25EE478D5DEDF56C1C743451E6; tested against HEAD 7699e7368d86dca3ebd5b1652b7b752613dee73a plus shared feature working tree.",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "27/27 adapter+component tests and 1/1 real localhost API/SQLite Playwright browser test passed; browser exercised keyboard confirmation, 390px overflow, one cancellation POST, and no execute dispatch. Protected-host cleanup remains T5/T4.",
+    "promoted": false,
+    "escapedDefects": 0,
+    "retries": 2,
+    "leadCorrections": 1,
+    "reviewPasses": 1,
+    "escalations": 0,
+    "decision": "accept",
+    "reviewMode": "ac-group",
+    "detailReviewReason": null
+  }
+}

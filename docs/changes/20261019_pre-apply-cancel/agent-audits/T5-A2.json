@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261019_pre-apply-cancel",
+  "taskId": "T5",
+  "attemptId": "T5-A2",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC1", "AC2"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "not exposed by runtime"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "not exposed by runtime"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.Api/IdentityMigration/HorseIdentityMigrationSupervisor.cs; HorseIdentityMigrationMaintenanceOwnership.cs; HorseIdentityMigrationRuntimeOwnership.cs; HorseIdentityMigrationRuntimeMode.cs; HorseIdentityMigrationPublicMapper.cs; Endpoints/IdentityMigration/HorseIdentityMigrationEndpoints.cs; HorseIdentityMigrationExecutionPolicy.cs (cancellation diagnostic only); HorseIdentityMigrationJournal.cs (cancellation diagnostic only); tests/HorseRacingPrediction.Api.Tests/HorseIdentityMigrationRuntimeOwnershipTests.cs; HorseIdentityMigrationRuntimeModeTests.cs; HorseIdentityMigrationEndpointsTests.cs; HorseIdentityMigrationJournalTests.cs; tests/scripts/test-horse-id-migration-supervisor.ps1"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "not exposed by runtime"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "not measured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "not exposed by runtime"
+  },
+  "startRevision": "7699e7368d86dca3ebd5b1652b7b752613dee73a",
+  "endRevisionOrPatch": "T5 15-path SHA-256 b3b6540c9556eeaede62f48cb7b8a63dffef18b1ff67e3968061f26814c16560. Cancel run 90de7c105ab14588a698d46db94729ca/image sha256:57a8b86b964accbc0e25a2ac782351af9fb2220d490cc86f2c62d975b509f81a; Fast run 288983f019db4036a71e89f8d61278de/image sha256:5a5784be923f6a6f5ee890acc6b05c7edd521ae709c9ef36b2388b20d7c21119. Images differ; 12 hashes match; evidence in README.",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Focused closure 5/5; formatter passed; Linux 2,110/8/0; real PID1 cancellation and FastLifecycle Passed. Lead-reviewed corrections and evidence are recorded in README.",
+    "promoted": false,
+    "escapedDefects": 0,
+    "retries": 5,
+    "leadCorrections": 18,
+    "reviewPasses": 1,
+    "escalations": 0,
+    "decision": "accept",
+    "reviewMode": "ac-group",
+    "detailReviewReason": null
+  }
+}

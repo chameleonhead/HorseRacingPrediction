@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261019_pre-apply-cancel",
+  "taskId": "T6",
+  "attemptId": "T6-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC1", "AC2"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime does not expose agent model telemetry"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime does not expose per-agent usage"
+  },
+  "scope": [
+    ".github/workflows/app-deploy.yml",
+    "deploy/horse-id-migration-deploy.sh",
+    "tests/scripts/test-deploy-migration-guard.ps1",
+    "tests/HorseRacingPrediction.Api.Tests/HorseIdentityMigrationOperatorReadinessInteropTests.cs",
+    "docs/changes/20261019_pre-apply-cancel/README.md",
+    "docs/changes/20261019_pre-apply-cancel/agent-audits/T6-A1.json"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "per-agent reviewer effort and telemetry are unavailable; Lead independently reviewed target-binding guard evidence"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "not measured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "not exposed by runtime"
+  },
+  "startRevision": "7699e7368d86dca3ebd5b1652b7b752613dee73a",
+  "endRevisionOrPatch": "Included in the verified integrated 24-file overlay SHA-256 b2a067407f68691216bb9f5dcbaf58641c15583bddcb850cde2043730d496131; current-source deploy fixture producer 2/2 and full parsed Ruby deploy guard exit 0",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Current-source fixture producer passed 2/2; parsed Ruby workflow/helper/Compose guard passed including uppercase/mixed-case exact binding and expected-red missing-target counterexample. Deploy-pipeline and Playwright version guards passed. The full solution suite includes the current HTTPS operator readiness interop test; unchanged T6 inputs also have the prior PyYAML semantic-only pass. No normal deployment was run.",
+    "promoted": false,
+    "escapedDefects": 0,
+    "retries": 1,
+    "leadCorrections": 1,
+    "reviewPasses": 1,
+    "escalations": 0,
+    "decision": "accept",
+    "reviewMode": "ac-group",
+    "detailReviewReason": null
+  }
+}

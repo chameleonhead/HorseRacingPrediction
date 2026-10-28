@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20261019_pre-apply-cancel",
+  "taskId": "T2",
+  "attemptId": "T2-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": ["AC1", "AC2"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime does not expose agent model telemetry"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime does not expose per-agent usage"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.Api/IdentityMigration/HorseIdentityMigrationJournal.cs",
+    "src/HorseRacingPrediction.Api/IdentityMigration/HorseIdentityMigrationExecutionPolicy.cs",
+    "src/HorseRacingPrediction.Api/IdentityMigration/HorseIdentityMigrationMaintenanceCapability.cs",
+    "tests/HorseRacingPrediction.Api.Tests/HorseIdentityMigrationJournalTests.cs"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "runtime does not expose reviewer usage or active time"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "active effort telemetry was not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "runtime did not expose reliable agent elapsed effort"
+  },
+  "startRevision": "7699e7368d86dca3ebd5b1652b7b752613dee73a",
+  "endRevisionOrPatch": "working-tree patch fingerprint 9bcdb1cefd0a3975b1694f1eaaea76896721be23 (T2 owned paths; no commit)",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Lead review identified cancellation receipt pruning, duplicate configured-source comparison, and write-path legacy-index migration gaps; T2 fixed them and JournalTests passed 55/55 (session 91511).",
+    "promoted": false,
+    "escapedDefects": 0,
+    "retries": 1,
+    "leadCorrections": 4,
+    "reviewPasses": 1,
+    "escalations": 0,
+    "decision": "accept",
+    "reviewMode": "ac-group",
+    "detailReviewReason": null
+  }
+}
