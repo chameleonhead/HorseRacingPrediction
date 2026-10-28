@@ -17,6 +17,8 @@ internal enum HorseIdentityMigrationExecutionPhase
     Verifying,
     Verified,
     Failed,
+    CancellationRequested,
+    PreparationCancelled,
 }
 
 internal sealed record HorseIdentityMigrationExecutionIntent(
@@ -24,7 +26,11 @@ internal sealed record HorseIdentityMigrationExecutionIntent(
     string ImmutableRequestHash,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    HorseIdentityMigrationExecutionPhase Phase);
+    HorseIdentityMigrationExecutionPhase Phase)
+{
+    internal string? CancellationSourceSetHash { get; init; }
+    internal HorseIdentityMigrationJournalReason? CancellationDiagnosticReason { get; init; }
+}
 
 /// <summary>Pure admission, request identity, and phase policy for the future supervised executor.</summary>
 internal static class HorseIdentityMigrationExecutionPolicy
@@ -100,7 +106,16 @@ internal static class HorseIdentityMigrationExecutionPolicy
         HorseIdentityMigrationExecutionPhase current,
         HorseIdentityMigrationExecutionPhase next)
     {
-        if (current is HorseIdentityMigrationExecutionPhase.Verified or HorseIdentityMigrationExecutionPhase.Failed)
+        if (current is HorseIdentityMigrationExecutionPhase.Verified or HorseIdentityMigrationExecutionPhase.Failed
+            or HorseIdentityMigrationExecutionPhase.PreparationCancelled)
+            return false;
+        if (current == HorseIdentityMigrationExecutionPhase.CancellationRequested)
+            return next == HorseIdentityMigrationExecutionPhase.PreparationCancelled;
+        if (next == HorseIdentityMigrationExecutionPhase.CancellationRequested)
+            return current is HorseIdentityMigrationExecutionPhase.StoppingApi
+                or HorseIdentityMigrationExecutionPhase.ApiExited
+                or HorseIdentityMigrationExecutionPhase.BackedUp;
+        if (next == HorseIdentityMigrationExecutionPhase.PreparationCancelled)
             return false;
         if (next == HorseIdentityMigrationExecutionPhase.Failed)
             return true;
@@ -119,6 +134,20 @@ internal static class HorseIdentityMigrationExecutionPolicy
             _ => false,
         };
     }
+
+    internal static bool CanRequestPreparationCancellation(
+        HorseIdentityMigrationOperationStatus operationStatus,
+        HorseIdentityMigrationExecutionPhase phase) =>
+        operationStatus == HorseIdentityMigrationOperationStatus.Staged
+        && phase is HorseIdentityMigrationExecutionPhase.StoppingApi
+            or HorseIdentityMigrationExecutionPhase.ApiExited
+            or HorseIdentityMigrationExecutionPhase.BackedUp;
+
+    internal static bool CanFinalizePreparationCancellation(
+        HorseIdentityMigrationOperationStatus operationStatus,
+        HorseIdentityMigrationExecutionPhase phase) =>
+        operationStatus == HorseIdentityMigrationOperationStatus.Staged
+        && phase == HorseIdentityMigrationExecutionPhase.CancellationRequested;
 
     internal static bool CanBeginReadonlyVerification(
         HorseIdentityMigrationOperationStatus operationStatus,

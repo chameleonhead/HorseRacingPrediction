@@ -6,10 +6,12 @@ using EventFlow.Aggregates;
 using EventFlow.EventStores;
 using HorseRacingPrediction.Api.Identity;
 using HorseRacingPrediction.Contracts.Identity;
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Domain.Horses;
 using HorseRacingPrediction.Domain.Races;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Api.IdentityMigration;
 
@@ -119,7 +121,7 @@ internal static class HorseIdentityMigrationSupervisor
             var startup = await journal.InspectStartupGuardAsync(DateTimeOffset.UtcNow).ConfigureAwait(false);
             var active = await journal.GetActiveExecutionIntentAsync().ConfigureAwait(false);
             startBlocked = ShouldStartBlockedHost(startup.State, active is not null, paths,
-                HorseIdentityMigrationRuntimeMode.IsOperatorOnlyMode());
+            HorseIdentityMigrationRuntimeMode.IsOperatorOnlyMode());
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
             or InvalidDataException or Microsoft.Data.Sqlite.SqliteException)
@@ -129,13 +131,30 @@ internal static class HorseIdentityMigrationSupervisor
         }
 
         var operatorStartFailures = 0;
+        var attemptedCancellationOperations = new HashSet<Guid>();
         while (true)
         {
             if (stopping.IsCancellationRequested) return 143;
+            if (HorseIdentityMigrationRuntimeMode.IsOperatorOnlyMode())
+            {
+                if (await TryReleaseBoundCancellationTargetAsync(builder, paths, journal, controlLease,
+                        attemptedCancellationOperations, stopping.Token)
+                        .ConfigureAwait(false))
+                {
+                    startBlocked = false;
+                    operatorStartFailures = 0;
+                }
+                else
+                {
+                    startBlocked = true;
+                }
+            }
             OwnedChild child;
+            var operatorOnlyChild = HorseIdentityMigrationRuntimeMode.IsOperatorOnlyMode();
             try
             {
-                child = StartApiChild(startBlocked, controlLease);
+                child = StartApiChild(startBlocked, controlLease,
+                    operatorOnly: operatorOnlyChild);
             }
             catch
             {
@@ -161,9 +180,16 @@ internal static class HorseIdentityMigrationSupervisor
             using (child)
             {
                 int exitCode;
+                Guid? cancellationOperationId = null;
+                var journalOnlyChild = startBlocked || operatorOnlyChild;
                 try
                 {
-                    exitCode = await WaitForChildExitAsync(child, cancellationToken: stopping.Token).ConfigureAwait(false);
+                    var observed = await WaitForChildExitOrCancellationAsync(child, journal,
+                            operatorOnlyChild, journalOnlyChild, attemptedCancellationOperations,
+                            stopping.Token)
+                        .ConfigureAwait(false);
+                    exitCode = observed.ExitCode ?? -1;
+                    cancellationOperationId = observed.CancellationOperationId;
                 }
                 catch (OperationCanceledException) when (stopping.IsCancellationRequested)
                 {
@@ -178,6 +204,103 @@ internal static class HorseIdentityMigrationSupervisor
                     exitCode = -1;
                 }
                 if (stopping.IsCancellationRequested) return 143;
+                var cancellationWasObserved = cancellationOperationId is not null;
+
+                if (cancellationOperationId is { } cancelledOperationId)
+                {
+                    if (operatorOnlyChild && !HorseIdentityMigrationRuntimeMode.IsCancellationTargetAllowed(
+                            cancelledOperationId))
+                    {
+                        startBlocked = true;
+                        try
+                        {
+                            await WaitForChildExitAsync(child, cancellationToken: stopping.Token).ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException) when (stopping.IsCancellationRequested)
+                        {
+                            return 143;
+                        }
+                        cancellationOperationId = null;
+                        exitCode = -1;
+                    }
+                    else
+                    {
+                        if (!operatorOnlyChild)
+                        {
+                            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable, "true");
+                            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOperationIdEnvironmentVariable,
+                                cancelledOperationId.ToString("D"));
+                        }
+                        try
+                        {
+                            if (await TryReleaseBoundCancellationTargetAsync(builder, paths, journal, controlLease,
+                                    attemptedCancellationOperations, stopping.Token).ConfigureAwait(false))
+                            {
+                                if (journalOnlyChild) await ReapOperatorChildAsync(child).ConfigureAwait(false);
+                                startBlocked = false;
+                                operatorStartFailures = 0;
+                                continue;
+                            }
+                        }
+                        catch (OperationCanceledException) when (stopping.IsCancellationRequested)
+                        {
+                            return 143;
+                        }
+                        catch (OperatorHostCleanupException)
+                        {
+                            throw;
+                        }
+                        catch
+                        {
+                            // Keep the durable cancellation request and maintenance gates for operator recovery.
+                            await RecordCancellationProofFailureAsync(journal, cancelledOperationId, stopping.Token)
+                                .ConfigureAwait(false);
+                        }
+                        startBlocked = true;
+                        // Keep a healthy journal-only child serving status after permanent proof refusal.
+                        try
+                        {
+                            await WaitForChildExitAsync(child, cancellationToken: stopping.Token).ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException) when (stopping.IsCancellationRequested)
+                        {
+                            return 143;
+                        }
+                        cancellationOperationId = null;
+                        exitCode = -1;
+                    }
+                }
+
+                if (cancellationOperationId is null && !cancellationWasObserved)
+                {
+                    HorseIdentityMigrationExecutionIntent? currentIntent;
+                    try
+                    {
+                        currentIntent = await journal.GetActiveExecutionIntentAsync(stopping.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (stopping.IsCancellationRequested)
+                    {
+                        return 143;
+                    }
+                    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+                        or InvalidDataException or Microsoft.Data.Sqlite.SqliteException)
+                    {
+                        // Unknown journal state after a child exit is never permission to apply.
+                        startBlocked = true;
+                        await WaitBeforeOperatorRetryAsync(++operatorStartFailures, stopping.Token).ConfigureAwait(false);
+                        continue;
+                    }
+                    if (currentIntent?.Phase == HorseIdentityMigrationExecutionPhase.CancellationRequested)
+                    {
+                        cancellationOperationId = currentIntent.OperationId;
+                        if (!operatorOnlyChild)
+                        {
+                            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable, "true");
+                            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOperationIdEnvironmentVariable,
+                                currentIntent.OperationId.ToString("D"));
+                        }
+                    }
+                }
 
                 if (HorseIdentityMigrationRuntimeMode.IsOperatorOnlyMode())
                 {
@@ -294,6 +417,157 @@ internal static class HorseIdentityMigrationSupervisor
             Math.Pow(2, Math.Min(Math.Max(failures - 1, 0), 4)));
         await Task.Delay(TimeSpan.FromSeconds(seconds), cancellationToken).ConfigureAwait(false);
     }
+
+    private static async Task<(int? ExitCode, Guid? CancellationOperationId)> WaitForChildExitOrCancellationAsync(
+        OwnedChild child, HorseIdentityMigrationJournal journal, bool operatorOnlyChild, bool journalOnlyChild,
+        HashSet<Guid> attemptedCancellationOperations,
+        CancellationToken cancellationToken)
+    {
+        HorseIdentityMigrationExecutionIntent? active;
+        try
+        {
+            active = await journal.GetActiveExecutionIntentAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+            or InvalidDataException or Microsoft.Data.Sqlite.SqliteException)
+        {
+            return (await WaitForChildExitAsync(child, cancellationToken: cancellationToken).ConfigureAwait(false), null);
+        }
+        if (!IsCancellationWatchPhase(active?.Phase)
+            || (operatorOnlyChild && (!HorseIdentityMigrationRuntimeMode.IsCancellationTargetAllowed(active!.OperationId)
+                || attemptedCancellationOperations.Contains(active.OperationId))))
+            return (await WaitForChildExitAsync(child, cancellationToken: cancellationToken).ConfigureAwait(false), null);
+
+        var exited = child.Process.WaitForExitAsync(cancellationToken);
+        while (true)
+        {
+            if (exited.IsCompleted)
+            {
+                await exited.ConfigureAwait(false);
+                return (await WaitForChildExitAsync(child, cancellationToken: cancellationToken).ConfigureAwait(false), null);
+            }
+
+            var poll = Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+            if (await Task.WhenAny(exited, poll).ConfigureAwait(false) == exited) continue;
+            await poll.ConfigureAwait(false);
+            HorseIdentityMigrationExecutionIntent? intent;
+            try { intent = await journal.GetActiveExecutionIntentAsync(cancellationToken).ConfigureAwait(false); }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+                or InvalidDataException or Microsoft.Data.Sqlite.SqliteException)
+            {
+                return (await WaitForChildExitAsync(child, cancellationToken: cancellationToken).ConfigureAwait(false), null);
+            }
+            if (intent?.Phase != HorseIdentityMigrationExecutionPhase.CancellationRequested) continue;
+            if (operatorOnlyChild && !HorseIdentityMigrationRuntimeMode.IsCancellationTargetAllowed(intent.OperationId))
+                return (await WaitForChildExitAsync(child, cancellationToken: cancellationToken).ConfigureAwait(false), null);
+            if (attemptedCancellationOperations.Contains(intent.OperationId))
+                return (await WaitForChildExitAsync(child, cancellationToken: cancellationToken).ConfigureAwait(false), null);
+            if (!journalOnlyChild) await TerminateAndReapAsync(child).ConfigureAwait(false);
+            return (null, intent.OperationId);
+        }
+    }
+
+    private static bool IsCancellationWatchPhase(HorseIdentityMigrationExecutionPhase? phase) => phase is
+        HorseIdentityMigrationExecutionPhase.IntentRecorded or HorseIdentityMigrationExecutionPhase.Preparing
+        or HorseIdentityMigrationExecutionPhase.Draining or HorseIdentityMigrationExecutionPhase.StoppingApi
+        or HorseIdentityMigrationExecutionPhase.ApiExited or HorseIdentityMigrationExecutionPhase.BackedUp
+        or HorseIdentityMigrationExecutionPhase.CancellationRequested;
+
+    private static async Task<bool> FinalizeRequestedPreparationCancellationAsync(
+        WebApplicationBuilder builder, IReadOnlyList<string> paths, HorseIdentityMigrationJournal journal,
+        HorseIdentityMigrationMaintenanceOwnership.HorseIdentityMigrationSupervisorControlLease controlLease,
+        Guid operationId, CancellationToken cancellationToken)
+    {
+        var intent = await journal.GetExecutionIntentAsync(operationId, cancellationToken).ConfigureAwait(false);
+        if (intent is null || intent.Phase != HorseIdentityMigrationExecutionPhase.CancellationRequested)
+            return false;
+        using var runtimeOwnership = await HorseIdentityMigrationRuntimeOwnership.AcquireForPreparationCancellationAsync(
+            paths, controlLease, operationId, intent.ImmutableRequestHash, journal, cancellationToken).ConfigureAwait(false);
+        var collectionOptions = HorseIdentityMigrationRuntimeMode.ReadCollectionOptions(builder);
+        var collectionPath = HorseIdentityMigrationRuntimeMode.ResolveConfiguredSources(builder, collectionOptions)
+            .CollectionPlatformPath
+            ?? throw new IOException("The configured collection database is not available for cancellation proof.");
+        var authorization = await controlLease.IssuePreparationCancellationAuthorizationAsync(operationId,
+            runtimeOwnership, collectionPath, journal, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+        if (authorization is null) return false;
+        var outcome = await journal.FinalizePreparationCancellationAsync(operationId, authorization, paths,
+            DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+        if (!outcome.Succeeded) return false;
+        await HorseIdentityMigrationMaintenanceOwnership.ClearMaintenanceGatesAfterPreparationCancellationAsync(
+            runtimeOwnership, controlLease, operationId, paths, journal, cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    private static async Task<bool> TryReleaseBoundCancellationTargetAsync(WebApplicationBuilder builder,
+        IReadOnlyList<string> paths,
+        HorseIdentityMigrationJournal journal,
+        HorseIdentityMigrationMaintenanceOwnership.HorseIdentityMigrationSupervisorControlLease controlLease,
+        HashSet<Guid> attemptedCancellationOperations,
+        CancellationToken cancellationToken)
+    {
+        var target = Environment.GetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOperationIdEnvironmentVariable);
+        if (!Guid.TryParseExact(target, "D", out var operationId) || operationId == Guid.Empty) return false;
+        try
+        {
+            var intent = await journal.GetExecutionIntentAsync(operationId, cancellationToken).ConfigureAwait(false);
+            if (intent?.Phase == HorseIdentityMigrationExecutionPhase.CancellationRequested)
+            {
+                if (!attemptedCancellationOperations.Add(operationId)) return false;
+                if (!await FinalizeRequestedPreparationCancellationAsync(builder, paths, journal, controlLease,
+                        operationId, cancellationToken).ConfigureAwait(false))
+                {
+                    await RecordCancellationProofFailureAsync(journal, operationId, cancellationToken).ConfigureAwait(false);
+                    return false;
+                }
+            }
+
+            using var runtimeOwnership = await HorseIdentityMigrationRuntimeOwnership
+                .AcquireForCancellationReceiptRecoveryAsync(paths, controlLease, operationId, journal, cancellationToken)
+                .ConfigureAwait(false);
+            await HorseIdentityMigrationMaintenanceOwnership.ClearMaintenanceGatesAfterPreparationCancellationAsync(
+                runtimeOwnership, controlLease, operationId, paths, journal, cancellationToken).ConfigureAwait(false);
+            var startup = await journal.InspectStartupGuardAsync(DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+            var active = await journal.GetActiveExecutionIntentAsync(cancellationToken).ConfigureAwait(false);
+            if (startup.State != HorseIdentityMigrationStartupState.Ready
+                || active is not null
+                || ShouldStartBlockedHost(startup.State, hasActiveIntent: active is not null, paths)) return false;
+            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable, "false");
+            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOperationIdEnvironmentVariable, null);
+            return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (IsRecoverableCancellationProofFailure(exception, cancellationToken))
+        {
+            await RecordCancellationProofFailureAsync(journal, operationId, cancellationToken).ConfigureAwait(false);
+            return false;
+        }
+    }
+
+    private static async Task RecordCancellationProofFailureAsync(HorseIdentityMigrationJournal journal,
+        Guid operationId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await journal.RecordPreparationCancellationDiagnosticAsync(operationId, DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (IsRecoverableCancellationProofFailure(exception, cancellationToken))
+        {
+            // Failure details stay bounded; the durable request and protected host remain authoritative.
+        }
+    }
+
+    internal static bool IsRecoverableCancellationProofFailure(Exception exception, CancellationToken cancellationToken) =>
+        !(exception is OperationCanceledException && cancellationToken.IsCancellationRequested)
+        && exception is not OutOfMemoryException and not StackOverflowException and not AccessViolationException
+        && exception is not OperatorHostCleanupException;
 
     internal static string ResolveOperatorUrls(Microsoft.Extensions.Configuration.IConfiguration configuration)
     {
@@ -484,6 +758,9 @@ internal static class HorseIdentityMigrationSupervisor
         deadline.CancelAfter(TimeSpan.FromSeconds(2));
         try
         {
+            var intent = await journal.GetExecutionIntentAsync(operationId, deadline.Token).ConfigureAwait(false);
+            if (intent?.Phase == HorseIdentityMigrationExecutionPhase.CancellationRequested)
+                return;
             await journal.RecordFailureAsync(operationId, code, DateTimeOffset.UtcNow, deadline.Token)
                 .ConfigureAwait(false);
         }
@@ -521,8 +798,9 @@ internal static class HorseIdentityMigrationSupervisor
         startInfo.Environment[HorseIdentityMigrationMaintenanceCapability.PrivateEnvironmentVariable] =
             bootstrap.SerializeForPrivateEnvironment();
         if (operatorUrls is not null) startInfo.Environment["ASPNETCORE_URLS"] = operatorUrls;
-        if (operatorOnly)
-            startInfo.Environment[HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable] = "true";
+        startInfo.Environment[HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable] = operatorOnly ? "true" : "false";
+        if (!operatorOnly)
+            startInfo.Environment.Remove(HorseIdentityMigrationRuntimeMode.OperatorOperationIdEnvironmentVariable);
         return StartOwnedChild(startInfo, captureOutput: false);
     }
 

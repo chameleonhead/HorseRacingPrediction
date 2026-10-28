@@ -36,7 +36,7 @@ internal static class HorseIdentityMigrationPublicMapper
         _ => "Unavailable",
     };
 
-    private static string Reason(HorseIdentityMigrationJournalReason reason) => reason switch
+    internal static string Reason(HorseIdentityMigrationJournalReason reason) => reason switch
     {
         HorseIdentityMigrationJournalReason.None => "None",
         HorseIdentityMigrationJournalReason.CapacityExceeded => "CapacityExceeded",
@@ -52,6 +52,7 @@ internal static class HorseIdentityMigrationPublicMapper
         HorseIdentityMigrationJournalReason.VerificationFailed => "VerificationFailed",
         HorseIdentityMigrationJournalReason.ChildFailed => "ChildFailed",
         HorseIdentityMigrationJournalReason.StartupFailed => "StartupFailed",
+        HorseIdentityMigrationJournalReason.PreparationCancelled => "PreparationCancelled",
         _ => "Unavailable",
     };
 

@@ -5,14 +5,19 @@ param(
     [switch] $WrapperSmokeOnly,
     [switch] $ObserverSmokeOnly,
     [switch] $FastLifecycleSmokeOnly,
+    [switch] $CancellationOnlySmoke,
+    [string] $ReuseImage = '',
     [ValidateSet('127.0.0.1', 'host.docker.internal')]
     [string] $PublishedHost = '127.0.0.1'
 )
-$smokeModeCount = [int]$WrapperSmokeOnly.IsPresent + [int]$ObserverSmokeOnly.IsPresent + [int]$FastLifecycleSmokeOnly.IsPresent
+$smokeModeCount = [int]$WrapperSmokeOnly.IsPresent + [int]$ObserverSmokeOnly.IsPresent + [int]$FastLifecycleSmokeOnly.IsPresent + [int]$CancellationOnlySmoke.IsPresent
 if ($smokeModeCount -gt 1) {
-    throw 'Wrapper, observer, and fast-lifecycle smoke modes are mutually exclusive.'
+    throw 'Wrapper, observer, fast-lifecycle, and cancellation-only smoke modes are mutually exclusive.'
 }
-if ($FastLifecycleSmokeOnly) {
+if ($CancellationOnlySmoke) {
+    $harnessMode = 'cancellation-only-smoke'
+    Write-Output 'MODE deterministic PID 1 pre-apply cancellation and source-bound restart smoke'
+} elseif ($FastLifecycleSmokeOnly) {
     $harnessMode = 'fast-lifecycle-smoke-only'
     Write-Output 'MODE aged-pause FAST lifecycle preflight (not a 900-second timing proof)'
 } elseif ($WrapperSmokeOnly) {
@@ -33,11 +38,14 @@ $dotnetCommand = (Get-Command $Dotnet -ErrorAction Stop).Source
 $tempParent = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $runId = [guid]::NewGuid().ToString('N')
 $tempRoot = Join-Path $tempParent "hrp-horse-id-supervisor-$runId"
-$image = "hrp-horse-id-supervisor-test:$runId"
+$image = if ([string]::IsNullOrWhiteSpace($ReuseImage)) { "hrp-horse-id-supervisor-test:$runId" } else { $ReuseImage }
 $happyContainer = "hrp-horse-id-supervisor-happy-$runId"
 $crashContainer = "hrp-horse-id-supervisor-crash-$runId"
+$cancelContainer = "hrp-horse-id-supervisor-cancel-$runId"
+$cancelContainerPath = "/tmp/hrp-horse-identity-deploy-interop-$runId"
 $happyData = Join-Path $tempRoot 'happy-data'
 $crashData = Join-Path $tempRoot 'crash-data'
+$cancelData = Join-Path $tempRoot 'cancel-data'
 $evidenceRoot = Join-Path $tempRoot 'evidence'
 $evidenceTranscript = Join-Path $evidenceRoot 'lifecycle.jsonl'
 $testProject = Join-Path $repositoryRoot 'tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj'
@@ -269,6 +277,248 @@ function Get-SourceFileFingerprint([string] $DataDirectory) {
     }) -join "`n"
 }
 
+function Get-ContainerSourceFileFingerprint([string] $Container) {
+    $script = 'for name in collection-platform.db eventstore.db prediction-executions.db; do for suffix in "" -wal -shm; do path="/data/$name$suffix"; if [ -f "$path" ]; then sha256sum "$path"; fi; done; done'
+    $lines = @(Invoke-Docker @('exec', $Container, '/bin/sh', '-c', $script) 15) -split "`r?`n" |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        ForEach-Object {
+            $parts = $_.Trim() -split '\s+', 2
+            if ($parts.Count -ne 2) { throw 'The container could not provide a stable source fingerprint.' }
+            "$(Split-Path -Leaf $parts[1])=$($parts[0].ToUpperInvariant())"
+        } | Sort-Object
+    return $lines -join "`n"
+}
+
+function ConvertTo-CanonicalUtcTimestamp([string] $Value) {
+    $timestamp = [DateTimeOffset]::MinValue
+    if (-not [DateTimeOffset]::TryParse($Value, [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::RoundtripKind, [ref]$timestamp)) {
+        throw 'A timestamp did not parse as an invariant DateTimeOffset.'
+    }
+    return $timestamp.ToUniversalTime().ToString('O', [Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Assert-CanonicalTimestampOracleExamples {
+    $examples = @(
+        @('2026-10-27T10:15:31.524654+00:00', '2026-10-27T10:15:31.5246540+00:00'),
+        @('2026-10-27T10:15:31.524654Z', '2026-10-27T10:15:31.5246540+00:00'))
+    foreach ($example in $examples) {
+        if ((ConvertTo-CanonicalUtcTimestamp $example[0]) -cne
+            (ConvertTo-CanonicalUtcTimestamp $example[1])) {
+            throw 'The exact UTC timestamp oracle rejected equivalent JSON/HTML timestamp spellings.'
+        }
+    }
+}
+
+Assert-CanonicalTimestampOracleExamples
+
+function Save-LogicalSourceSnapshot([string] $DataDirectory, [string] $SnapshotPath) {
+    $python = (Get-Command python -ErrorAction Stop).Source
+    $snapshotScript = @'
+import base64, hashlib, json, pathlib, sqlite3, sys
+root = pathlib.Path(sys.argv[1]); output = pathlib.Path(sys.argv[2])
+files = ['eventstore.db', 'collection-platform.db', 'prediction-executions.db']
+def encode(value): return {'$blob': base64.b64encode(value).decode('ascii')} if isinstance(value, bytes) else value
+snapshot = {'files': []}
+for filename in files:
+    path = root / filename
+    with sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True) as db:
+        objects = db.execute('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name').fetchall()
+        tables = []
+        for object_type, name, table_name, create_sql in objects:
+            if object_type != 'table': continue
+            quoted = '"' + name.replace('"', '""') + '"'
+            info = db.execute('PRAGMA table_info(' + quoted + ')').fetchall()
+            columns = [row[1] for row in info]
+            primary_key = [row[1] for row in sorted(info, key=lambda row: row[5]) if row[5] > 0]
+            order = ', '.join('"' + column.replace('"', '""') + '"' for column in columns)
+            rows = db.execute('SELECT * FROM ' + quoted + (' ORDER BY ' + order if order else '')).fetchall()
+            tables.append({'name': name, 'sql': create_sql, 'columns': columns,
+                'primaryKey': primary_key, 'rows': [[encode(value) for value in row] for row in rows]})
+        snapshot['files'].append({'name': filename, 'objects': objects, 'tables': tables})
+canonical = json.dumps(snapshot, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')
+output.write_text(canonical.decode('utf-8'), encoding='utf-8')
+print(json.dumps({'path': str(output), 'sha256': hashlib.sha256(canonical).hexdigest().upper(),
+    'databases': len(files), 'tables': sum(len(file['tables']) for file in snapshot['files']),
+    'rows': sum(len(table['rows']) for file in snapshot['files'] for table in file['tables'])}, separators=(',', ':')))
+'@
+    $summaryJson = Invoke-External -FilePath $python -Arguments @('-c', $snapshotScript, $DataDirectory, $SnapshotPath) -TimeoutSeconds 30
+    $summary = ConvertFrom-Json -InputObject $summaryJson.Trim()
+    if ($summary.databases -ne 3 -or $summary.sha256 -notmatch '^[0-9A-F]{64}$' -or
+        -not (Test-Path -LiteralPath $SnapshotPath)) {
+        throw 'The all-table SQLite snapshot did not produce its expected content digest and artifact.'
+    }
+    return $summary
+}
+
+function Compare-LogicalSourceSnapshots([string] $BeforePath, [string] $AfterPath,
+    [bool] $AllowNormalStartupSeeds, [string] $NormalStartUtc = '', [string] $NormalReadyUtc = '') {
+    $python = (Get-Command python -ErrorAction Stop).Source
+    $comparisonScript = @'
+import collections, datetime, json, sys
+def load(path):
+    with open(path, encoding='utf-8') as stream: return json.load(stream)
+def canonical(value): return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+before, after = load(sys.argv[1]), load(sys.argv[2])
+allow_seeds = sys.argv[3] == '1'
+start = datetime.datetime.fromisoformat(sys.argv[4].replace('Z', '+00:00')) if sys.argv[4] else None
+ready = datetime.datetime.fromisoformat(sys.argv[5].replace('Z', '+00:00')) if sys.argv[5] else None
+if allow_seeds and (start is None or ready is None or start.tzinfo is None or ready.tzinfo is None or ready < start):
+    raise SystemExit('normal-start timestamp bounds are missing or invalid')
+expected_definitions = {
+    'horse-profile': ('Horse profile', 'Horse', 5, 1),
+    'jockey-profile': ('Jockey profile', 'Jockey', 4, 1),
+    'trainer-profile': ('Trainer profile', 'Trainer', 4, 1),
+    'owner-identity': ('Owner identity', 'Owner', 1, 1),
+    'race-discovery': ('Race discovery', 'Race', 1, 1),
+    'race-detail': ('Race detail', 'Race', 6, 1),
+    'race-odds': ('Race odds', 'RaceOdds', 1, 1),
+}
+expected_revisions = {
+    'horse-profile': (5, 'Wait for the semantic profile view and isolate structural failures', 1),
+    'jockey-profile': (4, 'Wait for the semantic profile view and isolate structural failures', 1),
+    'trainer-profile': (4, 'Wait for the semantic profile view and isolate structural failures', 1),
+    'owner-identity': (1, 'Initial', 0),
+    'race-discovery': (1, 'Initial', 0),
+    'race-detail': (6, 'Race resource artifact state machine', 0),
+    'race-odds': (1, 'Initial', 0),
+}
+def parse_seed_time(value):
+    stamp = datetime.datetime.fromisoformat(value.replace(' ', 'T', 1))
+    if stamp.tzinfo is None: stamp = stamp.replace(tzinfo=datetime.timezone(datetime.timedelta(hours=9)))
+    return stamp.astimezone(datetime.timezone.utc)
+def keyed(table):
+    if not table['primaryKey']: return None
+    indices = [table['columns'].index(column) for column in table['primaryKey']]
+    result = {}
+    for row in table['rows']:
+        row_key = canonical([row[index] for index in indices])
+        if row_key in result: raise ValueError('duplicate primary key')
+        result[row_key] = row
+    return result
+def row_dict(table, row): return dict(zip(table['columns'], row))
+def validate_seed(table, table_name, row, expected_seen):
+    value = row_dict(table, row)
+    if table_name == 'collection_definitions':
+        identity = value.get('DefinitionId')
+        if identity not in expected_definitions: raise ValueError('unexpected definition insert')
+        expected = expected_definitions[identity]
+        if value != {'DefinitionId': identity, 'Name': expected[0], 'ResourceType': expected[1],
+            'CurrentRevision': expected[2], 'Enabled': expected[3]}: raise ValueError('definition seed payload mismatch')
+        expected_seen['definitions'].add(identity)
+    elif table_name == 'collection_revisions':
+        identity = value.get('DefinitionId')
+        if identity not in expected_revisions: raise ValueError('unexpected revision insert')
+        revision, description, recollection = expected_revisions[identity]
+        if value.get('Revision') != revision or value.get('Description') != description or value.get('MayRequireRecollection') != recollection:
+            raise ValueError('revision seed payload mismatch')
+        if set(value) != {'DefinitionId', 'Revision', 'Description', 'MayRequireRecollection', 'CreatedAt'}:
+            raise ValueError('revision seed columns changed')
+        created = parse_seed_time(value['CreatedAt'])
+        if created < start.astimezone(datetime.timezone.utc) or created > ready.astimezone(datetime.timezone.utc):
+            raise ValueError('revision seed timestamp fell outside normal child startup/readiness')
+        expected_seen['revisions'].add(identity)
+    else:
+        raise ValueError('unexpected source-row insertion')
+
+def main():
+    old_files = {file['name']: file for file in before['files']}; new_files = {file['name']: file for file in after['files']}
+    if set(old_files) != set(new_files): raise ValueError('source database inventory changed')
+    expected_seen = {'definitions': set(), 'revisions': set()}; changed = []
+    for filename in sorted(old_files):
+        old_file, new_file = old_files[filename], new_files[filename]
+        if canonical(old_file['objects']) != canonical(new_file['objects']): raise ValueError('source schema objects changed in ' + filename)
+        old_tables = {table['name']: table for table in old_file['tables']}; new_tables = {table['name']: table for table in new_file['tables']}
+        if set(old_tables) != set(new_tables): raise ValueError('source table inventory changed in ' + filename)
+        for table_name in sorted(old_tables):
+            old_table, current_table = old_tables[table_name], new_tables[table_name]
+            if old_table['sql'] != current_table['sql'] or old_table['columns'] != current_table['columns'] or old_table['primaryKey'] != current_table['primaryKey']:
+                raise ValueError('source table schema changed in ' + filename + ':' + table_name)
+            old_keyed, new_keyed = keyed(old_table), keyed(current_table)
+            additions = []; deletions = []; updates = []
+            if old_keyed is not None and new_keyed is not None:
+                for item in sorted(set(new_keyed) - set(old_keyed)): additions.append(new_keyed[item])
+                for item in sorted(set(old_keyed) - set(new_keyed)): deletions.append(old_keyed[item])
+                for item in sorted(set(old_keyed) & set(new_keyed)):
+                    if canonical(old_keyed[item]) != canonical(new_keyed[item]): updates.append((old_keyed[item], new_keyed[item]))
+            else:
+                old_rows = collections.Counter(canonical(row) for row in old_table['rows'])
+                new_rows = collections.Counter(canonical(row) for row in current_table['rows'])
+                deleted = old_rows - new_rows; added = new_rows - old_rows
+                if deleted: deletions = list(deleted.elements())
+                if added: additions = list(added.elements())
+            if deletions or updates: raise ValueError('source rows were removed or updated in ' + filename + ':' + table_name)
+            if additions:
+                if not allow_seeds or filename != 'collection-platform.db' or table_name not in {'collection_definitions', 'collection_revisions'}:
+                    raise ValueError('unexpected source-row insertion in ' + filename + ':' + table_name)
+                for row in additions: validate_seed(current_table, table_name, row, expected_seen)
+                changed.append({'file': filename, 'table': table_name, 'added': len(additions)})
+    if allow_seeds and (expected_seen['definitions'] != set(expected_definitions) or expected_seen['revisions'] != set(expected_revisions)):
+        raise ValueError('normal startup did not insert the exact expected definition/revision seed set')
+    print(json.dumps({'equalExceptDocumentedStartupSeeds': True, 'tablesCompared': sum(len(file['tables']) for file in before['files']),
+        'rowsBefore': sum(len(table['rows']) for file in before['files'] for table in file['tables']),
+        'rowsAfter': sum(len(table['rows']) for file in after['files'] for table in file['tables']),
+        'classifiedStartupInserts': changed}, ensure_ascii=False, separators=(',', ':')))
+try:
+    main()
+except Exception as error:
+    print(json.dumps({'equalExceptDocumentedStartupSeeds': False, 'error': str(error)}, ensure_ascii=False, separators=(',', ':')))
+    raise SystemExit(1)
+'@
+    $allowSeeds = if ($AllowNormalStartupSeeds) { '1' } else { '0' }
+    $summaryJson = Invoke-External -FilePath $python -Arguments @('-c', $comparisonScript, $BeforePath, $AfterPath,
+        $allowSeeds, $NormalStartUtc, $NormalReadyUtc) -TimeoutSeconds 30
+    $summary = ConvertFrom-Json -InputObject $summaryJson.Trim()
+    if (-not $summary.equalExceptDocumentedStartupSeeds) { throw 'The all-table logical source comparison found an unapproved change.' }
+    return $summary
+}
+
+function Get-DisposablePipelineControlRow([string] $DatabasePath) {
+    $python = (Get-Command python -ErrorAction Stop).Source
+    $script = @'
+import json, pathlib, sqlite3, sys
+path = pathlib.Path(sys.argv[1]).resolve()
+with sqlite3.connect(path.as_uri() + '?mode=ro', uri=True) as db:
+    rows = db.execute('SELECT ControlId, IsPaused, Reason, UpdatedAt FROM collection_platform_controls WHERE ControlId = ?', ('pipeline',)).fetchall()
+if len(rows) != 1:
+    raise SystemExit('expected exactly one disposable pipeline control row')
+print(json.dumps(rows[0], ensure_ascii=False, separators=(',', ':')))
+'@
+    $json = Invoke-External -FilePath $python -Arguments @('-c', $script, $DatabasePath) -TimeoutSeconds 15
+    $row = ConvertFrom-Json -InputObject $json.Trim()
+    if ($row.Count -ne 4 -or $row[0] -cne 'pipeline') {
+        throw 'The disposable source fixture did not expose its exact pipeline control row.'
+    }
+    return ,$row
+}
+
+function Set-DisposablePipelinePaused([string] $DatabasePath, [object[]] $OriginalRow,
+    [bool] $ExpectedPaused, [bool] $Paused) {
+    $python = (Get-Command python -ErrorAction Stop).Source
+    $script = @'
+import pathlib, sqlite3, sys
+path = pathlib.Path(sys.argv[1]).resolve()
+original = (sys.argv[2], int(sys.argv[3]), sys.argv[4], sys.argv[5])
+expected_paused = int(sys.argv[6])
+paused = int(sys.argv[7])
+with sqlite3.connect(path.as_uri() + '?mode=rw', uri=True) as db:
+    db.execute('BEGIN IMMEDIATE')
+    row = db.execute('SELECT ControlId, IsPaused, Reason, UpdatedAt FROM collection_platform_controls WHERE ControlId = ?', ('pipeline',)).fetchone()
+    if row is None or row != (original[0], expected_paused, original[2], original[3]):
+        raise SystemExit('pipeline fixture control row changed outside the test-owned pause bit')
+    db.execute('UPDATE collection_platform_controls SET IsPaused = ? WHERE ControlId = ?', (paused, 'pipeline'))
+    if db.total_changes != 1:
+        raise SystemExit('pipeline fixture pause update did not affect exactly one row')
+    updated = db.execute('SELECT ControlId, IsPaused, Reason, UpdatedAt FROM collection_platform_controls WHERE ControlId = ?', ('pipeline',)).fetchone()
+    if updated != (original[0], paused, original[2], original[3]):
+        raise SystemExit('pipeline fixture pause update changed more than the pause bit')
+    db.commit()
+'@
+    [void](Invoke-External -FilePath $python -Arguments @('-c', $script, $DatabasePath, [string]$OriginalRow[0],
+        [string]$OriginalRow[1], [string]$OriginalRow[2], [string]$OriginalRow[3],
+        [string][int]$ExpectedPaused, [string][int]$Paused) -TimeoutSeconds 15)
+}
+
 function Add-EvidenceEvent([string] $Event, [string] $OperationId = '', [string] $Phase = '',
     [string] $Status = '', [string] $Detail = '') {
     $entry = [ordered]@{
@@ -365,8 +615,13 @@ function Get-SourceHashes {
         'tests/scripts/test-horse-id-migration-supervisor.ps1',
         'src/HorseRacingPrediction.Api/IdentityMigration/HorseIdentityMigrationJournal.cs',
         'src/HorseRacingPrediction.Api/IdentityMigration/HorseIdentityMigrationPreparationService.cs',
+        'src/HorseRacingPrediction.Api/IdentityMigration/HorseIdentityMigrationMaintenanceOwnership.cs',
+        'src/HorseRacingPrediction.Api/IdentityMigration/HorseIdentityMigrationRuntimeOwnership.cs',
         'src/HorseRacingPrediction.Api/IdentityMigration/HorseIdentityMigrationSupervisor.cs',
         'src/HorseRacingPrediction.Api/IdentityMigration/HorseIdentityMigrationRuntimeMode.cs',
+        'src/HorseRacingPrediction.Api/IdentityMigration/HorseIdentityMigrationPublicMapper.cs',
+        'src/HorseRacingPrediction.Api/Endpoints/IdentityMigration/HorseIdentityMigrationEndpoints.cs',
+        'tests/HorseRacingPrediction.Api.Tests/HorseIdentityMigrationSupervisorTests.cs',
         'src/HorseRacingPrediction.Api/IdentityMigration/TypedHorseIdentityStoreEngine.cs',
         'src/HorseRacingPrediction.Api/IdentityMigration/TypedHorseIdentityStoreWriter.cs'
     )
@@ -452,11 +707,11 @@ function Invoke-Api([string] $BaseUrl, [string] $Path, [string] $Method = 'GET',
     $uri = $BaseUrl + $Path
     if ($Method -cne 'GET') {
         if ($null -eq $Body) {
-            return Invoke-RestMethod -Method $Method -Uri $uri -Headers $headers -TimeoutSec 15
+            return Invoke-RestMethod -Method $Method -Uri $uri -Headers $headers -MaximumRedirection 0 -TimeoutSec 15
         }
         $json = $Body | ConvertTo-Json -Depth 10 -Compress
         return Invoke-RestMethod -Method $Method -Uri $uri -Headers $headers `
-            -ContentType 'application/json' -Body $json -TimeoutSec 15
+            -ContentType 'application/json' -Body $json -MaximumRedirection 0 -TimeoutSec 15
     }
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds($GetDeadlineSeconds)
     $lastTransportException = $null
@@ -465,7 +720,7 @@ function Invoke-Api([string] $BaseUrl, [string] $Path, [string] $Method = 'GET',
         if ($remainingSeconds -lt 1) { break }
         $timeoutSeconds = [Math]::Max(1, [Math]::Floor($remainingSeconds))
         try {
-            return Invoke-RestMethod -Method GET -Uri $uri -Headers $headers -TimeoutSec $timeoutSeconds
+            return Invoke-RestMethod -Method GET -Uri $uri -Headers $headers -MaximumRedirection 0 -TimeoutSec $timeoutSeconds
         }
         catch {
             if (-not (Test-KnownApiGetTransportInterruption $_.Exception)) { throw }
@@ -1693,17 +1948,17 @@ function Assert-AuthenticatedMigrationPage([string] $BaseUrl, [string] $ApiKey, 
     if ($HostMode -ne 'Normal') {
         $headers = @{ 'X-Api-Key' = $ApiKey }
         $businessApi = Invoke-WebRequest -Uri ($BaseUrl + '/api/races/not-available') -Headers $headers `
-            -WebSession $session -SkipHttpErrorCheck -TimeoutSec 15
+            -WebSession $session -MaximumRedirection 0 -SkipHttpErrorCheck -TimeoutSec 15
         if ($businessApi.StatusCode -ne 503) {
             throw "The $HostMode $Observation surface exposed a business API: $($businessApi.StatusCode)"
         }
         $execute = Invoke-WebRequest -Method Post -Uri ($BaseUrl + "/api/v2/admin/horse-id-migration-operations/$OperationId/execute") `
-            -Headers $headers -WebSession $session -ContentType 'application/json' -Body '{}' -SkipHttpErrorCheck -TimeoutSec 15
+            -Headers $headers -WebSession $session -ContentType 'application/json' -Body '{}' -MaximumRedirection 0 -SkipHttpErrorCheck -TimeoutSec 15
         if ($execute.StatusCode -ne 503) {
             throw "The $HostMode $Observation surface exposed migration apply: $($execute.StatusCode)"
         }
         $verify = Invoke-WebRequest -Method Post -Uri ($BaseUrl + "/settings/horse-id-migration/$OperationId/verify") `
-            -Headers $headers -WebSession $session -ContentType 'application/json' -Body '{}' -SkipHttpErrorCheck -TimeoutSec 15
+            -Headers $headers -WebSession $session -ContentType 'application/json' -Body '{}' -MaximumRedirection 0 -SkipHttpErrorCheck -TimeoutSec 15
         Assert-VerificationSurfaceContract $HostMode $verify.StatusCode $hasVerificationForm
     }
     elseif ($hasVerificationForm) {
@@ -1954,6 +2209,14 @@ function Reset-DisposablePauseWindow([string] $BaseUrl, [string] $ApiKey, [strin
     Set-Content -LiteralPath $PauseTimestampPath -Value ([DateTimeOffset]::Parse([string]$state.pipeline.updatedAt).ToUniversalTime().ToString('O')) -NoNewline
 }
 
+function Assert-ReadyPausedPipeline([string] $BaseUrl, [string] $ApiKey, [string] $Context) {
+    $state = Invoke-Api $BaseUrl '/api/v2/admin/collection/pipeline-state' -ApiKey $ApiKey
+    if (-not $state.pipeline.isPaused -or -not $state.pipeline.updatedAt) {
+        throw "$Context did not expose the known paused collection pipeline after startup readiness."
+    }
+    return $state
+}
+
 function Assert-AgedDisposablePauseWindow([string] $BaseUrl, [string] $ApiKey, [string] $PauseTimestampPath) {
     $state = Invoke-Api $BaseUrl '/api/v2/admin/collection/pipeline-state' -ApiKey $ApiKey
     if (-not $state.pipeline.isPaused -or -not $state.pipeline.updatedAt) {
@@ -2000,6 +2263,7 @@ try {
     [void](New-Item -ItemType Directory -Path $evidenceRoot)
     [void](New-Item -ItemType Directory -Path $happyData)
     [void](New-Item -ItemType Directory -Path $crashData)
+    [void](New-Item -ItemType Directory -Path $cancelData)
     $gitPath = (Get-Command git -ErrorAction Stop).Source
     $gitRevision = (Invoke-External $gitPath @('rev-parse', 'HEAD') 30).Trim()
     $sourceHashes = Get-SourceHashes
@@ -2025,10 +2289,13 @@ try {
         return
     }
 
-    Invoke-Docker @('build', '--file', (Join-Path $repositoryRoot 'Dockerfile'), '--tag', $image, $repositoryRoot) 1800 | Out-Null
+    if ([string]::IsNullOrWhiteSpace($ReuseImage)) {
+        Invoke-Docker @('build', '--file', (Join-Path $repositoryRoot 'Dockerfile'), '--tag', $image, $repositoryRoot) 1800 | Out-Null
+    }
     $imageIdentity = (Invoke-Docker @('image', 'inspect', '--format', '{{.Id}}', $image)).Trim()
     if ($imageIdentity -notmatch '^sha256:[0-9a-f]{64}$') { throw 'The production test image did not expose a valid immutable image identity.' }
-    Add-EvidenceEvent -Event 'image-built' -Detail "imageId=$imageIdentity"
+    $imageEvent = if ([string]::IsNullOrWhiteSpace($ReuseImage)) { 'image-built' } else { 'image-reused' }
+    Add-EvidenceEvent -Event $imageEvent -Detail "image=$image;imageId=$imageIdentity"
     Test-FixedCliObserverProcReadCounterexamples $image
     if ($ObserverSmokeOnly) {
         Write-Output 'PASS fixed CLI observer proc-read churn, post-stop ambiguity, and exact PID/start liveness counterexamples'
@@ -2036,44 +2303,372 @@ try {
         return
     }
 
-    $fixtureArguments = @(
-        'test', $testProject, '-c', 'Release', '--no-restore', '--filter', $fixtureMethod,
-        '--logger', 'console;verbosity=minimal')
-    $fixtureOutput = Invoke-External -FilePath $dotnetCommand -Arguments $fixtureArguments -TimeoutSeconds 300 `
-        -Environment @{
-            HRP_HORSE_IDENTITY_SUPERVISOR_FIXTURE_DIR = $happyData
-            HRP_HORSE_IDENTITY_SUPERVISOR_FIXTURE_PAUSE_AGED = $(if ($FastLifecycleSmokeOnly) { '1' } else { '' })
+    if (-not $CancellationOnlySmoke) {
+        $fixtureArguments = @(
+            'test', $testProject, '-c', 'Release', '--no-restore', '--filter', $fixtureMethod,
+            '--logger', 'console;verbosity=minimal')
+        $fixtureOutput = Invoke-External -FilePath $dotnetCommand -Arguments $fixtureArguments -TimeoutSeconds 300 `
+            -Environment @{
+                HRP_HORSE_IDENTITY_SUPERVISOR_FIXTURE_DIR = $happyData
+                HRP_HORSE_IDENTITY_SUPERVISOR_FIXTURE_PAUSE_AGED = $(if ($FastLifecycleSmokeOnly) { '1' } else { '' })
+            }
+        if (-not $fixtureOutput.Contains('ExportProductionContainerFixtureWhenRequested')) {
+            # VSTest may suppress names for a one-test success; filesystem evidence below is authoritative.
         }
-    if (-not $fixtureOutput.Contains('ExportProductionContainerFixtureWhenRequested')) {
-        # VSTest may suppress names for a one-test success; filesystem evidence below is authoritative.
     }
-    Copy-Item -LiteralPath (Join-Path $happyData 'eventstore.db') -Destination (Join-Path $crashData 'eventstore.db')
-    Copy-Item -LiteralPath (Join-Path $happyData 'collection-platform.db') -Destination (Join-Path $crashData 'collection-platform.db')
-    Copy-Item -LiteralPath (Join-Path $happyData 'prediction-executions.db') -Destination (Join-Path $crashData 'prediction-executions.db')
-    Copy-Item -LiteralPath (Join-Path $happyData 'pause-start.txt') -Destination (Join-Path $crashData 'pause-start.txt')
+    [void](Invoke-Docker @(
+        'run', '--rm', '--volume', "${repositoryRoot}:/src:ro", '--volume', "${cancelData}:${cancelContainerPath}:rw",
+        '--workdir', '/src', '--env', "HRP_HORSE_IDENTITY_SUPERVISOR_FIXTURE_DIR=$cancelContainerPath",
+        '--env', 'HRP_HORSE_IDENTITY_SUPERVISOR_FIXTURE_PAUSE_AGED=1',
+        '--env', 'HRP_HORSE_IDENTITY_SUPERVISOR_FIXTURE_PREPARATION_CANCELLATION=1',
+        'mcr.microsoft.com/dotnet/sdk:10.0', 'dotnet', 'test',
+        'tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj',
+        '--configuration', 'Release', '--filter', $fixtureMethod,
+        '--artifacts-path', '/tmp/hrp-cancel-fixture-artifacts', '--logger', 'console;verbosity=minimal') 900)
+    if (-not $CancellationOnlySmoke) {
+        Copy-Item -LiteralPath (Join-Path $happyData 'eventstore.db') -Destination (Join-Path $crashData 'eventstore.db')
+        Copy-Item -LiteralPath (Join-Path $happyData 'collection-platform.db') -Destination (Join-Path $crashData 'collection-platform.db')
+        Copy-Item -LiteralPath (Join-Path $happyData 'prediction-executions.db') -Destination (Join-Path $crashData 'prediction-executions.db')
+        Copy-Item -LiteralPath (Join-Path $happyData 'pause-start.txt') -Destination (Join-Path $crashData 'pause-start.txt')
 
-    $apiKey = 'local-supervisor-' + [guid]::NewGuid().ToString('N')
-    $sensitiveValues.Add($apiKey)
-    $published = Invoke-Docker @(
-        'run', '-d', '--name', $happyContainer, '--label', "hrp.test.run=$runId", '--restart=no',
+        $apiKey = 'local-supervisor-' + [guid]::NewGuid().ToString('N')
+        $sensitiveValues.Add($apiKey)
+        [void](Invoke-Docker @(
+            'run', '-d', '--name', $happyContainer, '--label', "hrp.test.run=$runId", '--restart=no',
+            '--publish', '127.0.0.1::8080',
+            '--env', 'ASPNETCORE_ENVIRONMENT=Production',
+            '--env', 'AWS_REGION=ap-northeast-1',
+            '--env', 'ASPNETCORE_URLS=http://+:8080',
+            '--env', 'ConnectionStrings__EventStore=Data Source=/data/eventstore.db',
+            '--env', 'CollectionPlatform__StateDirectory=/data',
+            '--env', 'CollectionPlatform__DatabaseFileName=collection-platform.db',
+            '--env', 'PredictionScheduling__StateDirectory=/data',
+            '--env', 'PredictionScheduling__StoreFileName=prediction-executions.db',
+            '--env', 'CollectionQueue__Provider=Sqs',
+            '--env', 'CollectionQueue__Enabled=false',
+            '--env', 'CollectionMonitoring__Enabled=false',
+            '--env', 'JobFailureNotifications__Enabled=false',
+            '--env', "HORSE_RACING_API_KEY=$apiKey",
+            '--volume', "${happyData}:/data:rw", $image))
+        $happyPort = Get-PublishedPort $happyContainer
+        $happyUrl = "http://$($PublishedHost):$happyPort"
+        Wait-Api $happyUrl $apiKey
+    }
+
+    $cancelKey = 'local-cancel-' + [guid]::NewGuid().ToString('N')
+    $sensitiveValues.Add($cancelKey)
+    $cancelOperationId = (Get-Content -Raw -LiteralPath (Join-Path $cancelData 'preparation-cancellation-operation-id.txt')).Trim()
+    [guid]$parsedCancelOperationId = [guid]::Empty
+    if (-not [guid]::TryParseExact($cancelOperationId, 'D', [ref]$parsedCancelOperationId) -or $parsedCancelOperationId -eq [guid]::Empty) {
+        throw 'The typed cancellation fixture did not emit a canonical operation GUID.'
+    }
+    $cancelSourceSnapshotPath = Join-Path $evidenceRoot 'preparation-cancellation-source-before.json'
+    $cancelSourceSnapshot = Save-LogicalSourceSnapshot $cancelData $cancelSourceSnapshotPath
+    $cancelSourceFingerprint = [string]$cancelSourceSnapshot.sha256
+    $cancelPipelineDatabase = Join-Path $cancelData 'collection-platform.db'
+    $cancelOriginalPipelineRow = Get-DisposablePipelineControlRow $cancelPipelineDatabase
+    if ([int]$cancelOriginalPipelineRow[1] -ne 1) {
+        throw 'The exact exported cancellation fixture must begin with its persisted pipeline pause enabled.'
+    }
+    Set-DisposablePipelinePaused $cancelPipelineDatabase $cancelOriginalPipelineRow $true $false
+    $cancelGates = @(
+        (Join-Path $cancelData '.eventstore.db.horse-identity-migration.maintenance'),
+        (Join-Path $cancelData '.collection-platform.db.horse-identity-migration.maintenance'),
+        (Join-Path $cancelData '.prediction-executions.db.horse-identity-migration.maintenance'))
+    if (@($cancelGates | Where-Object { -not (Test-Path -LiteralPath $_) }).Count -ne 0) {
+        throw 'The cancellation proof-refusal fixture did not retain the exact complete gate set.'
+    }
+    Add-EvidenceEvent -Event 'preparation-business-source-snapshot-before' -OperationId $cancelOperationId `
+        -Phase 'StoppingApi' -Status 'AwaitingActions' `
+        -Detail "allTables=$($cancelSourceSnapshot.tables);allRows=$($cancelSourceSnapshot.rows);sourceSha256=$cancelSourceFingerprint"
+    Add-EvidenceEvent -Event 'preparation-cancellation-proof-refusal-fixture-prepared' -OperationId $cancelOperationId `
+        -Phase 'StoppingApi' -Status 'AwaitingActions' `
+        -Detail "pipelineIsPaused=false;originalReason=$($cancelOriginalPipelineRow[2]);originalUpdatedAt=$($cancelOriginalPipelineRow[3]);exactGatesRetained=true"
+    [void](Invoke-Docker @(
+        'run', '-d', '--name', $cancelContainer, '--label', "hrp.test.run=$runId", '--restart=no',
         '--publish', '127.0.0.1::8080',
         '--env', 'ASPNETCORE_ENVIRONMENT=Production',
         '--env', 'AWS_REGION=ap-northeast-1',
         '--env', 'ASPNETCORE_URLS=http://+:8080',
-        '--env', 'ConnectionStrings__EventStore=Data Source=/data/eventstore.db',
-        '--env', 'CollectionPlatform__StateDirectory=/data',
+        '--env', "ConnectionStrings__EventStore=Data Source=$cancelContainerPath/eventstore.db",
+        '--env', "CollectionPlatform__StateDirectory=$cancelContainerPath",
         '--env', 'CollectionPlatform__DatabaseFileName=collection-platform.db',
-        '--env', 'PredictionScheduling__StateDirectory=/data',
+        '--env', "PredictionScheduling__StateDirectory=$cancelContainerPath",
         '--env', 'PredictionScheduling__StoreFileName=prediction-executions.db',
         '--env', 'CollectionQueue__Provider=Sqs',
         '--env', 'CollectionQueue__Enabled=false',
         '--env', 'CollectionMonitoring__Enabled=false',
         '--env', 'JobFailureNotifications__Enabled=false',
-        '--env', "HORSE_RACING_API_KEY=$apiKey",
-        '--volume', "${happyData}:/data:rw", $image)
-    $happyPort = Get-PublishedPort $happyContainer
-    $happyUrl = "http://$($PublishedHost):$happyPort"
-    Wait-Api $happyUrl $apiKey
+        '--env', "HORSE_RACING_API_KEY=$cancelKey",
+        '--env', 'HRP_HORSE_IDENTITY_OPERATOR_ONLY=true',
+        '--env', "HRP_HORSE_IDENTITY_OPERATOR_OPERATION_ID=$cancelOperationId",
+        '--volume', "${cancelData}:${cancelContainerPath}:rw", $image))
+    $cancelPort = Get-PublishedPort $cancelContainer
+    $cancelUrl = "http://$($PublishedHost):$cancelPort"
+    Wait-Api $cancelUrl $cancelKey
+    [void](Assert-Pid1ApiShape $cancelContainer '--internal-blocked-child')
+    $cancelBefore = Invoke-Api $cancelUrl "/api/v2/admin/horse-id-migration-operations/$cancelOperationId" -ApiKey $cancelKey
+    if ($cancelBefore.executionPhase -ne 'StoppingApi' -or $cancelBefore.status -ne 'AwaitingActions') {
+        throw "The native cancellation fixture did not start at its exact production-shaped pre-apply state (status=$($cancelBefore.status), phase=$($cancelBefore.executionPhase))."
+    }
+    $cancelSession = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
+    $cancelLogin = Invoke-WebRequest -Uri ($cancelUrl + '/login') -WebSession $cancelSession -TimeoutSec 15
+    if ($cancelLogin.StatusCode -ne 200) { throw 'The forced cancellation operator login page was unavailable.' }
+    $cancelLoginResponse = Invoke-WebRequest -Method Post -Uri ($cancelUrl + '/login') -WebSession $cancelSession `
+        -Body @{ username = 'user'; password = $cancelKey; ReturnUrl = "/settings/horse-id-migration?operationId=$cancelOperationId" } -TimeoutSec 15
+    if ($cancelLoginResponse.StatusCode -notin @(200, 302)) { throw 'The forced cancellation operator login did not complete.' }
+    $cancelPage = Invoke-WebRequest -Uri ($cancelUrl + "/settings/horse-id-migration?operationId=$cancelOperationId") `
+        -WebSession $cancelSession -TimeoutSec 15
+    $cancelHtml = [string]$cancelPage.Content
+    if ($cancelPage.StatusCode -ne 200 -or
+        $cancelHtml -notmatch [regex]::Escape("/settings/horse-id-migration/$cancelOperationId/cancel-preparation") -or
+        $cancelHtml -notmatch 'name="confirmCancellation"[^>]*required' -or
+        $cancelHtml -notmatch 'name="__RequestVerificationToken"') {
+        throw 'The exact forced operator target did not expose the explicit cookie/CSRF cancellation confirmation form.'
+    }
+    $missingKeyResponse = Invoke-WebRequest -Method Post `
+        -Uri ($cancelUrl + "/api/v2/admin/horse-id-migration-operations/$cancelOperationId/cancel-preparation") `
+        -MaximumRedirection 0 -SkipHttpErrorCheck -TimeoutSec 10
+    if ([int]$missingKeyResponse.StatusCode -ne 401) {
+        throw "The cancellation API did not require its API key when no cookie/header was sent (status=$([int]$missingKeyResponse.StatusCode))."
+    }
+    $invalidKeyResponse = Invoke-WebRequest -Method Post `
+        -Uri ($cancelUrl + "/api/v2/admin/horse-id-migration-operations/$cancelOperationId/cancel-preparation") `
+        -Headers @{ 'X-Api-Key' = 'invalid-test-key' } -MaximumRedirection 0 -SkipHttpErrorCheck -TimeoutSec 10
+    if ([int]$invalidKeyResponse.StatusCode -ne 401) {
+        throw "The cancellation API did not reject an invalid API key (status=$([int]$invalidKeyResponse.StatusCode))."
+    }
+    $cookieOnlyResponse = Invoke-WebRequest -Method Post `
+        -Uri ($cancelUrl + "/api/v2/admin/horse-id-migration-operations/$cancelOperationId/cancel-preparation") `
+        -WebSession $cancelSession -MaximumRedirection 0 -SkipHttpErrorCheck -TimeoutSec 10
+    if ([int]$cookieOnlyResponse.StatusCode -ne 401) {
+        throw "The cancellation API treated a UI cookie without its API key as authorized (status=$([int]$cookieOnlyResponse.StatusCode))."
+    }
+    $cancelRequestStartedAt = [DateTimeOffset]::UtcNow
+    $cancelResponse = Invoke-WebRequest -Method Post `
+        -Uri ($cancelUrl + "/api/v2/admin/horse-id-migration-operations/$cancelOperationId/cancel-preparation") `
+        -Headers @{ 'X-Api-Key' = $cancelKey } -MaximumRedirection 0 -SkipHttpErrorCheck -TimeoutSec 10
+    if ([int]$cancelResponse.StatusCode -ne 202) {
+        throw "The exact forced-operator target did not accept the bodyless cancellation request (status=$([int]$cancelResponse.StatusCode))."
+    }
+    $cancelRequestAcceptedAt = [DateTimeOffset]::UtcNow
+    Add-EvidenceEvent -Event 'preparation-cancellation-post-accepted' -OperationId $cancelOperationId `
+        -Phase 'CancellationRequested' -Status 'InProgress' `
+        -Detail "requestStartedAt=$($cancelRequestStartedAt.ToString('O'));acceptedAt=$($cancelRequestAcceptedAt.ToString('O'));httpStatus=202"
+    $cancelRefusal = $null
+    $cancelRefusalDeadline = [DateTimeOffset]::UtcNow.AddSeconds(45)
+    while ([DateTimeOffset]::UtcNow -lt $cancelRefusalDeadline) {
+        $cancelRefusal = Invoke-Api $cancelUrl "/api/v2/admin/horse-id-migration-operations/$cancelOperationId" -ApiKey $cancelKey
+        if ($cancelRefusal.executionPhase -eq 'CancellationRequested' -and $cancelRefusal.reason -eq 'PreparationFailed') { break }
+        if ($cancelRefusal.executionPhase -eq 'PreparationCancelled' -or $cancelRefusal.status -in @('Partial', 'Failed', 'Unknown')) {
+            throw "The cancellation proof-refusal fixture moved unexpectedly to status '$($cancelRefusal.status)' phase '$($cancelRefusal.executionPhase)' reason '$($cancelRefusal.reason)'."
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    if ($null -eq $cancelRefusal -or $cancelRefusal.executionPhase -ne 'CancellationRequested' -or
+        $cancelRefusal.status -ne 'AwaitingActions' -or $cancelRefusal.reason -ne 'PreparationFailed' -or
+        -not $cancelRefusal.executionUpdatedAt) {
+        throw 'The real PID 1 did not retain the pending request with a timestamped safe proof-refusal diagnostic.'
+    }
+    $cancelRefusalRawResponse = Invoke-WebRequest -Uri `
+        ($cancelUrl + "/api/v2/admin/horse-id-migration-operations/$cancelOperationId") `
+        -Headers @{ 'X-Api-Key' = $cancelKey } -MaximumRedirection 0 -TimeoutSec 10
+    $cancelRefusalTimestampMatch = [regex]::Match([string]$cancelRefusalRawResponse.Content,
+        '"executionUpdatedAt"\s*:\s*"(?<value>[^"]+)"')
+    if (-not $cancelRefusalTimestampMatch.Success) {
+        throw 'The raw public cancellation status did not contain its safe execution timestamp.'
+    }
+    $cancelRefusalTimestampText = $cancelRefusalTimestampMatch.Groups['value'].Value
+    $cancelRefusalTimestamp = [DateTimeOffset]::Parse($cancelRefusalTimestampText).ToUniversalTime()
+    $cancelFailurePage = Invoke-WebRequest -Uri ($cancelUrl + "/settings/horse-id-migration?operationId=$cancelOperationId") `
+        -WebSession $cancelSession -MaximumRedirection 0 -TimeoutSec 15
+    $cancelFailureHtml = [string]$cancelFailurePage.Content
+    $cancelDisplayedTimestampText = [regex]::Match($cancelFailureHtml,
+        '<dt>記録更新時刻</dt><dd>(.*?)</dd>').Groups[1].Value
+    $cancelDisplayedTimestamp = [DateTimeOffset]::MinValue
+    $cancelDisplayedTimestampParsed = [DateTimeOffset]::TryParse($cancelDisplayedTimestampText, [ref]$cancelDisplayedTimestamp)
+    if ($cancelFailurePage.StatusCode -ne 200 -or $cancelFailureHtml -notmatch '取消の検証を完了できませんでした' -or
+        $cancelFailureHtml -notmatch 'Reason|理由' -or
+        -not $cancelDisplayedTimestampParsed -or
+        (ConvertTo-CanonicalUtcTimestamp $cancelDisplayedTimestampText) -cne
+            (ConvertTo-CanonicalUtcTimestamp $cancelRefusalTimestampText) -or
+        $cancelFailureHtml -notmatch 'この中止要求では業務データを書き換えません') {
+        throw 'The protected operator page did not show the safe refusal reason/time and scoped no-write wording.'
+    }
+    $refusalChild = Assert-Pid1ApiShape $cancelContainer '--internal-blocked-child'
+    $refusalObservedAt = [DateTimeOffset]::UtcNow
+    for ($interval = 1; $interval -le 3; $interval++) {
+        Start-Sleep -Seconds 1
+        $refusalStatus = Invoke-Api $cancelUrl "/api/v2/admin/horse-id-migration-operations/$cancelOperationId" -ApiKey $cancelKey
+        if ($refusalStatus.status -ne 'AwaitingActions' -or $refusalStatus.executionPhase -ne 'CancellationRequested' -or
+            $refusalStatus.reason -ne 'PreparationFailed' -or [string]$refusalStatus.executionUpdatedAt -cne [string]$cancelRefusal.executionUpdatedAt) {
+            throw "The cancellation proof refusal was not stable at observation $interval; the durable request/diagnostic changed."
+        }
+        $refusalChildNow = Assert-Pid1ApiShape $cancelContainer '--internal-blocked-child'
+        if ($refusalChildNow.ProcessId -ne $refusalChild.ProcessId -or $refusalChildNow.StartIdentity -cne $refusalChild.StartIdentity) {
+            throw "The healthy protected child was restarted during proof refusal interval $interval."
+        }
+        foreach ($gatePath in $cancelGates) {
+            if (-not (Test-Path -LiteralPath $gatePath)) { throw "The failed proof removed or lost an owned maintenance gate: $([IO.Path]::GetFileName($gatePath))" }
+        }
+        $cancelClient = [Net.Http.HttpClient]::new()
+        try {
+            $cancelClient.DefaultRequestHeaders.Add('X-Api-Key', $cancelKey)
+            $cancelClient.BaseAddress = [Uri]$cancelUrl
+            $protectedRoute = $cancelClient.GetAsync('/api/races/not-available').GetAwaiter().GetResult()
+            if ([int]$protectedRoute.StatusCode -ne 503) {
+                throw "The operator-only business routes were not protected during refusal interval $interval."
+            }
+        }
+        finally { $cancelClient.Dispose() }
+    }
+    $cancelBackup = Join-Path $cancelData "backups/horse-id-migration-$($cancelOperationId.Replace('-', ''))"
+    if (Test-Path -LiteralPath $cancelBackup) { throw 'A failed cancellation proof unexpectedly created a backup.' }
+    Add-EvidenceEvent -Event 'preparation-cancellation-proof-refused-stably' -OperationId $cancelOperationId `
+        -Phase 'CancellationRequested' -Status 'AwaitingActions' `
+        -Detail "reason=PreparationFailed;recordedAt=$($cancelRefusalTimestamp.ToString('O'));stableIntervals=3;blockedChild=$($refusalChild.ProcessId)/$($refusalChild.StartIdentity);gatesRetained=true;backupAbsent=true;businessRoute=503;elapsedSeconds=$([Math]::Round(([DateTimeOffset]::UtcNow - $refusalObservedAt).TotalSeconds, 3))"
+    Invoke-Docker @('stop', '--timeout', '10', $cancelContainer) | Out-Null
+    Invoke-Docker @('rm', $cancelContainer) | Out-Null
+    Set-DisposablePipelinePaused $cancelPipelineDatabase $cancelOriginalPipelineRow $false $true
+    $cancelRestoredSourceSnapshotPath = Join-Path $evidenceRoot 'preparation-cancellation-source-restored.json'
+    $cancelRestoredSourceSnapshot = Save-LogicalSourceSnapshot $cancelData $cancelRestoredSourceSnapshotPath
+    $cancelRestoredComparison = Compare-LogicalSourceSnapshots $cancelSourceSnapshotPath $cancelRestoredSourceSnapshotPath $false
+    Add-EvidenceEvent -Event 'preparation-cancellation-fixture-restored' -OperationId $cancelOperationId `
+        -Phase 'CancellationRequested' -Status 'AwaitingActions' `
+        -Detail "originalPipelineRowRestored=true;allTables=$($cancelRestoredComparison.tablesCompared);allRows=$($cancelRestoredComparison.rowsBefore);sourceSha256=$($cancelSourceSnapshot.sha256)"
+    $cancelNormalChildStartedAt = [DateTimeOffset]::UtcNow
+    [void](Invoke-Docker @(
+        'run', '-d', '--name', $cancelContainer, '--label', "hrp.test.run=$runId", '--restart=no',
+        '--publish', '127.0.0.1::8080',
+        '--env', 'ASPNETCORE_ENVIRONMENT=Production',
+        '--env', 'AWS_REGION=ap-northeast-1',
+        '--env', 'ASPNETCORE_URLS=http://+:8080',
+        '--env', "ConnectionStrings__EventStore=Data Source=$cancelContainerPath/eventstore.db",
+        '--env', "CollectionPlatform__StateDirectory=$cancelContainerPath",
+        '--env', 'CollectionPlatform__DatabaseFileName=collection-platform.db',
+        '--env', "PredictionScheduling__StateDirectory=$cancelContainerPath",
+        '--env', 'PredictionScheduling__StoreFileName=prediction-executions.db',
+        '--env', 'CollectionQueue__Provider=Sqs',
+        '--env', 'CollectionQueue__Enabled=false',
+        '--env', 'CollectionMonitoring__Enabled=false',
+        '--env', 'JobFailureNotifications__Enabled=false',
+        '--env', "HORSE_RACING_API_KEY=$cancelKey",
+        '--env', 'HRP_HORSE_IDENTITY_OPERATOR_ONLY=true',
+        '--env', "HRP_HORSE_IDENTITY_OPERATOR_OPERATION_ID=$cancelOperationId",
+        '--volume', "${cancelData}:${cancelContainerPath}:rw", $image))
+    $cancelPort = Get-PublishedPort $cancelContainer
+    $cancelUrl = "http://$($PublishedHost):$cancelPort"
+    Wait-Api $cancelUrl $cancelKey
+    $cancelTerminal = $null
+    $cancelDeadline = [DateTimeOffset]::UtcNow.AddSeconds(90)
+    while ([DateTimeOffset]::UtcNow -lt $cancelDeadline) {
+        try {
+            $cancelTerminal = Invoke-Api $cancelUrl "/api/v2/admin/horse-id-migration-operations/$cancelOperationId" -ApiKey $cancelKey
+            if ($cancelTerminal.executionPhase -eq 'PreparationCancelled') { break }
+        }
+        catch {
+            if (-not (Test-KnownApiGetTransportInterruption $_.Exception)) { throw }
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    if ($null -eq $cancelTerminal -or $cancelTerminal.status -ne 'Failed' -or
+        $cancelTerminal.reason -ne 'PreparationCancelled' -or $cancelTerminal.executionPhase -ne 'PreparationCancelled') {
+        throw 'PID 1 did not persist the exact terminal preparation-cancellation receipt.'
+    }
+    $cancelTerminalRawResponse = Invoke-WebRequest -Uri `
+        ($cancelUrl + "/api/v2/admin/horse-id-migration-operations/$cancelOperationId") `
+        -Headers @{ 'X-Api-Key' = $cancelKey } -MaximumRedirection 0 -TimeoutSec 10
+    $cancelTerminalTimestampMatch = [regex]::Match([string]$cancelTerminalRawResponse.Content,
+        '"executionUpdatedAt"\s*:\s*"(?<value>[^"]+)"')
+    if (-not $cancelTerminalTimestampMatch.Success) {
+        throw 'The raw terminal cancellation status did not contain its safe execution timestamp.'
+    }
+    $terminalCommittedAt = [DateTimeOffset]::Parse($cancelTerminalTimestampMatch.Groups['value'].Value).ToUniversalTime()
+    $cancelReceiptElapsedSeconds = [Math]::Round(($terminalCommittedAt - $cancelRequestAcceptedAt).TotalSeconds, 3)
+    if ($cancelReceiptElapsedSeconds -lt 0) { throw 'The cancellation receipt timestamp predates the accepted cancellation request.' }
+    if ($cancelGates | Where-Object { Test-Path -LiteralPath $_ }) { throw 'The exact cancellation receipt left a maintenance gate behind.' }
+    if (Test-Path -LiteralPath $cancelBackup) { throw 'Pre-apply cancellation unexpectedly created a backup.' }
+    [void](Assert-Pid1ApiShape $cancelContainer '--internal-api-child')
+    $cancelNormalPipeline = Assert-ReadyPausedPipeline $cancelUrl $cancelKey 'The immediate post-cancellation normal child'
+    $cancelNormalChildReadyAt = [DateTimeOffset]::UtcNow
+    $cancelFinalPipelineRow = Get-DisposablePipelineControlRow $cancelPipelineDatabase
+    for ($column = 0; $column -lt 4; $column++) {
+        if ([string]$cancelFinalPipelineRow[$column] -cne [string]$cancelOriginalPipelineRow[$column]) {
+            throw 'Normal startup changed the exact paused pipeline control row after cancellation.'
+        }
+    }
+    Add-EvidenceEvent -Event 'preparation-cancelled-by-pid1' -OperationId $cancelOperationId `
+        -Phase 'PreparationCancelled' -Status 'Failed' `
+        -Detail "bodylessRequest=true;terminalSourceBoundReceipt=true;gatesAbsent=true;backupAbsent=true;acceptedAt=$($cancelRequestAcceptedAt.ToString('O'));terminalUpdatedAt=$($terminalCommittedAt.ToString('O'));receiptElapsedSeconds=$cancelReceiptElapsedSeconds"
+
+    Invoke-Docker @('stop', '--timeout', '10', $cancelContainer) | Out-Null
+    Invoke-Docker @('rm', $cancelContainer) | Out-Null
+    $cancelSourceSnapshotAfterPath = Join-Path $evidenceRoot 'preparation-cancellation-source-after.json'
+    $cancelSourceSnapshotAfter = Save-LogicalSourceSnapshot $cancelData $cancelSourceSnapshotAfterPath
+    $cancelFinalComparison = Compare-LogicalSourceSnapshots $cancelSourceSnapshotPath $cancelSourceSnapshotAfterPath $true `
+        $cancelNormalChildStartedAt.ToString('O') $cancelNormalChildReadyAt.ToString('O')
+    Add-EvidenceEvent -Event 'preparation-source-snapshot-normal-startup-seeds-classified' -OperationId $cancelOperationId `
+        -Phase 'PreparationCancelled' -Status 'Failed' `
+        -Detail "allTables=$($cancelFinalComparison.tablesCompared);rowsBefore=$($cancelFinalComparison.rowsBefore);rowsAfter=$($cancelFinalComparison.rowsAfter);classifiedStartupInserts=$($cancelFinalComparison.classifiedStartupInserts.Count);sourceSha256=$($cancelSourceSnapshotAfter.sha256)"
+    $cancelPort = Invoke-Docker @(
+        'run', '-d', '--name', $cancelContainer, '--label', "hrp.test.run=$runId", '--restart=no',
+        '--publish', '127.0.0.1::8080', '--env', 'ASPNETCORE_ENVIRONMENT=Production',
+        '--env', 'AWS_REGION=ap-northeast-1', '--env', 'ASPNETCORE_URLS=http://+:8080',
+        '--env', "ConnectionStrings__EventStore=Data Source=$cancelContainerPath/eventstore.db",
+        '--env', "CollectionPlatform__StateDirectory=$cancelContainerPath", '--env', 'CollectionPlatform__DatabaseFileName=collection-platform.db',
+        '--env', "PredictionScheduling__StateDirectory=$cancelContainerPath", '--env', 'PredictionScheduling__StoreFileName=prediction-executions.db',
+        '--env', 'CollectionQueue__Provider=Sqs', '--env', 'CollectionQueue__Enabled=false',
+        '--env', 'CollectionMonitoring__Enabled=false', '--env', 'JobFailureNotifications__Enabled=false',
+        '--env', "HORSE_RACING_API_KEY=$cancelKey", '--env', 'HRP_HORSE_IDENTITY_OPERATOR_ONLY=true',
+        '--env', "HRP_HORSE_IDENTITY_OPERATOR_OPERATION_ID=$cancelOperationId",
+        '--volume', "${cancelData}:${cancelContainerPath}:rw", $image) | Out-Null
+    $cancelPort = Get-PublishedPort $cancelContainer
+    $cancelUrl = "http://$($PublishedHost):$cancelPort"
+    Wait-Api $cancelUrl $cancelKey
+    $matchedRecoveryChild = Assert-Pid1ApiShape $cancelContainer '--internal-api-child'
+    $matchedPipeline = Assert-ReadyPausedPipeline $cancelUrl $cancelKey 'The same-target cancellation recovery'
+    Add-EvidenceEvent -Event 'matching-cancellation-target-released' -OperationId $cancelOperationId `
+        -Phase 'PreparationCancelled' -Status 'Failed' `
+        -Detail "newPid1Child=$($matchedRecoveryChild.ProcessId);sourceHashMatched=true;startupReady=true;businessPipelineReadiness=200;pipelinePaused=$($matchedPipeline.pipeline.isPaused)"
+
+    Invoke-Docker @('stop', '--timeout', '10', $cancelContainer) | Out-Null
+    Invoke-Docker @('rm', $cancelContainer) | Out-Null
+    $differentTarget = [guid]::NewGuid().ToString('D')
+    [void](Invoke-Docker @(
+        'run', '-d', '--name', $cancelContainer, '--label', "hrp.test.run=$runId", '--restart=no',
+        '--publish', '127.0.0.1::8080', '--env', 'ASPNETCORE_ENVIRONMENT=Production',
+        '--env', 'AWS_REGION=ap-northeast-1', '--env', 'ASPNETCORE_URLS=http://+:8080',
+        '--env', "ConnectionStrings__EventStore=Data Source=$cancelContainerPath/eventstore.db",
+        '--env', "CollectionPlatform__StateDirectory=$cancelContainerPath", '--env', 'CollectionPlatform__DatabaseFileName=collection-platform.db',
+        '--env', "PredictionScheduling__StateDirectory=$cancelContainerPath", '--env', 'PredictionScheduling__StoreFileName=prediction-executions.db',
+        '--env', 'CollectionQueue__Provider=Sqs', '--env', 'CollectionQueue__Enabled=false',
+        '--env', 'CollectionMonitoring__Enabled=false', '--env', 'JobFailureNotifications__Enabled=false',
+        '--env', "HORSE_RACING_API_KEY=$cancelKey", '--env', 'HRP_HORSE_IDENTITY_OPERATOR_ONLY=true',
+        '--env', "HRP_HORSE_IDENTITY_OPERATOR_OPERATION_ID=$differentTarget",
+        '--volume', "${cancelData}:${cancelContainerPath}:rw", $image))
+    $cancelPort = Get-PublishedPort $cancelContainer
+    $cancelUrl = "http://$($PublishedHost):$cancelPort"
+    Wait-Api $cancelUrl $cancelKey
+    [void](Assert-Pid1ApiShape $cancelContainer '--internal-blocked-child')
+    $cancelClient = [Net.Http.HttpClient]::new()
+    try {
+        $cancelClient.DefaultRequestHeaders.Add('X-Api-Key', $cancelKey)
+        $cancelClient.BaseAddress = [Uri]$cancelUrl
+        $unrelatedBusinessRoute = $cancelClient.GetAsync('/api/races/not-available').GetAwaiter().GetResult()
+        if ([int]$unrelatedBusinessRoute.StatusCode -ne 503) {
+            throw 'A different forced operation target incorrectly escaped operator-only mode.'
+        }
+    }
+    finally { $cancelClient.Dispose() }
+    Add-EvidenceEvent -Event 'different-cancellation-target-denied' -OperationId $differentTarget `
+        -Phase 'Unknown' -Status 'Blocked' -Detail "oldReceiptOperation=$cancelOperationId;businessRoute=503;blockedChild=true"
+
+    if ($CancellationOnlySmoke) {
+        Write-Output 'PASS deterministic PID 1 pre-apply cancellation, exact receipt/gate cleanup, business-data snapshot, and matching/different-target restart checks'
+        $harnessSucceeded = $true
+        return
+    }
+
     if ($FastLifecycleSmokeOnly) {
         Assert-AgedDisposablePauseWindow $happyUrl $apiKey (Join-Path $happyData 'pause-start.txt')
     }
@@ -2223,7 +2818,7 @@ try {
     $stoppedCliTimeoutSeconds = if ($FastLifecycleSmokeOnly) { 180 } else { 300 }
     $stoppedCli = Wait-ForStoppedCliAfterBackup $crashContainer $crashData $crashOperationId $crashCli `
         $stoppedCliTimeoutSeconds
-    $crashSourceFingerprint = Get-SourceFileFingerprint $crashData
+    $crashSourceFingerprint = Get-ContainerSourceFileFingerprint $crashContainer
     $crashReceiptPath = Join-Path $crashData "backups/horse-id-migration-$($crashOperationId.Replace('-', ''))/receipt.json"
     if (-not (Test-Path -LiteralPath $crashReceiptPath)) { throw 'The crash boundary has no managed backup receipt.' }
     $crashReceiptHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $crashReceiptPath).Hash
@@ -2308,7 +2903,7 @@ try {
     }
     Add-EvidenceEvent -Event 'crash-maintenance-gates' -OperationId $crashOperationId `
         -Phase ([string]$blockedStatus.executionPhase) -Status 'Present' -Detail 'gateCount=3'
-    if ((Get-SourceFileFingerprint $crashData) -cne $crashSourceFingerprint) {
+    if ((Get-ContainerSourceFileFingerprint $crashContainer) -cne $crashSourceFingerprint) {
         throw 'The killed fixed child changed a durable source or SQLite WAL/SHM file before blocked restart.'
     }
     Start-Sleep -Seconds 5
@@ -2316,7 +2911,7 @@ try {
     if (-not (Test-SafelyClassifiedChildFailureStatus $again)) {
         throw 'The blocked restart changed or replayed the safely classified Applying child-failure operation.'
     }
-    if ((Get-SourceFileFingerprint $crashData) -cne $crashSourceFingerprint) {
+    if ((Get-ContainerSourceFileFingerprint $crashContainer) -cne $crashSourceFingerprint) {
         throw 'The blocked restart mutated source or SQLite WAL/SHM files after the owned CLI was stopped.'
     }
 
@@ -2342,12 +2937,14 @@ finally {
         $happyCliHeld = $false
     }
     if ($harnessSucceeded) {
-        foreach ($container in @($happyContainer, $crashContainer)) {
+        foreach ($container in @($happyContainer, $crashContainer, $cancelContainer)) {
             try { Invoke-Docker @('rm', '--force', $container) | Out-Null } catch { }
         }
-        try { Invoke-Docker @('image', 'rm', '--force', $image) | Out-Null } catch { }
+        if ([string]::IsNullOrWhiteSpace($ReuseImage)) {
+            try { Invoke-Docker @('image', 'rm', '--force', $image) | Out-Null } catch { }
+        }
         Assert-DisposablePath $tempRoot
-        foreach ($disposableDataPath in @($happyData, $crashData, (Join-Path $tempRoot 'process-tree-probe'),
+        foreach ($disposableDataPath in @($happyData, $crashData, $cancelData, (Join-Path $tempRoot 'process-tree-probe'),
             (Join-Path $tempRoot 'stalled-child.pid'))) {
             Assert-DisposablePath $disposableDataPath
             if (Test-Path -LiteralPath $disposableDataPath) {
@@ -2362,7 +2959,7 @@ finally {
         if (Test-Path -LiteralPath $tempRoot) {
             $failureEvidence = Join-Path $tempRoot 'failure-evidence'
             [void](New-Item -ItemType Directory -Path $failureEvidence -Force)
-            foreach ($container in @($happyContainer, $crashContainer)) {
+            foreach ($container in @($happyContainer, $crashContainer, $cancelContainer)) {
                 try {
                     Invoke-Docker @('update', '--restart=no', $container) | Out-Null
                     $logs = Invoke-Docker @('logs', '--tail', '200', $container) 30
@@ -2378,6 +2975,6 @@ finally {
                 catch { }
             }
         }
-        Write-Output "PRESERVED_FAILURE_EVIDENCE root=$tempRoot image=$image happyContainer=$happyContainer crashContainer=$crashContainer"
+        Write-Output "PRESERVED_FAILURE_EVIDENCE root=$tempRoot image=$image happyContainer=$happyContainer crashContainer=$crashContainer cancelContainer=$cancelContainer"
     }
 }

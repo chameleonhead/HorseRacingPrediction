@@ -6,6 +6,7 @@ using System.Buffers.Binary;
 using System.Text.Json;
 using HorseRacingPrediction.Api.Identity;
 using HorseRacingPrediction.Api.IdentityMigration;
+using HorseRacingPrediction.Api.Endpoints.IdentityMigration;
 using HorseRacingPrediction.Contracts.Identity;
 using Microsoft.Data.Sqlite;
 
@@ -102,6 +103,329 @@ public sealed class HorseIdentityMigrationJournalTests
         Assert.AreEqual(HorseIdentityMigrationJournalReason.None, readback.Reason);
         Assert.AreEqual(HorseIdentityMigrationResultCode.VerificationFailed, readback.Results.Single().Code);
         Assert.AreEqual(Now.AddMinutes(3), readback.UpdatedAt);
+    }
+
+    [TestMethod]
+    public void PreparationCancellationPolicyPreservesPriorOrdinalsAndAllowsOnlyKnownPreApplyingStates()
+    {
+        Assert.AreEqual(0, (int)HorseIdentityMigrationExecutionPhase.IntentRecorded);
+        Assert.AreEqual(9, (int)HorseIdentityMigrationExecutionPhase.Verified);
+        Assert.AreEqual(10, (int)HorseIdentityMigrationExecutionPhase.Failed);
+        Assert.AreEqual(11, (int)HorseIdentityMigrationExecutionPhase.CancellationRequested);
+        Assert.AreEqual(12, (int)HorseIdentityMigrationExecutionPhase.PreparationCancelled);
+
+        foreach (var phase in new[]
+        {
+            HorseIdentityMigrationExecutionPhase.StoppingApi,
+            HorseIdentityMigrationExecutionPhase.ApiExited,
+            HorseIdentityMigrationExecutionPhase.BackedUp,
+        })
+        {
+            Assert.IsTrue(HorseIdentityMigrationExecutionPolicy.CanRequestPreparationCancellation(
+                HorseIdentityMigrationOperationStatus.Staged, phase));
+            Assert.IsFalse(HorseIdentityMigrationExecutionPolicy.CanRequestPreparationCancellation(
+                HorseIdentityMigrationOperationStatus.PartialUnverified, phase));
+        }
+
+        foreach (var phase in new[]
+        {
+            HorseIdentityMigrationExecutionPhase.IntentRecorded,
+            HorseIdentityMigrationExecutionPhase.Preparing,
+            HorseIdentityMigrationExecutionPhase.Draining,
+            HorseIdentityMigrationExecutionPhase.Applying,
+            HorseIdentityMigrationExecutionPhase.DataSucceeded,
+            HorseIdentityMigrationExecutionPhase.Verifying,
+            HorseIdentityMigrationExecutionPhase.Verified,
+            HorseIdentityMigrationExecutionPhase.Failed,
+            HorseIdentityMigrationExecutionPhase.CancellationRequested,
+            HorseIdentityMigrationExecutionPhase.PreparationCancelled,
+        })
+            Assert.IsFalse(HorseIdentityMigrationExecutionPolicy.CanRequestPreparationCancellation(
+                HorseIdentityMigrationOperationStatus.Staged, phase), $"{phase} must not request cancellation.");
+
+        Assert.IsTrue(HorseIdentityMigrationExecutionPolicy.CanTransition(
+            HorseIdentityMigrationExecutionPhase.BackedUp,
+            HorseIdentityMigrationExecutionPhase.CancellationRequested));
+        Assert.IsTrue(HorseIdentityMigrationExecutionPolicy.CanTransition(
+            HorseIdentityMigrationExecutionPhase.CancellationRequested,
+            HorseIdentityMigrationExecutionPhase.PreparationCancelled));
+        Assert.IsFalse(HorseIdentityMigrationExecutionPolicy.CanTransition(
+            HorseIdentityMigrationExecutionPhase.CancellationRequested,
+            HorseIdentityMigrationExecutionPhase.Applying));
+        Assert.IsFalse(HorseIdentityMigrationExecutionPolicy.CanTransition(
+            HorseIdentityMigrationExecutionPhase.PreparationCancelled,
+            HorseIdentityMigrationExecutionPhase.Failed));
+    }
+
+    [TestMethod]
+    public async Task PreparationCancellationRequestRacesApplyingInOneJournalWriteBoundary()
+    {
+        using var fixture = new Fixture();
+        var (operationId, _) = await StageCancelableAsync(fixture, 81);
+
+        var cancelTask = fixture.Journal.RequestPreparationCancellationAsync(operationId, Now.AddMinutes(1));
+        var applyingTask = fixture.Journal.AdvanceExecutionIntentAsync(operationId,
+            HorseIdentityMigrationExecutionPhase.Applying, Now.AddMinutes(1));
+        await Task.WhenAll(cancelTask, applyingTask);
+        var cancellation = await cancelTask;
+        var applying = await applyingTask;
+
+        Assert.AreEqual(1, Convert.ToInt32(cancellation.Succeeded) + Convert.ToInt32(applying.Succeeded),
+            "Exactly one transaction may win the request-vs-Applying race.");
+        var operation = await fixture.Journal.GetStatusAsync(operationId);
+        var intent = await fixture.Journal.GetExecutionIntentAsync(operationId);
+        Assert.IsNotNull(operation);
+        Assert.IsNotNull(intent);
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.Staged, operation.Status);
+        Assert.IsNull(intent.CancellationSourceSetHash);
+        if (intent.Phase == HorseIdentityMigrationExecutionPhase.CancellationRequested)
+        {
+            Assert.AreEqual(HorseIdentityMigrationJournalReason.None, operation.Reason);
+            Assert.AreEqual(HorseIdentityMigrationJournalReason.StaleOperation,
+                (await fixture.Journal.AdvanceExecutionIntentAsync(operationId,
+                    HorseIdentityMigrationExecutionPhase.Applying, Now.AddMinutes(2))).Reason);
+        }
+        else
+        {
+            Assert.AreEqual(HorseIdentityMigrationExecutionPhase.Applying, intent.Phase);
+            Assert.AreEqual(HorseIdentityMigrationJournalReason.StaleOperation,
+                (await fixture.Journal.RequestPreparationCancellationAsync(operationId, Now.AddMinutes(2))).Reason);
+        }
+    }
+
+    [TestMethod]
+    public async Task PreparationCancellationRequestIsIdempotentAndRejectsUnsafeOperationStates()
+    {
+        using var fixture = new Fixture();
+        var (cancelId, _) = await StageCancelableAsync(fixture, 82);
+        var first = await fixture.Journal.RequestPreparationCancellationAsync(cancelId, Now.AddMinutes(1));
+        var duplicate = await fixture.Journal.RequestPreparationCancellationAsync(cancelId, Now.AddMinutes(2));
+        Assert.IsTrue(first.Succeeded);
+        Assert.IsTrue(duplicate.Succeeded);
+        Assert.AreEqual(first.Operation!.OperationId, duplicate.Operation!.OperationId);
+        Assert.AreEqual(HorseIdentityMigrationExecutionPhase.CancellationRequested, duplicate.Intent!.Phase);
+        Assert.AreEqual(first.Intent!.UpdatedAt, duplicate.Intent.UpdatedAt,
+            "An idempotent retry returns the stored request receipt without rewriting timestamps.");
+
+        using var applyingFixture = new Fixture();
+        var (applyingId, _) = await StageCancelableAsync(applyingFixture, 83);
+        Assert.IsTrue((await applyingFixture.Journal.AdvanceExecutionIntentAsync(applyingId,
+            HorseIdentityMigrationExecutionPhase.Applying, Now)).Succeeded);
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.StaleOperation,
+            (await applyingFixture.Journal.RequestPreparationCancellationAsync(applyingId, Now.AddMinutes(1))).Reason);
+
+        using var partialFixture = new Fixture();
+        var (partialId, _) = await StageCancelableAsync(partialFixture, 84);
+        await UpdateOperationAsync(partialFixture.Journal.DatabasePath, partialId,
+            HorseIdentityMigrationOperationStatus.PartialUnverified,
+            HorseIdentityMigrationJournalReason.OperationInterrupted, terminalAt: null);
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.StaleOperation,
+            (await partialFixture.Journal.RequestPreparationCancellationAsync(partialId, Now.AddMinutes(1))).Reason);
+
+        using var failedFixture = new Fixture();
+        var (failedId, _) = await StageCancelableAsync(failedFixture, 85);
+        await UpdateOperationAsync(failedFixture.Journal.DatabasePath, failedId,
+            HorseIdentityMigrationOperationStatus.Failed,
+            HorseIdentityMigrationJournalReason.BackupFailed, Now.ToString("O"));
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.StaleOperation,
+            (await failedFixture.Journal.RequestPreparationCancellationAsync(failedId, Now.AddMinutes(1))).Reason);
+
+        using var mismatchedFixture = new Fixture();
+        var (mismatchedId, _) = await StageCancelableAsync(mismatchedFixture, 86);
+        await using (var connection = new SqliteConnection($"Data Source={mismatchedFixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE migration_request_keys SET immutable_request_hash = $hash WHERE operation_id = $id;";
+            command.Parameters.AddWithValue("$hash", new string('B', 64));
+            command.Parameters.AddWithValue("$id", mismatchedId.ToString("D"));
+            await command.ExecuteNonQueryAsync();
+        }
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.StaleOperation,
+            (await fixture.Journal.RequestPreparationCancellationAsync(mismatchedId, Now.AddMinutes(1))).Reason);
+        Assert.AreEqual(HorseIdentityMigrationExecutionPhase.BackedUp,
+            (await mismatchedFixture.Journal.GetExecutionIntentAsync(mismatchedId))!.Phase);
+    }
+
+    [TestMethod]
+    public async Task PreparationCancellationDuplicateFinalizationRequiresConfiguredSourceSetMatch()
+    {
+        using var fixture = new Fixture();
+        var (operationId, requestHash) = await StageCancelableAsync(fixture, 88);
+        Assert.IsTrue((await fixture.Journal.RequestPreparationCancellationAsync(operationId, Now)).Succeeded);
+        var sources = new[]
+        {
+            Path.Combine(fixture.Directory, "event.db"), Path.Combine(fixture.Directory, "collection.db"),
+            Path.Combine(fixture.Directory, "schedule.db"), Path.Combine(fixture.Directory, "queue.db"),
+        };
+        var sourceHash = HorseIdentityMigrationRuntimeOwnership.ComputeSourceSetHash(sources);
+        var proof = HorseIdentityMigrationMaintenanceCapability.CreatePreparationCancellationAuthorization(
+            operationId, requestHash, sourceHash, 1, 1, new byte[32]);
+        await MarkCancellationReceiptAsync(fixture.Journal.DatabasePath, operationId, sourceHash);
+
+        var duplicate = await fixture.Journal.FinalizePreparationCancellationAsync(operationId, proof, sources,
+            Now.AddMinutes(1));
+        var wrongTarget = await fixture.Journal.FinalizePreparationCancellationAsync(operationId, proof,
+            sources.Append(Path.Combine(fixture.Directory, "other.db")), Now.AddMinutes(2));
+
+        Assert.IsTrue(duplicate.Succeeded);
+        Assert.AreEqual(sourceHash, duplicate.Intent!.CancellationSourceSetHash);
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.RequestConflict, wrongTarget.Reason,
+            "A terminal receipt must not be accepted for a different configured source set after gates disappear.");
+    }
+
+    [TestMethod]
+    public async Task PreparationCancellationReceiptIsNotPrunedAndLegacyIndexUpgradesBeforeWrites()
+    {
+        using var fixture = new Fixture();
+        var (cancelledId, requestHash) = await StageCancelableAsync(fixture, 89);
+        await using (var connection = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "DROP INDEX IX_migration_execution_intents_single_active; CREATE UNIQUE INDEX IX_migration_execution_intents_single_active ON migration_execution_intents ((1)) WHERE phase NOT IN (9, 10);";
+            await command.ExecuteNonQueryAsync();
+        }
+
+        Assert.IsTrue((await fixture.Journal.RequestPreparationCancellationAsync(cancelledId, Now)).Succeeded);
+        var upgradedIndex = await ReadActiveIntentIndexAsync(fixture.Journal.DatabasePath);
+        StringAssert.Contains(upgradedIndex!, "phase NOT IN (9, 10, 12)");
+
+        var receiptHash = new string('A', 64);
+        await MarkCancellationReceiptAsync(fixture.Journal.DatabasePath, cancelledId, receiptHash,
+            Now.AddDays(-365).ToString("O"));
+        var (nextId, nextHash) = await StageCancelableAsync(fixture, 90);
+        Assert.IsTrue((await fixture.Journal.CreateExecutionIntentAsync(nextId, nextHash, Now)).Succeeded,
+            "A legacy-index terminal cancellation must not block a later intent after write-path upgrade.");
+        Assert.IsNotNull(await fixture.Journal.GetStatusAsync(cancelledId),
+            "Cancellation receipt is durable control evidence and remains protected from retention pruning.");
+    }
+
+    [TestMethod]
+    public async Task PreparationCancellationFinalizerRejectsUnprovenCapabilityWithoutMutation()
+    {
+        using var fixture = new Fixture();
+        var (operationId, requestHash) = await StageCancelableAsync(fixture, 87);
+        Assert.IsTrue((await fixture.Journal.RequestPreparationCancellationAsync(operationId, Now.AddMinutes(1)))
+            .Succeeded);
+        var beforeOperation = await fixture.Journal.GetStatusAsync(operationId);
+        var beforeIntent = await fixture.Journal.GetExecutionIntentAsync(operationId);
+        var proof = HorseIdentityMigrationMaintenanceCapability.CreatePreparationCancellationAuthorization(
+            operationId, requestHash, new string('F', 64), 1, 1, new byte[32]);
+        var sources = new[]
+        {
+            Path.Combine(fixture.Directory, "event.db"), Path.Combine(fixture.Directory, "collection.db"),
+            Path.Combine(fixture.Directory, "schedule.db"), Path.Combine(fixture.Directory, "queue.db"),
+        };
+
+        var rejected = await fixture.Journal.FinalizePreparationCancellationAsync(operationId, proof, sources,
+            Now.AddMinutes(2));
+
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.StaleOperation, rejected.Reason);
+        Assert.AreEqual(beforeOperation, await fixture.Journal.GetStatusAsync(operationId));
+        Assert.AreEqual(beforeIntent, await fixture.Journal.GetExecutionIntentAsync(operationId));
+        Assert.IsNull((await fixture.Journal.GetExecutionIntentAsync(operationId))!.CancellationSourceSetHash);
+    }
+
+    [TestMethod]
+    public async Task PreparationCancellationProofFailureIsSafeDurableAndUpgradesLegacyIntentInPlace()
+    {
+        using var fixture = new Fixture();
+        var (operationId, requestHash) = await StageCancelableAsync(fixture, 91);
+        Assert.IsTrue((await fixture.Journal.RequestPreparationCancellationAsync(operationId, Now)).Succeeded);
+
+        // Simulate an existing journal schema before this nullable diagnostic column was introduced.
+        await using (var connection = new SqliteConnection($"Data Source={fixture.Journal.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "ALTER TABLE migration_execution_intents DROP COLUMN cancellation_diagnostic_reason;";
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var failedAt = Now.AddMinutes(2);
+        var recorded = await fixture.Journal.RecordPreparationCancellationDiagnosticAsync(operationId, failedAt);
+        var duplicate = await fixture.Journal.RecordPreparationCancellationDiagnosticAsync(operationId,
+            Now.AddMinutes(3));
+        Assert.IsTrue(recorded.Succeeded);
+        Assert.IsTrue(duplicate.Succeeded);
+        Assert.AreEqual(HorseIdentityMigrationExecutionPhase.CancellationRequested, recorded.Intent!.Phase);
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.PreparationFailed,
+            recorded.Intent.CancellationDiagnosticReason);
+        Assert.AreEqual(failedAt, recorded.Intent.UpdatedAt);
+        Assert.AreEqual(failedAt, duplicate.Intent!.UpdatedAt, "Repeated refusal must not churn diagnostic time.");
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.Staged, recorded.Operation!.Status);
+        Assert.AreEqual(HorseIdentityMigrationJournalReason.None, recorded.Operation.Reason,
+            "A refusal keeps the cancellation intent active rather than converting it to a generic failure.");
+        Assert.AreEqual("PreparationFailed", HorseIdentityMigrationEndpoints.ToPublic(recorded.Operation,
+            saved: null, pending: null, recorded.Intent).Reason);
+        Assert.AreEqual(failedAt, HorseIdentityMigrationEndpoints.ToPublic(recorded.Operation,
+            saved: null, pending: null, recorded.Intent).ExecutionUpdatedAt);
+        Assert.AreEqual(requestHash, recorded.Intent.ImmutableRequestHash,
+            "The old row must retain its canonical request binding during the nullable-column upgrade.");
+    }
+
+    private static async Task<(Guid OperationId, string RequestHash)> StageCancelableAsync(Fixture fixture, int index)
+    {
+        var operationId = Guid.NewGuid();
+        var manifest = Manifest(index);
+        var fingerprint = new string('A', 64);
+        var requestHash = HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(manifest, fingerprint);
+        Assert.IsTrue((await fixture.Journal.StageWithRequestKeyAsync(operationId, manifest, Guid.NewGuid(),
+            requestHash, fingerprint, Now)).Succeeded);
+        Assert.IsTrue((await fixture.Journal.CreateExecutionIntentAsync(operationId, requestHash, Now)).Succeeded);
+        foreach (var phase in new[]
+        {
+            HorseIdentityMigrationExecutionPhase.Preparing,
+            HorseIdentityMigrationExecutionPhase.Draining,
+            HorseIdentityMigrationExecutionPhase.StoppingApi,
+            HorseIdentityMigrationExecutionPhase.ApiExited,
+            HorseIdentityMigrationExecutionPhase.BackedUp,
+        })
+            Assert.IsTrue((await fixture.Journal.AdvanceExecutionIntentAsync(operationId, phase, Now)).Succeeded,
+                $"Expected to advance test intent to {phase}.");
+
+        return (operationId, requestHash);
+    }
+
+    private static async Task UpdateOperationAsync(string databasePath, Guid operationId,
+        HorseIdentityMigrationOperationStatus status, HorseIdentityMigrationJournalReason reason, string? terminalAt)
+    {
+        await using var connection = new SqliteConnection($"Data Source={databasePath};Pooling=False");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE migration_operations SET status = $status, reason = $reason, terminal_utc = $terminal WHERE operation_id = $id;";
+        command.Parameters.AddWithValue("$status", (int)status);
+        command.Parameters.AddWithValue("$reason", (int)reason);
+        command.Parameters.AddWithValue("$terminal", (object?)terminalAt ?? DBNull.Value);
+        command.Parameters.AddWithValue("$id", operationId.ToString("D"));
+        Assert.AreEqual(1, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task MarkCancellationReceiptAsync(string databasePath, Guid operationId, string sourceHash,
+        string? terminalAt = null)
+    {
+        await using var connection = new SqliteConnection($"Data Source={databasePath};Pooling=False");
+        await connection.OpenAsync();
+        await using (var intent = connection.CreateCommand())
+        {
+            intent.CommandText = "UPDATE migration_execution_intents SET phase = $phase, cancellation_source_set_hash = $source WHERE operation_id = $id;";
+            intent.Parameters.AddWithValue("$phase", (int)HorseIdentityMigrationExecutionPhase.PreparationCancelled);
+            intent.Parameters.AddWithValue("$source", sourceHash);
+            intent.Parameters.AddWithValue("$id", operationId.ToString("D"));
+            Assert.AreEqual(1, await intent.ExecuteNonQueryAsync());
+        }
+        await UpdateOperationAsync(databasePath, operationId, HorseIdentityMigrationOperationStatus.Failed,
+            HorseIdentityMigrationJournalReason.PreparationCancelled, terminalAt ?? Now.ToString("O"));
+    }
+
+    private static async Task<string?> ReadActiveIntentIndexAsync(string databasePath)
+    {
+        await using var connection = new SqliteConnection($"Data Source={databasePath};Pooling=False");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'IX_migration_execution_intents_single_active';";
+        return await command.ExecuteScalarAsync() as string;
     }
 
     [TestMethod]

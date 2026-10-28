@@ -1,9 +1,12 @@
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Api.IdentityMigration;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts.Collection;
 using HorseRacingPrediction.Contracts.Identity;
 using HorseRacingPrediction.PredictionScheduling;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
@@ -272,6 +275,301 @@ public sealed class HorseIdentityMigrationRuntimeOwnershipTests
                 "The first gate created by this failed attempt is rolled back.");
             CollectionAssert.AreEqual(corruptBytes, File.ReadAllBytes(corruptGate),
                 "A pre-existing corrupt marker is never replaced or deleted.");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task PreparationCancellationAuthorizationUsesIndependentOwnerAndReceiptCleanupResumesOnlyMatchingGates()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"horse-maintenance-cancel-{Guid.NewGuid():N}");
+        var paths = new[] { Path.Combine(root, "a", "eventstore.db"), Path.Combine(root, "b", "collection.db") };
+        Directory.CreateDirectory(root);
+        try
+        {
+            var journalDirectory = Path.Combine(root, "journal");
+            var (journal, operationId, requestHash) = await CreateStoppingApiJournal(journalDirectory, paths);
+            var pauseStartedAt = DateTimeOffset.UtcNow - HorseIdentityMigrationPreparationService.RequiredPauseDuration
+                - TimeSpan.FromSeconds(5);
+            var collection = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
+            {
+                StateDirectory = Path.GetDirectoryName(paths[1])!,
+                DatabaseFileName = Path.GetFileName(paths[1]),
+            }));
+            await collection.SetPausedAsync(true, "preparation cancellation test", pauseStartedAt);
+
+            using (var originalControl = HorseIdentityMigrationMaintenanceOwnership.AcquireSupervisorControlLease(paths))
+            using (var originalRuntime = HorseIdentityMigrationRuntimeOwnership.Acquire(paths))
+            {
+                Assert.IsTrue(originalControl.OwnsSameSourceSet(paths));
+                Assert.IsTrue(originalControl.OwnsSameSourceSet(originalRuntime.SourcePaths));
+                var bootstrap = originalControl.IssueApiBootstrapAuthorization();
+                var bootstrapOwnerPath = HorseIdentityMigrationMaintenanceOwnership
+                    .GetControlBootstrapOwnerRecordPath(paths[0]);
+                await HorseIdentityMigrationMaintenanceOwnership.InstallMaintenanceGatesAsync(
+                    originalRuntime, bootstrap, operationId, requestHash, journal);
+                foreach (var phase in new[]
+                {
+                    HorseIdentityMigrationExecutionPhase.ApiExited,
+                    HorseIdentityMigrationExecutionPhase.BackedUp,
+                })
+                    Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId, phase,
+                        DateTimeOffset.UtcNow)).Succeeded);
+
+                var requested = await journal.RequestPreparationCancellationAsync(operationId, DateTimeOffset.UtcNow);
+                Assert.IsTrue(requested.Succeeded);
+                Assert.IsTrue(HorseIdentityMigrationMaintenanceOwnership.ValidateMaintenanceGateSet(paths, operationId,
+                    requestHash, HorseIdentityMigrationRuntimeOwnership.ComputeSourceSetHash(paths)));
+                Assert.AreEqual(HorseIdentityMigrationExecutionPhase.CancellationRequested,
+                    (await journal.GetExecutionIntentAsync(operationId))?.Phase);
+                var cancellationStatus = await journal.GetStatusAsync(operationId);
+                Assert.AreEqual(HorseIdentityMigrationOperationStatus.Staged, cancellationStatus?.Status);
+                Assert.AreEqual(requestHash, (await journal.GetExecutionIntentAsync(operationId))?.ImmutableRequestHash);
+                Assert.IsTrue(HorseIdentityMigrationPreparationService.IsReadyToStop(await collection.GetPipelineStateAsync(),
+                    (await collection.GetPipelineStateAsync()).UpdatedAt!.Value, 0, DateTimeOffset.UtcNow));
+                var collectionDatabaseHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(paths[1])));
+                var drain = await originalControl.ReadPreparationCancellationDrainStateAsync(originalRuntime, paths[1]);
+                Assert.IsTrue(drain.Pipeline.IsPaused);
+                Assert.IsNotNull(drain.Pipeline.UpdatedAt);
+                Assert.AreEqual(0, drain.RunningTaskCount);
+                Assert.AreEqual(collectionDatabaseHash,
+                    Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(paths[1]))),
+                    "Read-only cancellation proof must not modify the collection database bytes.");
+                var refusal = await journal.RecordPreparationCancellationDiagnosticAsync(operationId,
+                    DateTimeOffset.UtcNow);
+                Assert.IsTrue(refusal.Succeeded);
+                Assert.AreEqual(HorseIdentityMigrationJournalReason.PreparationFailed,
+                    refusal.Intent!.CancellationDiagnosticReason);
+                var cancellation = await originalControl.IssuePreparationCancellationAuthorizationAsync(
+                    operationId, originalRuntime, paths[1], journal, DateTimeOffset.UtcNow);
+                Assert.IsNotNull(cancellation, "Cancellation authority requires a complete exact gate set and a stable, drained pause.");
+
+                var cancelOwnerPath = HorseIdentityMigrationMaintenanceOwnership
+                    .GetPreparationCancellationOwnerRecordPath(paths[0]);
+                Assert.AreNotEqual(bootstrapOwnerPath, cancelOwnerPath);
+                Assert.IsTrue(File.Exists(bootstrapOwnerPath), "Issuing cancellation authority must retain bootstrap ownership evidence.");
+                Assert.IsTrue(File.Exists(cancelOwnerPath), "Cancellation authority must use its own owner sidecar.");
+                var finalized = await journal.FinalizePreparationCancellationAsync(operationId, cancellation!, paths,
+                    DateTimeOffset.UtcNow);
+                Assert.IsTrue(finalized.Succeeded);
+                Assert.IsNull(finalized.Intent!.CancellationDiagnosticReason,
+                    "The terminal cancellation receipt atomically clears the transient proof-refusal diagnostic.");
+
+                File.Delete(HorseIdentityMigrationMaintenanceOwnership.GetMaintenanceGatePath(paths[0]));
+            }
+
+            using var recoveryControl = HorseIdentityMigrationMaintenanceOwnership.AcquireSupervisorControlLease(paths);
+            using var recoveryRuntime = await HorseIdentityMigrationRuntimeOwnership.AcquireForCancellationReceiptRecoveryAsync(
+                paths, recoveryControl, operationId, journal);
+            await HorseIdentityMigrationMaintenanceOwnership.ClearMaintenanceGatesAfterPreparationCancellationAsync(
+                recoveryRuntime, recoveryControl, operationId, paths, journal);
+            Assert.IsTrue(paths.All(path => !File.Exists(
+                HorseIdentityMigrationMaintenanceOwnership.GetMaintenanceGatePath(path))),
+                "A source-bound terminal cancellation receipt must finish cleanup after a crash between deletions.");
+
+            var (laterJournal, laterOperationId, laterRequestHash) = await CreateStoppingApiJournal(
+                Path.Combine(root, "later-journal"), paths);
+            var laterBootstrap = recoveryControl.IssueApiBootstrapAuthorization();
+            await HorseIdentityMigrationMaintenanceOwnership.InstallMaintenanceGatesAsync(
+                recoveryRuntime, laterBootstrap, laterOperationId, laterRequestHash, laterJournal);
+            await Assert.ThrowsExactlyAsync<InvalidDataException>(() =>
+                HorseIdentityMigrationMaintenanceOwnership.ClearMaintenanceGatesAfterPreparationCancellationAsync(
+                    recoveryRuntime, recoveryControl, operationId, paths, journal),
+                "A prior cancellation receipt must never clear a later operation's gates.");
+            Assert.IsTrue(paths.All(path => File.Exists(
+                HorseIdentityMigrationMaintenanceOwnership.GetMaintenanceGatePath(path))));
+            await Assert.ThrowsExactlyAsync<IOException>(() =>
+                HorseIdentityMigrationMaintenanceOwnership.ClearMaintenanceGatesAfterPreparationCancellationAsync(
+                    recoveryRuntime, recoveryControl, operationId, [paths[0]], journal),
+                "A cancellation receipt cannot be replayed against a different configured source set.");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task PreparationCancellationDrainReaderRefusesMissingEmptyAndOldSchemasWithoutCreatingOrChangingThem()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"horse-maintenance-cancel-readonly-{Guid.NewGuid():N}");
+        var missingPath = Path.Combine(root, "collection", "missing.db");
+        var eventPath = Path.Combine(root, "eventstore.db");
+        var paths = new[] { eventPath, missingPath };
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var control = HorseIdentityMigrationMaintenanceOwnership.AcquireSupervisorControlLease(paths);
+            using var runtime = HorseIdentityMigrationRuntimeOwnership.Acquire(paths);
+            var unrelatedPath = Path.Combine(root, "unrelated.db");
+            await Assert.ThrowsExactlyAsync<IOException>(() =>
+                control.ReadPreparationCancellationDrainStateAsync(runtime, unrelatedPath));
+            Assert.IsFalse(File.Exists(unrelatedPath), "A proof path outside the held source set must not be opened or created.");
+            await Assert.ThrowsExactlyAsync<IOException>(() =>
+                control.ReadPreparationCancellationDrainStateAsync(runtime, missingPath));
+            Assert.IsFalse(File.Exists(missingPath), "A missing collection source must not be created for cancellation proof.");
+
+            Directory.CreateDirectory(Path.GetDirectoryName(missingPath)!);
+            await File.WriteAllBytesAsync(missingPath, []);
+            var emptyHash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(missingPath)));
+            await AssertReadOnlySchemaRefusalAsync(control, runtime, missingPath);
+            Assert.AreEqual(emptyHash,
+                Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(missingPath))),
+                "An empty SQLite source remains byte-identical after refusal.");
+
+            await using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource = missingPath,
+                Pooling = false,
+            }.ToString()))
+            {
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText = """
+                    CREATE TABLE collection_schema_history (version INTEGER NOT NULL, applied_at TEXT NOT NULL);
+                    CREATE TABLE collection_platform_controls (
+                        ControlId TEXT NOT NULL, IsPaused INTEGER NOT NULL, Reason TEXT NULL, UpdatedAt TEXT NOT NULL);
+                    CREATE TABLE collection_tasks (Status INTEGER NOT NULL);
+                    INSERT INTO collection_schema_history (version, applied_at) VALUES (24, 'fixture');
+                    """;
+                await command.ExecuteNonQueryAsync();
+            }
+            var oldSchemaHash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(missingPath)));
+            await AssertReadOnlySchemaRefusalAsync(control, runtime, missingPath);
+            Assert.AreEqual(oldSchemaHash,
+                Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(missingPath))),
+                "An older supported table layout must not be migrated by cancellation proof.");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task PreparationCancellationDrainReaderRefusesWhenRealStoreContainsRunningTask()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"horse-maintenance-cancel-running-{Guid.NewGuid():N}");
+        var paths = new[]
+        {
+            Path.Combine(root, "eventstore.db"),
+            Path.Combine(root, "collection", "collection-platform.db"),
+        };
+        Directory.CreateDirectory(root);
+        try
+        {
+            var (journal, operationId, requestHash) = await CreateStoppingApiJournal(
+                Path.Combine(root, "journal"), paths);
+            var collection = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
+            {
+                StateDirectory = Path.GetDirectoryName(paths[1])!,
+                DatabaseFileName = Path.GetFileName(paths[1]),
+            }));
+            await SubjectCollectionDefinitions.RegisterAsync(collection);
+            var requestTime = DateTimeOffset.UtcNow;
+            var receipt = await collection.RequestAsync(
+                new ResourceKey(CollectionResourceType.Horse, "test", "horse-cancel-running"),
+                new CollectionDefinitionId("horse-profile"),
+                SubjectCollectionDefinitions.For(CollectionResourceType.Horse).CurrentRevision,
+                CollectionReason.ManualRefresh, requestTime,
+                explicitUrl: new Uri("https://example.invalid/horse-cancel-running"));
+            Assert.IsTrue(receipt.CreatedTask);
+            Assert.IsNotNull(receipt.TaskId);
+            Assert.IsNotNull(await collection.AcquireAsync(receipt.TaskId.Value, 1, requestTime,
+                TimeSpan.FromMinutes(5)), "The normal store must persist a real Running task for this refusal case.");
+            var pauseStartedAt = requestTime - HorseIdentityMigrationPreparationService.RequiredPauseDuration
+                - TimeSpan.FromSeconds(5);
+            await collection.SetPausedAsync(true, "cancellation running-task refusal", pauseStartedAt);
+
+            using var control = HorseIdentityMigrationMaintenanceOwnership.AcquireSupervisorControlLease(paths);
+            using (var runtime = HorseIdentityMigrationRuntimeOwnership.Acquire(paths))
+            {
+                await HorseIdentityMigrationMaintenanceOwnership.InstallMaintenanceGatesAsync(runtime,
+                    control.IssueApiBootstrapAuthorization(), operationId, requestHash, journal);
+            }
+            foreach (var phase in new[]
+            {
+                HorseIdentityMigrationExecutionPhase.ApiExited,
+                HorseIdentityMigrationExecutionPhase.BackedUp,
+            })
+                Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId, phase, requestTime)).Succeeded);
+            Assert.IsTrue((await journal.RequestPreparationCancellationAsync(operationId, requestTime)).Succeeded);
+
+            using var cancellationRuntime = await HorseIdentityMigrationRuntimeOwnership
+                .AcquireForPreparationCancellationAsync(paths, control, operationId, requestHash, journal);
+            var sourceHashBeforeProof = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(paths[1])));
+            var drain = await control.ReadPreparationCancellationDrainStateAsync(cancellationRuntime, paths[1]);
+            Assert.IsTrue(drain.Pipeline.IsPaused);
+            Assert.AreEqual(1, drain.RunningTaskCount,
+                "The direct readonly query must use the persisted string enum representation.");
+            var authorization = await control.IssuePreparationCancellationAuthorizationAsync(
+                operationId, cancellationRuntime, paths[1], journal, DateTimeOffset.UtcNow);
+            Assert.IsNull(authorization, "A genuinely Running collection task prevents terminal cancellation proof.");
+            Assert.AreEqual(sourceHashBeforeProof,
+                Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(paths[1]))),
+                "The readonly drain check and refusal must preserve the source database byte-for-byte.");
+            Assert.IsFalse(File.Exists(HorseIdentityMigrationMaintenanceOwnership
+                .GetPreparationCancellationOwnerRecordPath(paths[0])),
+                "A refused running-task proof must not issue cancellation owner evidence.");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static async Task AssertReadOnlySchemaRefusalAsync(
+        HorseIdentityMigrationMaintenanceOwnership.HorseIdentityMigrationSupervisorControlLease control,
+        HorseIdentityMigrationRuntimeOwnership runtime, string collectionPath)
+    {
+        try
+        {
+            await control.ReadPreparationCancellationDrainStateAsync(runtime, collectionPath);
+            Assert.Fail("An unsupported collection schema must refuse cancellation proof.");
+        }
+        catch (Exception exception) when (exception is InvalidDataException or SqliteException)
+        {
+        }
+    }
+
+    [TestMethod]
+    public async Task PreparationCancellationRuntimeOwnershipIsDisposedWhenPostAcquireRevalidationThrows()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"horse-maintenance-cancel-lease-{Guid.NewGuid():N}");
+        var paths = new[] { Path.Combine(root, "a", "eventstore.db"), Path.Combine(root, "b", "collection.db") };
+        Directory.CreateDirectory(root);
+        try
+        {
+            var (journal, operationId, requestHash) = await CreateStoppingApiJournal(
+                Path.Combine(root, "journal"), paths);
+            using var control = HorseIdentityMigrationMaintenanceOwnership.AcquireSupervisorControlLease(paths);
+            using (var runtime = HorseIdentityMigrationRuntimeOwnership.Acquire(paths))
+            {
+                var bootstrap = control.IssueApiBootstrapAuthorization();
+                await HorseIdentityMigrationMaintenanceOwnership.InstallMaintenanceGatesAsync(
+                    runtime, bootstrap, operationId, requestHash, journal);
+            }
+            foreach (var phase in new[]
+            {
+                HorseIdentityMigrationExecutionPhase.ApiExited,
+                HorseIdentityMigrationExecutionPhase.BackedUp,
+            })
+                Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId, phase, DateTimeOffset.UtcNow)).Succeeded);
+            Assert.IsTrue((await journal.RequestPreparationCancellationAsync(operationId, DateTimeOffset.UtcNow)).Succeeded);
+
+            var runtimeGatePath = HorseIdentityMigrationRuntimeOwnership.GetRuntimeOwnershipGatePath(paths[0]);
+            await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
+                HorseIdentityMigrationRuntimeOwnership.AcquireForPreparationCancellationAsync(
+                    paths, control, operationId, requestHash, journal, afterAcquire: () =>
+                        throw new InvalidOperationException("Injected post-acquire revalidation failure.")));
+
+            using var reopened = new FileStream(runtimeGatePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            Assert.IsTrue((await journal.GetExecutionIntentAsync(operationId))?.Phase
+                == HorseIdentityMigrationExecutionPhase.CancellationRequested,
+                "The injected refusal releases runtime ownership without changing the journal request.");
         }
         finally
         {

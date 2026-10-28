@@ -25,6 +25,7 @@ internal static class HorseIdentityMigrationEndpoints
         endpoints.MapGet(SchemaDiagnosticsPath, GetSchemaDiagnosticsAsync);
         endpoints.MapPost(OperationsPath, StageAsync);
         endpoints.MapPost(OperationsPath + "/{operationId}/execute", ExecuteAsync);
+        endpoints.MapPost(OperationsPath + "/{operationId}/cancel-preparation", RequestPreparationCancellationAsync);
         endpoints.MapGet(OperationsPath + "/{operationId}", GetStatusAsync);
         endpoints.MapGet(RequestsPath + "/{requestKey}", GetRequestAsync);
     }
@@ -359,6 +360,42 @@ internal static class HorseIdentityMigrationEndpoints
         }
     }
 
+    internal static async Task<IResult> RequestPreparationCancellationAsync(
+        string operationId, HttpResponse response, [FromServices] HorseIdentityMigrationJournal journal,
+        [FromServices] TimeProvider timeProvider, CancellationToken cancellationToken)
+    {
+        SetNoStore(response);
+        if (!Guid.TryParseExact(operationId, "D", out var parsed) || parsed == Guid.Empty)
+            return Results.NotFound();
+        if (!HorseIdentityMigrationRuntimeMode.IsCancellationTargetAllowed(parsed))
+            return Results.NotFound();
+        try
+        {
+            var outcome = await journal.RequestPreparationCancellationAsync(parsed, timeProvider.GetUtcNow(),
+                cancellationToken).ConfigureAwait(false);
+            if (outcome.Succeeded && outcome.Operation is not null)
+                return Results.Accepted($"{OperationsPath}/{parsed:D}",
+                    ToPublic(outcome.Operation, saved: null, pending: null, outcome.Intent));
+            if (outcome.Operation is null) return Results.NotFound();
+            return outcome.Reason switch
+            {
+                HorseIdentityMigrationJournalReason.StaleOperation or HorseIdentityMigrationJournalReason.RequestConflict
+                    => Error(StatusCodes.Status409Conflict,
+                        outcome.Reason == HorseIdentityMigrationJournalReason.RequestConflict
+                            ? "RequestConflict" : "NotEligible"),
+                _ => Error(StatusCodes.Status503ServiceUnavailable, "Unavailable"),
+            };
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (IsUnavailable(exception))
+        {
+            return Error(StatusCodes.Status503ServiceUnavailable, "Unavailable");
+        }
+    }
+
     internal static async Task<IResult> GetRequestAsync(
         string requestKey, HttpResponse response, [FromServices] HorseIdentityMigrationJournal journal,
         CancellationToken cancellationToken)
@@ -484,6 +521,9 @@ internal static class HorseIdentityMigrationEndpoints
                 : pending is not null ? HorseIdentityMigrationAdmissionKind.PendingV2 : null,
             ExecutionPhase = intent?.Phase.ToString(),
             ExecutionUpdatedAt = intent?.UpdatedAt,
+            Reason = intent?.Phase == HorseIdentityMigrationExecutionPhase.CancellationRequested
+                && intent.CancellationDiagnosticReason == HorseIdentityMigrationJournalReason.PreparationFailed
+                    ? "PreparationFailed" : HorseIdentityMigrationPublicMapper.Reason(operation.Reason),
         };
 
     // Keep the existing internal call shape used by the standalone supervisor.

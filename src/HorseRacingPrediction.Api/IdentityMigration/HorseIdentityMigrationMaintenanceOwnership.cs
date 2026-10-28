@@ -3,6 +3,10 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Runtime.InteropServices;
 using System.Text;
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts.Collection;
+using HorseRacingPrediction.Contracts.Common.Time;
+using Microsoft.Data.Sqlite;
 
 namespace HorseRacingPrediction.Api.IdentityMigration;
 
@@ -11,6 +15,7 @@ internal static class HorseIdentityMigrationMaintenanceOwnership
 {
     private const string ControlLockPrefix = "HorseIdentityMigrationSupervisorControl:v1:";
     private const int MaximumRecordBytes = 1024;
+    private const int PreparationCancellationCollectionSchemaVersion = 25;
 
     internal static HorseIdentityMigrationSupervisorControlLease AcquireSupervisorControlLease(
         IEnumerable<string> sourcePaths)
@@ -61,6 +66,9 @@ internal static class HorseIdentityMigrationMaintenanceOwnership
     internal static string GetControlBootstrapOwnerRecordPath(string sourcePath) => GetSiblingPath(sourcePath,
         ".horse-identity-migration.supervisor-control.bootstrap.owner");
 
+    internal static string GetPreparationCancellationOwnerRecordPath(string sourcePath) => GetSiblingPath(sourcePath,
+        ".horse-identity-migration.supervisor-control.preparation-cancel.owner");
+
     internal static string GetMaintenanceGatePath(string sourcePath) => GetSiblingPath(sourcePath,
         ".horse-identity-migration.maintenance");
 
@@ -71,7 +79,8 @@ internal static class HorseIdentityMigrationMaintenanceOwnership
         {
             HorseIdentityMigrationRuntimeOwnership.GetRuntimeOwnershipGatePath(path),
             GetControlLockPath(path), GetControlOwnerRecordPath(path),
-            GetControlBootstrapOwnerRecordPath(path), GetMaintenanceGatePath(path),
+            GetControlBootstrapOwnerRecordPath(path), GetPreparationCancellationOwnerRecordPath(path),
+            GetMaintenanceGatePath(path),
         })).ToArray();
         if (sidecars.Distinct(comparer).Count() != sidecars.Length)
             throw new IOException("Configured sources and maintenance sidecars cannot alias one another.");
@@ -86,7 +95,7 @@ internal static class HorseIdentityMigrationMaintenanceOwnership
             || parentProcessId <= 0 || parentStartTicks <= 0
             || (purpose == "api-bootstrap" && (operationId is not null || requestHash is not null))
             || (purpose != "api-bootstrap" && (operationId is null || requestHash is null))
-            || purpose is not ("api-bootstrap" or "cli-operation" or "readonly-reverify")
+            || purpose is not ("api-bootstrap" or "cli-operation" or "readonly-reverify" or "preparation-cancel")
             || (requestHash is not null && !HorseIdentityMigrationMaintenanceCapability.IsHash(requestHash)))
             return false;
 
@@ -377,6 +386,59 @@ internal static class HorseIdentityMigrationMaintenanceOwnership
             authorization.RequestHash, authorization.SourceSetHash, journal, cancellationToken);
     }
 
+    internal static async Task ClearMaintenanceGatesAfterPreparationCancellationAsync(
+        HorseIdentityMigrationRuntimeOwnership runtimeOwnership,
+        HorseIdentityMigrationSupervisorControlLease controlLease,
+        Guid operationId,
+        IEnumerable<string> configuredSourcePaths,
+        HorseIdentityMigrationJournal journal,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(runtimeOwnership);
+        ArgumentNullException.ThrowIfNull(controlLease);
+        ArgumentNullException.ThrowIfNull(configuredSourcePaths);
+        ArgumentNullException.ThrowIfNull(journal);
+        runtimeOwnership.ThrowIfDisposed();
+        var paths = HorseIdentityMigrationRuntimeOwnership.CanonicalizeSourcePaths(configuredSourcePaths);
+        if (operationId == Guid.Empty || paths.Length == 0
+            || !controlLease.OwnsSameSourceSet(paths) || !controlLease.OwnsSameSourceSet(runtimeOwnership.SourcePaths))
+            throw new IOException("Preparation-cancellation cleanup requires matching live source, control, and runtime ownership.");
+
+        var operation = await journal.GetStatusAsync(operationId, cancellationToken).ConfigureAwait(false);
+        var intent = await journal.GetExecutionIntentAsync(operationId, cancellationToken).ConfigureAwait(false);
+        var saved = await journal.GetSavedRequestAsync(operationId, cancellationToken).ConfigureAwait(false);
+        var pending = saved is null
+            ? await journal.GetPendingRequestAsync(operationId, cancellationToken).ConfigureAwait(false)
+            : null;
+        var boundRequestHash = saved?.ImmutableRequestHash ?? pending?.ImmutableRequestHash;
+        var sourceSetHash = HorseIdentityMigrationRuntimeOwnership.ComputeSourceSetHash(paths);
+        if (operation?.Status != HorseIdentityMigrationOperationStatus.Failed
+            || operation.Reason != HorseIdentityMigrationJournalReason.PreparationCancelled
+            || intent is null || intent.Phase != HorseIdentityMigrationExecutionPhase.PreparationCancelled
+            || boundRequestHash != intent.ImmutableRequestHash
+            || intent.CancellationSourceSetHash != sourceSetHash)
+            throw new InvalidOperationException("Only a matching durable preparation-cancellation receipt may clear its maintenance gates.");
+
+        var matchingGates = new List<string>(paths.Length);
+        foreach (var path in paths)
+        {
+            var markerPath = GetMaintenanceGatePath(path);
+            if (Directory.Exists(markerPath))
+                throw new InvalidDataException("A maintenance gate path is not a regular gate file.");
+            if (!File.Exists(markerPath)) continue;
+            var record = ReadMaintenanceGate(path);
+            if (record is null || record.OperationId != operationId
+                || record.RequestHash != intent.ImmutableRequestHash || record.SourceSetHash != sourceSetHash)
+                throw new InvalidDataException("A remaining maintenance gate belongs to another operation or source set.");
+            matchingGates.Add(markerPath);
+        }
+
+        // A terminal receipt authorizes completing a partially finished deletion after restart.
+        // Every surviving marker must still match the receipt; absent markers are never recreated.
+        foreach (var markerPath in matchingGates)
+            File.Delete(markerPath);
+    }
+
     private static async Task ClearMaintenanceGatesCoreAsync(string[] paths,
         HorseIdentityMigrationRuntimeOwnership runtimeOwnership, Guid operationId, string requestHash,
         string sourceSetHash, HorseIdentityMigrationJournal journal, CancellationToken cancellationToken)
@@ -514,6 +576,7 @@ internal static class HorseIdentityMigrationMaintenanceOwnership
     {
         "api-bootstrap" => GetControlBootstrapOwnerRecordPath(sourcePath),
         "cli-operation" or "readonly-reverify" => GetControlOwnerRecordPath(sourcePath),
+        "preparation-cancel" => GetPreparationCancellationOwnerRecordPath(sourcePath),
         _ => throw new ArgumentOutOfRangeException(nameof(purpose)),
     };
 
@@ -525,7 +588,7 @@ internal static class HorseIdentityMigrationMaintenanceOwnership
         handle.ReadExactly(bytes);
         var fields = Encoding.ASCII.GetString(bytes).Split('\n');
         if (fields.Length != 8 || fields[0] != "v1"
-            || fields[1] is not ("api-bootstrap" or "cli-operation" or "readonly-reverify")
+            || fields[1] is not ("api-bootstrap" or "cli-operation" or "readonly-reverify" or "preparation-cancel")
             || !HorseIdentityMigrationMaintenanceCapability.IsHash(fields[4])
             || !int.TryParse(fields[5], NumberStyles.None, CultureInfo.InvariantCulture, out var pid) || pid <= 0
             || !long.TryParse(fields[6], NumberStyles.None, CultureInfo.InvariantCulture, out var startTicks) || startTicks <= 0
@@ -634,6 +697,108 @@ internal static class HorseIdentityMigrationMaintenanceOwnership
             return expected.SequenceEqual(_sourcePaths, HorseIdentityMigrationConfiguredSources.PathComparer);
         }
 
+        internal async Task<(CollectionPipelineState Pipeline, int RunningTaskCount)>
+            ReadPreparationCancellationDrainStateAsync(
+                HorseIdentityMigrationRuntimeOwnership runtimeOwnership, string collectionPlatformPath,
+                CancellationToken cancellationToken = default)
+        {
+            ThrowIfDisposed();
+            ArgumentNullException.ThrowIfNull(runtimeOwnership);
+            ArgumentException.ThrowIfNullOrWhiteSpace(collectionPlatformPath);
+            runtimeOwnership.ThrowIfDisposed();
+            if (!OwnsSameSourceSet(runtimeOwnership.SourcePaths))
+                throw new IOException("Cancellation drain verification requires matching live source and runtime ownership.");
+
+            var canonicalCollectionPath = HorseIdentityMigrationRuntimeOwnership
+                .CanonicalizeSourcePaths([collectionPlatformPath]);
+            if (canonicalCollectionPath.Length != 1
+                || !_sourcePaths.Contains(canonicalCollectionPath[0], HorseIdentityMigrationConfiguredSources.PathComparer))
+                throw new IOException("The cancellation drain database is outside the held source set.");
+            if (!File.Exists(canonicalCollectionPath[0]))
+                throw new IOException("The cancellation drain database is missing; cancellation proof remains protected.");
+
+            var connectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = canonicalCollectionPath[0],
+                Mode = SqliteOpenMode.ReadOnly,
+                Pooling = false,
+                DefaultTimeout = 2,
+            }.ToString();
+            await using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await using (var queryOnly = connection.CreateCommand())
+            {
+                queryOnly.CommandText = "PRAGMA query_only = ON;";
+                await queryOnly.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await using var transaction = connection.BeginTransaction(deferred: true);
+            await RequireColumnsAsync(connection, transaction, "collection_schema_history",
+                ["version", "applied_at"], cancellationToken).ConfigureAwait(false);
+            await RequireColumnsAsync(connection, transaction, "collection_platform_controls",
+                ["ControlId", "IsPaused", "Reason", "UpdatedAt"], cancellationToken).ConfigureAwait(false);
+            await RequireColumnsAsync(connection, transaction, "collection_tasks", ["Status"], cancellationToken)
+                .ConfigureAwait(false);
+
+            await using (var versionCommand = connection.CreateCommand())
+            {
+                versionCommand.Transaction = transaction;
+                versionCommand.CommandText = "SELECT COALESCE(MAX(version), 0) FROM collection_schema_history;";
+                var version = Convert.ToInt32(await versionCommand.ExecuteScalarAsync(cancellationToken)
+                    .ConfigureAwait(false), CultureInfo.InvariantCulture);
+                if (version != PreparationCancellationCollectionSchemaVersion)
+                    throw new InvalidDataException("The collection schema is not the supported current version.");
+            }
+
+            var pipeline = new CollectionPipelineState(false, null, null);
+            await using (var pipelineCommand = connection.CreateCommand())
+            {
+                pipelineCommand.Transaction = transaction;
+                pipelineCommand.CommandText = """
+                    SELECT IsPaused, Reason, UpdatedAt
+                    FROM collection_platform_controls
+                    WHERE ControlId = 'pipeline';
+                    """;
+                await using var reader = await pipelineCommand.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    var updatedAt = reader.IsDBNull(2) ? (DateTimeOffset?)null
+                        : JstTime.ParseStoredValue(reader.GetString(2));
+                    pipeline = new CollectionPipelineState(reader.GetInt64(0) != 0,
+                        reader.IsDBNull(1) ? null : reader.GetString(1), updatedAt);
+                    if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                        throw new InvalidDataException("The collection pipeline control row is not unique.");
+                }
+            }
+
+            int runningTaskCount;
+            await using (var runningCommand = connection.CreateCommand())
+            {
+                runningCommand.Transaction = transaction;
+                runningCommand.CommandText = "SELECT COUNT(*) FROM collection_tasks WHERE Status = $running;";
+                runningCommand.Parameters.AddWithValue("$running", CollectionTaskStatus.Running.ToString());
+                runningTaskCount = Convert.ToInt32(await runningCommand.ExecuteScalarAsync(cancellationToken)
+                    .ConfigureAwait(false), CultureInfo.InvariantCulture);
+            }
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return (pipeline, runningTaskCount);
+        }
+
+        private static async Task RequireColumnsAsync(SqliteConnection connection, SqliteTransaction transaction,
+            string table, IReadOnlyCollection<string> requiredColumns, CancellationToken cancellationToken)
+        {
+            var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = $"PRAGMA table_info(\"{table}\");";
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                columns.Add(reader.GetString(1));
+            if (!requiredColumns.All(columns.Contains))
+                throw new InvalidDataException($"The collection table '{table}' does not match the required read-only schema.");
+        }
+
         internal async Task<HorseIdentityMigrationMaintenanceCapability.OperationAuthorization> IssueOperationAuthorizationAsync(
             Guid operationId, string immutableRequestHash, HorseIdentityMigrationJournal journal,
             CancellationToken cancellationToken = default)
@@ -682,6 +847,52 @@ internal static class HorseIdentityMigrationMaintenanceOwnership
                 operationId, immutableRequestHash, sourceHash, identity.ProcessId, identity.StartTicks, nonce);
             WriteOwnerRecords(_sourcePaths, "readonly-reverify", EncodeOwnerRecord("readonly-reverify", operationId, immutableRequestHash,
                 sourceHash, identity.ProcessId, identity.StartTicks, authorization.GetNonceHash()));
+            CryptographicOperations.ZeroMemory(nonce);
+            return authorization;
+        }
+
+        internal async Task<HorseIdentityMigrationMaintenanceCapability.PreparationCancellationAuthorization?>
+            IssuePreparationCancellationAuthorizationAsync(Guid operationId,
+                HorseIdentityMigrationRuntimeOwnership runtimeOwnership, string collectionPlatformPath,
+                HorseIdentityMigrationJournal journal, DateTimeOffset now,
+                CancellationToken cancellationToken = default)
+        {
+            ThrowIfDisposed();
+            ArgumentNullException.ThrowIfNull(runtimeOwnership);
+            ArgumentException.ThrowIfNullOrWhiteSpace(collectionPlatformPath);
+            ArgumentNullException.ThrowIfNull(journal);
+            runtimeOwnership.ThrowIfDisposed();
+            if (operationId == Guid.Empty || !OwnsSameSourceSet(runtimeOwnership.SourcePaths))
+                throw new IOException("Preparation-cancellation authorization requires matching live source and runtime ownership.");
+
+            var operation = await journal.GetStatusAsync(operationId, cancellationToken).ConfigureAwait(false);
+            var intent = await journal.GetExecutionIntentAsync(operationId, cancellationToken).ConfigureAwait(false);
+            var executable = await journal.GetExecutableRequestAsync(operationId, cancellationToken).ConfigureAwait(false);
+            if (operation?.Status != HorseIdentityMigrationOperationStatus.Staged
+                || intent is null || intent.Phase != HorseIdentityMigrationExecutionPhase.CancellationRequested
+                || intent.CancellationSourceSetHash is not null
+                || executable?.ImmutableRequestHash != intent.ImmutableRequestHash)
+                return null;
+
+            var sourceSetHash = HorseIdentityMigrationRuntimeOwnership.ComputeSourceSetHash(_sourcePaths);
+            if (!ValidateMaintenanceGateSet(_sourcePaths, operationId, intent.ImmutableRequestHash, sourceSetHash))
+                return null;
+
+            var drain = await ReadPreparationCancellationDrainStateAsync(runtimeOwnership, collectionPlatformPath,
+                cancellationToken).ConfigureAwait(false);
+            var pause = drain.Pipeline;
+            if (pause.UpdatedAt is not { } pauseStartedAt
+                || !HorseIdentityMigrationPreparationService.IsReadyToStop(pause, pauseStartedAt,
+                    drain.RunningTaskCount, now))
+                return null;
+
+            var identity = HorseIdentityMigrationMaintenanceCapability.CurrentProcessIdentity();
+            var nonce = HorseIdentityMigrationMaintenanceCapability.CreateNonce();
+            var authorization = HorseIdentityMigrationMaintenanceCapability.CreatePreparationCancellationAuthorization(
+                operationId, intent.ImmutableRequestHash, sourceSetHash, identity.ProcessId, identity.StartTicks, nonce);
+            WriteOwnerRecords(_sourcePaths, "preparation-cancel", EncodeOwnerRecord("preparation-cancel",
+                operationId, intent.ImmutableRequestHash, sourceSetHash, identity.ProcessId, identity.StartTicks,
+                authorization.GetNonceHash()));
             CryptographicOperations.ZeroMemory(nonce);
             return authorization;
         }

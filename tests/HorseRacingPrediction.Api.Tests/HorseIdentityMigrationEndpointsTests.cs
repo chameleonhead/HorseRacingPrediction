@@ -95,6 +95,48 @@ public sealed class HorseIdentityMigrationEndpointsTests
     }
 
     [TestMethod]
+    public async Task CancelPreparationEndpointOnlyJournalsIdempotentEligibleRequest()
+    {
+        await using var stores = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();
+        await using var app = await StartApiAsync(stores);
+        using var transport = app.GetTestClient();
+        transport.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+
+        var journal = GetJournal(stores);
+        var manifest = Manifest();
+        var operationId = Guid.NewGuid();
+        var requestKey = Guid.NewGuid();
+        var previewFingerprint = new string('C', 64);
+        var immutableHash = HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(manifest, previewFingerprint);
+        Assert.IsTrue((await journal.StageWithRequestKeyAsync(operationId, manifest, requestKey, immutableHash,
+            previewFingerprint, DateTimeOffset.UtcNow)).Succeeded);
+        Assert.IsTrue((await journal.CreateExecutionIntentAsync(operationId, immutableHash,
+            DateTimeOffset.UtcNow)).Succeeded);
+        foreach (var phase in new[]
+        {
+            HorseIdentityMigrationExecutionPhase.Preparing,
+            HorseIdentityMigrationExecutionPhase.Draining,
+            HorseIdentityMigrationExecutionPhase.StoppingApi,
+        })
+            Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId, phase, DateTimeOffset.UtcNow)).Succeeded);
+
+        var route = $"/api/v2/admin/horse-id-migration-operations/{operationId:D}/cancel-preparation";
+        using var response = await transport.PostAsync(route, content: null);
+        Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.AreEqual(HorseIdentityMigrationExecutionPhase.CancellationRequested,
+            (await journal.GetExecutionIntentAsync(operationId))?.Phase);
+        Assert.AreEqual(HorseIdentityMigrationOperationStatus.Staged,
+            (await journal.GetStatusAsync(operationId))?.Status,
+            "The HTTP request records intent only; it does not finalize or release any maintenance gate.");
+
+        using var duplicate = await transport.PostAsync(route, content: null);
+        Assert.AreEqual(HttpStatusCode.Accepted, duplicate.StatusCode,
+            "Repeating the same cancellation request returns its persisted request receipt.");
+        Assert.IsNull((await journal.GetExecutionIntentAsync(operationId))?.CancellationSourceSetHash,
+            "The request endpoint must not mint source-bound cleanup authority.");
+    }
+
+    [TestMethod]
     public async Task RequestKeyReplaysBeforeFreshPreviewAndChangedContentsConflict()
     {
         await using var stores = await HorseIdentityMigrationStoreEngineTests.StoreFixture.CreateAsync();

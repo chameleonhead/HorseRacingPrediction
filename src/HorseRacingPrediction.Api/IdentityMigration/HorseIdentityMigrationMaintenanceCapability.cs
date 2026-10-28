@@ -205,6 +205,39 @@ internal static class HorseIdentityMigrationMaintenanceCapability
         }
     }
 
+    /// <summary>In-process proof that the live supervisor control lease validated preparation cancellation.</summary>
+    internal sealed class PreparationCancellationAuthorization
+    {
+        private readonly byte[] _nonce;
+
+        internal PreparationCancellationAuthorization(Guid operationId, string requestHash, string sourceSetHash,
+            int parentProcessId, long parentStartTicks, byte[] nonce)
+        {
+            OperationId = operationId;
+            RequestHash = requestHash;
+            SourceSetHash = sourceSetHash;
+            ParentProcessId = parentProcessId;
+            ParentStartTicks = parentStartTicks;
+            _nonce = nonce.ToArray();
+        }
+
+        internal Guid OperationId { get; }
+        internal string RequestHash { get; }
+        internal string SourceSetHash { get; }
+        internal int ParentProcessId { get; }
+        internal long ParentStartTicks { get; }
+        internal string GetNonceHash() => HashNonce(_nonce);
+
+        internal bool ValidateForSourcePaths(IEnumerable<string> sourcePaths) =>
+            string.Equals(SourceSetHash,
+                HorseIdentityMigrationRuntimeOwnership.ComputeSourceSetHash(sourcePaths), StringComparison.Ordinal)
+            && HorseIdentityMigrationMaintenanceOwnership.ValidateParentAuthorizationForSources(sourcePaths,
+                SourceSetHash, ParentProcessId, ParentStartTicks, GetNonceHash(), "preparation-cancel",
+                OperationId, RequestHash)
+            && HorseIdentityMigrationMaintenanceOwnership.ValidateMaintenanceGateSet(
+                sourcePaths, OperationId, RequestHash, SourceSetHash);
+    }
+
     internal static ApiBootstrapAuthorization CreateApiBootstrapAuthorization(
         string sourceSetHash, int parentProcessId, long parentStartTicks, byte[] nonce)
     {
@@ -219,6 +252,17 @@ internal static class HorseIdentityMigrationMaintenanceCapability
         if (operationId == Guid.Empty || !IsHash(requestHash) || !IsHash(sourceSetHash)
             || parentProcessId <= 0 || parentStartTicks <= 0 || nonce.Length != 32)
             throw new ArgumentException("The CLI operation authorization fields are invalid.");
+        return new(operationId, requestHash, sourceSetHash, parentProcessId, parentStartTicks, nonce.ToArray());
+    }
+
+    internal static PreparationCancellationAuthorization CreatePreparationCancellationAuthorization(
+        Guid operationId, string requestHash, string sourceSetHash, int parentProcessId, long parentStartTicks,
+        byte[] nonce)
+    {
+        ArgumentNullException.ThrowIfNull(nonce);
+        if (operationId == Guid.Empty || !IsHash(requestHash) || !IsHash(sourceSetHash)
+            || parentProcessId <= 0 || parentStartTicks <= 0 || nonce.Length != 32)
+            throw new ArgumentException("The preparation cancellation authorization fields are invalid.");
         return new(operationId, requestHash, sourceSetHash, parentProcessId, parentStartTicks, nonce.ToArray());
     }
 

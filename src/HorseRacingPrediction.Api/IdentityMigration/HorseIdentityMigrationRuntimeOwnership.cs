@@ -56,6 +56,93 @@ internal sealed class HorseIdentityMigrationRuntimeOwnership : IDisposable
         return ownership;
     }
 
+    internal static async Task<HorseIdentityMigrationRuntimeOwnership> AcquireForPreparationCancellationAsync(
+        IEnumerable<string> sourcePaths,
+        HorseIdentityMigrationMaintenanceOwnership.HorseIdentityMigrationSupervisorControlLease controlLease,
+        Guid operationId, string requestHash, HorseIdentityMigrationJournal journal,
+        CancellationToken cancellationToken = default, Action? afterAcquire = null)
+    {
+        ArgumentNullException.ThrowIfNull(controlLease);
+        ArgumentNullException.ThrowIfNull(journal);
+        var paths = CanonicalizeSourcePaths(sourcePaths);
+        if (operationId == Guid.Empty || !controlLease.OwnsSameSourceSet(paths))
+            throw new IOException("Preparation cancellation requires the matching supervisor control lease.");
+        var status = await journal.GetStatusAsync(operationId, cancellationToken).ConfigureAwait(false);
+        var intent = await journal.GetExecutionIntentAsync(operationId, cancellationToken).ConfigureAwait(false);
+        var sourceHash = ComputeSourceSetHash(paths);
+        if (status?.Status != HorseIdentityMigrationOperationStatus.Staged
+            || intent is null || intent.Phase != HorseIdentityMigrationExecutionPhase.CancellationRequested
+            || intent.ImmutableRequestHash != requestHash || intent.CancellationSourceSetHash is not null
+            || !HorseIdentityMigrationMaintenanceOwnership.ValidateMaintenanceGateSet(paths, operationId,
+                requestHash, sourceHash))
+            throw new IOException("The exact requested operation and complete maintenance gates are not present.");
+
+        var ownership = AcquireCore(paths, operationAuthorization: null, readonlyAuthorization: null,
+            allowGatedOperation: true);
+        try
+        {
+            afterAcquire?.Invoke();
+            var currentStatus = await journal.GetStatusAsync(operationId, cancellationToken).ConfigureAwait(false);
+            var currentIntent = await journal.GetExecutionIntentAsync(operationId, cancellationToken).ConfigureAwait(false);
+            if (currentStatus?.Status != HorseIdentityMigrationOperationStatus.Staged
+                || currentIntent is null || currentIntent.Phase != HorseIdentityMigrationExecutionPhase.CancellationRequested
+                || currentIntent.ImmutableRequestHash != requestHash || currentIntent.CancellationSourceSetHash is not null
+                || !HorseIdentityMigrationMaintenanceOwnership.ValidateMaintenanceGateSet(paths, operationId,
+                    requestHash, sourceHash))
+                throw new IOException("The requested operation changed while cancellation ownership was acquired.");
+            return ownership;
+        }
+        catch
+        {
+            ownership.Dispose();
+            throw;
+        }
+    }
+
+    internal static async Task<HorseIdentityMigrationRuntimeOwnership> AcquireForCancellationReceiptRecoveryAsync(
+        IEnumerable<string> sourcePaths,
+        HorseIdentityMigrationMaintenanceOwnership.HorseIdentityMigrationSupervisorControlLease controlLease,
+        Guid operationId, HorseIdentityMigrationJournal journal,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(controlLease);
+        ArgumentNullException.ThrowIfNull(journal);
+        var paths = CanonicalizeSourcePaths(sourcePaths);
+        if (operationId == Guid.Empty || !controlLease.OwnsSameSourceSet(paths))
+            throw new IOException("Cancellation receipt recovery requires the matching supervisor control lease.");
+
+        async Task ValidateReceiptAsync()
+        {
+            var status = await journal.GetStatusAsync(operationId, cancellationToken).ConfigureAwait(false);
+            var intent = await journal.GetExecutionIntentAsync(operationId, cancellationToken).ConfigureAwait(false);
+            var saved = await journal.GetSavedRequestAsync(operationId, cancellationToken).ConfigureAwait(false);
+            var pending = saved is null
+                ? await journal.GetPendingRequestAsync(operationId, cancellationToken).ConfigureAwait(false)
+                : null;
+            var requestHash = saved?.ImmutableRequestHash ?? pending?.ImmutableRequestHash;
+            if (status?.Status != HorseIdentityMigrationOperationStatus.Failed
+                || status.Reason != HorseIdentityMigrationJournalReason.PreparationCancelled
+                || intent is null || intent.Phase != HorseIdentityMigrationExecutionPhase.PreparationCancelled
+                || requestHash != intent.ImmutableRequestHash
+                || intent.CancellationSourceSetHash != ComputeSourceSetHash(paths))
+                throw new IOException("The exact source-bound preparation-cancellation receipt is unavailable.");
+        }
+
+        await ValidateReceiptAsync().ConfigureAwait(false);
+        var ownership = AcquireCore(paths, operationAuthorization: null, readonlyAuthorization: null,
+            allowGatedOperation: true);
+        try
+        {
+            await ValidateReceiptAsync().ConfigureAwait(false);
+            return ownership;
+        }
+        catch
+        {
+            ownership.Dispose();
+            throw;
+        }
+    }
+
     internal static HorseIdentityMigrationRuntimeOwnership AcquireForMaintenanceGateManagement(
         IEnumerable<string> sourcePaths,
         HorseIdentityMigrationMaintenanceOwnership.HorseIdentityMigrationSupervisorControlLease controlLease,
@@ -71,7 +158,8 @@ internal sealed class HorseIdentityMigrationRuntimeOwnership : IDisposable
 
     private static HorseIdentityMigrationRuntimeOwnership AcquireCore(IEnumerable<string> sourcePaths,
         HorseIdentityMigrationMaintenanceCapability.OperationAuthorization? operationAuthorization,
-        HorseIdentityMigrationMaintenanceCapability.ReadonlyReverificationAuthorization? readonlyAuthorization = null)
+        HorseIdentityMigrationMaintenanceCapability.ReadonlyReverificationAuthorization? readonlyAuthorization = null,
+        bool allowGatedOperation = false)
     {
         var paths = CanonicalizeSourcePaths(sourcePaths);
         var comparer = HorseIdentityMigrationConfiguredSources.PathComparer;
@@ -115,7 +203,7 @@ internal sealed class HorseIdentityMigrationRuntimeOwnership : IDisposable
 
             if (operationAuthorization is null)
             {
-                if (readonlyAuthorization is null
+                if (!allowGatedOperation && readonlyAuthorization is null
                     && paths.Any(path => File.Exists(HorseIdentityMigrationMaintenanceOwnership.GetMaintenanceGatePath(path))))
                     throw new IOException("A configured source is held by an active migration maintenance gate.");
             }

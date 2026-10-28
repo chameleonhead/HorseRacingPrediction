@@ -41,10 +41,30 @@ internal static class HorseIdentityMigrationRuntimeMode
     internal const string CommandName = "horse-id-migration";
     internal const string StatusRoute = "/api/v2/admin/horse-id-migration-operations/{operationId}";
     internal const string OperatorOnlyEnvironmentVariable = "HRP_HORSE_IDENTITY_OPERATOR_ONLY";
+    internal const string OperatorOperationIdEnvironmentVariable = "HRP_HORSE_IDENTITY_OPERATOR_OPERATION_ID";
     private static readonly TimeSpan OperatorStatusReadDeadline = TimeSpan.FromSeconds(2);
 
-    internal static bool IsOperatorOnlyMode() => string.Equals(
-        Environment.GetEnvironmentVariable(OperatorOnlyEnvironmentVariable), "true", StringComparison.Ordinal);
+    internal static bool IsOperatorOnlyMode()
+    {
+        var flag = Environment.GetEnvironmentVariable(OperatorOnlyEnvironmentVariable);
+        var operationId = Environment.GetEnvironmentVariable(OperatorOperationIdEnvironmentVariable);
+        return !string.IsNullOrWhiteSpace(operationId)
+            || (flag is not null && !string.Equals(flag, "false", StringComparison.OrdinalIgnoreCase));
+    }
+
+    internal static bool IsCancellationTargetAllowed(Guid operationId)
+    {
+        if (operationId == Guid.Empty) return false;
+        if (!IsOperatorOnlyMode()) return true;
+        var target = Environment.GetEnvironmentVariable(OperatorOperationIdEnvironmentVariable);
+        return Guid.TryParseExact(target, "D", out var bound) && bound == operationId;
+    }
+
+    private static Guid? ReadBoundOperatorOperationId()
+    {
+        var target = Environment.GetEnvironmentVariable(OperatorOperationIdEnvironmentVariable);
+        return Guid.TryParseExact(target, "D", out var parsed) && parsed != Guid.Empty ? parsed : null;
+    }
 
     internal static HorseIdentityMigrationRuntimeModeSelection Parse(IReadOnlyList<string> arguments)
     {
@@ -313,7 +333,19 @@ internal static class HorseIdentityMigrationRuntimeMode
                     statusCode: StatusCodes.Status503ServiceUnavailable);
             }
         });
-        MapReadonlyVerificationEndpoints(app, journal, allowVerificationActions: !operatorOnly);
+        app.MapPost(StatusRoute + "/cancel-preparation", (string operationId, HttpContext context,
+            CancellationToken cancellationToken) =>
+        {
+            if (!Guid.TryParseExact(operationId, "D", out var parsed)
+                || !IsCancellationTargetAllowed(parsed))
+                return Task.FromResult<IResult>(Results.NotFound());
+            return HorseIdentityMigrationEndpoints.RequestPreparationCancellationAsync(
+                operationId, context.Response, journal, TimeProvider.System, cancellationToken);
+        });
+        var boundOperatorOperationId = operatorOnly ? ReadBoundOperatorOperationId() : null;
+        MapReadonlyVerificationEndpoints(app, journal, allowVerificationActions: !operatorOnly,
+            allowPreparationCancellationActions: !operatorOnly || boundOperatorOperationId is not null,
+            boundOperatorOperationId: boundOperatorOperationId);
         app.MapFallback(async (HttpContext context) =>
         {
             SetNoStore(context.Response);
@@ -327,7 +359,7 @@ internal static class HorseIdentityMigrationRuntimeMode
                 return Results.Challenge();
 
             var status = journalAvailable
-                ? await ReadOperatorStatusAsync(journal, null, context.RequestAborted)
+                ? await ReadOperatorStatusAsync(journal, boundOperatorOperationId, context.RequestAborted)
                     .ConfigureAwait(false)
                 : (Operation: (HorseIdentityMigrationOperationResponse?)null, Available: false, CanVerify: false);
 
@@ -399,6 +431,9 @@ internal static class HorseIdentityMigrationRuntimeMode
             {
                 ExecutionPhase = intent?.Phase.ToString(),
                 ExecutionUpdatedAt = intent?.UpdatedAt,
+                Reason = intent?.Phase == HorseIdentityMigrationExecutionPhase.CancellationRequested
+                    && intent.CancellationDiagnosticReason == HorseIdentityMigrationJournalReason.PreparationFailed
+                        ? "PreparationFailed" : HorseIdentityMigrationPublicMapper.Reason(savedOperation.Reason),
             };
             var canVerify = savedOperation.Status == HorseIdentityMigrationOperationStatus.Succeeded
                 && intent is not null
@@ -433,17 +468,22 @@ internal static class HorseIdentityMigrationRuntimeMode
             ? "移行状態を確認できません。ジャーナルの内容が読み取れないため、成功とは判断できません。"
             : operation is null
                 ? "移行操作の記録がありません。状態は未確認です。"
-                : operation.Status switch
-                {
-                    "Succeeded" => "移行データの成功記録があります。運用状態は画面の最新情報を確認してください。",
-                    "Partial" => "移行の一部が完了した可能性があります。確認が終わるまで通常の更新は停止しています。",
-                    "Failed" => "移行処理に失敗しました。確認が終わるまで通常の更新は停止しています。",
-                    _ => "移行の状態を確認してください。確認が終わるまで通常の更新は停止しています.",
-                };
+                : operation.ExecutionPhase == "CancellationRequested" && operation.Reason == "PreparationFailed"
+                    ? "取消の検証を完了できませんでした。理由と記録時刻を確認してください。安全な確認が終わるまでホストを保護します。この中止要求では業務データを書き換えません。"
+                    : operation.ExecutionPhase == "CancellationRequested"
+                        ? "取消要求を記録しました。プロセス・停止状態・所有権を検証中です。安全な確認が終わるまでホストを保護します。この中止要求では業務データを書き換えません。"
+                    : operation.Status switch
+                    {
+                        "Succeeded" => "移行データの成功記録があります。運用状態は画面の最新情報を確認してください。",
+                        "Partial" => "移行の一部が完了した可能性があります。確認が終わるまで通常の更新は停止しています。",
+                        "Failed" => "移行処理に失敗しました。確認が終わるまで通常の更新は停止しています。",
+                        _ => "移行の状態を確認してください。確認が終わるまで通常の更新は停止しています.",
+                    };
         var status = operation is null ? "Unknown" : E(operation.Status);
         var reason = operation is null ? "Unavailable" : E(operation.Reason);
         var phase = operation?.ExecutionPhase is { Length: > 0 } value ? E(value) : "Unknown";
-        var updatedAt = operation is null ? "Unknown" : E(operation.UpdatedAt.ToString("O"));
+        var recordedAt = operation?.ExecutionUpdatedAt ?? operation?.UpdatedAt;
+        var updatedAt = recordedAt is null ? "Unknown" : E(recordedAt.Value.ToString("O"));
         var operationId = operation is null ? "Unknown" : E(operation.OperationId.ToString("D"));
         var detailsHref = operation is null
             ? null
@@ -475,7 +515,8 @@ internal static class HorseIdentityMigrationRuntimeMode
     }
 
     internal static void MapReadonlyVerificationEndpoints(IEndpointRouteBuilder endpoints,
-        HorseIdentityMigrationJournal journal, bool allowVerificationActions = true)
+        HorseIdentityMigrationJournal journal, bool allowVerificationActions = true,
+        bool allowPreparationCancellationActions = true, Guid? boundOperatorOperationId = null)
     {
         if (allowVerificationActions)
         {
@@ -525,12 +566,24 @@ internal static class HorseIdentityMigrationRuntimeMode
             if (requestedOperationId is not null && status.Available && status.Operation is null)
                 return Results.NotFound();
             var verificationAction = string.Empty;
-            if (allowVerificationActions && status.CanVerify)
+            var canRequestPreparationCancellation = allowPreparationCancellationActions && status.Operation is { } current
+                && current.Status == "AwaitingActions"
+                && (boundOperatorOperationId is null || boundOperatorOperationId == current.OperationId)
+                && current.ExecutionPhase is "StoppingApi" or "ApiExited" or "BackedUp";
+            if ((allowVerificationActions && status.CanVerify) || canRequestPreparationCancellation)
             {
                 var token = antiforgery.GetAndStoreTokens(context).RequestToken;
                 var tokenHtml = WebUtility.HtmlEncode(token);
-                var operationIdHtml = WebUtility.HtmlEncode(status.Operation!.OperationId.ToString("D"));
-                verificationAction = $"<form method=\"post\" action=\"/settings/horse-id-migration/{operationIdHtml}/verify\"><input type=\"hidden\" name=\"__RequestVerificationToken\" value=\"{tokenHtml}\"><button type=\"submit\">Run read-only verification</button></form>";
+                if (allowVerificationActions && status.CanVerify)
+                {
+                    var verifyId = WebUtility.HtmlEncode(status.Operation!.OperationId.ToString("D"));
+                    verificationAction += $"<form method=\"post\" action=\"/settings/horse-id-migration/{verifyId}/verify\"><input type=\"hidden\" name=\"__RequestVerificationToken\" value=\"{tokenHtml}\"><button type=\"submit\">Run read-only verification</button></form>";
+                }
+                if (canRequestPreparationCancellation)
+                {
+                    var cancelId = WebUtility.HtmlEncode(status.Operation!.OperationId.ToString("D"));
+                    verificationAction += $"<form method=\"post\" action=\"/settings/horse-id-migration/{cancelId}/cancel-preparation\"><input type=\"hidden\" name=\"__RequestVerificationToken\" value=\"{tokenHtml}\"><label><input type=\"checkbox\" name=\"confirmCancellation\" value=\"cancel-preparation\" required> 準備処理の取消を明示的に確認します</label><button type=\"submit\">準備を取り消す</button></form>";
+                }
             }
             return Results.Content(BuildMinimalOperatorHtml(context.Request.Path, status.Operation, status.Available,
                     verificationAction),
@@ -538,8 +591,39 @@ internal static class HorseIdentityMigrationRuntimeMode
                 status.Available ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
         }).RequireAuthorization();
 
-        if (allowVerificationActions)
+        if (allowPreparationCancellationActions)
         {
+            endpoints.MapPost("/settings/horse-id-migration/{operationId:guid}/cancel-preparation", async (
+                Guid operationId, HttpContext context, IAntiforgery antiforgery,
+                CancellationToken cancellationToken) =>
+            {
+                SetNoStore(context.Response);
+                if (operationId == Guid.Empty || !await antiforgery.IsRequestValidAsync(context).ConfigureAwait(false))
+                    return Results.BadRequest("Cancellation request was not accepted.");
+                if ((boundOperatorOperationId is { } bound && bound != operationId)
+                    || !IsCancellationTargetAllowed(operationId))
+                    return Results.NotFound();
+                var form = await context.Request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
+                if (!string.Equals(form["confirmCancellation"], "cancel-preparation", StringComparison.Ordinal))
+                    return Results.BadRequest("Explicit cancellation confirmation is required.");
+                try
+                {
+                    var outcome = await journal.RequestPreparationCancellationAsync(operationId,
+                        TimeProvider.System.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+                    var message = outcome.Succeeded
+                        ? "Cancellation was recorded. The supervisor will verify process, pause, and source ownership before cleanup."
+                        : "Cancellation was not accepted. The operation may no longer be eligible; the host remains protected.";
+                    return Results.Content($"<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"robots\" content=\"noindex\"><title>Horse identity migration</title><main><h1>Horse identity migration</h1><p role=\"status\">{WebUtility.HtmlEncode(message)}</p><p>Operation: <code>{WebUtility.HtmlEncode(operationId.ToString("D"))}</code></p><p><a href=\"/settings/horse-id-migration?operationId={operationId:D}\">Return to status</a></p></main></html>",
+                        "text/html; charset=utf-8", statusCode: outcome.Succeeded ? StatusCodes.Status202Accepted : StatusCodes.Status409Conflict);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+                    or InvalidDataException or SqliteException)
+                {
+                    return Results.Content("<!doctype html><html><meta charset=\"utf-8\"><title>Status unavailable</title><p>Cancellation could not be confirmed; the host remains protected.</p></html>",
+                        "text/html; charset=utf-8", statusCode: StatusCodes.Status503ServiceUnavailable);
+                }
+            }).RequireAuthorization();
+
             endpoints.MapPost("/settings/horse-id-migration/{operationId:guid}/verify", async (
                 Guid operationId, HttpContext context, IAntiforgery antiforgery,
                 CancellationToken cancellationToken) =>

@@ -258,6 +258,7 @@ public sealed class HorseIdentityMigrationOperatorReadinessInteropTests
             process.StartInfo.Environment["ApiKey__HeaderName"] = "X-Api-Key";
             process.StartInfo.Environment["ApiKey__Key"] = ApiKey;
             process.StartInfo.Environment["HRP_HORSE_IDENTITY_OPERATOR_ONLY"] = "true";
+            process.StartInfo.Environment["HRP_HORSE_IDENTITY_OPERATOR_OPERATION_ID"] = OperationId.ToString("D");
             process.StartInfo.Environment["ASPNETCORE_Kestrel__Certificates__Default__Path"] = ServerCertificatePath;
             process.StartInfo.Environment["ASPNETCORE_Kestrel__Certificates__Default__Password"] = _certificatePassword;
             process.StartInfo.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";

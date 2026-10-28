@@ -1,7 +1,10 @@
 using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using HorseRacingPrediction.Contracts.Common;
+using HorseRacingPrediction.Contracts.Identity;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Api.IdentityMigration;
 using Microsoft.Extensions.Options;
@@ -49,12 +52,17 @@ public sealed class HorseIdentityMigrationSupervisorTests
         var requestedDirectory = Environment.GetEnvironmentVariable("HRP_HORSE_IDENTITY_SUPERVISOR_FIXTURE_DIR");
         var pauseAgeRequested = Environment.GetEnvironmentVariable(
             "HRP_HORSE_IDENTITY_SUPERVISOR_FIXTURE_PAUSE_AGED");
+        var cancellationFixtureRequested = Environment.GetEnvironmentVariable(
+            "HRP_HORSE_IDENTITY_SUPERVISOR_FIXTURE_PREPARATION_CANCELLATION");
         if (!string.IsNullOrWhiteSpace(pauseAgeRequested) && pauseAgeRequested != "1")
             throw new InvalidOperationException("The disposable fixture pause-age flag must be exactly '1'.");
+        if (!string.IsNullOrWhiteSpace(cancellationFixtureRequested) && cancellationFixtureRequested != "1")
+            throw new InvalidOperationException("The disposable cancellation-fixture flag must be exactly '1'.");
         if (string.IsNullOrWhiteSpace(requestedDirectory))
         {
-            if (!string.IsNullOrWhiteSpace(pauseAgeRequested))
-                throw new InvalidOperationException("The disposable fixture pause-age flag requires a fixture export directory.");
+            if (!string.IsNullOrWhiteSpace(pauseAgeRequested)
+                || !string.IsNullOrWhiteSpace(cancellationFixtureRequested))
+                throw new InvalidOperationException("The disposable fixture flags require a fixture export directory.");
             return;
         }
 
@@ -93,6 +101,50 @@ public sealed class HorseIdentityMigrationSupervisorTests
         File.Copy(stores.SchedulePath, Path.Combine(outputDirectory, "prediction-executions.db"));
         await File.WriteAllTextAsync(Path.Combine(outputDirectory, "pause-start.txt"),
             pipeline.UpdatedAt.Value.ToUniversalTime().ToString("O"));
+
+        if (cancellationFixtureRequested == "1")
+        {
+            var sourcePaths = new[]
+            {
+                Path.Combine(outputDirectory, "eventstore.db"),
+                Path.Combine(outputDirectory, "collection-platform.db"),
+                Path.Combine(outputDirectory, "prediction-executions.db"),
+            };
+            var journal = new HorseIdentityMigrationJournal(outputDirectory, sourcePaths);
+            var manifest = new HorseIdentityMigrationManifest(
+                [new HorseIdentityMigrationManifestEntry(oldHorseId, "jra-horse:1234567890", true)]);
+            var immutableRequestHash = HorseIdentityMigrationExecutionPolicy.ComputePendingImmutableRequestHash(manifest);
+            var operationId = Guid.NewGuid();
+            var requestKey = Guid.NewGuid();
+            var now = DateTimeOffset.UtcNow;
+            if (!(await journal.StagePendingWithRequestKeyAsync(operationId, manifest, requestKey,
+                    immutableRequestHash, now)).Succeeded
+                || !(await journal.CreateExecutionIntentAsync(operationId, immutableRequestHash, now)).Succeeded
+                || !(await journal.AdvanceExecutionIntentAsync(operationId,
+                    HorseIdentityMigrationExecutionPhase.Preparing, now)).Succeeded)
+                throw new InvalidOperationException("The typed cancellation fixture could not stage its real PendingV2 intent.");
+
+            using (var runtimeOwnership = HorseIdentityMigrationRuntimeOwnership.Acquire(sourcePaths))
+            using (var controlLease = HorseIdentityMigrationMaintenanceOwnership.AcquireSupervisorControlLease(sourcePaths))
+            {
+                await HorseIdentityMigrationMaintenanceOwnership.InstallStandaloneMaintenanceGatesAsync(
+                    runtimeOwnership, controlLease, operationId, immutableRequestHash, journal);
+            }
+
+            if (!(await journal.AdvanceExecutionIntentAsync(operationId,
+                    HorseIdentityMigrationExecutionPhase.Draining, now)).Succeeded
+                || !(await journal.AdvanceExecutionIntentAsync(operationId,
+                    HorseIdentityMigrationExecutionPhase.StoppingApi, now)).Succeeded)
+                throw new InvalidOperationException("The typed cancellation fixture could not advance through StoppingApi.");
+            var intent = await journal.GetExecutionIntentAsync(operationId);
+            if (intent?.Phase != HorseIdentityMigrationExecutionPhase.StoppingApi
+                || !HorseIdentityMigrationMaintenanceOwnership.ValidateMaintenanceGateSet(sourcePaths,
+                    operationId, immutableRequestHash,
+                    HorseIdentityMigrationRuntimeOwnership.ComputeSourceSetHash(sourcePaths)))
+                throw new InvalidOperationException("The cancellation fixture is not source-bound at StoppingApi with the complete exact gate set.");
+            await File.WriteAllTextAsync(Path.Combine(outputDirectory, "preparation-cancellation-operation-id.txt"),
+                operationId.ToString("D"));
+        }
     }
 
     [TestMethod]
@@ -121,6 +173,32 @@ public sealed class HorseIdentityMigrationSupervisorTests
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    [TestMethod]
+    public void CancellationProofFailuresKeepOperatorHostUnlessShutdownIsRequested()
+    {
+        Assert.IsTrue(HorseIdentityMigrationSupervisor.IsRecoverableCancellationProofFailure(
+            new InvalidOperationException("A stale or failed cancellation proof remains protected."), CancellationToken.None));
+        Assert.IsTrue(HorseIdentityMigrationSupervisor.IsRecoverableCancellationProofFailure(
+            new IOException("A source proof could not be read."), CancellationToken.None));
+        Assert.IsTrue(HorseIdentityMigrationSupervisor.IsRecoverableCancellationProofFailure(
+            new OperationCanceledException("A bounded proof operation was canceled."), CancellationToken.None));
+        Assert.IsFalse(HorseIdentityMigrationSupervisor.IsRecoverableCancellationProofFailure(
+            new OutOfMemoryException(), CancellationToken.None));
+        var cleanupExceptionType = typeof(HorseIdentityMigrationSupervisor)
+            .GetNestedType("OperatorHostCleanupException", BindingFlags.NonPublic);
+        Assert.IsNotNull(cleanupExceptionType);
+        var cleanupException = (Exception)RuntimeHelpers.GetUninitializedObject(cleanupExceptionType!);
+        Assert.IsFalse(HorseIdentityMigrationSupervisor.IsRecoverableCancellationProofFailure(
+            cleanupException, CancellationToken.None),
+            "An unconfirmed operator-child reap remains fatal and must never be converted into a proof refusal.");
+
+        using var stopping = new CancellationTokenSource();
+        stopping.Cancel();
+        Assert.IsFalse(HorseIdentityMigrationSupervisor.IsRecoverableCancellationProofFailure(
+            new OperationCanceledException(stopping.Token), stopping.Token),
+            "PID1 shutdown cancellation must still propagate rather than being converted into a proof refusal.");
     }
 
     [TestMethod]

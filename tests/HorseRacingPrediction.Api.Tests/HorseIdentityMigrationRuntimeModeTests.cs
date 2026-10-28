@@ -92,6 +92,32 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
     }
 
     [TestMethod]
+    public void OperatorOnlyMalformedOrUnboundTargetRemainsForcedClosed()
+    {
+        var priorFlag = Environment.GetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable);
+        var priorTarget = Environment.GetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOperationIdEnvironmentVariable);
+        try
+        {
+            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable, "true");
+            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOperationIdEnvironmentVariable, null);
+            Assert.IsTrue(HorseIdentityMigrationRuntimeMode.IsOperatorOnlyMode(), "A forced host without a bound GUID stays blocked.");
+
+            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable, "true");
+            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOperationIdEnvironmentVariable, "not-a-guid");
+            Assert.IsTrue(HorseIdentityMigrationRuntimeMode.IsOperatorOnlyMode(), "A malformed target cannot release forced mode.");
+
+            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable, "unexpected");
+            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOperationIdEnvironmentVariable, null);
+            Assert.IsTrue(HorseIdentityMigrationRuntimeMode.IsOperatorOnlyMode(), "Malformed force state fails closed.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable, priorFlag);
+            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOperationIdEnvironmentVariable, priorTarget);
+        }
+    }
+
+    [TestMethod]
     public async Task FixedCommandRejectsMissingMalformedAndExtraArgumentsBeforeCreatingHostState()
     {
         var missing = HorseIdentityMigrationRuntimeMode.Parse([HorseIdentityMigrationRuntimeMode.CommandName]);
@@ -302,6 +328,259 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
             {
                 await RuntimeFixture.StopAsync(child);
             }
+        }
+    }
+
+    [TestMethod]
+    public async Task ForcedOperatorCancellationApiUsesApiKeyWithoutCookieAndRejectsCookieOnly()
+    {
+        using var fixture = new RuntimeFixture();
+        var operationId = Guid.NewGuid();
+        var manifest = Manifest();
+        var fingerprint = new string('E', 64);
+        var requestHash = HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(manifest, fingerprint);
+        Assert.IsTrue((await fixture.Journal.StageWithRequestKeyAsync(operationId, manifest, Guid.NewGuid(), requestHash,
+            fingerprint, DateTimeOffset.UtcNow)).Succeeded);
+        Assert.IsTrue((await fixture.Journal.CreateExecutionIntentAsync(operationId, requestHash,
+            DateTimeOffset.UtcNow)).Succeeded);
+        foreach (var phase in new[]
+        {
+            HorseIdentityMigrationExecutionPhase.Preparing,
+            HorseIdentityMigrationExecutionPhase.Draining,
+            HorseIdentityMigrationExecutionPhase.StoppingApi,
+        })
+            Assert.IsTrue((await fixture.Journal.AdvanceExecutionIntentAsync(operationId, phase,
+                DateTimeOffset.UtcNow)).Succeeded);
+
+        using var child = fixture.StartApiProcess(operatorOnly: true, operatorOperationId: operationId.ToString("D"));
+        try
+        {
+            using var healthClient = await fixture.WaitForHealthAsync(child);
+            var route = $"/api/v2/admin/horse-id-migration-operations/{operationId:D}/cancel-preparation";
+            using var noCookieHandler = new HttpClientHandler { AllowAutoRedirect = false };
+            using var noCookieClient = new HttpClient(noCookieHandler) { BaseAddress = new Uri(fixture.OperatorUrl) };
+            using var missingKey = await noCookieClient.PostAsync(route, content: null);
+            Assert.AreEqual(HttpStatusCode.Unauthorized, missingKey.StatusCode,
+                "The forced-host API route must retain the API-key middleware contract.");
+            noCookieClient.DefaultRequestHeaders.Add("X-Test-Horse-Key", "invalid-test-key");
+            using var invalidKey = await noCookieClient.PostAsync(route, content: null);
+            Assert.AreEqual(HttpStatusCode.Unauthorized, invalidKey.StatusCode);
+            Assert.AreEqual(HorseIdentityMigrationExecutionPhase.StoppingApi,
+                (await fixture.Journal.GetExecutionIntentAsync(operationId))!.Phase);
+
+            var cookies = new CookieContainer();
+            using var cookieHandler = new HttpClientHandler { AllowAutoRedirect = false, CookieContainer = cookies };
+            using var cookieClient = new HttpClient(cookieHandler) { BaseAddress = new Uri(fixture.OperatorUrl) };
+            using var login = await cookieClient.PostAsync("/login", new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["username"] = "user",
+                ["password"] = fixture.ApiKey,
+                ["ReturnUrl"] = "/",
+            }));
+            Assert.AreEqual(HttpStatusCode.Redirect, login.StatusCode);
+            using var cookieOnly = await cookieClient.PostAsync(route, content: null);
+            Assert.AreEqual(HttpStatusCode.Unauthorized, cookieOnly.StatusCode,
+                "An authenticated UI cookie cannot replace the API key on the bodyless JSON route.");
+            Assert.AreEqual(HorseIdentityMigrationExecutionPhase.StoppingApi,
+                (await fixture.Journal.GetExecutionIntentAsync(operationId))!.Phase);
+
+            using var apiKeyOnlyHandler = new HttpClientHandler { AllowAutoRedirect = false };
+            using var apiKeyOnlyClient = new HttpClient(apiKeyOnlyHandler) { BaseAddress = new Uri(fixture.OperatorUrl) };
+            apiKeyOnlyClient.DefaultRequestHeaders.Add("X-Test-Horse-Key", fixture.ApiKey);
+            using var accepted = await apiKeyOnlyClient.PostAsync(route, content: null);
+            Assert.AreEqual(HttpStatusCode.Accepted, accepted.StatusCode,
+                "The API-key-only integration used by callers must not be redirected to the cookie login page.");
+            Assert.AreEqual(HorseIdentityMigrationExecutionPhase.CancellationRequested,
+                (await fixture.Journal.GetExecutionIntentAsync(operationId))!.Phase);
+        }
+        finally
+        {
+            await RuntimeFixture.StopAsync(child);
+        }
+    }
+
+    [TestMethod]
+    public async Task ForcedOperatorHostExposesOnlyItsBoundCancellationFormWithoutReadonlyVerification()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "horse-migration-bound-cancel-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var priorFlag = Environment.GetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable);
+        var priorTarget = Environment.GetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOperationIdEnvironmentVariable);
+        try
+        {
+            var journal = new HorseIdentityMigrationJournal(Path.Combine(root, "journal"), []);
+            var operationId = Guid.NewGuid();
+            var manifest = Manifest();
+            var fingerprint = new string('A', 64);
+            var requestHash = HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(manifest, fingerprint);
+            Assert.IsTrue((await journal.StageWithRequestKeyAsync(operationId, manifest, Guid.NewGuid(), requestHash,
+                fingerprint, DateTimeOffset.UtcNow)).Succeeded);
+            Assert.IsTrue((await journal.CreateExecutionIntentAsync(operationId, requestHash, DateTimeOffset.UtcNow)).Succeeded);
+            foreach (var phase in new[]
+            {
+                HorseIdentityMigrationExecutionPhase.Preparing,
+                HorseIdentityMigrationExecutionPhase.Draining,
+                HorseIdentityMigrationExecutionPhase.StoppingApi,
+            })
+                Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId, phase, DateTimeOffset.UtcNow)).Succeeded);
+
+            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable, "true");
+            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOperationIdEnvironmentVariable,
+                operationId.ToString("D"));
+            var builder = WebApplication.CreateBuilder();
+            builder.WebHost.UseTestServer();
+            builder.Services.Configure<ApiKeyOptions>(options => options.Key = "test-only-key");
+            builder.Services.AddAdminAuthentication();
+            HorseIdentityMigrationRuntimeMode.ConfigureMinimalOperatorCookieChallenges(builder.Services);
+            builder.Services.AddAntiforgery();
+            var app = builder.Build();
+            app.UseApiKeyProtection();
+            app.UseAuthentication();
+            app.UseAuthorization();
+            app.UseAntiforgery();
+            app.MapAdminLoginEndpoints();
+            HorseIdentityMigrationRuntimeMode.MapReadonlyVerificationEndpoints(app, journal,
+                allowVerificationActions: false, allowPreparationCancellationActions: true,
+                boundOperatorOperationId: operationId);
+            await app.StartAsync();
+            try
+            {
+                using var client = app.GetTestClient();
+                using var login = await client.PostAsync("/login", new FormUrlEncodedContent(new Dictionary<string, string>
+                {
+                    ["username"] = "user",
+                    ["password"] = "test-only-key",
+                    ["ReturnUrl"] = "/",
+                }));
+                Assert.AreEqual(HttpStatusCode.Redirect, login.StatusCode);
+                var authCookie = login.Headers.GetValues("Set-Cookie").Single().Split(';')[0];
+                using var statusRequest = new HttpRequestMessage(HttpMethod.Get,
+                    $"/settings/horse-id-migration?operationId={operationId:D}");
+                statusRequest.Headers.Add("Cookie", authCookie);
+                using var status = await client.SendAsync(statusRequest);
+                Assert.AreEqual(HttpStatusCode.OK, status.StatusCode);
+                var html = await status.Content.ReadAsStringAsync();
+                StringAssert.Contains(html, "confirmCancellation");
+                Assert.IsFalse(html.Contains("Run read-only verification", StringComparison.Ordinal));
+                var token = System.Text.RegularExpressions.Regex.Match(html,
+                    "name=\\\"__RequestVerificationToken\\\" value=\\\"([^\\\"]+)\\\"").Groups[1].Value;
+                Assert.IsFalse(string.IsNullOrWhiteSpace(token));
+                var antiforgeryCookie = status.Headers.GetValues("Set-Cookie").Single(value =>
+                    !value.StartsWith("HorseRacingPrediction.Admin=", StringComparison.Ordinal)).Split(';')[0];
+
+                var otherOperation = Guid.NewGuid();
+                using var denied = new HttpRequestMessage(HttpMethod.Post,
+                    $"/settings/horse-id-migration/{otherOperation:D}/cancel-preparation")
+                {
+                    Content = new FormUrlEncodedContent(new Dictionary<string, string>
+                    {
+                        ["__RequestVerificationToken"] = token,
+                        ["confirmCancellation"] = "cancel-preparation",
+                    }),
+                };
+                denied.Headers.Add("Cookie", authCookie + "; " + antiforgeryCookie);
+                Assert.AreEqual(HttpStatusCode.NotFound, (await client.SendAsync(denied)).StatusCode);
+                Assert.AreEqual(HorseIdentityMigrationExecutionPhase.StoppingApi,
+                    (await journal.GetExecutionIntentAsync(operationId))!.Phase);
+
+                using var accepted = new HttpRequestMessage(HttpMethod.Post,
+                    $"/settings/horse-id-migration/{operationId:D}/cancel-preparation")
+                {
+                    Content = new FormUrlEncodedContent(new Dictionary<string, string>
+                    {
+                        ["__RequestVerificationToken"] = token,
+                        ["confirmCancellation"] = "cancel-preparation",
+                    }),
+                };
+                accepted.Headers.Add("Cookie", authCookie + "; " + antiforgeryCookie);
+                Assert.AreEqual(HttpStatusCode.Accepted, (await client.SendAsync(accepted)).StatusCode);
+                Assert.AreEqual(HorseIdentityMigrationExecutionPhase.CancellationRequested,
+                    (await journal.GetExecutionIntentAsync(operationId))!.Phase);
+            }
+            finally { await app.DisposeAsync(); }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable, priorFlag);
+            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOperationIdEnvironmentVariable, priorTarget);
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task FailedPreApplyOperationWithStalePreparationPhaseDoesNotOfferCancellationForm()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "horse-migration-failed-cancel-form-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var priorFlag = Environment.GetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable);
+        var priorTarget = Environment.GetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOperationIdEnvironmentVariable);
+        try
+        {
+            var journal = new HorseIdentityMigrationJournal(Path.Combine(root, "journal"), []);
+            var operationId = Guid.NewGuid();
+            var manifest = Manifest();
+            var fingerprint = new string('B', 64);
+            var requestHash = HorseIdentityMigrationExecutionPolicy.ComputeImmutableRequestHash(manifest, fingerprint);
+            Assert.IsTrue((await journal.StageWithRequestKeyAsync(operationId, manifest, Guid.NewGuid(), requestHash,
+                fingerprint, DateTimeOffset.UtcNow)).Succeeded);
+            Assert.IsTrue((await journal.CreateExecutionIntentAsync(operationId, requestHash, DateTimeOffset.UtcNow)).Succeeded);
+            foreach (var phase in new[]
+            {
+                HorseIdentityMigrationExecutionPhase.Preparing,
+                HorseIdentityMigrationExecutionPhase.Draining,
+                HorseIdentityMigrationExecutionPhase.StoppingApi,
+            })
+                Assert.IsTrue((await journal.AdvanceExecutionIntentAsync(operationId, phase, DateTimeOffset.UtcNow)).Succeeded);
+            Assert.IsTrue((await journal.RecordFailureAsync(operationId, HorseIdentityMigrationResultCode.PreparationFailed,
+                DateTimeOffset.UtcNow)).Succeeded);
+
+            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable, "true");
+            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOperationIdEnvironmentVariable,
+                operationId.ToString("D"));
+            var builder = WebApplication.CreateBuilder();
+            builder.WebHost.UseTestServer();
+            builder.Services.Configure<ApiKeyOptions>(options => options.Key = "test-only-key");
+            builder.Services.AddAdminAuthentication();
+            HorseIdentityMigrationRuntimeMode.ConfigureMinimalOperatorCookieChallenges(builder.Services);
+            builder.Services.AddAntiforgery();
+            var app = builder.Build();
+            app.UseApiKeyProtection();
+            app.UseAuthentication();
+            app.UseAuthorization();
+            app.UseAntiforgery();
+            app.MapAdminLoginEndpoints();
+            HorseIdentityMigrationRuntimeMode.MapReadonlyVerificationEndpoints(app, journal,
+                allowVerificationActions: false, allowPreparationCancellationActions: true,
+                boundOperatorOperationId: operationId);
+            await app.StartAsync();
+            try
+            {
+                using var client = app.GetTestClient();
+                using var login = await client.PostAsync("/login", new FormUrlEncodedContent(new Dictionary<string, string>
+                {
+                    ["username"] = "user",
+                    ["password"] = "test-only-key",
+                    ["ReturnUrl"] = "/",
+                }));
+                Assert.AreEqual(HttpStatusCode.Redirect, login.StatusCode);
+                var authCookie = login.Headers.GetValues("Set-Cookie").Single().Split(';')[0];
+                using var statusRequest = new HttpRequestMessage(HttpMethod.Get,
+                    $"/settings/horse-id-migration?operationId={operationId:D}");
+                statusRequest.Headers.Add("Cookie", authCookie);
+                using var status = await client.SendAsync(statusRequest);
+                Assert.AreEqual(HttpStatusCode.OK, status.StatusCode);
+                var html = await status.Content.ReadAsStringAsync();
+                Assert.IsFalse(html.Contains("confirmCancellation", StringComparison.Ordinal),
+                    "A stale pre-apply phase is not sufficient once the operation is generically Failed.");
+                StringAssert.Contains(html, "PreparationFailed");
+            }
+            finally { await app.DisposeAsync(); }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable, priorFlag);
+            Environment.SetEnvironmentVariable(HorseIdentityMigrationRuntimeMode.OperatorOperationIdEnvironmentVariable, priorTarget);
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         }
     }
 
@@ -1504,7 +1783,8 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
         internal string OperatorUrls => $"http://+:{_port}";
         internal HorseIdentityMigrationJournal Journal { get; }
 
-        internal Process StartApiProcess(bool maintenanceMode = false, bool operatorOnly = false)
+        internal Process StartApiProcess(bool maintenanceMode = false, bool operatorOnly = false,
+            string? operatorOperationId = null)
         {
             var apiAssembly = typeof(HorseIdentityMigrationRuntimeMode).Assembly.Location;
             var process = new Process
@@ -1536,6 +1816,8 @@ public sealed class HorseIdentityMigrationRuntimeModeTests
             process.StartInfo.Environment["DOTNET_NOLOGO"] = "1";
             if (operatorOnly)
                 process.StartInfo.Environment[HorseIdentityMigrationRuntimeMode.OperatorOnlyEnvironmentVariable] = "true";
+            if (operatorOperationId is not null)
+                process.StartInfo.Environment[HorseIdentityMigrationRuntimeMode.OperatorOperationIdEnvironmentVariable] = operatorOperationId;
             if (!process.Start()) throw new InvalidOperationException("API child process did not start.");
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
